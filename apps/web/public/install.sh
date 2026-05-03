@@ -94,20 +94,43 @@ case "$(uname -s)" in
     ;;
 esac
 
+# Detect Linux distro family. get.docker.com supports Debian/Ubuntu/Fedora/RHEL
+# but rejects Arch and derivatives, which ship Docker via pacman instead.
+DISTRO_FAMILY=""
+if [ "$OS" = "linux" ] || [ "$OS" = "wsl" ]; then
+  if [ -r /etc/os-release ]; then
+    . /etc/os-release
+    case "${ID:-}" in
+      arch|manjaro|endeavouros|garuda|artix|cachyos)
+        DISTRO_FAMILY="arch" ;;
+      *)
+        case " ${ID_LIKE:-} " in
+          *" arch "*) DISTRO_FAMILY="arch" ;;
+        esac ;;
+    esac
+  fi
+fi
+
 install_docker_linux() {
   info "Installing Docker Engine..."
   if ! command -v sudo &>/dev/null; then
     fail "sudo is required to install Docker. Install sudo first, then re-run."
   fi
   printf "  ${DIM}This requires sudo — you may be prompted for your password.${RESET}\n"
-  curl -fsSL https://get.docker.com | sudo sh
+  if [ "$DISTRO_FAMILY" = "arch" ]; then
+    # Arch family: get.docker.com refuses to run, so install via pacman.
+    sudo pacman -Sy --needed --noconfirm docker docker-compose
+    sudo systemctl enable --now docker.service
+  else
+    curl -fsSL https://get.docker.com | sudo sh
+  fi
   sudo usermod -aG docker "$USER"
   warn "You were added to the docker group. Log out and back in, then re-run this installer."
   exit 0
 }
 
 if ! command -v git &>/dev/null; then
-  fail "git is required to install Fairtrail.\n\n  Install: ${BOLD}sudo apt install git${RESET} (Debian/Ubuntu) or ${BOLD}sudo dnf install git${RESET} (Fedora)"
+  fail "git is required to install Fairtrail.\n\n  Install: ${BOLD}sudo apt install git${RESET} (Debian/Ubuntu), ${BOLD}sudo dnf install git${RESET} (Fedora), or ${BOLD}sudo pacman -S git${RESET} (Arch/Manjaro)"
 fi
 
 if command -v docker &>/dev/null; then
