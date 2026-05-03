@@ -186,6 +186,24 @@ test_dockerfile_ships_cli() {
 }
 
 # ---------------------------------------------------------------------------
+# Test: install.sh installs Docker via pacman on Arch-family distros
+# Regression test for issue #62: get.docker.com rejects Manjaro/Arch,
+# so the installer must detect the Arch family and use pacman instead.
+# ---------------------------------------------------------------------------
+test_install_supports_arch_family() {
+  local installer="apps/web/public/install.sh"
+  local has_detection has_pacman_branch has_git_hint
+  has_detection=$(grep -c 'DISTRO_FAMILY="arch"' "$installer" || true)
+  has_pacman_branch=$(grep -c 'pacman .* docker' "$installer" || true)
+  has_git_hint=$(grep -c 'pacman -S git' "$installer" || true)
+  if [ "$has_detection" -ge 1 ] && [ "$has_pacman_branch" -ge 1 ] && [ "$has_git_hint" -ge 1 ]; then
+    pass "install.sh detects Arch family and installs Docker + git via pacman"
+  else
+    fail "install.sh should detect Arch family (DISTRO_FAMILY=arch), install Docker via pacman, and hint pacman -S git"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo ""
@@ -204,6 +222,7 @@ test_cli_dispatches_tui_flags
 test_cli_has_cmd_tui
 test_install_supports_no_browser
 test_dockerfile_ships_cli
+test_install_supports_arch_family
 
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"
