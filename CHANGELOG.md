@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.5.1] - 2026-05-03
+
+### Fixed
+- **Installer now supports Arch and Manjaro**: `install.sh` detects Arch-family distros (arch, manjaro, endeavouros, garuda, artix, cachyos, plus anything with `ID_LIKE=arch`) from `/etc/os-release` and installs Docker via `pacman -Sy --needed --noconfirm docker docker-compose` followed by `systemctl enable --now docker.service`. Previously the unconditional `curl get.docker.com | sudo sh` path would fail because Docker upstream rejects Arch family in its convenience script (#62).
+- **Origin airport preserved on edit**: editing a tracked query no longer drops the origin airport from the form (#60).
+
 ## [0.5.0] - 2026-05-01
 
 ### Added
