@@ -478,7 +478,8 @@ cmd_tui() {
     exec_flags="-i"
   fi
 
-  exec dc exec $exec_flags web fairtrail-tui "$@"
+  # `exec` cannot run shell functions, so call $_DC directly instead of dc().
+  exec $_DC $COMPOSE_FILES exec $exec_flags web fairtrail-tui "$@"
 }
 
 case "${1:-}" in
