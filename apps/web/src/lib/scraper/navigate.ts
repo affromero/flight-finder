@@ -53,15 +53,51 @@ export interface NavigationResult {
   source: NavigationSource;
 }
 
+function buildQueryString(params: FlightSearchParams): string {
+  const qs = ['hl=en'];
+  if (params.currency) qs.push(`curr=${params.currency}`);
+  if (params.country) qs.push(`gl=${params.country}`);
+  return qs.join('&');
+}
+
 export function buildGoogleFlightsUrl(params: FlightSearchParams): string {
+  // Verbose phrase form. For one-way searches we omit "+to+${dateTo}" — Google
+  // Flights' NLU misparses "on YYYY-MM-DD to YYYY-MM-DD" for less-trafficked
+  // airport codes (e.g. BDS, BRI) and falls back to the bare homepage. See #65.
   const dateFrom = params.dateFrom.toISOString().split('T')[0];
   const dateTo = params.dateTo.toISOString().split('T')[0];
-  const oneWayPrefix = params.tripType === 'one_way' ? 'one+way+' : '';
+  const oneWay = params.tripType === 'one_way';
+  const oneWayPrefix = oneWay ? 'one+way+' : '';
+  const datePart = oneWay ? `+on+${dateFrom}` : `+on+${dateFrom}+to+${dateTo}`;
 
-  let url = `https://www.google.com/travel/flights?q=${oneWayPrefix}flights+from+${params.origin}+to+${params.destination}+on+${dateFrom}+to+${dateTo}&hl=en`;
-  if (params.currency) url += `&curr=${params.currency}`;
-  if (params.country) url += `&gl=${params.country}`;
-  return url;
+  return `https://www.google.com/travel/flights?q=${oneWayPrefix}flights+from+${params.origin}+to+${params.destination}${datePart}&${buildQueryString(params)}`;
+}
+
+/**
+ * Build alternative Google Flights URL formats. The verbose `q=` text URL
+ * (buildGoogleFlightsUrl) is what humans land on, but it depends on Google's
+ * NLU and is unreliable for less-trafficked airport codes. We rotate through
+ * progressively terser forms on retry.
+ */
+export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): string[] {
+  const dateFrom = params.dateFrom.toISOString().split('T')[0];
+  const dateTo = params.dateTo.toISOString().split('T')[0];
+  const oneWay = params.tripType === 'one_way';
+  const qs = buildQueryString(params);
+
+  // Variant 1: verbose phrase, fixed for one-way (above)
+  const verbose = buildGoogleFlightsUrl(params);
+
+  // Variant 2: terse codes + date — fewer NLU tokens for Google to misinterpret
+  const terseDate = oneWay ? `+${dateFrom}` : `+${dateFrom}+to+${dateTo}`;
+  const terse = `https://www.google.com/travel/flights?q=${params.origin}+to+${params.destination}${terseDate}&${qs}`;
+
+  // Variant 3: SEO route landing — does NOT include dates, but reliably
+  // resolves to a valid Flights page where the search form is pre-populated
+  // with the airport pair, preventing the "redirected to homepage" failure.
+  const path = `https://www.google.com/travel/flights/flights-from-${params.origin}-to-${params.destination}.html?${qs}`;
+
+  return [verbose, terse, path];
 }
 
 export async function navigateGoogleFlights(
@@ -69,10 +105,14 @@ export async function navigateGoogleFlights(
   countryProfile?: CountryProfile,
   proxyUrl?: string
 ): Promise<NavigationResult> {
-  const url = buildGoogleFlightsUrl(params);
-  const maxAttempts = 3;
+  // Rotate URL formats per attempt — text URLs are unreliable for less-common
+  // airport codes (#65), so retrying the same URL only ever hits the same
+  // homepage redirect. Each attempt tries a structurally different URL.
+  const urlCandidates = buildGoogleFlightsUrlCandidates(params);
+  const maxAttempts = urlCandidates.length;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const url = urlCandidates[attempt - 1]!;
     const browser = await launchBrowser({ proxyUrl });
     const attemptStart = Date.now();
 
