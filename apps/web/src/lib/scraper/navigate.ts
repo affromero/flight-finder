@@ -76,8 +76,11 @@ export function buildGoogleFlightsUrl(params: FlightSearchParams): string {
 /**
  * Build alternative Google Flights URL formats. The verbose `q=` text URL
  * (buildGoogleFlightsUrl) is what humans land on, but it depends on Google's
- * NLU and is unreliable for less-trafficked airport codes. We rotate through
- * progressively terser forms on retry.
+ * NLU and is unreliable for less-trafficked airport codes. Each candidate is
+ * a text URL that *carries the requested dates* — we deliberately avoid the
+ * `/travel/flights/flights-from-X-to-Y.html` SEO path because it omits dates
+ * and trip type, and Google fills it with defaults that would silently write
+ * snapshots for the wrong travelDate.
  */
 export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): string[] {
   const dateFrom = params.dateFrom.toISOString().split('T')[0];
@@ -85,19 +88,23 @@ export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): str
   const oneWay = params.tripType === 'one_way';
   const qs = buildQueryString(params);
 
-  // Variant 1: verbose phrase, fixed for one-way (above)
+  // Variant 1: verbose phrase, fixed for one-way (above).
   const verbose = buildGoogleFlightsUrl(params);
 
-  // Variant 2: terse codes + date — fewer NLU tokens for Google to misinterpret
+  // Variant 2: terse codes + date — fewer NLU tokens for Google to misinterpret.
   const terseDate = oneWay ? `+${dateFrom}` : `+${dateFrom}+to+${dateTo}`;
   const terse = `https://www.google.com/travel/flights?q=${params.origin}+to+${params.destination}${terseDate}&${qs}`;
 
-  // Variant 3: SEO route landing — does NOT include dates, but reliably
-  // resolves to a valid Flights page where the search form is pre-populated
-  // with the airport pair, preventing the "redirected to homepage" failure.
-  const path = `https://www.google.com/travel/flights/flights-from-${params.origin}-to-${params.destination}.html?${qs}`;
+  // Variant 3: reworded phrase — different verb ("departing"/"returning") and
+  // a different word order put the airport codes adjacent to the keywords
+  // Google's NLU is most confident about, while still carrying the date(s).
+  const oneWayPrefix = oneWay ? 'one+way+' : '';
+  const dateClause = oneWay
+    ? `departing+${dateFrom}`
+    : `departing+${dateFrom}+returning+${dateTo}`;
+  const reworded = `https://www.google.com/travel/flights?q=${oneWayPrefix}flights+to+${params.destination}+from+${params.origin}+${dateClause}&${qs}`;
 
-  return [verbose, terse, path];
+  return [verbose, terse, reworded];
 }
 
 export async function navigateGoogleFlights(

@@ -84,7 +84,19 @@ describe('buildGoogleFlightsUrlCandidates (regression: #65)', () => {
     expect(candidates[0]).toContain('one+way+flights+from+BDS+to+JFK');
     expect(candidates[1]).toMatch(/\?q=BDS\+to\+JFK\+2026-11-09/);
     expect(candidates[1]).not.toContain('flights+from');
-    expect(candidates[2]).toContain('/flights-from-BDS-to-JFK.html');
+    expect(candidates[2]).toContain('flights+to+JFK+from+BDS+departing+2026-11-09');
+  });
+
+  it('every candidate carries the requested date — never a date-less URL', () => {
+    // The SEO landing /flights-from-X-to-Y.html was rejected for #65 because
+    // Google fills missing dates with defaults, which would silently write
+    // snapshots tagged with the user's travelDate but priced for the wrong
+    // departure. Every candidate must carry the requested date.
+    const candidates = buildGoogleFlightsUrlCandidates(oneWay);
+    for (const url of candidates) {
+      expect(url).toContain('2026-11-09');
+    }
+    expect(candidates.some((u) => u.includes('flights-from-BDS-to-JFK.html'))).toBe(false);
   });
 
   it('propagates currency and locale to every candidate', () => {
@@ -110,7 +122,7 @@ describe('buildGoogleFlightsUrlCandidates (regression: #65)', () => {
     const candidates = buildGoogleFlightsUrlCandidates(rt);
     expect(candidates[0]).toContain('on+2026-11-09+to+2026-11-15');
     expect(candidates[1]).toContain('BDS+to+JFK+2026-11-09+to+2026-11-15');
-    // Path landing has no date; the form is filled after navigation.
-    expect(candidates[2]).not.toContain('2026-11-09');
+    expect(candidates[2]).toContain('departing+2026-11-09+returning+2026-11-15');
+    expect(candidates[2]).not.toContain('one+way');
   });
 });
