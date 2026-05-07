@@ -341,21 +341,24 @@ describe('pageHasRequestedRoute (strict directional defense)', () => {
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK', '$$$')).toBe(false);
   });
 
-  it('documents the currency/IATA overlap residual risk', () => {
+  it('rejects chained routes even when the layover code is allowlisted (currency/IATA overlap)', () => {
     // Several allowlisted currency codes are ALSO real (small) IATA airport
     // codes: HKD = Hakodate, BRL = Borba, CAD = Cadillac, CHF = Chefornak.
-    // A chained-route phrase using one of those as a layover technically
-    // passes the route validator. We accept this because:
-    //
-    // (a) Real Google Flights pages do not render "BDS to HKD via JFK" as
-    //     a header for a JFK booking — Hakodate is not a layover hop on
-    //     EU-to-NA routes.
-    // (b) Removing overlapping currencies would resurface the cycle-5/6
-    //     false-negative bugs for users actually transacting in HKD/BRL/etc.
-    //
-    // This test exists to make the trade-off explicit so a future change
-    // that wants stricter behavior knows what it is overriding.
-    expect(pageHasRequestedRoute('BDS to HKD via JFK', 'BDS', 'JFK')).toBe(true);
+    // A naive allowlist would let "BDS to HKD via JFK" pass because HKD
+    // is allowed as a currency. The fix is structural: we block the
+    // chaining keywords (`via`, `layover`, `through`, `connecting`) inside
+    // the gap. Real Google Flights route headers never carry those words
+    // between the airport pair, so legitimate pages are unaffected, while
+    // any chained phrase fails immediately at `via`.
+    expect(pageHasRequestedRoute('BDS to HKD via JFK', 'BDS', 'JFK')).toBe(false);
+    expect(pageHasRequestedRoute('BDS to BRL via JFK', 'BDS', 'JFK')).toBe(false);
+    expect(pageHasRequestedRoute('BDS to CAD via JFK', 'BDS', 'JFK')).toBe(false);
+  });
+
+  it('rejects chained routes phrased with "layover", "through", "connecting"', () => {
+    expect(pageHasRequestedRoute('BDS to HKD layover JFK', 'BDS', 'JFK')).toBe(false);
+    expect(pageHasRequestedRoute('BDS to FCO through JFK', 'BDS', 'JFK')).toBe(false);
+    expect(pageHasRequestedRoute('BDS to LHR connecting JFK', 'BDS', 'JFK')).toBe(false);
   });
 
   it('still rejects unknown 3-letter uppercase codes (real airport layovers)', () => {

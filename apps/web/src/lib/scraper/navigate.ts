@@ -226,13 +226,22 @@ export function pageHasRequestedRoute(
   // 3. The standard supported currency list (above): covers cases where the
   //    query has currency=null and Google auto-detects locale-appropriate.
   //
-  // Any OTHER 3-letter uppercase token (LHR, FCO, NYC, USA) blocks the gap.
-  // That is what stops "BDS Brindisi to LHR via JFK" from matching.
+  // Two things block the gap:
+  //
+  // (a) Any 3-letter uppercase token NOT in the allowlist (LHR, FCO, NYC,
+  //     USA) blocks. That stops "BDS Brindisi to LHR via JFK" from matching.
+  // (b) The chaining keywords `via`, `layover`, `through`, `connecting`
+  //     block. That closes the currency/IATA overlap edge case (HKD is
+  //     also Hakodate airport): "BDS to HKD via JFK" still has `via` in
+  //     the gap, so the lazy match cannot reach JFK regardless of whether
+  //     HKD is treated as currency or airport. Real Google Flights route
+  //     headers never use these words between the airport pair.
   const dynamicCurrency = currency && /^[A-Z]{3}$/.test(currency) ? [currency] : [];
   const allowedInGap = [origin, destination, ...dynamicCurrency, ...ALLOWED_CURRENCY_TOKENS]
     .map(escapeRegex)
     .join('|');
-  const noOtherIata = `(?:(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;
+  const blockingChainKeyword = `\\b(?:via|layover|through|connecting)\\b`;
+  const noOtherIata = `(?:(?!${blockingChainKeyword})(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;
   const strict: RegExp[] = [
     // "from BDS to JFK" / "from BDS Brindisi to John F. Kennedy JFK".
     new RegExp(`\\bfrom\\s+${o}\\b${noOtherIata}{0,80}\\bto\\b${noOtherIata}{0,80}\\b${d}\\b`),
