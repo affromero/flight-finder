@@ -53,15 +53,258 @@ export interface NavigationResult {
   source: NavigationSource;
 }
 
-export function buildGoogleFlightsUrl(params: FlightSearchParams): string {
-  const dateFrom = params.dateFrom.toISOString().split('T')[0];
-  const dateTo = params.dateTo.toISOString().split('T')[0];
-  const oneWayPrefix = params.tripType === 'one_way' ? 'one+way+' : '';
+// IATA codes are exactly 3 uppercase A-Z. Anything else means the upstream
+// query parser wrote garbage (or a user-supplied code escaped sanitization)
+// and would otherwise corrupt the URL via raw interpolation.
+const IATA_CODE = /^[A-Z]{3}$/;
 
-  let url = `https://www.google.com/travel/flights?q=${oneWayPrefix}flights+from+${params.origin}+to+${params.destination}+on+${dateFrom}+to+${dateTo}&hl=en`;
-  if (params.currency) url += `&curr=${params.currency}`;
-  if (params.country) url += `&gl=${params.country}`;
-  return url;
+function assertValidIataCode(code: string, role: 'origin' | 'destination'): void {
+  if (!IATA_CODE.test(code)) {
+    throw new Error(`Invalid IATA ${role} code: ${JSON.stringify(code)}`);
+  }
+}
+
+function isoDate(d: Date): string {
+  // toISOString().split('T')[0] returns the UTC calendar day. Callers that
+  // construct dates in non-UTC timezones can see a day shift here; that risk
+  // predates this file and is tracked separately.
+  return d.toISOString().split('T')[0]!;
+}
+
+function buildFlightsUrl(qPhrase: string, params: FlightSearchParams): string {
+  const url = new URL('https://www.google.com/travel/flights');
+  url.searchParams.set('q', qPhrase);
+  url.searchParams.set('hl', 'en');
+  if (params.currency) url.searchParams.set('curr', params.currency);
+  if (params.country) url.searchParams.set('gl', params.country);
+  return url.toString();
+}
+
+export function buildGoogleFlightsUrl(params: FlightSearchParams): string {
+  // Verbose phrase form. For one-way searches we omit the trailing "to ${dateTo}"
+  // because Google Flights' NLU misparses "on YYYY-MM-DD to YYYY-MM-DD" for
+  // less popular airport codes (BDS, BRI) and falls back to the bare homepage.
+  // See #65.
+  assertValidIataCode(params.origin, 'origin');
+  assertValidIataCode(params.destination, 'destination');
+
+  const dateFrom = isoDate(params.dateFrom);
+  const dateTo = isoDate(params.dateTo);
+  const oneWay = params.tripType === 'one_way';
+  const oneWayPrefix = oneWay ? 'one way ' : '';
+  const datePart = oneWay ? `on ${dateFrom}` : `on ${dateFrom} to ${dateTo}`;
+
+  return buildFlightsUrl(
+    `${oneWayPrefix}flights from ${params.origin} to ${params.destination} ${datePart}`,
+    params,
+  );
+}
+
+/**
+ * Build three structurally distinct Google Flights URL candidates. The verbose
+ * `q=` text URL is what humans land on, but it depends on Google's NLU and is
+ * unreliable for less popular airport codes. Each candidate is a text URL that
+ * carries the requested dates AND an unambiguous trip-type token — we
+ * deliberately avoid date-less or trip-less URLs (SEO landings, partial
+ * phrases) because Google fills missing fields with defaults and Playwright
+ * would still see [data-gs], silently writing snapshots tagged with the
+ * user's travelDate but priced for the wrong departure.
+ */
+export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): string[] {
+  assertValidIataCode(params.origin, 'origin');
+  assertValidIataCode(params.destination, 'destination');
+
+  const dateFrom = isoDate(params.dateFrom);
+  const dateTo = isoDate(params.dateTo);
+  const oneWay = params.tripType === 'one_way';
+  const oneWayPrefix = oneWay ? 'one way ' : '';
+
+  // Variant 1: verbose phrase, fixed for one-way (above).
+  const verbose = buildGoogleFlightsUrl(params);
+
+  // Variant 2: terse codes + date — fewer NLU tokens for Google to misinterpret.
+  // Always include the one-way token so Google does not infer round trip.
+  const terseDate = oneWay ? dateFrom : `${dateFrom} to ${dateTo}`;
+  const terse = buildFlightsUrl(
+    `${oneWayPrefix}${params.origin} to ${params.destination} ${terseDate}`,
+    params,
+  );
+
+  // Variant 3: reworded phrase — different verbs ("departing"/"returning") and
+  // a different word order put the airport codes adjacent to the keywords
+  // Google's NLU is most confident about, while still carrying the date(s)
+  // and an explicit one-way marker for one-way trips.
+  const dateClause = oneWay
+    ? `departing ${dateFrom}`
+    : `departing ${dateFrom} returning ${dateTo}`;
+  const reworded = buildFlightsUrl(
+    `${oneWayPrefix}flights to ${params.destination} from ${params.origin} ${dateClause}`,
+    params,
+  );
+
+  return [verbose, terse, reworded];
+}
+
+/** Stable label per candidate index, used in logs so failures are diagnosable. */
+const CANDIDATE_NAMES = ['verbose', 'terse', 'reworded'] as const;
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
+/**
+ * Verify the loaded Google Flights page shows the requested route IN THE
+ * REQUESTED DIRECTION via at least one strict pattern. Loose membership +
+ * proximity checks were rejected by audit because:
+ *
+ * * Chained routes leak: "BDS Brindisi to LHR via JFK" matched
+ *   `BDS ... to ... JFK` even though the requested route never appears.
+ * * Plain "to" is not token-bounded: matches inside "stop", "Toronto",
+ *   "destination", so any flight card with a stop satisfies the regex
+ *   regardless of the actual airports.
+ * * Plain dash characters appear in dates, durations, and price ranges,
+ *   so a wide context window around any dash gives false positives.
+ *
+ * Strict patterns demand immediate adjacency between the airport codes and
+ * a route connector. That is what Google actually renders on results
+ * pages: the search-bar header, breadcrumbs, and route chips all show
+ * `from BDS to JFK`, `BDS - John F. Kennedy`, or `BDS → JFK` with the
+ * codes adjacent to the connector.
+ *
+ * Failure modes this function does NOT cover:
+ *
+ * * Wrong date with the right route. Google renders dates in too many
+ *   formats to match reliably; mitigated by carrying the date in every
+ *   URL candidate and by URL rotation.
+ * * Wrong trip type. Mitigated by the explicit `one way` token in every
+ *   one-way URL candidate.
+ *
+ * Both residual risks fail-soft (the next candidate retries) rather than
+ * silently overwriting good snapshots.
+ */
+/**
+ * Currencies allowed inside the route-validation gap. The first 21 entries
+ * mirror the dropdown in apps/web/src/app/settings/page.tsx; TRY is added
+ * because Fairtrail's #64 example was IST/AYT (Turkish market) and TRY
+ * labels appear in those headers even though TRY is not in the settings
+ * dropdown today.
+ *
+ * Accepted residual risk: several of these codes are also valid IATA
+ * airport codes (HKD = Hakodate, BRL = Borba, CAD = Cadillac, CHF = Chefornak,
+ * NOK = Nogales, DKK = Dakar military, ARS = Aragarcas, etc.). A chained
+ * route like "BDS to HKD via JFK" therefore accepts under current policy.
+ * Real Google Flights pages do not render that phrasing for a JFK booking,
+ * so the practical corruption frequency is near zero, but the invariant is
+ * not "currencies are never airport codes". Removing overlapping codes
+ * would re-introduce false negatives for users in those currency locales,
+ * which is the actual reported bug; on balance we keep them.
+ *
+ * Users selecting "Other..." in settings pass the custom code via the
+ * `currency` arg to pageHasRequestedRoute, allowed dynamically.
+ */
+const ALLOWED_CURRENCY_TOKENS = [
+  'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'MXN',
+  'BRL', 'KRW', 'SGD', 'HKD', 'SEK', 'NOK', 'DKK', 'NZD', 'THB', 'COP',
+  'ARS', 'TRY',
+] as const;
+
+export function pageHasRequestedRoute(
+  pageText: string,
+  origin: string,
+  destination: string,
+  currency?: string | null,
+): boolean {
+  const o = escapeRegex(origin);
+  const d = escapeRegex(destination);
+
+  // Tokens the strict regex allows inside the gap between origin and destination:
+  //
+  // 1. Origin and destination themselves: Google headers render the code both
+  //    as a label and a parenthetical alias ("BDS Brindisi (BDS) to JFK").
+  // 2. The currency the query uses: passed dynamically so users who selected
+  //    "Other..." in settings (any ISO 4217 3-letter code) are covered.
+  // 3. The standard supported currency list (above): covers cases where the
+  //    query has currency=null and Google auto-detects locale-appropriate.
+  //
+  // Two things block the gap:
+  //
+  // (a) Any 3-letter uppercase token NOT in the allowlist (LHR, FCO, NYC,
+  //     USA) blocks. That stops "BDS Brindisi to LHR via JFK" from matching.
+  // (b) The chaining keywords `via`, `layover`, `through`, `connecting`
+  //     block. That closes the currency/IATA overlap edge case (HKD is
+  //     also Hakodate airport): "BDS to HKD via JFK" still has `via` in
+  //     the gap, so the lazy match cannot reach JFK regardless of whether
+  //     HKD is treated as currency or airport. Real Google Flights route
+  //     headers never use these words between the airport pair.
+  const dynamicCurrency = currency && /^[A-Z]{3}$/.test(currency) ? [currency] : [];
+  const allowedInGap = [origin, destination, ...dynamicCurrency, ...ALLOWED_CURRENCY_TOKENS]
+    .map(escapeRegex)
+    .join('|');
+  // Chaining keywords matched case-insensitively. JS regex has no inline (?i)
+  // flag and the top-level /i flag would break the [A-Z]{3} IATA guard in
+  // the same alternation, so each ASCII letter is expanded to a character
+  // class via `ci` below. The helper hard-fails on regex metacharacters so a
+  // future addition to the phrase list cannot silently inject regex syntax.
+  //
+  // Phrase coverage: bare chain words (via / layover / through / connecting /
+  // stopover) plus phrase-form variants that close the currency/IATA overlap
+  // for `stop`-family chained routes ("stopping at", "stops in", "with a
+  // stop at", "connection in"). Bare `stop`/`stops`/`stopping` is NOT
+  // blocked because real flight-card metadata (`1 stop`, `Nonstop`) sits in
+  // the 80-char gap on legitimate pages.
+  const ci = (word: string): string => {
+    if (!/^[a-z]+$/.test(word)) {
+      throw new Error(`pageHasRequestedRoute: ci() expects lowercase ASCII letters only, got ${JSON.stringify(word)}`);
+    }
+    return word.split('').map((ch) => `[${ch}${ch.toUpperCase()}]`).join('');
+  };
+  const chainPhrases = [
+    ci('via'),
+    ci('layover'),
+    ci('through'),
+    ci('connecting'),
+    ci('stopover'),
+    // "stop over" / "stop-over"
+    `${ci('stop')}[-\\s]+${ci('over')}`,
+    // "stop at"/"stop in"/"stops at"/"stops in"
+    `${ci('stop')}${ci('s')}?\\s+${ci('at')}`,
+    `${ci('stop')}${ci('s')}?\\s+${ci('in')}`,
+    // "stopping at"/"stopping in"
+    `${ci('stopping')}\\s+(?:${ci('at')}|${ci('in')})`,
+    // "with stop"/"with a stop"/"with stopover"/"with a stopover"
+    `${ci('with')}\\s+(?:${ci('a')}\\s+)?${ci('stop')}(?:${ci('over')})?`,
+    // "connection"/"connection at"/"connection in"/"connection through"
+    `${ci('connection')}(?:\\s+(?:${ci('at')}|${ci('in')}|${ci('through')}))?`,
+  ];
+  const blockingChainKeyword = `\\b(?:${chainPhrases.join('|')})\\b`;
+  const noOtherIata = `(?:(?!${blockingChainKeyword})(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;
+  const strict: RegExp[] = [
+    // "from BDS to JFK" / "from BDS Brindisi to John F. Kennedy JFK".
+    new RegExp(`\\bfrom\\s+${o}\\b${noOtherIata}{0,80}\\bto\\b${noOtherIata}{0,80}\\b${d}\\b`),
+    // "BDS to JFK" / "BDS Brindisi to JFK" with no other IATA in between.
+    new RegExp(`\\b${o}\\b${noOtherIata}{0,80}\\bto\\b${noOtherIata}{0,80}\\b${d}\\b`),
+    // "BDS → JFK" / "BDS ⇒ JFK" — immediate adjacency.
+    new RegExp(`\\b${o}\\s*[→⇒]\\s*${d}\\b`),
+    // "BDS - JFK" / "BDS – JFK" / "BDS — JFK" / "BDS-JFK" — immediate adjacency.
+    new RegExp(`\\b${o}\\s*[-–—]\\s*${d}\\b`),
+  ];
+
+  return strict.some((re) => re.test(pageText));
+}
+
+/**
+ * Detect the specific failure mode reported in #65: Google strips the `q`
+ * parameter and redirects to the bare /travel/flights homepage. The input
+ * URL has a q param; the resolved URL does not.
+ */
+export function pageRedirectedToHomepage(inputUrl: string, finalUrl: string): boolean {
+  try {
+    const had = new URL(inputUrl).searchParams.has('q');
+    const has = new URL(finalUrl).searchParams.has('q');
+    return had && !has;
+  } catch {
+    return false;
+  }
 }
 
 export async function navigateGoogleFlights(
@@ -69,17 +312,22 @@ export async function navigateGoogleFlights(
   countryProfile?: CountryProfile,
   proxyUrl?: string
 ): Promise<NavigationResult> {
-  const url = buildGoogleFlightsUrl(params);
-  const maxAttempts = 3;
+  // Rotate URL formats per attempt — text URLs are unreliable for less-common
+  // airport codes (#65), so retrying the same URL only ever hits the same
+  // homepage redirect. Each attempt tries a structurally different URL.
+  const urlCandidates = buildGoogleFlightsUrlCandidates(params);
+  const maxAttempts = urlCandidates.length;
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+    const url = urlCandidates[attempt - 1]!;
+    const candidateName = CANDIDATE_NAMES[attempt - 1] ?? 'unknown';
     const browser = await launchBrowser({ proxyUrl });
     const attemptStart = Date.now();
 
     try {
       const context = await createStealthContext(browser, { countryProfile, proxyUrl });
       const page = await context.newPage();
-      console.log(`[navigate] attempt ${attempt}/${maxAttempts} → ${url}`);
+      console.log(`[navigate] attempt ${attempt}/${maxAttempts} (${candidateName}) → ${url}`);
 
       const gotoStart = Date.now();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
@@ -121,22 +369,46 @@ export async function navigateGoogleFlights(
       // of HTML but only ~3k of visible text, and flight data starts deep in the DOM
       // where a 50k char cap would never reach it
       const html = await page.evaluate(() => document.body.innerText);
-      console.log(`[navigate] attempt ${attempt}: resultsFound=${resultsFound}, textLength=${html.length}, elapsed=${Date.now() - attemptStart}ms`);
+      const finalUrl = page.url();
+
+      // Belt-and-suspenders defense against silent route corruption. Three
+      // layers; any failure marks the attempt failed and rotates to the next
+      // URL candidate. A false success here would write snapshots labeled
+      // with the user's travelDate but priced for a different route.
+      //
+      // 1. Homepage redirect: Google strips q= and lands on the bare
+      //    /travel/flights URL. This is the headline #65 failure mode.
+      // 2. Route membership + direction: both IATA codes must appear in the
+      //    visible text AND in the requested order separated by a route
+      //    connector (catches swapped routes and unrelated suggestion lists).
+      if (resultsFound && pageRedirectedToHomepage(url, finalUrl)) {
+        console.log(`[navigate] q= dropped on redirect (input=${url}, final=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
+        resultsFound = false;
+      }
+      if (resultsFound && !pageHasRequestedRoute(html, params.origin, params.destination, params.currency)) {
+        console.log(`[navigate] page text missing requested directional route (origin=${params.origin}, dest=${params.destination}, finalUrl=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
+        resultsFound = false;
+      }
+
+      console.log(`[navigate] attempt ${attempt} (${candidateName}): resultsFound=${resultsFound}, textLength=${html.length}, finalUrl=${finalUrl}, elapsed=${Date.now() - attemptStart}ms`);
 
       await context.close();
 
       // Retry with fresh browser if no results and we have attempts left
       if (!resultsFound && attempt < maxAttempts) {
-        console.log(`[navigate] no results on attempt ${attempt}, retrying after delay…`);
+        console.log(`[navigate] no results on attempt ${attempt} (${candidateName}), retrying with next URL after delay…`);
         await new Promise((r) => setTimeout(r, 3000 + Math.random() * 4000));
         continue;
       }
 
+      if (resultsFound) {
+        console.log(`[navigate] succeeded with ${candidateName} candidate (final URL: ${finalUrl})`);
+      }
       return { html, url, resultsFound, source: 'google_flights' };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isCrash = /crashed|target closed|disposed/i.test(message);
-      console.error(`[navigate] attempt ${attempt} failed (crash=${isCrash}, elapsed=${Date.now() - attemptStart}ms): ${message}`);
+      console.error(`[navigate] attempt ${attempt} (${candidateName}) failed (crash=${isCrash}, elapsed=${Date.now() - attemptStart}ms): ${message}`);
 
       if (attempt < maxAttempts) {
         await new Promise((r) => setTimeout(r, 3000 + Math.random() * 4000));
