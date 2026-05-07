@@ -53,58 +53,123 @@ export interface NavigationResult {
   source: NavigationSource;
 }
 
-function buildQueryString(params: FlightSearchParams): string {
-  const qs = ['hl=en'];
-  if (params.currency) qs.push(`curr=${params.currency}`);
-  if (params.country) qs.push(`gl=${params.country}`);
-  return qs.join('&');
+// IATA codes are exactly 3 uppercase A-Z. Anything else means the upstream
+// query parser wrote garbage (or a user-supplied code escaped sanitization)
+// and would otherwise corrupt the URL via raw interpolation.
+const IATA_CODE = /^[A-Z]{3}$/;
+
+function assertValidIataCode(code: string, role: 'origin' | 'destination'): void {
+  if (!IATA_CODE.test(code)) {
+    throw new Error(`Invalid IATA ${role} code: ${JSON.stringify(code)}`);
+  }
+}
+
+function isoDate(d: Date): string {
+  // toISOString().split('T')[0] returns the UTC calendar day. Callers that
+  // construct dates in non-UTC timezones can see a day shift here; that risk
+  // predates this file and is tracked separately.
+  return d.toISOString().split('T')[0]!;
+}
+
+function buildFlightsUrl(qPhrase: string, params: FlightSearchParams): string {
+  const url = new URL('https://www.google.com/travel/flights');
+  url.searchParams.set('q', qPhrase);
+  url.searchParams.set('hl', 'en');
+  if (params.currency) url.searchParams.set('curr', params.currency);
+  if (params.country) url.searchParams.set('gl', params.country);
+  return url.toString();
 }
 
 export function buildGoogleFlightsUrl(params: FlightSearchParams): string {
-  // Verbose phrase form. For one-way searches we omit "+to+${dateTo}" — Google
-  // Flights' NLU misparses "on YYYY-MM-DD to YYYY-MM-DD" for less-trafficked
-  // airport codes (e.g. BDS, BRI) and falls back to the bare homepage. See #65.
-  const dateFrom = params.dateFrom.toISOString().split('T')[0];
-  const dateTo = params.dateTo.toISOString().split('T')[0];
-  const oneWay = params.tripType === 'one_way';
-  const oneWayPrefix = oneWay ? 'one+way+' : '';
-  const datePart = oneWay ? `+on+${dateFrom}` : `+on+${dateFrom}+to+${dateTo}`;
+  // Verbose phrase form. For one-way searches we omit the trailing "to ${dateTo}"
+  // because Google Flights' NLU misparses "on YYYY-MM-DD to YYYY-MM-DD" for
+  // less popular airport codes (BDS, BRI) and falls back to the bare homepage.
+  // See #65.
+  assertValidIataCode(params.origin, 'origin');
+  assertValidIataCode(params.destination, 'destination');
 
-  return `https://www.google.com/travel/flights?q=${oneWayPrefix}flights+from+${params.origin}+to+${params.destination}${datePart}&${buildQueryString(params)}`;
+  const dateFrom = isoDate(params.dateFrom);
+  const dateTo = isoDate(params.dateTo);
+  const oneWay = params.tripType === 'one_way';
+  const oneWayPrefix = oneWay ? 'one way ' : '';
+  const datePart = oneWay ? `on ${dateFrom}` : `on ${dateFrom} to ${dateTo}`;
+
+  return buildFlightsUrl(
+    `${oneWayPrefix}flights from ${params.origin} to ${params.destination} ${datePart}`,
+    params,
+  );
 }
 
 /**
- * Build alternative Google Flights URL formats. The verbose `q=` text URL
- * (buildGoogleFlightsUrl) is what humans land on, but it depends on Google's
- * NLU and is unreliable for less-trafficked airport codes. Each candidate is
- * a text URL that *carries the requested dates* — we deliberately avoid the
- * `/travel/flights/flights-from-X-to-Y.html` SEO path because it omits dates
- * and trip type, and Google fills it with defaults that would silently write
- * snapshots for the wrong travelDate.
+ * Build three structurally distinct Google Flights URL candidates. The verbose
+ * `q=` text URL is what humans land on, but it depends on Google's NLU and is
+ * unreliable for less popular airport codes. Each candidate is a text URL that
+ * carries the requested dates AND an unambiguous trip-type token — we
+ * deliberately avoid date-less or trip-less URLs (SEO landings, partial
+ * phrases) because Google fills missing fields with defaults and Playwright
+ * would still see [data-gs], silently writing snapshots tagged with the
+ * user's travelDate but priced for the wrong departure.
  */
 export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): string[] {
-  const dateFrom = params.dateFrom.toISOString().split('T')[0];
-  const dateTo = params.dateTo.toISOString().split('T')[0];
+  assertValidIataCode(params.origin, 'origin');
+  assertValidIataCode(params.destination, 'destination');
+
+  const dateFrom = isoDate(params.dateFrom);
+  const dateTo = isoDate(params.dateTo);
   const oneWay = params.tripType === 'one_way';
-  const qs = buildQueryString(params);
+  const oneWayPrefix = oneWay ? 'one way ' : '';
 
   // Variant 1: verbose phrase, fixed for one-way (above).
   const verbose = buildGoogleFlightsUrl(params);
 
   // Variant 2: terse codes + date — fewer NLU tokens for Google to misinterpret.
-  const terseDate = oneWay ? `+${dateFrom}` : `+${dateFrom}+to+${dateTo}`;
-  const terse = `https://www.google.com/travel/flights?q=${params.origin}+to+${params.destination}${terseDate}&${qs}`;
+  // Always include the one-way token so Google does not infer round trip.
+  const terseDate = oneWay ? dateFrom : `${dateFrom} to ${dateTo}`;
+  const terse = buildFlightsUrl(
+    `${oneWayPrefix}${params.origin} to ${params.destination} ${terseDate}`,
+    params,
+  );
 
-  // Variant 3: reworded phrase — different verb ("departing"/"returning") and
+  // Variant 3: reworded phrase — different verbs ("departing"/"returning") and
   // a different word order put the airport codes adjacent to the keywords
-  // Google's NLU is most confident about, while still carrying the date(s).
-  const oneWayPrefix = oneWay ? 'one+way+' : '';
+  // Google's NLU is most confident about, while still carrying the date(s)
+  // and an explicit one-way marker for one-way trips.
   const dateClause = oneWay
-    ? `departing+${dateFrom}`
-    : `departing+${dateFrom}+returning+${dateTo}`;
-  const reworded = `https://www.google.com/travel/flights?q=${oneWayPrefix}flights+to+${params.destination}+from+${params.origin}+${dateClause}&${qs}`;
+    ? `departing ${dateFrom}`
+    : `departing ${dateFrom} returning ${dateTo}`;
+  const reworded = buildFlightsUrl(
+    `${oneWayPrefix}flights to ${params.destination} from ${params.origin} ${dateClause}`,
+    params,
+  );
 
   return [verbose, terse, reworded];
+}
+
+/** Stable label per candidate index, used in logs so failures are diagnosable. */
+const CANDIDATE_NAMES = ['verbose', 'terse', 'reworded'] as const;
+
+/**
+ * Verify the loaded Google Flights page is actually showing the requested
+ * route. Google's NLU can silently resolve an ambiguous query to a different
+ * airport pair, default dates, or the bare homepage and still render
+ * `[data-gs]`-bearing content. Without this guard, we would write snapshots
+ * tagged with the user's travelDate but priced for the wrong route.
+ *
+ * The check is intentionally narrow: we only assert the requested IATA codes
+ * appear in the visible text. Date validation is harder (Google renders dates
+ * in many formats) and a URL-rotation candidate that arrived at the right
+ * airports but the wrong date is much less plausible than a homepage fallback.
+ */
+export function pageHasRequestedRoute(
+  pageText: string,
+  origin: string,
+  destination: string,
+): boolean {
+  // Word-boundary match prevents "AYT" matching inside other tokens like
+  // "PAYTON". Codes are 3 uppercase letters, so this is safe.
+  const originRe = new RegExp(`\\b${origin}\\b`);
+  const destRe = new RegExp(`\\b${destination}\\b`);
+  return originRe.test(pageText) && destRe.test(pageText);
 }
 
 export async function navigateGoogleFlights(
@@ -120,13 +185,14 @@ export async function navigateGoogleFlights(
 
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     const url = urlCandidates[attempt - 1]!;
+    const candidateName = CANDIDATE_NAMES[attempt - 1] ?? 'unknown';
     const browser = await launchBrowser({ proxyUrl });
     const attemptStart = Date.now();
 
     try {
       const context = await createStealthContext(browser, { countryProfile, proxyUrl });
       const page = await context.newPage();
-      console.log(`[navigate] attempt ${attempt}/${maxAttempts} → ${url}`);
+      console.log(`[navigate] attempt ${attempt}/${maxAttempts} (${candidateName}) → ${url}`);
 
       const gotoStart = Date.now();
       await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 30_000 });
@@ -168,22 +234,38 @@ export async function navigateGoogleFlights(
       // of HTML but only ~3k of visible text, and flight data starts deep in the DOM
       // where a 50k char cap would never reach it
       const html = await page.evaluate(() => document.body.innerText);
-      console.log(`[navigate] attempt ${attempt}: resultsFound=${resultsFound}, textLength=${html.length}, elapsed=${Date.now() - attemptStart}ms`);
+      const finalUrl = page.url();
+
+      // Belt-and-suspenders defense against silent route corruption: even when
+      // [data-gs] resolves, Google may have landed on a different airport pair,
+      // a homepage fallback, or default-date results. Verify the requested
+      // codes appear in the visible text before treating the attempt as a
+      // success — a false success here would write snapshots labeled with the
+      // user's travelDate but priced for the wrong route.
+      if (resultsFound && !pageHasRequestedRoute(html, params.origin, params.destination)) {
+        console.log(`[navigate] page text missing requested airports (origin=${params.origin}, dest=${params.destination}, finalUrl=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
+        resultsFound = false;
+      }
+
+      console.log(`[navigate] attempt ${attempt} (${candidateName}): resultsFound=${resultsFound}, textLength=${html.length}, finalUrl=${finalUrl}, elapsed=${Date.now() - attemptStart}ms`);
 
       await context.close();
 
       // Retry with fresh browser if no results and we have attempts left
       if (!resultsFound && attempt < maxAttempts) {
-        console.log(`[navigate] no results on attempt ${attempt}, retrying after delay…`);
+        console.log(`[navigate] no results on attempt ${attempt} (${candidateName}), retrying with next URL after delay…`);
         await new Promise((r) => setTimeout(r, 3000 + Math.random() * 4000));
         continue;
       }
 
+      if (resultsFound) {
+        console.log(`[navigate] succeeded with ${candidateName} candidate (final URL: ${finalUrl})`);
+      }
       return { html, url, resultsFound, source: 'google_flights' };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       const isCrash = /crashed|target closed|disposed/i.test(message);
-      console.error(`[navigate] attempt ${attempt} failed (crash=${isCrash}, elapsed=${Date.now() - attemptStart}ms): ${message}`);
+      console.error(`[navigate] attempt ${attempt} (${candidateName}) failed (crash=${isCrash}, elapsed=${Date.now() - attemptStart}ms): ${message}`);
 
       if (attempt < maxAttempts) {
         await new Promise((r) => setTimeout(r, 3000 + Math.random() * 4000));
