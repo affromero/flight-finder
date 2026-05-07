@@ -281,6 +281,35 @@ describe('pageHasRequestedRoute (strict directional defense)', () => {
     const text = 'BDS 6:35 - 9:55 JFK';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
+
+  // ---- Allowlist exceptions: origin/destination aliases and currency codes ----
+
+  it('accepts repeated origin code as parenthetical alias ("BDS Brindisi (BDS) to JFK")', () => {
+    // Google Flights commonly renders headers with the code, the airport name,
+    // and the code again in parentheses. The repeated origin must not block
+    // the gap.
+    const text = 'BDS Brindisi (BDS) to JFK';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
+  it('accepts repeated destination code in parens ("from BDS to JFK (JFK)")', () => {
+    const text = 'Flights from BDS to JFK (JFK) New York';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
+  it('accepts currency codes in the gap ("BDS to USD airport JFK")', () => {
+    // USD/EUR/GBP/JPY/CHF/CAD/AUD are 3-letter uppercase but not airport
+    // codes. Google may render currency labels in flight pages.
+    const text = 'BDS Brindisi to USD area JFK';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
+  it('still rejects unknown 3-letter uppercase codes (real airport layovers)', () => {
+    // Allowlist must NOT swallow real airport codes that are layovers.
+    expect(pageHasRequestedRoute('BDS to LHR via JFK', 'BDS', 'JFK')).toBe(false);
+    expect(pageHasRequestedRoute('BDS via NYC to JFK', 'BDS', 'JFK')).toBe(false);
+    expect(pageHasRequestedRoute('BDS Brindisi to FCO via JFK', 'BDS', 'JFK')).toBe(false);
+  });
 });
 
 describe('pageRedirectedToHomepage (the #65 headline failure mode)', () => {

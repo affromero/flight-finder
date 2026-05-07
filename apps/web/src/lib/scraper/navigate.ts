@@ -194,10 +194,17 @@ export function pageHasRequestedRoute(
   // no other airport code between them. "?" / "*" quantifiers are bounded
   // tightly to avoid the chained-route leak.
   // "noOtherIata" matches a single character that is NOT the start of a
-  // 3-letter uppercase IATA code. Used to allow airport names ("Brindisi",
-  // "John F. Kennedy") between codes while blocking other airport codes
-  // (LHR, FCO) from being layovers in chained-route phrases.
-  const noOtherIata = `(?:(?!\\b[A-Z]{3}\\b)[\\s\\S])`;
+  // 3-letter uppercase IATA-shaped token, with two exceptions: the origin
+  // and destination codes themselves (Google headers often render the code
+  // both as a label and a parenthetical alias, e.g. "BDS Brindisi (BDS) to
+  // JFK"), and a small allowlist of common 3-letter uppercase tokens that
+  // appear in flight pages but are not airport codes (currency labels).
+  // Other 3-letter uppercase tokens (LHR, FCO, NYC, USA) block the gap so
+  // chained-route phrases like "BDS Brindisi to LHR via JFK" never match.
+  const allowedInGap = [origin, destination, 'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD']
+    .map(escapeRegex)
+    .join('|');
+  const noOtherIata = `(?:(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;
   const strict: RegExp[] = [
     // "from BDS to JFK" / "from BDS Brindisi to John F. Kennedy JFK".
     new RegExp(`\\bfrom\\s+${o}\\b${noOtherIata}{0,80}\\bto\\b${noOtherIata}{0,80}\\b${d}\\b`),
