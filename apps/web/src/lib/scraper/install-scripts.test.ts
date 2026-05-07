@@ -172,50 +172,71 @@ describe('install.sh', () => {
   describe('Docker reachability detection (regression: #62)', () => {
     // The previous version always interpreted `docker info` failure as
     // "daemon down" and told the user to run `systemctl start docker`. On
-    // Manjaro/Arch the more common failure is permission denied (user is
-    // not in the docker group, or the current shell session has not picked
-    // up the new group). Telling them to start an already-running daemon
-    // dead-ended the install.
+    // Manjaro/Arch the more common failure is permission denied (user not
+    // in docker group, or shell session hasn't picked up the group).
+    //
+    // Tests below operate on INSTALL_SH_CODE — the script with shell
+    // comments stripped — so a string-presence assertion can't pass just
+    // because the same word appears in a comment near the change.
+    const INSTALL_SH_CODE = INSTALL_SH.split('\n')
+      .map((l) => {
+        // Drop full-line comments (allowing leading whitespace) but keep
+        // shebang, and don't strip mid-line "#" since shell strings can
+        // contain them. Conservative line-level filter is enough here.
+        const trimmed = l.trimStart();
+        if (trimmed.startsWith('#') && !trimmed.startsWith('#!')) return '';
+        return l;
+      })
+      .join('\n');
 
-    it('captures docker info stderr instead of discarding it', () => {
-      // The new branch needs the actual error text to distinguish failure
-      // modes; the old `docker info &>/dev/null 2>&1` form lost it.
-      expect(INSTALL_SH).toMatch(/docker info\s+2>&1\s+1>\/dev\/null/);
+    it('gates on docker info exit status, not stderr presence', () => {
+      // docker info can exit 0 while emitting stderr warnings (deprecated
+      // config, plugin notices). Gating on `[ -n "$err" ]` would falsely
+      // trigger the failure branch in that case; gating on `if !
+      // var=$(...)` reads the actual exit status.
+      expect(INSTALL_SH_CODE).toMatch(/if\s+!\s+docker_info_err=\$\(docker info\s+2>&1\s+1>\/dev\/null\)/);
+      // The pre-fix pattern that ignored exit status must not reappear.
+      expect(INSTALL_SH_CODE).not.toMatch(/docker info\s+&>\/dev\/null\s+2>&1.*\n[^#]*case.*docker_info_err/s);
     });
 
     it('matches "permission denied" branch separately from daemon-down', () => {
       // Both case variants because docker error output has differed by
       // version (lowercase older, capital P newer).
-      expect(INSTALL_SH).toContain('"permission denied"');
-      expect(INSTALL_SH).toContain('"Permission denied"');
+      expect(INSTALL_SH_CODE).toContain('"permission denied"');
+      expect(INSTALL_SH_CODE).toContain('"Permission denied"');
     });
 
-    it('permission-denied branch tells the user about the docker group', () => {
-      // Without this, a user who just ran `usermod -aG docker $USER` but
-      // never logged out gets sent to `systemctl start docker`, which
-      // does nothing.
-      const dockerGroupBlock = INSTALL_SH.split('permission denied')[1] ?? '';
-      expect(dockerGroupBlock).toContain('docker');
-      expect(dockerGroupBlock).toContain('group');
-      expect(dockerGroupBlock).toContain('newgrp');
+    it('permission-denied branch tells the user about the docker group and newgrp', () => {
+      // Locate the permission case body via the literal case pattern, not
+      // generic substring. That way a future comment containing
+      // "permission denied" can't satisfy the test on its own.
+      const codeAfterPermPattern = INSTALL_SH_CODE.split('"permission denied"')[1] ?? '';
+      // Body should reach the matching `;;` of the permission case. Use a
+      // generous slice — we only need to confirm the user-facing message.
+      const caseBody = codeAfterPermPattern.split(';;')[0] ?? '';
+      expect(caseBody).toContain('docker');
+      expect(caseBody).toContain('group');
+      expect(caseBody).toContain('newgrp');
+      // And the suggestion to refresh group membership must include
+      // usermod, which is the canonical fix for users not yet in the group.
+      expect(caseBody).toContain('usermod');
     });
 
     it('daemon-down branch still suggests systemctl start docker', () => {
       // Existing behavior must still work for the "daemon really is not
       // running" case — verify the systemctl message survives the refactor.
-      expect(INSTALL_SH).toContain('sudo systemctl start docker');
+      expect(INSTALL_SH_CODE).toContain('sudo systemctl start docker');
     });
 
-    it('does NOT issue the daemon-down message before checking the failure mode', () => {
+    it('"Could not start Docker" only fires after permission-denied is excluded', () => {
       // Regression guard: the old code unconditionally said "Could not
-      // start Docker" on any docker info failure. With the new branching,
-      // that fail() must only fire inside the daemon-down case, after the
-      // permission-denied case has already been excluded.
-      const lines = INSTALL_SH.split('\n');
-      const couldNotStartIdx = lines.findIndex((l) =>
+      // start Docker" on any docker info failure. The new branching must
+      // place that fail() AFTER the permission-denied case body.
+      const codeLines = INSTALL_SH_CODE.split('\n');
+      const couldNotStartIdx = codeLines.findIndex((l) =>
         l.includes('Could not start Docker')
       );
-      const permissionDeniedIdx = lines.findIndex((l) =>
+      const permissionDeniedIdx = codeLines.findIndex((l) =>
         l.includes('"permission denied"')
       );
       expect(permissionDeniedIdx).toBeGreaterThan(-1);

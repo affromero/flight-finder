@@ -164,8 +164,10 @@ if [ "$CONTAINER_CMD" = "docker" ]; then
   # from daemon-down. The previous version always told the user to start the
   # daemon, which is wrong on the common Manjaro/Arch path where the daemon
   # is already running but the current shell cannot reach the socket. See #62.
-  docker_info_err=$(docker info 2>&1 1>/dev/null || true)
-  if [ -n "$docker_info_err" ]; then
+  #
+  # Gate on exit status, not stderr presence: docker info can exit 0 while
+  # writing warnings to stderr (deprecated config, plugin notices, etc).
+  if ! docker_info_err=$(docker info 2>&1 1>/dev/null); then
     case "$docker_info_err" in
       *"permission denied"*|*"Permission denied"*)
         case "$OS" in
