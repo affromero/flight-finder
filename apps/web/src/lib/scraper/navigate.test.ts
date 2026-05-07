@@ -177,48 +177,78 @@ describe('IATA validation (regression: query-param injection via raw interpolati
   });
 });
 
-describe('pageHasRequestedRoute (post-navigation defense)', () => {
-  // After URL rotation, this is the last line of defense against silent route
-  // corruption: verify the rendered page shows the requested route in the
-  // requested direction before extracting prices.
+describe('pageHasRequestedRoute (strict directional defense)', () => {
+  // Strict patterns: each pattern requires the airport codes adjacent to a
+  // route connector with no other IATA-shaped token between them.
 
-  it('returns true when codes appear in directional order with a connector', () => {
+  // ---- POSITIVE cases: real Google Flights page text shapes ----
+
+  it('matches the page header "Flights from BDS to JFK"', () => {
     const text = 'Flights from BDS to JFK\n€96\nTurkish Airlines\nDeparts Wed Nov 9';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
   });
 
-  it('accepts arrow connectors used in flight cards', () => {
+  it('matches the airport-name header "BDS Brindisi to JFK"', () => {
+    // Google often renders the search bar with airport names mixed with codes.
+    const text = 'BDS Brindisi to JFK John F. Kennedy';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
+  it('matches arrow connectors', () => {
     const text = 'BDS → JFK · 14h 20m · 1 stop';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
   });
 
-  it('accepts long flight-card context between codes (~120 chars)', () => {
-    // Real flight cards put airline, duration, stops, time between codes.
-    const text = 'BDS 6:35 PM Turkish Airlines TK 1882 14h 20m 1 stop in IST JFK 9:55 PM';
-    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  it('matches dash connectors with adjacent codes', () => {
+    expect(pageHasRequestedRoute('BDS - JFK', 'BDS', 'JFK')).toBe(true);
+    expect(pageHasRequestedRoute('BDS – JFK', 'BDS', 'JFK')).toBe(true);
+    expect(pageHasRequestedRoute('BDS — JFK', 'BDS', 'JFK')).toBe(true);
+    expect(pageHasRequestedRoute('BDS-JFK', 'BDS', 'JFK')).toBe(true);
   });
 
-  it('returns false when origin code is missing (homepage fallback case)', () => {
+  // ---- NEGATIVE cases: silent-corruption modes that previously leaked ----
+
+  it('rejects a chained route "BDS Brindisi to LHR via JFK"', () => {
+    // Audit cycle 3 caught this: previous loose regex matched
+    // BDS .* to .* JFK across the whole string, ignoring that the actual
+    // route is BDS to LHR with JFK as a layover.
+    const text = 'BDS Brindisi to LHR via JFK';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
+  it('rejects a multi-leg sentence "BDS to FCO and FCO to JFK"', () => {
+    // Two legitimate routes back to back must not satisfy a single-route
+    // tracker. The lazy match of unrelated context blocks IATA codes from
+    // appearing between origin and destination.
+    const text = 'BDS to FCO and FCO to JFK';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
+  it('rejects a flight card with no header connector ("BDS 6:35 PM ... JFK 9:55 PM")', () => {
+    // A previous test of this exact text passed only because "stop" contains
+    // "to" inside an unbounded regex. With strict tokenization the page text
+    // must carry an explicit "to", arrow, or dash adjacent to both codes,
+    // which only the page header reliably has.
+    const text = 'BDS 6:35 PM Turkish Airlines TK 1882 14h 20m 1 stop in IST JFK 9:55 PM';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
+  it('rejects when origin code is missing (homepage fallback)', () => {
     const text = 'Top destinations from Rome (FCO): JFK New York, LHR London';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
-  it('returns false when destination code is missing (route substitution)', () => {
+  it('rejects route substitution (BDS to FCO when user wanted BDS to JFK)', () => {
     const text = 'Cheapest flights from BDS to FCO: €45';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
-  it('returns false when codes appear but in WRONG direction (swap regression)', () => {
-    // Critical: a page for JFK→BDS contains both codes. The directional
-    // regex must reject it because the user requested BDS→JFK, and writing
-    // JFK→BDS prices under a BDS→JFK tracker is silent corruption.
+  it('rejects swapped route (JFK to BDS when user wanted BDS to JFK)', () => {
     const text = 'Flights from JFK to BDS\n€350\nDelta';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
-  it('returns false when codes appear in unrelated suggestion lists with no directional context', () => {
-    // Both codes exist on the homepage in disjointed contexts — there is no
-    // connector linking them in the requested direction.
+  it('rejects unrelated suggestion lists with codes scattered', () => {
     const text = `Recent searches:
       LHR to JFK
       MAD to FCO
@@ -229,6 +259,12 @@ describe('pageHasRequestedRoute (post-navigation defense)', () => {
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
+  it('rejects "to" appearing inside other words ("stop", "Toronto", "destination")', () => {
+    // These contain "to" as a substring but never as a tokenized word.
+    const text = 'BDS sets a stop record at the destination Toronto and JFK';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
   it('uses word boundaries so codes inside other tokens do not false-match', () => {
     const text = 'Booking under PAYTON, John\nDeparts ISTANBUL';
     expect(pageHasRequestedRoute(text, 'IST', 'AYT')).toBe(false);
@@ -236,6 +272,13 @@ describe('pageHasRequestedRoute (post-navigation defense)', () => {
 
   it('matches case-sensitively (IATA codes are uppercase)', () => {
     const text = 'flights from bds to jfk are available';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
+  it('rejects dashes inside dates and durations from connecting unrelated codes', () => {
+    // A time range "BDS 6:35 - 9:55 JFK" has a dash but it connects times
+    // not codes. The dash pattern requires immediate adjacency to both codes.
+    const text = 'BDS 6:35 - 9:55 JFK';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 });

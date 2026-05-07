@@ -148,66 +148,68 @@ export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): str
 /** Stable label per candidate index, used in logs so failures are diagnosable. */
 const CANDIDATE_NAMES = ['verbose', 'terse', 'reworded'] as const;
 
-/** Directional connectors between origin and destination on Flights pages.
- *  Google renders any of these, plus locale variants. The literal word "to"
- *  is the most common in en-US.
- */
-const ROUTE_CONNECTORS = ['to', '→', '⇒', '–', '—', '-'];
-
 function escapeRegex(s: string): string {
   return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * Verify the loaded Google Flights page is actually showing the requested
- * route IN THE REQUESTED DIRECTION. Google's NLU can silently resolve an
- * ambiguous query to:
+ * Verify the loaded Google Flights page shows the requested route IN THE
+ * REQUESTED DIRECTION via at least one strict pattern. Loose membership +
+ * proximity checks were rejected by audit because:
  *
- * 1. The bare homepage (codes absent) -- caught by membership check.
- * 2. The swapped route (codes present, wrong direction) -- caught by the
- *    directional regex below: origin must appear BEFORE destination near a
- *    connector token like "to", "→", or "—".
- * 3. A nearby-airport substitution (one code missing, another shown) --
- *    caught by membership check.
+ * * Chained routes leak: "BDS Brindisi to LHR via JFK" matched
+ *   `BDS ... to ... JFK` even though the requested route never appears.
+ * * Plain "to" is not token-bounded: matches inside "stop", "Toronto",
+ *   "destination", so any flight card with a stop satisfies the regex
+ *   regardless of the actual airports.
+ * * Plain dash characters appear in dates, durations, and price ranges,
+ *   so a wide context window around any dash gives false positives.
  *
- * Remaining gaps that this function intentionally does NOT cover:
+ * Strict patterns demand immediate adjacency between the airport codes and
+ * a route connector. That is what Google actually renders on results
+ * pages: the search-bar header, breadcrumbs, and route chips all show
+ * `from BDS to JFK`, `BDS - John F. Kennedy`, or `BDS → JFK` with the
+ * codes adjacent to the connector.
  *
- * * Wrong date: Google renders dates in too many formats to match reliably.
- *   A nearby acceptable failure is that wrong-date pages still tend to drop
- *   one of the two codes from the visible text when Google falls back to
- *   default dates.
- * * Wrong trip type: requires inspecting trip-type chips, which are
- *   selector-fragile. The pre-navigation `one way` token plus URL rotation
- *   covers the URL side; this guard covers the route side.
+ * Failure modes this function does NOT cover:
  *
- * If the directional check passes but the page still has wrong dates or
- * wrong trip type, the LLM extractor downstream uses the page text directly
- * and would still produce snapshots labelled with the user's travelDate but
- * priced from a different date. Tracking this as a known residual risk;
- * mitigations beyond URL/text are out of scope for this PR.
+ * * Wrong date with the right route. Google renders dates in too many
+ *   formats to match reliably; mitigated by carrying the date in every
+ *   URL candidate and by URL rotation.
+ * * Wrong trip type. Mitigated by the explicit `one way` token in every
+ *   one-way URL candidate.
+ *
+ * Both residual risks fail-soft (the next candidate retries) rather than
+ * silently overwriting good snapshots.
  */
 export function pageHasRequestedRoute(
   pageText: string,
   origin: string,
   destination: string,
 ): boolean {
-  // Word-boundary match prevents "AYT" matching inside other tokens like
-  // "PAYTON". Codes are 3 uppercase letters, so this is safe.
-  const originRe = new RegExp(`\\b${origin}\\b`);
-  const destRe = new RegExp(`\\b${destination}\\b`);
-  if (!originRe.test(pageText) || !destRe.test(pageText)) {
-    return false;
-  }
+  const o = escapeRegex(origin);
+  const d = escapeRegex(destination);
 
-  // Directional check: somewhere in the page, origin must appear before
-  // destination separated by a connector and at most ~120 chars of context.
-  // 120 chars accommodates flight cards that show airline + duration + stops
-  // between the codes (`BDS 6:35 PM ... 14h 20m ... JFK 9:55 PM`).
-  const connectors = ROUTE_CONNECTORS.map(escapeRegex).join('|');
-  const directional = new RegExp(
-    `\\b${escapeRegex(origin)}\\b[\\s\\S]{0,120}(?:${connectors})[\\s\\S]{0,120}\\b${escapeRegex(destination)}\\b`,
-  );
-  return directional.test(pageText);
+  // Each pattern requires the airport codes adjacent to a connector with
+  // no other airport code between them. "?" / "*" quantifiers are bounded
+  // tightly to avoid the chained-route leak.
+  // "noOtherIata" matches a single character that is NOT the start of a
+  // 3-letter uppercase IATA code. Used to allow airport names ("Brindisi",
+  // "John F. Kennedy") between codes while blocking other airport codes
+  // (LHR, FCO) from being layovers in chained-route phrases.
+  const noOtherIata = `(?:(?!\\b[A-Z]{3}\\b)[\\s\\S])`;
+  const strict: RegExp[] = [
+    // "from BDS to JFK" / "from BDS Brindisi to John F. Kennedy JFK".
+    new RegExp(`\\bfrom\\s+${o}\\b${noOtherIata}{0,80}\\bto\\b${noOtherIata}{0,80}\\b${d}\\b`),
+    // "BDS to JFK" / "BDS Brindisi to JFK" with no other IATA in between.
+    new RegExp(`\\b${o}\\b${noOtherIata}{0,80}\\bto\\b${noOtherIata}{0,80}\\b${d}\\b`),
+    // "BDS → JFK" / "BDS ⇒ JFK" — immediate adjacency.
+    new RegExp(`\\b${o}\\s*[→⇒]\\s*${d}\\b`),
+    // "BDS - JFK" / "BDS – JFK" / "BDS — JFK" / "BDS-JFK" — immediate adjacency.
+    new RegExp(`\\b${o}\\s*[-–—]\\s*${d}\\b`),
+  ];
+
+  return strict.some((re) => re.test(pageText));
 }
 
 /**
