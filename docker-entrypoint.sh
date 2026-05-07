@@ -55,8 +55,13 @@ done
 echo "[setup] Database is ready"
 
 # --- Run migrations ---
+# Pin prisma to the major version that matches the schema (currently v6).
+# Without the pin, `npx prisma` fetches whatever the npm registry serves
+# as latest, which broke deploys when Prisma 7 dropped `url = env(...)`.
+# A future Dockerfile change should bundle the CLI + transitive deps so
+# this stops round-tripping the registry entirely.
 echo "[setup] Applying database schema..."
-npx prisma@6 db push --schema=apps/web/prisma/schema.prisma --skip-generate 2>&1 | tail -1
+npx prisma@^6 db push --schema=apps/web/prisma/schema.prisma --skip-generate 2>&1 | tail -1
 echo "[setup] Schema ready"
 
 # --- Self-hosted only: CLI auth + install ---

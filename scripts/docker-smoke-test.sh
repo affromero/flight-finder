@@ -26,6 +26,25 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 cd "$REPO_ROOT"
 
+# --- Precheck: Docker daemon must be reachable BEFORE any trap is set.
+# Without this, `docker compose build` fails on a missing socket and the
+# EXIT-trap cleanup masks the failure (the trap returns 0 because of the
+# `|| true` in `down`, and bash uses that as the exit code). The release
+# gate then reports "passed" even though no checks ran. See
+# https://github.com/affromero/fairtrail/pull/...
+if ! docker info >/dev/null 2>&1; then
+  cat >&2 <<EOF
+  [smoke] FATAL Docker daemon is not reachable.
+
+  Start Docker Desktop (macOS) or the docker service (Linux), wait for
+  the daemon to come up, and re-run:
+
+      ./scripts/docker-smoke-test.sh
+
+EOF
+  exit 1
+fi
+
 # --- Config ---
 COMPOSE_FILES="-f docker-compose.yml -f docker-compose.test.yml"
 CRON_SECRET="smoke-test-secret-$(date +%s)"
@@ -45,9 +64,19 @@ done
 info()  { echo "  [smoke] $*"; }
 pass()  { echo "  [smoke] PASS $*"; }
 fail()  { echo "  [smoke] FAIL $*"; }
-fatal() { echo "  [smoke] FATAL $*" >&2; cleanup; exit 1; }
+fatal() { echo "  [smoke] FATAL $*" >&2; exit 1; }
+# Don't call cleanup manually here — the EXIT trap fires it automatically
+# with the right $? (1, from this exit), whereas calling cleanup directly
+# would let `local status=$?` inside cleanup capture 0 from the prior
+# `echo` and then `exit "$status"` would exit successfully, masking the
+# fatal we just reported.
 
 cleanup() {
+  # Capture the exit status that triggered this trap. Without this, a
+  # successful `docker compose down` later in the cleanup overwrites the
+  # original failure code and the script reports a false "all checks
+  # passed". The trap restores it via `exit "$status"` at the end.
+  local status=$?
   info "Tearing down..."
   CRON_SECRET="$CRON_SECRET" HOST_PORT="$HOST_PORT" \
     docker compose $COMPOSE_FILES down -v --remove-orphans 2>/dev/null || true
@@ -57,6 +86,8 @@ cleanup() {
   else
     rm -f "$REPO_ROOT/.env" "$REPO_ROOT/.env.smoke-backup"
   fi
+  # Propagate the original failure to the shell.
+  exit "$status"
 }
 
 trap cleanup EXIT
