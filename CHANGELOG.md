@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.2] - 2026-05-07
+
+### Fixed
+- **CLI `dc: invalid option -- 't'` on `fairtrail --headless`** (#64): `cmd_tui` used `exec dc exec ...` to dispatch the headless TUI, but bash's `exec` builtin only runs external commands and not shell functions, so it found `/usr/bin/dc` (GNU desk calculator) and passed it `-it web fairtrail-tui --headless`. The call site now expands `$_DC $COMPOSE_FILES` inline so the running shell is replaced by `docker compose` as intended. Regression test added.
+- **"Best price found" card showed sold-out flights** (#64): `run-scrape` writes a `sold_out` snapshot that copies the prior price each time a flight disappears. PriceChart and PriceHistory both filter `status !== 'sold_out'`; BestPrice did not, so a vanished cheap fare could keep ranking as best with a Book button pointing at a dead listing. BestPrice now matches the other components and renders nothing when every snapshot is sold out.
+- **Scraper failed for less popular EU airport pairs** (#65): `?q=one+way+flights+from+BDS+to+JFK+on+2026-11-09+to+2026-11-09` carried a redundant `+to+${dateTo}` for one-way searches and Google's NLU misparsed the duplicate date for less confident codes (BDS, BRI), falling back to the homepage. Retries hit the same URL three times. Fix rotates through three structurally distinct text URLs (verbose phrase, terse codes plus date, reworded with `departing`/`returning` keywords). New `pageHasRequestedRoute` defense verifies after navigation that the rendered page actually shows the requested route in the requested direction; `pageRedirectedToHomepage` catches the literal `q=` strip case. URL construction now goes through `URL`/`URLSearchParams` with strict IATA validation. Per-candidate logging tells operators which URL format Google's parser accepted. 12 commits, 10 `/codex` audit cycles.
+- **Installer dead-ended on Manjaro/Arch when user freshly added to docker group** (#62 follow-up): `install.sh` ran `docker info &>/dev/null 2>&1` and treated any failure as "daemon not running", suggesting `sudo systemctl start docker` even when the daemon was already running and the actual error was permission denied on the socket. Now captures stderr, gates on exit status (not stderr presence, since docker info can exit 0 with deprecation warnings), and branches: permission-denied tells the user about the docker group and `newgrp docker`; daemon-down keeps the original `systemctl start docker` path.
+
 ## [0.5.1] - 2026-05-03
 
 ### Fixed
