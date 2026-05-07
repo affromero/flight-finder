@@ -168,6 +168,60 @@ describe('install.sh', () => {
     const beforeDocker = lines.slice(Math.max(0, dockerOllamaIdx - 3), dockerOllamaIdx).join('\n');
     expect(beforeDocker).toContain('else');
   });
+
+  describe('Docker reachability detection (regression: #62)', () => {
+    // The previous version always interpreted `docker info` failure as
+    // "daemon down" and told the user to run `systemctl start docker`. On
+    // Manjaro/Arch the more common failure is permission denied (user is
+    // not in the docker group, or the current shell session has not picked
+    // up the new group). Telling them to start an already-running daemon
+    // dead-ended the install.
+
+    it('captures docker info stderr instead of discarding it', () => {
+      // The new branch needs the actual error text to distinguish failure
+      // modes; the old `docker info &>/dev/null 2>&1` form lost it.
+      expect(INSTALL_SH).toMatch(/docker info\s+2>&1\s+1>\/dev\/null/);
+    });
+
+    it('matches "permission denied" branch separately from daemon-down', () => {
+      // Both case variants because docker error output has differed by
+      // version (lowercase older, capital P newer).
+      expect(INSTALL_SH).toContain('"permission denied"');
+      expect(INSTALL_SH).toContain('"Permission denied"');
+    });
+
+    it('permission-denied branch tells the user about the docker group', () => {
+      // Without this, a user who just ran `usermod -aG docker $USER` but
+      // never logged out gets sent to `systemctl start docker`, which
+      // does nothing.
+      const dockerGroupBlock = INSTALL_SH.split('permission denied')[1] ?? '';
+      expect(dockerGroupBlock).toContain('docker');
+      expect(dockerGroupBlock).toContain('group');
+      expect(dockerGroupBlock).toContain('newgrp');
+    });
+
+    it('daemon-down branch still suggests systemctl start docker', () => {
+      // Existing behavior must still work for the "daemon really is not
+      // running" case — verify the systemctl message survives the refactor.
+      expect(INSTALL_SH).toContain('sudo systemctl start docker');
+    });
+
+    it('does NOT issue the daemon-down message before checking the failure mode', () => {
+      // Regression guard: the old code unconditionally said "Could not
+      // start Docker" on any docker info failure. With the new branching,
+      // that fail() must only fire inside the daemon-down case, after the
+      // permission-denied case has already been excluded.
+      const lines = INSTALL_SH.split('\n');
+      const couldNotStartIdx = lines.findIndex((l) =>
+        l.includes('Could not start Docker')
+      );
+      const permissionDeniedIdx = lines.findIndex((l) =>
+        l.includes('"permission denied"')
+      );
+      expect(permissionDeniedIdx).toBeGreaterThan(-1);
+      expect(couldNotStartIdx).toBeGreaterThan(permissionDeniedIdx);
+    });
+  });
 });
 
 describe('fairtrail-cli', () => {
