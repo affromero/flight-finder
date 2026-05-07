@@ -148,17 +148,43 @@ export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): str
 /** Stable label per candidate index, used in logs so failures are diagnosable. */
 const CANDIDATE_NAMES = ['verbose', 'terse', 'reworded'] as const;
 
+/** Directional connectors between origin and destination on Flights pages.
+ *  Google renders any of these, plus locale variants. The literal word "to"
+ *  is the most common in en-US.
+ */
+const ROUTE_CONNECTORS = ['to', '→', '⇒', '–', '—', '-'];
+
+function escapeRegex(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 /**
  * Verify the loaded Google Flights page is actually showing the requested
- * route. Google's NLU can silently resolve an ambiguous query to a different
- * airport pair, default dates, or the bare homepage and still render
- * `[data-gs]`-bearing content. Without this guard, we would write snapshots
- * tagged with the user's travelDate but priced for the wrong route.
+ * route IN THE REQUESTED DIRECTION. Google's NLU can silently resolve an
+ * ambiguous query to:
  *
- * The check is intentionally narrow: we only assert the requested IATA codes
- * appear in the visible text. Date validation is harder (Google renders dates
- * in many formats) and a URL-rotation candidate that arrived at the right
- * airports but the wrong date is much less plausible than a homepage fallback.
+ * 1. The bare homepage (codes absent) -- caught by membership check.
+ * 2. The swapped route (codes present, wrong direction) -- caught by the
+ *    directional regex below: origin must appear BEFORE destination near a
+ *    connector token like "to", "→", or "—".
+ * 3. A nearby-airport substitution (one code missing, another shown) --
+ *    caught by membership check.
+ *
+ * Remaining gaps that this function intentionally does NOT cover:
+ *
+ * * Wrong date: Google renders dates in too many formats to match reliably.
+ *   A nearby acceptable failure is that wrong-date pages still tend to drop
+ *   one of the two codes from the visible text when Google falls back to
+ *   default dates.
+ * * Wrong trip type: requires inspecting trip-type chips, which are
+ *   selector-fragile. The pre-navigation `one way` token plus URL rotation
+ *   covers the URL side; this guard covers the route side.
+ *
+ * If the directional check passes but the page still has wrong dates or
+ * wrong trip type, the LLM extractor downstream uses the page text directly
+ * and would still produce snapshots labelled with the user's travelDate but
+ * priced from a different date. Tracking this as a known residual risk;
+ * mitigations beyond URL/text are out of scope for this PR.
  */
 export function pageHasRequestedRoute(
   pageText: string,
@@ -169,7 +195,34 @@ export function pageHasRequestedRoute(
   // "PAYTON". Codes are 3 uppercase letters, so this is safe.
   const originRe = new RegExp(`\\b${origin}\\b`);
   const destRe = new RegExp(`\\b${destination}\\b`);
-  return originRe.test(pageText) && destRe.test(pageText);
+  if (!originRe.test(pageText) || !destRe.test(pageText)) {
+    return false;
+  }
+
+  // Directional check: somewhere in the page, origin must appear before
+  // destination separated by a connector and at most ~120 chars of context.
+  // 120 chars accommodates flight cards that show airline + duration + stops
+  // between the codes (`BDS 6:35 PM ... 14h 20m ... JFK 9:55 PM`).
+  const connectors = ROUTE_CONNECTORS.map(escapeRegex).join('|');
+  const directional = new RegExp(
+    `\\b${escapeRegex(origin)}\\b[\\s\\S]{0,120}(?:${connectors})[\\s\\S]{0,120}\\b${escapeRegex(destination)}\\b`,
+  );
+  return directional.test(pageText);
+}
+
+/**
+ * Detect the specific failure mode reported in #65: Google strips the `q`
+ * parameter and redirects to the bare /travel/flights homepage. The input
+ * URL has a q param; the resolved URL does not.
+ */
+export function pageRedirectedToHomepage(inputUrl: string, finalUrl: string): boolean {
+  try {
+    const had = new URL(inputUrl).searchParams.has('q');
+    const has = new URL(finalUrl).searchParams.has('q');
+    return had && !has;
+  } catch {
+    return false;
+  }
 }
 
 export async function navigateGoogleFlights(
@@ -236,14 +289,22 @@ export async function navigateGoogleFlights(
       const html = await page.evaluate(() => document.body.innerText);
       const finalUrl = page.url();
 
-      // Belt-and-suspenders defense against silent route corruption: even when
-      // [data-gs] resolves, Google may have landed on a different airport pair,
-      // a homepage fallback, or default-date results. Verify the requested
-      // codes appear in the visible text before treating the attempt as a
-      // success — a false success here would write snapshots labeled with the
-      // user's travelDate but priced for the wrong route.
+      // Belt-and-suspenders defense against silent route corruption. Three
+      // layers; any failure marks the attempt failed and rotates to the next
+      // URL candidate. A false success here would write snapshots labeled
+      // with the user's travelDate but priced for a different route.
+      //
+      // 1. Homepage redirect: Google strips q= and lands on the bare
+      //    /travel/flights URL. This is the headline #65 failure mode.
+      // 2. Route membership + direction: both IATA codes must appear in the
+      //    visible text AND in the requested order separated by a route
+      //    connector (catches swapped routes and unrelated suggestion lists).
+      if (resultsFound && pageRedirectedToHomepage(url, finalUrl)) {
+        console.log(`[navigate] q= dropped on redirect (input=${url}, final=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
+        resultsFound = false;
+      }
       if (resultsFound && !pageHasRequestedRoute(html, params.origin, params.destination)) {
-        console.log(`[navigate] page text missing requested airports (origin=${params.origin}, dest=${params.destination}, finalUrl=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
+        console.log(`[navigate] page text missing requested directional route (origin=${params.origin}, dest=${params.destination}, finalUrl=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
         resultsFound = false;
       }
 

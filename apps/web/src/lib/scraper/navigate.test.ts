@@ -3,6 +3,7 @@ import {
   buildGoogleFlightsUrl,
   buildGoogleFlightsUrlCandidates,
   pageHasRequestedRoute,
+  pageRedirectedToHomepage,
 } from './navigate';
 
 describe('buildGoogleFlightsUrl', () => {
@@ -177,40 +178,90 @@ describe('IATA validation (regression: query-param injection via raw interpolati
 });
 
 describe('pageHasRequestedRoute (post-navigation defense)', () => {
-  // After the URL fix and rotation, this is the last line of defense against
-  // silent route corruption: even if a candidate URL "succeeds", verify the
-  // rendered page is showing the requested route before extracting prices.
+  // After URL rotation, this is the last line of defense against silent route
+  // corruption: verify the rendered page shows the requested route in the
+  // requested direction before extracting prices.
 
-  it('returns true when both airport codes appear in the page text', () => {
+  it('returns true when codes appear in directional order with a connector', () => {
     const text = 'Flights from BDS to JFK\n€96\nTurkish Airlines\nDeparts Wed Nov 9';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
   });
 
+  it('accepts arrow connectors used in flight cards', () => {
+    const text = 'BDS → JFK · 14h 20m · 1 stop';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
+  it('accepts long flight-card context between codes (~120 chars)', () => {
+    // Real flight cards put airline, duration, stops, time between codes.
+    const text = 'BDS 6:35 PM Turkish Airlines TK 1882 14h 20m 1 stop in IST JFK 9:55 PM';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
   it('returns false when origin code is missing (homepage fallback case)', () => {
-    // Bare /travel/flights homepage shows recommended destinations from your
-    // location — JFK might appear in suggestions, BDS will not.
     const text = 'Top destinations from Rome (FCO): JFK New York, LHR London';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
-  it('returns false when destination code is missing (route-substitution case)', () => {
-    // If Google silently swaps the destination (BDS to FCO instead of JFK),
-    // we must NOT write snapshots tagged JFK with FCO prices.
+  it('returns false when destination code is missing (route substitution)', () => {
     const text = 'Cheapest flights from BDS to FCO: €45';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
+  it('returns false when codes appear but in WRONG direction (swap regression)', () => {
+    // Critical: a page for JFK→BDS contains both codes. The directional
+    // regex must reject it because the user requested BDS→JFK, and writing
+    // JFK→BDS prices under a BDS→JFK tracker is silent corruption.
+    const text = 'Flights from JFK to BDS\n€350\nDelta';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
+  it('returns false when codes appear in unrelated suggestion lists with no directional context', () => {
+    // Both codes exist on the homepage in disjointed contexts — there is no
+    // connector linking them in the requested direction.
+    const text = `Recent searches:
+      LHR to JFK
+      MAD to FCO
+      Popular from your area:
+        BDS · Brindisi
+        FCO · Rome
+        NAP · Naples`;
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
   it('uses word boundaries so codes inside other tokens do not false-match', () => {
-    // "PAYTON" must not satisfy a search for "AYT" — both are 3 chars but the
-    // user is tracking AYT (Antalya), not a name.
     const text = 'Booking under PAYTON, John\nDeparts ISTANBUL';
     expect(pageHasRequestedRoute(text, 'IST', 'AYT')).toBe(false);
   });
 
   it('matches case-sensitively (IATA codes are uppercase)', () => {
-    // IATA codes are always uppercase. A page containing only lowercase "bds"
-    // is suspicious and should not satisfy the check.
     const text = 'flights from bds to jfk are available';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+});
+
+describe('pageRedirectedToHomepage (the #65 headline failure mode)', () => {
+  it('detects when Google strips the q= parameter on redirect', () => {
+    const input = 'https://www.google.com/travel/flights?q=one+way+BDS+to+JFK&hl=en';
+    const final = 'https://www.google.com/travel/flights?hl=en';
+    expect(pageRedirectedToHomepage(input, final)).toBe(true);
+  });
+
+  it('returns false when q= survives the redirect', () => {
+    const input = 'https://www.google.com/travel/flights?q=one+way+BDS+to+JFK&hl=en';
+    const final = 'https://www.google.com/travel/flights?q=one+way+BDS+to+JFK&hl=en';
+    expect(pageRedirectedToHomepage(input, final)).toBe(false);
+  });
+
+  it('returns false when input never had a q= (cannot be a fallback)', () => {
+    // We are not currently producing such URLs (every candidate has q=),
+    // but defending against the symmetric case keeps the helper honest.
+    const input = 'https://www.google.com/travel/flights/search?tfs=ABC';
+    const final = 'https://www.google.com/travel/flights?hl=en';
+    expect(pageRedirectedToHomepage(input, final)).toBe(false);
+  });
+
+  it('returns false on malformed URL inputs (defensive)', () => {
+    expect(pageRedirectedToHomepage('not a url', 'also not a url')).toBe(false);
   });
 });
