@@ -12,12 +12,18 @@ interface Snapshot {
   duration: string | null;
   vpnCountry: string | null;
   scrapedAt: string;
+  status?: string;
 }
 
 export function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
-  if (snapshots.length === 0) return null;
+  // Sold-out snapshots carry the last seen price (run-scrape.ts marks the row
+  // sold_out but copies the prior price). The listing is no longer bookable,
+  // so excluding them keeps a vanished cheap fare from outranking real ones
+  // and avoids a Book button that points at a dead URL.
+  const bookable = snapshots.filter((s) => s.status !== 'sold_out');
+  if (bookable.length === 0) return null;
 
-  const best = snapshots.reduce((min, s) => (s.price < min.price ? s : min), snapshots[0]!);
+  const best = bookable.reduce((min, s) => (s.price < min.price ? s : min), bookable[0]!);
 
   return (
     <div className={styles.root}>
