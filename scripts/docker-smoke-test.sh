@@ -64,7 +64,12 @@ done
 info()  { echo "  [smoke] $*"; }
 pass()  { echo "  [smoke] PASS $*"; }
 fail()  { echo "  [smoke] FAIL $*"; }
-fatal() { echo "  [smoke] FATAL $*" >&2; cleanup; exit 1; }
+fatal() { echo "  [smoke] FATAL $*" >&2; exit 1; }
+# Don't call cleanup manually here — the EXIT trap fires it automatically
+# with the right $? (1, from this exit), whereas calling cleanup directly
+# would let `local status=$?` inside cleanup capture 0 from the prior
+# `echo` and then `exit "$status"` would exit successfully, masking the
+# fatal we just reported.
 
 cleanup() {
   # Capture the exit status that triggered this trap. Without this, a
