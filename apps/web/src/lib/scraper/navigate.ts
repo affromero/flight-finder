@@ -183,13 +183,24 @@ function escapeRegex(s: string): string {
  * silently overwriting good snapshots.
  */
 /**
- * Currencies the Fairtrail settings UI exposes (apps/web/src/app/settings/
- * page.tsx). When pageHasRequestedRoute walks the gap between airport codes
- * it allows these tokens through because they are 3-letter uppercase but
- * never airport codes — Google Flights commonly renders currency labels in
- * headers ("BDS Brindisi to TRY area JFK"). Keep this list in sync with the
- * settings dropdown; users selecting "Other..." pass the custom code via
- * the `currency` arg, which is also allowed dynamically.
+ * Currencies allowed inside the route-validation gap. The first 21 entries
+ * mirror the dropdown in apps/web/src/app/settings/page.tsx; TRY is added
+ * because Fairtrail's #64 example was IST/AYT (Turkish market) and TRY
+ * labels appear in those headers even though TRY is not in the settings
+ * dropdown today.
+ *
+ * Accepted residual risk: several of these codes are also valid IATA
+ * airport codes (HKD = Hakodate, BRL = Borba, CAD = Cadillac, CHF = Chefornak,
+ * NOK = Nogales, DKK = Dakar military, ARS = Aragarcas, etc.). A chained
+ * route like "BDS to HKD via JFK" therefore accepts under current policy.
+ * Real Google Flights pages do not render that phrasing for a JFK booking,
+ * so the practical corruption frequency is near zero, but the invariant is
+ * not "currencies are never airport codes". Removing overlapping codes
+ * would re-introduce false negatives for users in those currency locales,
+ * which is the actual reported bug; on balance we keep them.
+ *
+ * Users selecting "Other..." in settings pass the custom code via the
+ * `currency` arg to pageHasRequestedRoute, allowed dynamically.
  */
 const ALLOWED_CURRENCY_TOKENS = [
   'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'MXN',
