@@ -312,6 +312,35 @@ describe('pageHasRequestedRoute (strict directional defense)', () => {
     expect(pageHasRequestedRoute(text, 'IST', 'AYT')).toBe(true);
   });
 
+  it.each([
+    'CNY', 'INR', 'MXN', 'BRL', 'KRW', 'SGD', 'HKD',
+    'SEK', 'NOK', 'DKK', 'NZD', 'THB', 'COP', 'ARS',
+  ])('accepts every settings-supported currency in the gap (%s)', (curr) => {
+    // The settings dropdown lets users pick any of these currencies.
+    // pageHasRequestedRoute must allow each one in the gap so the locales
+    // we explicitly support never produce silent rejection.
+    const text = `BDS Brindisi to ${curr} fares JFK`;
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
+  it('accepts a dynamically supplied custom currency code', () => {
+    // Settings exposes "Other..." which lets the user type any 3-letter ISO
+    // 4217 code. Those are not in the static list but must still be allowed.
+    // ZAR (South African Rand) is a real ISO code not in the dropdown.
+    const text = 'BDS Brindisi to ZAR fares JFK';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false); // not in static list
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK', 'ZAR')).toBe(true); // dynamic param allows it
+  });
+
+  it('ignores a malformed dynamic currency (not 3 uppercase)', () => {
+    // Defensive: callers passing junk like 'eur', 'EU', '$$$' must not
+    // expand the allowlist with arbitrary tokens.
+    const text = 'BDS Brindisi to LHR fares JFK';
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK', 'lhr')).toBe(false);
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK', 'LH')).toBe(false);
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK', '$$$')).toBe(false);
+  });
+
   it('still rejects unknown 3-letter uppercase codes (real airport layovers)', () => {
     // Allowlist must NOT swallow real airport codes that are layovers.
     expect(pageHasRequestedRoute('BDS to LHR via JFK', 'BDS', 'JFK')).toBe(false);

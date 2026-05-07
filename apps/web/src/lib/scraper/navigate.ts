@@ -182,33 +182,43 @@ function escapeRegex(s: string): string {
  * Both residual risks fail-soft (the next candidate retries) rather than
  * silently overwriting good snapshots.
  */
+/**
+ * Currencies the Fairtrail settings UI exposes (apps/web/src/app/settings/
+ * page.tsx). When pageHasRequestedRoute walks the gap between airport codes
+ * it allows these tokens through because they are 3-letter uppercase but
+ * never airport codes — Google Flights commonly renders currency labels in
+ * headers ("BDS Brindisi to TRY area JFK"). Keep this list in sync with the
+ * settings dropdown; users selecting "Other..." pass the custom code via
+ * the `currency` arg, which is also allowed dynamically.
+ */
+const ALLOWED_CURRENCY_TOKENS = [
+  'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'MXN',
+  'BRL', 'KRW', 'SGD', 'HKD', 'SEK', 'NOK', 'DKK', 'NZD', 'THB', 'COP',
+  'ARS', 'TRY',
+] as const;
+
 export function pageHasRequestedRoute(
   pageText: string,
   origin: string,
   destination: string,
+  currency?: string | null,
 ): boolean {
   const o = escapeRegex(origin);
   const d = escapeRegex(destination);
 
-  // Each pattern requires the airport codes adjacent to a connector with
-  // no other airport code between them. "?" / "*" quantifiers are bounded
-  // tightly to avoid the chained-route leak.
-  // "noOtherIata" matches a single character that is NOT the start of a
-  // 3-letter uppercase IATA-shaped token, with two exceptions: the origin
-  // and destination codes themselves (Google headers often render the code
-  // both as a label and a parenthetical alias, e.g. "BDS Brindisi (BDS) to
-  // JFK"), and a small allowlist of common 3-letter uppercase tokens that
-  // appear in flight pages but are not airport codes (currency labels).
-  // Other 3-letter uppercase tokens (LHR, FCO, NYC, USA) block the gap so
-  // chained-route phrases like "BDS Brindisi to LHR via JFK" never match.
-  // Currency allowlist covers the locales we have actual users in — TRY is
-  // critical because Fairtrail's #64 example was IST/AYT (Turkish market) and
-  // Turkish Lira labels appear in those headers.
-  const allowedInGap = [
-    origin,
-    destination,
-    'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'TRY',
-  ]
+  // Tokens the strict regex allows inside the gap between origin and destination:
+  //
+  // 1. Origin and destination themselves: Google headers render the code both
+  //    as a label and a parenthetical alias ("BDS Brindisi (BDS) to JFK").
+  // 2. The currency the query uses: passed dynamically so users who selected
+  //    "Other..." in settings (any ISO 4217 3-letter code) are covered.
+  // 3. The standard supported currency list (above): covers cases where the
+  //    query has currency=null and Google auto-detects locale-appropriate.
+  //
+  // Any OTHER 3-letter uppercase token (LHR, FCO, NYC, USA) blocks the gap.
+  // That is what stops "BDS Brindisi to LHR via JFK" from matching.
+  const dynamicCurrency = currency && /^[A-Z]{3}$/.test(currency) ? [currency] : [];
+  const allowedInGap = [origin, destination, ...dynamicCurrency, ...ALLOWED_CURRENCY_TOKENS]
     .map(escapeRegex)
     .join('|');
   const noOtherIata = `(?:(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;
@@ -319,7 +329,7 @@ export async function navigateGoogleFlights(
         console.log(`[navigate] q= dropped on redirect (input=${url}, final=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
         resultsFound = false;
       }
-      if (resultsFound && !pageHasRequestedRoute(html, params.origin, params.destination)) {
+      if (resultsFound && !pageHasRequestedRoute(html, params.origin, params.destination, params.currency)) {
         console.log(`[navigate] page text missing requested directional route (origin=${params.origin}, dest=${params.destination}, finalUrl=${finalUrl}) — treating attempt ${attempt} (${candidateName}) as failed`);
         resultsFound = false;
       }
