@@ -355,10 +355,38 @@ describe('pageHasRequestedRoute (strict directional defense)', () => {
     expect(pageHasRequestedRoute('BDS to CAD via JFK', 'BDS', 'JFK')).toBe(false);
   });
 
-  it('rejects chained routes phrased with "layover", "through", "connecting"', () => {
+  it('rejects chained routes phrased with "layover", "through", "connecting", "stopover"', () => {
     expect(pageHasRequestedRoute('BDS to HKD layover JFK', 'BDS', 'JFK')).toBe(false);
     expect(pageHasRequestedRoute('BDS to FCO through JFK', 'BDS', 'JFK')).toBe(false);
     expect(pageHasRequestedRoute('BDS to LHR connecting JFK', 'BDS', 'JFK')).toBe(false);
+    expect(pageHasRequestedRoute('BDS to HKD stopover JFK', 'BDS', 'JFK')).toBe(false);
+  });
+
+  it.each([
+    ['Via', 'BDS to HKD Via JFK'],
+    ['VIA', 'BDS to HKD VIA JFK'],
+    ['Layover', 'BDS to HKD Layover JFK'],
+    ['LAYOVER', 'BDS to HKD LAYOVER JFK'],
+    ['Connecting', 'BDS to HKD Connecting JFK'],
+    ['CONNECTING', 'BDS to HKD CONNECTING JFK'],
+    ['Through', 'BDS to HKD Through JFK'],
+    ['Stopover', 'BDS to HKD Stopover JFK'],
+  ])('rejects %s case variant of chaining keyword', (_label, text) => {
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
+  it('does NOT block "stop" / "stops" / "stopping" (intentional, real flight cards use them)', () => {
+    // Google flight cards display "1 stop", "Nonstop", etc. in metadata
+    // adjacent to airport codes. Blocking these would reject every page
+    // with a layover description in the gap, including legitimate ones.
+    // Chained routes that route through a real airport code are still
+    // caught by the IATA-allowlist guard (LHR/FCO/NYC etc. block the gap).
+    // Currency-airport overlaps with these phrasings are out of scope.
+    // The phrasing "BDS to HKD stopping at JFK" is unusual on real pages.
+    expect(pageHasRequestedRoute('BDS Brindisi to JFK 1 stop', 'BDS', 'JFK')).toBe(true);
+    // The currency-airport overlap with "stopping" remains theoretically
+    // open. Real Google headers do not phrase headers this way.
+    expect(pageHasRequestedRoute('BDS to HKD stopping at JFK', 'BDS', 'JFK')).toBe(true);
   });
 
   it('still rejects unknown 3-letter uppercase codes (real airport layovers)', () => {

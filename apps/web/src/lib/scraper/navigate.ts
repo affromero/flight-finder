@@ -240,7 +240,18 @@ export function pageHasRequestedRoute(
   const allowedInGap = [origin, destination, ...dynamicCurrency, ...ALLOWED_CURRENCY_TOKENS]
     .map(escapeRegex)
     .join('|');
-  const blockingChainKeyword = `\\b(?:via|layover|through|connecting)\\b`;
+  // Chaining keywords are matched case-insensitively. JS regex has no inline
+  // (?i) flag and the top-level /i flag would break the [A-Z]{3} IATA guard
+  // in this same alternation, so we expand each lowercase letter into a
+  // character class. "Via" / "VIA" / "via" all match.
+  // We deliberately do NOT include "stop" / "stopping" / "stops": those
+  // appear legitimately in flight-card metadata ("1 stop", "Nonstop") and
+  // would over-block the gap. Chained routes that use a non-currency IATA
+  // code as layover are still rejected by the IATA-allowlist guard below.
+  const eachCase = (word: string): string =>
+    word.split('').map((ch) => `[${ch.toLowerCase()}${ch.toUpperCase()}]`).join('');
+  const chainWords = ['via', 'layover', 'through', 'connecting', 'stopover'];
+  const blockingChainKeyword = `\\b(?:${chainWords.map(eachCase).join('|')})\\b`;
   const noOtherIata = `(?:(?!${blockingChainKeyword})(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;
   const strict: RegExp[] = [
     // "from BDS to JFK" / "from BDS Brindisi to John F. Kennedy JFK".
