@@ -201,7 +201,14 @@ export function pageHasRequestedRoute(
   // appear in flight pages but are not airport codes (currency labels).
   // Other 3-letter uppercase tokens (LHR, FCO, NYC, USA) block the gap so
   // chained-route phrases like "BDS Brindisi to LHR via JFK" never match.
-  const allowedInGap = [origin, destination, 'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD']
+  // Currency allowlist covers the locales we have actual users in — TRY is
+  // critical because Fairtrail's #64 example was IST/AYT (Turkish market) and
+  // Turkish Lira labels appear in those headers.
+  const allowedInGap = [
+    origin,
+    destination,
+    'USD', 'EUR', 'GBP', 'JPY', 'CHF', 'CAD', 'AUD', 'TRY',
+  ]
     .map(escapeRegex)
     .join('|');
   const noOtherIata = `(?:(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;

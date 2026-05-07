@@ -298,10 +298,18 @@ describe('pageHasRequestedRoute (strict directional defense)', () => {
   });
 
   it('accepts currency codes in the gap ("BDS to USD airport JFK")', () => {
-    // USD/EUR/GBP/JPY/CHF/CAD/AUD are 3-letter uppercase but not airport
+    // USD/EUR/GBP/JPY/CHF/CAD/AUD/TRY are 3-letter uppercase but not airport
     // codes. Google may render currency labels in flight pages.
     const text = 'BDS Brindisi to USD area JFK';
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(true);
+  });
+
+  it('accepts TRY in the gap (Turkish Lira, regression for #64 IST/AYT scenario)', () => {
+    // The IST/AYT example in issue #64 is in the Turkish market where TRY
+    // labels commonly appear in Google Flights headers. Without TRY in the
+    // allowlist the route validator would always reject those pages.
+    const text = 'IST Istanbul to TRY area AYT';
+    expect(pageHasRequestedRoute(text, 'IST', 'AYT')).toBe(true);
   });
 
   it('still rejects unknown 3-letter uppercase codes (real airport layovers)', () => {
