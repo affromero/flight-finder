@@ -249,4 +249,17 @@ describe('fairtrail-cli', () => {
       );
     }
   });
+
+  it('never `exec`s the dc() shell function (regression: GH #64)', () => {
+    // `exec` only runs external commands; `exec dc ...` invokes /usr/bin/dc
+    // (the desk calculator), producing errors like `dc: invalid option -- 't'`.
+    // To replace the process with docker compose, expand $_DC inline instead.
+    const offending = CLI_SH.split('\n').filter(
+      (l) => /^\s*exec\s+dc(\s|$)/.test(l) && !l.trimStart().startsWith('#')
+    );
+    expect(
+      offending,
+      `'exec dc ...' must use $_DC directly:\n${offending.join('\n')}`
+    ).toEqual([]);
+  });
 });
