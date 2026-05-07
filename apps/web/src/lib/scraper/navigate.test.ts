@@ -375,18 +375,43 @@ describe('pageHasRequestedRoute (strict directional defense)', () => {
     expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
-  it('does NOT block "stop" / "stops" / "stopping" (intentional, real flight cards use them)', () => {
-    // Google flight cards display "1 stop", "Nonstop", etc. in metadata
-    // adjacent to airport codes. Blocking these would reject every page
-    // with a layover description in the gap, including legitimate ones.
-    // Chained routes that route through a real airport code are still
-    // caught by the IATA-allowlist guard (LHR/FCO/NYC etc. block the gap).
-    // Currency-airport overlaps with these phrasings are out of scope.
-    // The phrasing "BDS to HKD stopping at JFK" is unusual on real pages.
+  it('still accepts bare "stop" / "Nonstop" metadata on flight cards', () => {
+    // The chain-phrase blockers target chained-route phrases like "stops at"
+    // or "with a stop". Bare "stop" / "1 stop" / "Nonstop" remains unblocked
+    // because that text appears in legitimate flight-card metadata adjacent
+    // to airport codes.
     expect(pageHasRequestedRoute('BDS Brindisi to JFK 1 stop', 'BDS', 'JFK')).toBe(true);
-    // The currency-airport overlap with "stopping" remains theoretically
-    // open. Real Google headers do not phrase headers this way.
-    expect(pageHasRequestedRoute('BDS to HKD stopping at JFK', 'BDS', 'JFK')).toBe(true);
+    expect(pageHasRequestedRoute('Flights from BDS to JFK Nonstop', 'BDS', 'JFK')).toBe(true);
+  });
+
+  it.each([
+    ['stops at', 'BDS to HKD stops at JFK'],
+    ['stops in', 'BDS to HKD stops in JFK'],
+    ['stop at', 'BDS to HKD stop at JFK'],
+    ['stop in', 'BDS to HKD stop in JFK'],
+    ['stopping at', 'BDS to HKD stopping at JFK'],
+    ['stopping in', 'BDS to HKD stopping in JFK'],
+    ['with stop', 'BDS to HKD with stop JFK'],
+    ['with a stop', 'BDS to HKD with a stop JFK'],
+    ['with stopover', 'BDS to HKD with stopover JFK'],
+    ['with a stopover', 'BDS to HKD with a stopover JFK'],
+    ['stop over (two words)', 'BDS to HKD stop over JFK'],
+    ['stop-over (hyphen)', 'BDS to HKD stop-over JFK'],
+    ['connection', 'BDS to HKD connection JFK'],
+    ['connection at', 'BDS to HKD connection at JFK'],
+    ['connection in', 'BDS to HKD connection in JFK'],
+    ['connection through', 'BDS to HKD connection through JFK'],
+  ])('rejects chained-route phrase "%s" even with currency-airport overlap', (_label, text) => {
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
+  });
+
+  it.each([
+    ['Stops At', 'BDS to HKD Stops At JFK'],
+    ['STOPPING IN', 'BDS to HKD STOPPING IN JFK'],
+    ['With A Stop', 'BDS to HKD With A Stop JFK'],
+    ['Connection Through', 'BDS to HKD Connection Through JFK'],
+  ])('chain-phrase blockers are case-insensitive (%s)', (_label, text) => {
+    expect(pageHasRequestedRoute(text, 'BDS', 'JFK')).toBe(false);
   });
 
   it('still rejects unknown 3-letter uppercase codes (real airport layovers)', () => {

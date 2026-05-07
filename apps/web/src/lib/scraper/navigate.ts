@@ -240,18 +240,43 @@ export function pageHasRequestedRoute(
   const allowedInGap = [origin, destination, ...dynamicCurrency, ...ALLOWED_CURRENCY_TOKENS]
     .map(escapeRegex)
     .join('|');
-  // Chaining keywords are matched case-insensitively. JS regex has no inline
-  // (?i) flag and the top-level /i flag would break the [A-Z]{3} IATA guard
-  // in this same alternation, so we expand each lowercase letter into a
-  // character class. "Via" / "VIA" / "via" all match.
-  // We deliberately do NOT include "stop" / "stopping" / "stops": those
-  // appear legitimately in flight-card metadata ("1 stop", "Nonstop") and
-  // would over-block the gap. Chained routes that use a non-currency IATA
-  // code as layover are still rejected by the IATA-allowlist guard below.
-  const eachCase = (word: string): string =>
-    word.split('').map((ch) => `[${ch.toLowerCase()}${ch.toUpperCase()}]`).join('');
-  const chainWords = ['via', 'layover', 'through', 'connecting', 'stopover'];
-  const blockingChainKeyword = `\\b(?:${chainWords.map(eachCase).join('|')})\\b`;
+  // Chaining keywords matched case-insensitively. JS regex has no inline (?i)
+  // flag and the top-level /i flag would break the [A-Z]{3} IATA guard in
+  // the same alternation, so each ASCII letter is expanded to a character
+  // class via `ci` below. The helper hard-fails on regex metacharacters so a
+  // future addition to the phrase list cannot silently inject regex syntax.
+  //
+  // Phrase coverage: bare chain words (via / layover / through / connecting /
+  // stopover) plus phrase-form variants that close the currency/IATA overlap
+  // for `stop`-family chained routes ("stopping at", "stops in", "with a
+  // stop at", "connection in"). Bare `stop`/`stops`/`stopping` is NOT
+  // blocked because real flight-card metadata (`1 stop`, `Nonstop`) sits in
+  // the 80-char gap on legitimate pages.
+  const ci = (word: string): string => {
+    if (!/^[a-z]+$/.test(word)) {
+      throw new Error(`pageHasRequestedRoute: ci() expects lowercase ASCII letters only, got ${JSON.stringify(word)}`);
+    }
+    return word.split('').map((ch) => `[${ch}${ch.toUpperCase()}]`).join('');
+  };
+  const chainPhrases = [
+    ci('via'),
+    ci('layover'),
+    ci('through'),
+    ci('connecting'),
+    ci('stopover'),
+    // "stop over" / "stop-over"
+    `${ci('stop')}[-\\s]+${ci('over')}`,
+    // "stop at"/"stop in"/"stops at"/"stops in"
+    `${ci('stop')}${ci('s')}?\\s+${ci('at')}`,
+    `${ci('stop')}${ci('s')}?\\s+${ci('in')}`,
+    // "stopping at"/"stopping in"
+    `${ci('stopping')}\\s+(?:${ci('at')}|${ci('in')})`,
+    // "with stop"/"with a stop"/"with stopover"/"with a stopover"
+    `${ci('with')}\\s+(?:${ci('a')}\\s+)?${ci('stop')}(?:${ci('over')})?`,
+    // "connection"/"connection at"/"connection in"/"connection through"
+    `${ci('connection')}(?:\\s+(?:${ci('at')}|${ci('in')}|${ci('through')}))?`,
+  ];
+  const blockingChainKeyword = `\\b(?:${chainPhrases.join('|')})\\b`;
   const noOtherIata = `(?:(?!${blockingChainKeyword})(?!\\b(?!(?:${allowedInGap})\\b)[A-Z]{3}\\b)[\\s\\S])`;
   const strict: RegExp[] = [
     // "from BDS to JFK" / "from BDS Brindisi to John F. Kennedy JFK".
