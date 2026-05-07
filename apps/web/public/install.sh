@@ -159,25 +159,47 @@ else
 fi
 
 if [ "$CONTAINER_CMD" = "docker" ]; then
-  if ! docker info &>/dev/null 2>&1; then
-    case "$OS" in
-      macos)
-        fail "Docker Desktop is not running.\n\n  Open Docker Desktop from Applications, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://fairtrail.org/install.sh | bash${RESET}"
-        ;;
-      linux|wsl)
-        warn "Docker daemon is not running."
-        printf "  ${DIM}Trying to start it...${RESET}\n"
-        if command -v sudo &>/dev/null; then
-          sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
-          sleep 2
-        fi
-        if ! docker info &>/dev/null 2>&1; then
-          fail "Could not start Docker.\n\n  Start it manually: ${BOLD}sudo systemctl start docker${RESET}\n  Then re-run this installer."
-        fi
-        ok "Docker daemon started"
+  # Capture stderr so we can distinguish permission-denied (user is not in
+  # the docker group / shell session has not picked up new group membership)
+  # from daemon-down. The previous version always told the user to start the
+  # daemon, which is wrong on the common Manjaro/Arch path where the daemon
+  # is already running but the current shell cannot reach the socket. See #62.
+  #
+  # Gate on exit status, not stderr presence: docker info can exit 0 while
+  # writing warnings to stderr (deprecated config, plugin notices, etc).
+  if ! docker_info_err=$(docker info 2>&1 1>/dev/null); then
+    case "$docker_info_err" in
+      *"permission denied"*|*"Permission denied"*)
+        case "$OS" in
+          linux|wsl)
+            fail "Docker is running but your user cannot access the socket.\n\n  This usually means you are not in the ${BOLD}docker${RESET} group, or your\n  current shell session has not picked up that membership yet.\n\n  Try one of these:\n    ${BOLD}newgrp docker${RESET}  ${DIM}# refresh group in this shell, then re-run${RESET}\n    Log out and back in fully (close all terminals), then re-run\n    Reboot, then re-run\n\n  If you are not yet in the docker group:\n    ${BOLD}sudo usermod -aG docker \$USER${RESET}  ${DIM}# then log out + in${RESET}"
+            ;;
+          *)
+            fail "Docker socket is not accessible (permission denied).\n  Run this installer as a user that can access the docker socket."
+            ;;
+        esac
         ;;
       *)
-        fail "Docker is not running. Start Docker and try again."
+        case "$OS" in
+          macos)
+            fail "Docker Desktop is not running.\n\n  Open Docker Desktop from Applications, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://fairtrail.org/install.sh | bash${RESET}"
+            ;;
+          linux|wsl)
+            warn "Docker daemon is not running."
+            printf "  ${DIM}Trying to start it...${RESET}\n"
+            if command -v sudo &>/dev/null; then
+              sudo systemctl start docker 2>/dev/null || sudo service docker start 2>/dev/null || true
+              sleep 2
+            fi
+            if ! docker info &>/dev/null 2>&1; then
+              fail "Could not start Docker.\n\n  Start it manually: ${BOLD}sudo systemctl start docker${RESET}\n  Then re-run this installer."
+            fi
+            ok "Docker daemon started"
+            ;;
+          *)
+            fail "Docker is not running. Start Docker and try again."
+            ;;
+        esac
         ;;
     esac
   fi
