@@ -24,8 +24,6 @@ export interface ScrapeDatePair {
 export interface ExpandQueryDatesOptions {
   /** Max one-way pairs across the [dateFrom, dateTo] window. */
   oneWayCap?: number;
-  /** Round-trip grid side length (N x N pairs after dedupe). */
-  roundTripGrid?: number;
 }
 
 /** Convert a Date to an ISO calendar day (UTC). */
@@ -70,25 +68,23 @@ function evenIndices(length: number, count: number): number[] {
  *   - If the range is wider than `oneWayCap`, samples evenly-spaced days,
  *     always including dateFrom and dateTo.
  *
- * Round-trip with flexibility > 0:
- *   - Outbound dates: `roundTripGrid` evenly-spaced from
- *     [dateFrom, min(dateFrom + 2*flex, dateTo)].
- *   - Return dates: `roundTripGrid` evenly-spaced from
- *     [max(dateTo - 2*flex, dateFrom), dateTo].
- *   - Cartesian product, deduped by (outboundISO, returnISO), then filtered
- *     to keep only pairs where outbound <= return.
- *
- * Round-trip flexibility = 0 and one-way dateFrom == dateTo collapse to a
- * single pair (no behavior change for current single-day queries).
+ * Round-trip:
+ *   - Always emits a single (dateFrom, dateTo) pair regardless of
+ *     flexibility. PriceSnapshot.flightId is keyed by airline + outbound
+ *     travelDate only, so iterating multiple (outbound, return) pairs would
+ *     collapse same-outbound flights with different returns. Google
+ *     Flights' calendar grid already surfaces nearby return dates within a
+ *     single search, so the loss is small. Adding RT pair iteration would
+ *     require a returnTravelDate column on PriceSnapshot and changes to
+ *     flightId; that is a future migration, not part of this fix.
  */
 export function expandQueryDates(
   query: { dateFrom: Date; dateTo: Date; flexibility: number; tripType: string },
   options: ExpandQueryDatesOptions = {},
 ): ScrapeDatePair[] {
   const oneWayCap = options.oneWayCap ?? 7;
-  const roundTripGrid = options.roundTripGrid ?? 3;
 
-  const { dateFrom, dateTo, flexibility, tripType } = query;
+  const { dateFrom, dateTo, tripType } = query;
   const isOneWay = tripType === 'one_way';
 
   if (isOneWay) {
@@ -104,45 +100,8 @@ export function expandQueryDates(
     });
   }
 
-  // Round-trip
-  if (flexibility <= 0) {
-    return [{ outbound: dateFrom, return_: dateTo }];
-  }
-
-  // Outbound flex window: [dateFrom, dateFrom + 2*flex] clamped to dateTo.
-  const outboundEnd = new Date(
-    Math.min(addDaysUtc(dateFrom, 2 * flexibility).getTime(), dateTo.getTime()),
-  );
-  const outboundSpan = Math.max(0, dayDiff(dateFrom, outboundEnd));
-  const outboundDays = outboundSpan + 1;
-  const outboundIndices = evenIndices(outboundDays, Math.min(outboundDays, roundTripGrid));
-  const outboundDates = outboundIndices.map((i) => addDaysUtc(dateFrom, i));
-
-  // Return flex window: [dateTo - 2*flex, dateTo] clamped to dateFrom.
-  const returnStart = new Date(
-    Math.max(addDaysUtc(dateTo, -2 * flexibility).getTime(), dateFrom.getTime()),
-  );
-  const returnSpan = Math.max(0, dayDiff(returnStart, dateTo));
-  const returnDays = returnSpan + 1;
-  const returnIndices = evenIndices(returnDays, Math.min(returnDays, roundTripGrid));
-  const returnDates = returnIndices.map((i) => addDaysUtc(returnStart, i));
-
-  // Cartesian product, dedupe, drop outbound > return.
-  const seen = new Set<string>();
-  const pairs: ScrapeDatePair[] = [];
-  for (const outbound of outboundDates) {
-    for (const ret of returnDates) {
-      if (outbound.getTime() > ret.getTime()) continue;
-      const key = `${toIsoDay(outbound)}|${toIsoDay(ret)}`;
-      if (seen.has(key)) continue;
-      seen.add(key);
-      pairs.push({ outbound, return_: ret });
-    }
-  }
-  if (pairs.length === 0) {
-    return [{ outbound: dateFrom, return_: dateTo }];
-  }
-  return pairs;
+  // Round-trip: single pair until flightId/dedupe gain return-date awareness.
+  return [{ outbound: dateFrom, return_: dateTo }];
 }
 
 /**
@@ -167,14 +126,4 @@ export function expandContinuousRangeToDates(
   const totalDays = span + 1;
   const indices = evenIndices(totalDays, Math.min(totalDays, cap));
   return indices.map((i) => toIsoDay(addDaysUtc(from, i)));
-}
-
-/**
- * For the preview path: the round-trip pair count must respect the
- * combos x dates <= 24 cap in validatePreviewPayload. Return the largest
- * grid side that fits. Always >= 1.
- */
-export function previewRoundTripGridForCombos(combos: number): number {
-  if (combos <= 0) return 1;
-  return Math.max(1, Math.floor(Math.sqrt(24 / combos)));
 }

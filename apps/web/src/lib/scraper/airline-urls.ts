@@ -106,15 +106,29 @@ const AIRLINE_URL_SPECS: Record<string, AirlineSpec> = {
   },
 
   united: {
-    base: 'https://www.united.com/en-us/flight-search',
-    origin: 'from',
-    destination: 'to',
+    // Preserves the original path-based booking URL
+    // (https://www.united.com/en-us/flights-from-X-to-Y) which depends on
+    // the IATA codes being interpolated into the path, so this airline uses
+    // a customBuilder rather than the AirlineSpec query-string flow.
+    base: 'https://www.united.com',
+    origin: '__path',
+    destination: '__path',
     departureDate: 'departure',
-    returnDate: 'return',
-    passengers: { key: 'passengers', value: '1' },
-    cabin: {
-      key: 'cabin',
-      map: { economy: 'economy', premium_economy: 'premium-economy', business: 'business', first: 'first' },
+    customBuilder: (p, oneWay) => {
+      assertValidIataCode(p.origin, 'origin');
+      assertValidIataCode(p.destination, 'destination');
+      const url = new URL(`https://www.united.com/en-us/flights-from-${p.origin}-to-${p.destination}`);
+      url.searchParams.set('departure', isoDate(p.dateFrom));
+      if (!oneWay) url.searchParams.set('return', isoDate(p.dateTo));
+      url.searchParams.set('passengers', '1');
+      const cabinMapper: Record<string, string> = {
+        economy: 'economy',
+        premium_economy: 'premium-economy',
+        business: 'business',
+        first: 'first',
+      };
+      url.searchParams.set('cabin', cabinMapper[p.cabinClass ?? 'economy'] ?? 'economy');
+      return url;
     },
   },
 

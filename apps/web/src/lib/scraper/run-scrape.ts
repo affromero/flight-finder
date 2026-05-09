@@ -149,8 +149,10 @@ async function scrapeQueryForCountry(
   const costs = getModelCosts(provider, model);
 
   // Expand the date window into per-pair scrapes. One-way iterates every day
-  // in [dateFrom, dateTo] capped at 7; round-trip with flex emits a 3x3
-  // outbound/return grid; flex=0 collapses to a single pair.
+  // in [dateFrom, dateTo] capped at 7. Round-trip emits a single (dateFrom,
+  // dateTo) pair regardless of flexibility; iterating multiple pairs would
+  // collapse same-outbound flights with different returns at the
+  // flightId/dedupe layer.
   const pairs = expandQueryDates(
     {
       dateFrom: searchParams.dateFrom,
@@ -158,7 +160,7 @@ async function scrapeQueryForCountry(
       flexibility: query.flexibility ?? 0,
       tripType: searchParams.tripType ?? 'round_trip',
     },
-    { oneWayCap: 7, roundTripGrid: 3 },
+    { oneWayCap: 7 },
   );
   console.log(`[scrape] query=${queryId} expanded into ${pairs.length} date pair(s)`);
 
@@ -170,16 +172,26 @@ async function scrapeQueryForCountry(
   const scrapedTravelDates = new Set<string>();
 
   for (const pair of pairs) {
-    scrapedTravelDates.add(pair.outbound.toISOString().slice(0, 10));
+    const pairTravelDate = pair.outbound.toISOString().slice(0, 10);
     const pairParams: import('./navigate').FlightSearchParams = {
       ...searchParams,
       dateFrom: pair.outbound,
       dateTo: pair.return_,
     };
 
-    const pairResult = await scrapeOneDatePair(
-      queryId, pairParams, filters, directAirlines, useAirlineDirect, countryProfile, proxyUrl, vpnCountry,
-    );
+    // Per-pair try/catch isolates failures: a thrown pair (browser crash,
+    // VPN hiccup) must not discard prices already gathered from prior pairs.
+    let pairResult: PairScrapeResult;
+    try {
+      pairResult = await scrapeOneDatePair(
+        queryId, pairParams, filters, directAirlines, useAirlineDirect, countryProfile, proxyUrl, vpnCountry,
+      );
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      console.error(`[scrape] query=${queryId} pair=${pairTravelDate} threw err=${msg}`);
+      lastFailureReason = lastFailureReason ?? 'page_not_loaded';
+      continue;
+    }
 
     allPrices = allPrices.concat(pairResult.prices);
     totalInputTokens += pairResult.inputTokens;
@@ -187,6 +199,13 @@ async function scrapeQueryForCountry(
     for (const s of pairResult.sources) sources.add(s);
     if (pairResult.lastFailureReason) {
       lastFailureReason = pairResult.lastFailureReason;
+    }
+    // Only mark this travelDate as authoritatively scraped if the pair
+    // produced prices. Without this gate, a pair that hit page_not_loaded
+    // or llm_error would still flag prior snapshots for that date as
+    // sold_out, even though we did not actually verify availability.
+    if (pairResult.prices.length > 0) {
+      scrapedTravelDates.add(pairTravelDate);
     }
   }
 

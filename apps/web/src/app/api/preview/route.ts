@@ -165,7 +165,7 @@ function validatePreviewPayload(payload: PreviewRequestPayload): PreviewValidati
   const totalTasks = combos * datesToScrape.length;
 
   if (totalTasks > 24) {
-    throw new Error(`Too many date/route combinations (${totalTasks}). Max ${PREVIEW_MAX_DATES} dates x 4 routes = 28; cap is 24.`);
+    throw new Error(`Too many date/route combinations (${totalTasks}). Cap is 24 (combos x dates).`);
   }
 
   if (returnDates && outboundDates && !isOneWay && returnDates.length !== outboundDates.length) {

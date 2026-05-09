@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import {
   expandQueryDates,
   expandContinuousRangeToDates,
-  previewRoundTripGridForCombos,
 } from './scrape-dates';
 
 const D = (s: string) => new Date(s + 'T00:00:00Z');
@@ -76,6 +75,10 @@ describe('expandQueryDates one-way', () => {
 });
 
 describe('expandQueryDates round-trip', () => {
+  // Round-trip always emits a single (dateFrom, dateTo) pair. Iterating per
+  // pair would collapse same-outbound flights with different returns at the
+  // flightId/dedupe layer; that requires a returnTravelDate column on
+  // PriceSnapshot which is out of scope for this fix.
   it('flex=0 emits a single (dateFrom, dateTo) pair', () => {
     const pairs = expandQueryDates({
       dateFrom: D('2026-06-15'),
@@ -88,57 +91,16 @@ describe('expandQueryDates round-trip', () => {
     expect(iso(pairs[0]!.return_)).toBe('2026-06-22');
   });
 
-  it('flex=2 over an 11-day trip emits 9 pairs (3x3 grid)', () => {
-    // Intent: outbound around Jun 15 +/- 2, return around Jun 22 +/- 2.
-    // Storage: dateFrom=Jun 13, dateTo=Jun 24 (= 22+2).
+  it('flex>0 still emits a single (dateFrom, dateTo) pair (RT iteration deferred)', () => {
     const pairs = expandQueryDates({
       dateFrom: D('2026-06-13'),
       dateTo: D('2026-06-24'),
       flexibility: 2,
       tripType: 'round_trip',
     });
-    expect(pairs).toHaveLength(9);
-
-    const outboundDays = new Set(pairs.map((p) => iso(p.outbound)));
-    const returnDays = new Set(pairs.map((p) => iso(p.return_)));
-    expect(outboundDays).toEqual(new Set(['2026-06-13', '2026-06-15', '2026-06-17']));
-    expect(returnDays).toEqual(new Set(['2026-06-20', '2026-06-22', '2026-06-24']));
-
-    // Every pair must have outbound <= return.
-    for (const p of pairs) {
-      expect(p.outbound.getTime()).toBeLessThanOrEqual(p.return_.getTime());
-    }
-  });
-
-  it('tight window (flex > gap) clamps and produces valid pairs', () => {
-    const pairs = expandQueryDates({
-      dateFrom: D('2026-06-15'),
-      dateTo: D('2026-06-16'),
-      flexibility: 5,
-      tripType: 'round_trip',
-    });
-    expect(pairs.length).toBeGreaterThanOrEqual(1);
-    for (const p of pairs) {
-      const o = iso(p.outbound);
-      const r = iso(p.return_);
-      expect(o >= '2026-06-15' && o <= '2026-06-16').toBe(true);
-      expect(r >= '2026-06-15' && r <= '2026-06-16').toBe(true);
-      expect(p.outbound.getTime()).toBeLessThanOrEqual(p.return_.getTime());
-    }
-  });
-
-  it('dedupes when grid cells coincide', () => {
-    // flex=1 on a tight window where outbound and return windows overlap
-    // entirely: every outbound choice equals every return choice (after
-    // outbound <= return filter, only the diagonal pairs survive).
-    const pairs = expandQueryDates({
-      dateFrom: D('2026-06-15'),
-      dateTo: D('2026-06-15'),
-      flexibility: 1,
-      tripType: 'round_trip',
-    });
-    const keys = pairs.map((p) => `${iso(p.outbound)}|${iso(p.return_)}`);
-    expect(new Set(keys).size).toBe(keys.length);
+    expect(pairs).toHaveLength(1);
+    expect(iso(pairs[0]!.outbound)).toBe('2026-06-13');
+    expect(iso(pairs[0]!.return_)).toBe('2026-06-24');
   });
 });
 
@@ -176,20 +138,3 @@ describe('expandContinuousRangeToDates', () => {
   });
 });
 
-describe('previewRoundTripGridForCombos', () => {
-  it('1 combo allows 4x4 grid', () => {
-    expect(previewRoundTripGridForCombos(1)).toBe(4);
-  });
-
-  it('6 combos allows 2x2 grid (4 pairs, 24 tasks)', () => {
-    expect(previewRoundTripGridForCombos(6)).toBe(2);
-  });
-
-  it('25 combos clamps to 1', () => {
-    expect(previewRoundTripGridForCombos(25)).toBe(1);
-  });
-
-  it('0 combos defaults to 1 (defensive)', () => {
-    expect(previewRoundTripGridForCombos(0)).toBe(1);
-  });
-});
