@@ -43,6 +43,26 @@ test_update_shows_curl_errors() {
 }
 
 # ---------------------------------------------------------------------------
+# Test: fairtrail update force-recreates the web container after pull (#72)
+# ---------------------------------------------------------------------------
+# Without --force-recreate, podman-compose does not always detect a digest
+# change on :latest after `dc pull web` and skips the recreate, leaving the
+# user running the old image even though the pull succeeded.
+test_update_force_recreates_web() {
+  local cli="apps/web/public/fairtrail-cli"
+  local block
+  block=$(sed -n '/^cmd_update/,/^cmd_/p' "$cli")
+
+  # The cmd_update block must contain a `dc up -d` line that includes both
+  # --force-recreate and --no-deps targeting the `web` service.
+  if echo "$block" | grep -E 'dc up -d.*--force-recreate.*--no-deps.*web|dc up -d.*--no-deps.*--force-recreate.*web' >/dev/null; then
+    pass "fairtrail update force-recreates web after pull (#72)"
+  else
+    fail "fairtrail update should run 'dc up -d --force-recreate --no-deps web' after pull/build (#72)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Test: install.sh patches both .bashrc and .profile
 # ---------------------------------------------------------------------------
 test_path_patches_both_files() {
@@ -238,6 +258,7 @@ echo ""
 
 test_update_self_path
 test_update_shows_curl_errors
+test_update_force_recreates_web
 test_path_patches_both_files
 test_old_dir_migration
 test_env_host_port
