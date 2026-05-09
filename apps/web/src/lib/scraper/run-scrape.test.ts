@@ -70,9 +70,12 @@ const BASE_QUERY = {
   preferredAirlines: [],
   maxPrice: null,
   maxStops: null,
+  maxDurationHours: null,
   timePreference: 'any',
+  flexibility: 0,
   lookAheadDays: 14,
   expiresAt: new Date('2027-01-01'),
+  vpnCountries: [],
 };
 
 describe('runScrapeForQuery', () => {
@@ -302,6 +305,458 @@ describe('runScrapeForQuery', () => {
       ]),
     });
   });
+});
+
+describe('runScrapeForQuery multi-pair date expansion (issue #65)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.fetchRun.create.mockResolvedValue({ id: 'run1' });
+    mockPrisma.fetchRun.update.mockResolvedValue({});
+    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      scrapeInterval: 3,
+      defaultCurrency: null,
+      defaultCountry: null,
+      vpnProvider: null,
+      vpnCountries: [],
+    });
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([]);
+    mockPrisma.priceSnapshot.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.apiUsageLog.create.mockResolvedValue({});
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices.mockResolvedValue({
+      prices: [{
+        travelDate: '2026-11-07',
+        price: 350,
+        currency: 'USD',
+        airline: 'Delta',
+        bookingUrl: '',
+        stops: 0,
+        duration: '5h',
+        departureTime: null,
+        arrivalTime: null,
+        seatsLeft: null,
+      }],
+      usage: { inputTokens: 100, outputTokens: 20 },
+    });
+  });
+
+  it('one-way query with flex=2 calls navigate 5 times for the 5-day window', async () => {
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...BASE_QUERY,
+      tripType: 'one_way',
+      dateFrom: new Date('2026-11-07'),
+      dateTo: new Date('2026-11-11'),
+      flexibility: 2,
+    });
+
+    await runScrapeForQuery('q1');
+
+    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(5);
+    const dates = mockNavigateGoogleFlights.mock.calls.map((call) => {
+      const params = call[0] as { dateFrom: Date };
+      return params.dateFrom.toISOString().slice(0, 10);
+    });
+    expect(dates).toEqual(['2026-11-07', '2026-11-08', '2026-11-09', '2026-11-10', '2026-11-11']);
+  });
+
+  it('round-trip flex>0 still calls navigate once (single (dateFrom, dateTo) pair)', async () => {
+    // RT iteration is deferred until flightId/dedupe gain return-date awareness.
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...BASE_QUERY,
+      tripType: 'round_trip',
+      dateFrom: new Date('2026-06-13'),
+      dateTo: new Date('2026-06-24'),
+      flexibility: 2,
+    });
+
+    await runScrapeForQuery('q1');
+
+    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(1);
+  });
+
+  it('creates a single FetchRun for a multi-pair scrape', async () => {
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...BASE_QUERY,
+      tripType: 'one_way',
+      dateFrom: new Date('2026-11-07'),
+      dateTo: new Date('2026-11-09'),
+      flexibility: 1,
+    });
+
+    await runScrapeForQuery('q1');
+
+    expect(mockPrisma.fetchRun.create).toHaveBeenCalledTimes(1);
+    expect(mockPrisma.fetchRun.update).toHaveBeenCalledTimes(1);
+  });
+
+  it('flex=0 keeps single-pair behavior (no regression for non-flex queries)', async () => {
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...BASE_QUERY,
+      tripType: 'one_way',
+      dateFrom: new Date('2026-06-15'),
+      dateTo: new Date('2026-06-15'),
+      flexibility: 0,
+    });
+
+    await runScrapeForQuery('q1');
+
+    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('runScrapeForQuery sold-out scoping (issue #65)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.fetchRun.create.mockResolvedValue({ id: 'run1' });
+    mockPrisma.fetchRun.update.mockResolvedValue({});
+    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      scrapeInterval: 3,
+      defaultCurrency: null,
+      defaultCountry: null,
+      vpnProvider: null,
+      vpnCountries: [],
+    });
+    mockPrisma.priceSnapshot.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.apiUsageLog.create.mockResolvedValue({});
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+  });
+
+  it('does not flag sold-out when the pair scrape itself failed (audit blocker)', async () => {
+    // A failed pair (page_not_loaded, llm_error, etc.) must not mark prior
+    // snapshots for that date as sold_out, because we did not actually
+    // verify availability.
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...BASE_QUERY,
+      tripType: 'one_way',
+      dateFrom: new Date('2026-11-07'),
+      dateTo: new Date('2026-11-07'),
+      flexibility: 0,
+    });
+
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([{
+      flightId: 'Delta-1025-JFK-LAX-2026-11-07',
+      flightNumber: null,
+      price: 350,
+      airline: 'Delta',
+      travelDate: new Date('2026-11-07'),
+      currency: 'USD',
+      bookingUrl: 'https://example.com',
+      stops: 0,
+      duration: '5h',
+      departureTime: '10:25 AM',
+      arrivalTime: '3:25 PM',
+      status: 'available',
+    }]);
+
+    // Pair scrape returns failureReason on every attempt (no prices).
+    mockExtractPrices.mockResolvedValue({
+      prices: [],
+      usage: { inputTokens: 100, outputTokens: 20 },
+      failureReason: 'page_not_loaded',
+    });
+
+    await runScrapeForQuery('q1');
+
+    // No createMany call should mark the prior Delta flight as sold_out
+    // because the pair did not produce any prices.
+    const soldOutCall = mockPrisma.priceSnapshot.createMany.mock.calls.find((call) =>
+      Array.isArray(call[0]?.data) && call[0].data.some((row: { status?: string }) => row.status === 'sold_out')
+    );
+    expect(soldOutCall).toBeUndefined();
+  }, 15_000);
+
+  it('does not flag sold-out for prior dates outside the scraped pair set', async () => {
+    // Query covers Nov 7..Nov 9 (one-way flex=1, 3-day window).
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...BASE_QUERY,
+      tripType: 'one_way',
+      dateFrom: new Date('2026-11-07'),
+      dateTo: new Date('2026-11-09'),
+      flexibility: 1,
+    });
+
+    // Prior snapshots include Nov 5 (out of range) and Nov 7 (in range).
+    // Both have status=available. Nov 7 has a flight that disappears in the
+    // current scrape; Nov 5 is from a previous wider-window scrape.
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([
+      {
+        flightId: 'Delta-1025-JFK-LAX-2026-11-05',
+        flightNumber: null,
+        price: 300,
+        airline: 'Delta',
+        travelDate: new Date('2026-11-05'),
+        currency: 'USD',
+        bookingUrl: 'https://example.com',
+        stops: 0,
+        duration: '5h',
+        departureTime: '10:25 AM',
+        arrivalTime: '3:25 PM',
+        status: 'available',
+      },
+      {
+        flightId: 'Delta-1025-JFK-LAX-2026-11-07',
+        flightNumber: null,
+        price: 350,
+        airline: 'Delta',
+        travelDate: new Date('2026-11-07'),
+        currency: 'USD',
+        bookingUrl: 'https://example.com',
+        stops: 0,
+        duration: '5h',
+        departureTime: '10:25 AM',
+        arrivalTime: '3:25 PM',
+        status: 'available',
+      },
+    ]);
+
+    // The current scrape returns United (different from the existing Delta flights).
+    mockExtractPrices.mockResolvedValue({
+      prices: [{
+        travelDate: '2026-11-07',
+        price: 400,
+        currency: 'USD',
+        airline: 'United',
+        bookingUrl: '',
+        stops: 1,
+        duration: '7h',
+        departureTime: '2:00 PM',
+        arrivalTime: '5:30 PM',
+        seatsLeft: null,
+      }],
+      usage: { inputTokens: 100, outputTokens: 20 },
+    });
+
+    await runScrapeForQuery('q1');
+
+    // createMany is called for each pair's available rows (3 pairs x 1 flight = 3 calls)
+    // plus once for sold-out. Verify that the sold-out call only marks Nov 7 (in range),
+    // never Nov 5 (out of range).
+    const soldOutCall = mockPrisma.priceSnapshot.createMany.mock.calls.find((call) =>
+      Array.isArray(call[0]?.data) && call[0].data.some((row: { status?: string }) => row.status === 'sold_out')
+    );
+    expect(soldOutCall).toBeDefined();
+    const soldOutRows = soldOutCall![0].data as Array<{ flightId: string; status: string; travelDate: Date }>;
+    const soldOutDates = soldOutRows.map((r) => r.travelDate.toISOString().slice(0, 10));
+    expect(soldOutDates).toContain('2026-11-07');
+    expect(soldOutDates).not.toContain('2026-11-05');
+  });
+});
+
+describe('runScrapeForQuery extraction failure surfacing (issue #65)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.query.findUnique.mockResolvedValue(BASE_QUERY);
+    mockPrisma.fetchRun.create.mockResolvedValue({ id: 'run1' });
+    mockPrisma.fetchRun.update.mockResolvedValue({});
+    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      scrapeInterval: 3,
+      defaultCurrency: null,
+      defaultCountry: null,
+      vpnProvider: null,
+      vpnCountries: [],
+    });
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([]);
+    mockPrisma.priceSnapshot.createMany.mockResolvedValue({ count: 0 });
+    mockPrisma.apiUsageLog.create.mockResolvedValue({});
+  });
+
+  it('logs to console.error at the pair boundary when navigate throws (silent-catch fix)', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockNavigateGoogleFlights.mockRejectedValue(new Error('browser crashed'));
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('failed');
+    expect(consoleErr).toHaveBeenCalledWith(
+      expect.stringMatching(/pair=\S+ threw err=.*browser crashed/),
+    );
+    consoleErr.mockRestore();
+  });
+
+  it('logs to console.error in the outer runScrapeForQuery catch when scrapeQueryForCountry itself throws', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices.mockResolvedValue({
+      prices: [{
+        travelDate: '2026-06-15',
+        price: 350,
+        currency: 'USD',
+        airline: 'Delta',
+        bookingUrl: '',
+        stops: 0,
+        duration: '5h',
+        departureTime: null,
+        arrivalTime: null,
+        seatsLeft: null,
+      }],
+      usage: { inputTokens: 100, outputTokens: 20 },
+    });
+    // priceSnapshot.findMany runs after the pair loop inside
+    // scrapeQueryForCountry, so its throw lands in the outer catch.
+    mockPrisma.priceSnapshot.findMany.mockRejectedValueOnce(new Error('db connection lost'));
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('db connection lost');
+    expect(consoleErr).toHaveBeenCalledWith(
+      expect.stringContaining('runScrapeForQuery failed'),
+    );
+    consoleErr.mockRestore();
+  });
+
+  it('continues with remaining pairs when a single pair throws (issue #65 audit)', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...BASE_QUERY,
+      tripType: 'one_way',
+      dateFrom: new Date('2026-11-07'),
+      dateTo: new Date('2026-11-09'),
+      flexibility: 1,
+    });
+    // First pair throws, second succeeds, third succeeds.
+    mockNavigateGoogleFlights
+      .mockRejectedValueOnce(new Error('browser crashed'))
+      .mockResolvedValue({
+        html: '<html>flights</html>',
+        url: 'https://flights.google.com',
+        resultsFound: true,
+        source: 'google_flights',
+      });
+    mockExtractPrices.mockResolvedValue({
+      prices: [{
+        travelDate: '2026-11-08',
+        price: 350,
+        currency: 'USD',
+        airline: 'Delta',
+        bookingUrl: '',
+        stops: 0,
+        duration: '5h',
+        departureTime: null,
+        arrivalTime: null,
+        seatsLeft: null,
+      }],
+      usage: { inputTokens: 100, outputTokens: 20 },
+    });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('success');
+    expect(consoleErr).toHaveBeenCalledWith(
+      expect.stringMatching(/pair=2026-11-07 threw/),
+    );
+    consoleErr.mockRestore();
+  });
+
+  it('retries when first attempt returns llm_error then succeeds', async () => {
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices
+      .mockResolvedValueOnce({
+        prices: [],
+        usage: { inputTokens: 0, outputTokens: 0 },
+        failureReason: 'llm_error',
+      })
+      .mockResolvedValueOnce({
+        prices: [{
+          travelDate: '2026-06-15',
+          price: 350,
+          currency: 'USD',
+          airline: 'Delta',
+          bookingUrl: '',
+          stops: 0,
+          duration: '5h',
+          departureTime: null,
+          arrivalTime: null,
+          seatsLeft: null,
+        }],
+        usage: { inputTokens: 100, outputTokens: 20 },
+      });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('success');
+    expect(mockExtractPrices).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it('retries when first attempt returns json_parse_error then succeeds', async () => {
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices
+      .mockResolvedValueOnce({
+        prices: [],
+        usage: { inputTokens: 100, outputTokens: 20 },
+        failureReason: 'json_parse_error',
+      })
+      .mockResolvedValueOnce({
+        prices: [{
+          travelDate: '2026-06-15',
+          price: 350,
+          currency: 'USD',
+          airline: 'Delta',
+          bookingUrl: '',
+          stops: 0,
+          duration: '5h',
+          departureTime: null,
+          arrivalTime: null,
+          seatsLeft: null,
+        }],
+        usage: { inputTokens: 100, outputTokens: 20 },
+      });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('success');
+    expect(mockExtractPrices).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it('writes human-readable llm_error message to FetchRun', async () => {
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices.mockResolvedValue({
+      prices: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+      failureReason: 'llm_error',
+    });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('LLM call failed');
+  }, 15_000);
 });
 
 describe('PriceSnapshot schema', () => {

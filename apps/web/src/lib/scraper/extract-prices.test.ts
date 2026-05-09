@@ -289,4 +289,57 @@ describe('extractPrices', () => {
       process.env.ANTHROPIC_API_KEY = origKey;
     }
   });
+
+  // Issue #65: previously, if the LLM rejected (timeout, rate limit, etc.)
+  // the error propagated up and was swallowed by runScrapeForQuery's silent
+  // catch. Now extractPrices returns a structured llm_error and logs.
+  it('returns llm_error when provider extract throws', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockExtract.mockRejectedValue(new Error('rate limited'));
+
+    const result = await extractPrices('page content', 'https://flights.google.com', '2026-06-15');
+
+    expect(result.prices).toEqual([]);
+    expect(result.failureReason).toBe('llm_error');
+    expect(consoleErr).toHaveBeenCalledWith(
+      expect.stringContaining('FAIL llm_error'),
+    );
+    consoleErr.mockRestore();
+  });
+
+  it('returns llm_error when provider extract is aborted by AbortSignal timeout', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const abortErr = new Error('Request was aborted');
+    abortErr.name = 'AbortError';
+    mockExtract.mockRejectedValue(abortErr);
+
+    const result = await extractPrices('page content', 'https://flights.google.com', '2026-06-15');
+
+    expect(result.failureReason).toBe('llm_error');
+    consoleErr.mockRestore();
+  });
+
+  it('returns json_parse_error when LLM output has malformed JSON inside the bracket match', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // The regex /\[[\s\S]*\]/ matches; JSON.parse fails on truncated content.
+    mockExtract.mockResolvedValue({
+      content: '[{ "travelDate": "2026-06-15", "price": 6',  // truncated; closing ] is missing
+      usage: { inputTokens: 200, outputTokens: 50 },
+    });
+
+    // Force the regex to match by giving it a closing bracket that breaks JSON.
+    mockExtract.mockResolvedValue({
+      content: '[{ "travelDate": "2026-06-15", "price": invalid }]',
+      usage: { inputTokens: 200, outputTokens: 50 },
+    });
+
+    const result = await extractPrices('page content', 'https://flights.google.com', '2026-06-15');
+
+    expect(result.prices).toEqual([]);
+    expect(result.failureReason).toBe('json_parse_error');
+    expect(consoleErr).toHaveBeenCalledWith(
+      expect.stringContaining('FAIL json_parse_error'),
+    );
+    consoleErr.mockRestore();
+  });
 });

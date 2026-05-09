@@ -11,8 +11,17 @@ import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
 import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navigate';
 import type { Airport } from '@/lib/scraper/parse-query';
+import { expandContinuousRangeToDates } from '@/lib/scraper/scrape-dates';
 
-const RETRYABLE_FAILURES: ExtractionFailureReason[] = ['empty_extraction', 'page_not_loaded', 'no_json_in_response'];
+const PREVIEW_MAX_DATES = 7;
+
+const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
+  'empty_extraction',
+  'page_not_loaded',
+  'no_json_in_response',
+  'llm_error',
+  'json_parse_error',
+];
 const MAX_ATTEMPTS = 2;
 const DEBUG_DIR = '/tmp/fairtrail-debug';
 const PREVIEW_MAX_RESULTS = 20;
@@ -145,11 +154,18 @@ function validatePreviewPayload(payload: PreviewRequestPayload): PreviewValidati
   }
 
   const combos = origins.length * destinations.length;
-  const datesToScrape = outboundDates ?? [dateFrom];
+  // For continuous one-way ranges (no enumerated outboundDates), expand
+  // [dateFrom, dateTo] into per-day samples capped at PREVIEW_MAX_DATES so
+  // a +/- N flex query scrapes every day of the window. Round-trip continuous
+  // preview stays single-pair to fit the combos * dates <= 24 budget; the
+  // cron path does the wider grid.
+  const datesToScrape = outboundDates ?? (isOneWay
+    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
+    : [dateFrom]);
   const totalTasks = combos * datesToScrape.length;
 
   if (totalTasks > 24) {
-    throw new Error(`Too many date/route combinations (${totalTasks}). Max 6 dates x 4 routes = 24.`);
+    throw new Error(`Too many date/route combinations (${totalTasks}). Cap is 24 (combos x dates).`);
   }
 
   if (returnDates && outboundDates && !isOneWay && returnDates.length !== outboundDates.length) {
@@ -300,6 +316,8 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     no_json_in_response: `Could not extract flight data from ${sourceName}`,
     empty_extraction: `No flights found - ${sourceName} may be rate-limiting`,
     all_filtered_out: 'Flights exist but none matched your filters',
+    llm_error: 'Extraction provider failed (timeout or rate limit). Try again in a moment.',
+    json_parse_error: 'Extraction provider returned malformed output. Try again in a moment.',
   };
 
   throw new Error(messages[lastFailureReason!] ?? 'Flight extraction failed');
@@ -320,7 +338,9 @@ async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResult
     }
   }
 
-  const datesToScrape = outboundDates ?? [dateFrom];
+  const datesToScrape = outboundDates ?? (isOneWay
+    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
+    : [dateFrom]);
   const tasks: Array<{ combo: { origin: Airport; destination: Airport }; outboundDate: string; returnDate: string }> = [];
 
   for (const combo of combos) {

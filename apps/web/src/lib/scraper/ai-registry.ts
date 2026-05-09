@@ -1,5 +1,16 @@
 import Anthropic from '@anthropic-ai/sdk';
 
+/**
+ * Per-LLM-call timeout in ms. Without this, Gemini's SDK has no default
+ * request timeout and a hung call sits forever, which is what was happening
+ * in issue #65 (cron runs showed "[extract] sending ..." with no follow-up
+ * log line). 90s is conservative: Gemini Flash p99 for ~3k chars is ~30s.
+ * Configurable via env var EXTRACT_TIMEOUT_MS for ops tuning.
+ */
+const PARSED_TIMEOUT = parseInt(process.env.EXTRACT_TIMEOUT_MS ?? '90000', 10);
+export const EXTRACT_TIMEOUT_MS =
+  Number.isFinite(PARSED_TIMEOUT) && PARSED_TIMEOUT > 0 ? PARSED_TIMEOUT : 90_000;
+
 export interface ExtractionUsage {
   inputTokens: number;
   outputTokens: number;
@@ -66,12 +77,15 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     ],
     extract: async (apiKey, model, systemPrompt, userPrompt) => {
       const client = new Anthropic({ apiKey });
-      const response = await client.messages.create({
-        model,
-        max_tokens: 8192,
-        system: systemPrompt,
-        messages: [{ role: 'user', content: userPrompt }],
-      });
+      const response = await client.messages.create(
+        {
+          model,
+          max_tokens: 8192,
+          system: systemPrompt,
+          messages: [{ role: 'user', content: userPrompt }],
+        },
+        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+      );
 
       const text = response.content
         .filter((block): block is Anthropic.TextBlock => block.type === 'text')
@@ -106,14 +120,17 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
         apiKey: apiKey || 'unused',
         baseURL: options?.baseUrl || process.env.OPENAI_BASE_URL || undefined,
       });
-      const response = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 8192,
-      });
+      const response = await client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 8192,
+        },
+        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+      );
 
       return {
         content: response.choices[0]?.message.content ?? '',
@@ -136,14 +153,17 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
       const baseURL = options?.baseUrl
         || (process.env.OLLAMA_HOST ? process.env.OLLAMA_HOST + '/v1' : 'http://localhost:11434/v1');
       const client = new OpenAI({ apiKey: 'unused', baseURL });
-      const response = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 8192,
-      });
+      const response = await client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 8192,
+        },
+        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+      );
 
       return {
         content: response.choices[0]?.message.content ?? '',
@@ -165,14 +185,17 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
       const { default: OpenAI } = await import('openai');
       const baseURL = options?.baseUrl || 'http://localhost:8080/v1';
       const client = new OpenAI({ apiKey: 'unused', baseURL });
-      const response = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 8192,
-      });
+      const response = await client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 8192,
+        },
+        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+      );
 
       return {
         content: response.choices[0]?.message.content ?? '',
@@ -194,14 +217,17 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
       const { default: OpenAI } = await import('openai');
       const baseURL = options?.baseUrl || 'http://localhost:8000/v1';
       const client = new OpenAI({ apiKey: 'unused', baseURL });
-      const response = await client.chat.completions.create({
-        model,
-        messages: [
-          { role: 'system', content: systemPrompt },
-          { role: 'user', content: userPrompt },
-        ],
-        max_tokens: 8192,
-      });
+      const response = await client.chat.completions.create(
+        {
+          model,
+          messages: [
+            { role: 'system', content: systemPrompt },
+            { role: 'user', content: userPrompt },
+          ],
+          max_tokens: 8192,
+        },
+        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+      );
 
       return {
         content: response.choices[0]?.message.content ?? '',
@@ -231,7 +257,13 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
         systemInstruction: systemPrompt,
       });
 
-      const result = await genModel.generateContent(userPrompt);
+      // @google/generative-ai 0.24+ accepts SingleRequestOptions as the second
+      // arg with native `signal` and `timeout` fields. Native signal aborts
+      // the underlying fetch (better than Promise.race which would leak).
+      const result = await genModel.generateContent(userPrompt, {
+        signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
+        timeout: EXTRACT_TIMEOUT_MS,
+      });
       const response = result.response;
 
       return {
