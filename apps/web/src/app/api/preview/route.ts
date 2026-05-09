@@ -11,6 +11,9 @@ import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
 import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navigate';
 import type { Airport } from '@/lib/scraper/parse-query';
+import { expandContinuousRangeToDates } from '@/lib/scraper/scrape-dates';
+
+const PREVIEW_MAX_DATES = 7;
 
 const RETRYABLE_FAILURES: ExtractionFailureReason[] = ['empty_extraction', 'page_not_loaded', 'no_json_in_response'];
 const MAX_ATTEMPTS = 2;
@@ -145,11 +148,18 @@ function validatePreviewPayload(payload: PreviewRequestPayload): PreviewValidati
   }
 
   const combos = origins.length * destinations.length;
-  const datesToScrape = outboundDates ?? [dateFrom];
+  // For continuous one-way ranges (no enumerated outboundDates), expand
+  // [dateFrom, dateTo] into per-day samples capped at PREVIEW_MAX_DATES so
+  // a +/- N flex query scrapes every day of the window. Round-trip continuous
+  // preview stays single-pair to fit the combos * dates <= 24 budget; the
+  // cron path does the wider grid.
+  const datesToScrape = outboundDates ?? (isOneWay
+    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
+    : [dateFrom]);
   const totalTasks = combos * datesToScrape.length;
 
   if (totalTasks > 24) {
-    throw new Error(`Too many date/route combinations (${totalTasks}). Max 6 dates x 4 routes = 24.`);
+    throw new Error(`Too many date/route combinations (${totalTasks}). Max ${PREVIEW_MAX_DATES} dates x 4 routes = 28; cap is 24.`);
   }
 
   if (returnDates && outboundDates && !isOneWay && returnDates.length !== outboundDates.length) {
@@ -320,7 +330,9 @@ async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResult
     }
   }
 
-  const datesToScrape = outboundDates ?? [dateFrom];
+  const datesToScrape = outboundDates ?? (isOneWay
+    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
+    : [dateFrom]);
   const tasks: Array<{ combo: { origin: Airport; destination: Airport }; outboundDate: string; returnDate: string }> = [];
 
   for (const combo of combos) {

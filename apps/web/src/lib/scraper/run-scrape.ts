@@ -6,6 +6,7 @@ import { getModelCosts } from './ai-registry';
 import { isKnownAirline } from './airline-urls';
 import { getCountryProfile } from './country-profiles';
 import { createVpnProvider, type VpnProviderType } from './vpn';
+import { expandQueryDates } from './scrape-dates';
 
 const RETRYABLE_FAILURES: ExtractionFailureReason[] = ['empty_extraction', 'page_not_loaded', 'no_json_in_response'];
 const MAX_EXTRACT_ATTEMPTS = 2;
@@ -32,23 +33,103 @@ interface ScrapeResult {
   error?: string;
 }
 
+interface PairScrapeResult {
+  prices: import('./extract-prices').PriceData[];
+  inputTokens: number;
+  outputTokens: number;
+  sources: Set<string>;
+  lastFailureReason: string | undefined;
+}
+
+/** Scrape a single (outbound, return) date pair, with extract retries. */
+async function scrapeOneDatePair(
+  queryId: string,
+  pairParams: import('./navigate').FlightSearchParams,
+  filters: import('./extract-prices').QueryFilters,
+  directAirlines: string[],
+  useAirlineDirect: boolean,
+  countryProfile: ReturnType<typeof getCountryProfile> | undefined,
+  proxyUrl: string | undefined,
+  vpnCountry: string | null,
+): Promise<PairScrapeResult> {
+  const effectiveCurrency = pairParams.currency ?? null;
+  const travelDateFallback = pairParams.dateFrom.toISOString().split('T')[0]!;
+
+  const sources = new Set<string>();
+  let prices: import('./extract-prices').PriceData[] = [];
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let lastFailureReason: string | undefined;
+
+  async function navigateAll(): Promise<NavigationResult[]> {
+    if (useAirlineDirect) {
+      const results = await Promise.all(
+        directAirlines.map(async (airline) => {
+          try {
+            const result = await navigateAirlineDirect(pairParams, airline, countryProfile, proxyUrl);
+            if (!result.resultsFound) return null;
+            return result;
+          } catch {
+            return null;
+          }
+        })
+      );
+      const valid = results.filter((r): r is NavigationResult => r !== null);
+      if (valid.length === 0) {
+        return [await navigateGoogleFlights(pairParams, countryProfile, proxyUrl)];
+      }
+      return valid;
+    }
+    return [await navigateGoogleFlights(pairParams, countryProfile, proxyUrl)];
+  }
+
+  for (let attempt = 1; attempt <= MAX_EXTRACT_ATTEMPTS; attempt++) {
+    const vpnLabel = vpnCountry ? ` vpn=${vpnCountry}` : '';
+    console.log(`[scrape] query=${queryId}${vpnLabel} pair=${travelDateFallback} extract attempt ${attempt}/${MAX_EXTRACT_ATTEMPTS}`);
+
+    const navResults = await navigateAll();
+
+    for (const nav of navResults) {
+      sources.add(nav.source);
+      const result = await extractPrices(
+        nav.html, nav.url, travelDateFallback, filters, undefined, nav.resultsFound, nav.source, effectiveCurrency,
+      );
+      prices = prices.concat(result.prices);
+      inputTokens += result.usage.inputTokens;
+      outputTokens += result.usage.outputTokens;
+      if (result.failureReason) {
+        lastFailureReason = result.failureReason;
+        await saveDebugHtml(queryId, nav.html, attempt);
+      }
+    }
+
+    if (prices.length > 0) break;
+
+    if (attempt < MAX_EXTRACT_ATTEMPTS && lastFailureReason && RETRYABLE_FAILURES.includes(lastFailureReason as ExtractionFailureReason)) {
+      const delay = 5000 + Math.random() * 5000;
+      console.log(`[scrape] query=${queryId} pair=${travelDateFallback} retrying after ${Math.round(delay)}ms (reason: ${lastFailureReason})`);
+      await new Promise((r) => setTimeout(r, delay));
+    }
+  }
+
+  return { prices, inputTokens, outputTokens, sources, lastFailureReason };
+}
+
 /** Scrape a single query for a single country pass (local or VPN). */
 async function scrapeQueryForCountry(
   queryId: string,
-  query: { origin: string; destination: string; preferredAirlines: string[]; maxPrice: number | null; maxStops: number | null; maxDurationHours: number | null; timePreference: string; cabinClass: string },
+  query: { origin: string; destination: string; preferredAirlines: string[]; maxPrice: number | null; maxStops: number | null; maxDurationHours: number | null; timePreference: string; cabinClass: string; flexibility: number },
   searchParams: import('./navigate').FlightSearchParams,
   config: { provider?: string; model?: string } | null,
   vpnCountry: string | null,
   proxyUrl: string | undefined,
   fetchRunId: string,
 ): Promise<ScrapeResult> {
-  const effectiveCurrency = searchParams.currency ?? null;
   const countryProfile = vpnCountry ? getCountryProfile(vpnCountry) : undefined;
 
   const directAirlines = query.preferredAirlines.filter(isKnownAirline);
   const useAirlineDirect = directAirlines.length > 0;
 
-  const travelDateFallback = searchParams.dateFrom.toISOString().split('T')[0]!;
   const filters = {
     maxPrice: query.maxPrice,
     maxStops: query.maxStops,
@@ -61,61 +142,45 @@ async function scrapeQueryForCountry(
   const model = config?.model ?? 'claude-haiku-4-5-20251001';
   const costs = getModelCosts(provider, model);
 
+  // Expand the date window into per-pair scrapes. One-way iterates every day
+  // in [dateFrom, dateTo] capped at 7; round-trip with flex emits a 3x3
+  // outbound/return grid; flex=0 collapses to a single pair.
+  const pairs = expandQueryDates(
+    {
+      dateFrom: searchParams.dateFrom,
+      dateTo: searchParams.dateTo,
+      flexibility: query.flexibility ?? 0,
+      tripType: searchParams.tripType ?? 'round_trip',
+    },
+    { oneWayCap: 7, roundTripGrid: 3 },
+  );
+  console.log(`[scrape] query=${queryId} expanded into ${pairs.length} date pair(s)`);
+
   let allPrices: import('./extract-prices').PriceData[] = [];
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
   let lastFailureReason: string | undefined;
   const sources = new Set<string>();
+  const scrapedTravelDates = new Set<string>();
 
-  async function navigateAll(): Promise<NavigationResult[]> {
-    if (useAirlineDirect) {
-      const results = await Promise.all(
-        directAirlines.map(async (airline) => {
-          try {
-            const result = await navigateAirlineDirect(searchParams, airline, countryProfile, proxyUrl);
-            if (!result.resultsFound) return null; // airline site blocked/empty
-            return result;
-          } catch {
-            return null;
-          }
-        })
-      );
-      const valid = results.filter((r): r is NavigationResult => r !== null);
-      // If all airline-direct attempts failed, fall back to Google Flights
-      if (valid.length === 0) {
-        return [await navigateGoogleFlights(searchParams, countryProfile, proxyUrl)];
-      }
-      return valid;
-    }
-    return [await navigateGoogleFlights(searchParams, countryProfile, proxyUrl)];
-  }
+  for (const pair of pairs) {
+    scrapedTravelDates.add(pair.outbound.toISOString().slice(0, 10));
+    const pairParams: import('./navigate').FlightSearchParams = {
+      ...searchParams,
+      dateFrom: pair.outbound,
+      dateTo: pair.return_,
+    };
 
-  for (let attempt = 1; attempt <= MAX_EXTRACT_ATTEMPTS; attempt++) {
-    const vpnLabel = vpnCountry ? ` vpn=${vpnCountry}` : '';
-    console.log(`[scrape] query=${queryId}${vpnLabel} extract attempt ${attempt}/${MAX_EXTRACT_ATTEMPTS}`);
+    const pairResult = await scrapeOneDatePair(
+      queryId, pairParams, filters, directAirlines, useAirlineDirect, countryProfile, proxyUrl, vpnCountry,
+    );
 
-    const navResults = await navigateAll();
-
-    for (const nav of navResults) {
-      sources.add(nav.source);
-      const { prices, usage, failureReason } = await extractPrices(
-        nav.html, nav.url, travelDateFallback, filters, undefined, nav.resultsFound, nav.source, effectiveCurrency
-      );
-      allPrices = allPrices.concat(prices);
-      totalInputTokens += usage.inputTokens;
-      totalOutputTokens += usage.outputTokens;
-      if (failureReason) {
-        lastFailureReason = failureReason;
-        await saveDebugHtml(queryId, nav.html, attempt);
-      }
-    }
-
-    if (allPrices.length > 0) break;
-
-    if (attempt < MAX_EXTRACT_ATTEMPTS && lastFailureReason && RETRYABLE_FAILURES.includes(lastFailureReason as ExtractionFailureReason)) {
-      const delay = 5000 + Math.random() * 5000;
-      console.log(`[scrape] query=${queryId} retrying after ${Math.round(delay)}ms (reason: ${lastFailureReason})`);
-      await new Promise((r) => setTimeout(r, delay));
+    allPrices = allPrices.concat(pairResult.prices);
+    totalInputTokens += pairResult.inputTokens;
+    totalOutputTokens += pairResult.outputTokens;
+    for (const s of pairResult.sources) sources.add(s);
+    if (pairResult.lastFailureReason) {
+      lastFailureReason = pairResult.lastFailureReason;
     }
   }
 
@@ -176,11 +241,18 @@ async function scrapeQueryForCountry(
   // Match prior rows against BOTH the new and the legacy id forms so the
   // rollout does not flag every existing flight as sold out when scraping
   // resumes.
+  //
+  // Scope sold-out detection to dates we actually scraped this run. With
+  // multi-pair scraping (issue #65 fix), the date pairs sampled per cron run
+  // can change, and snapshots for dates outside the current pair set must
+  // not be flagged sold-out just because we did not look at them.
   const currentFlightIds = new Set(withFlightIds.map((p) => p.flightId));
   const currentLegacyIds = new Set(withFlightIds.map((p) => p.flightIdLegacy));
   const soldOutSnapshots = previousSnapshots
     .filter((prev) => {
       if (!prev.flightId || prev.status !== 'available') return false;
+      const prevTravelIso = prev.travelDate.toISOString().slice(0, 10);
+      if (!scrapedTravelDates.has(prevTravelIso)) return false;
       return !currentFlightIds.has(prev.flightId) && !currentLegacyIds.has(prev.flightId);
     })
     .map((prev) => ({
