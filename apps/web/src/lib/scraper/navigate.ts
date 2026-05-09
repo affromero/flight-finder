@@ -58,13 +58,13 @@ export interface NavigationResult {
 // and would otherwise corrupt the URL via raw interpolation.
 const IATA_CODE = /^[A-Z]{3}$/;
 
-function assertValidIataCode(code: string, role: 'origin' | 'destination'): void {
+export function assertValidIataCode(code: string, role: 'origin' | 'destination'): void {
   if (!IATA_CODE.test(code)) {
     throw new Error(`Invalid IATA ${role} code: ${JSON.stringify(code)}`);
   }
 }
 
-function isoDate(d: Date): string {
+export function isoDate(d: Date): string {
   // toISOString().split('T')[0] returns the UTC calendar day. Callers that
   // construct dates in non-UTC timezones can see a day shift here; that risk
   // predates this file and is tracked separately.
