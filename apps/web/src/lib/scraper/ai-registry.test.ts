@@ -381,3 +381,46 @@ describe('ai-registry', () => {
     });
   });
 });
+
+describe('EXTRACT_TIMEOUT_MS env parsing (issue #65)', () => {
+  const ORIGINAL = process.env.EXTRACT_TIMEOUT_MS;
+
+  afterEach(() => {
+    if (ORIGINAL === undefined) delete process.env.EXTRACT_TIMEOUT_MS;
+    else process.env.EXTRACT_TIMEOUT_MS = ORIGINAL;
+    vi.resetModules();
+  });
+
+  it('defaults to 90_000 ms when env var is unset', async () => {
+    delete process.env.EXTRACT_TIMEOUT_MS;
+    vi.resetModules();
+    const mod = await import('./ai-registry');
+    expect(mod.EXTRACT_TIMEOUT_MS).toBe(90_000);
+  });
+
+  it('respects a valid env var override', async () => {
+    process.env.EXTRACT_TIMEOUT_MS = '30000';
+    vi.resetModules();
+    const mod = await import('./ai-registry');
+    expect(mod.EXTRACT_TIMEOUT_MS).toBe(30_000);
+  });
+
+  it('falls back to 90_000 when env var is not a number', async () => {
+    process.env.EXTRACT_TIMEOUT_MS = 'not-a-number';
+    vi.resetModules();
+    const mod = await import('./ai-registry');
+    expect(mod.EXTRACT_TIMEOUT_MS).toBe(90_000);
+  });
+
+  it('falls back to 90_000 when env var is zero or negative', async () => {
+    process.env.EXTRACT_TIMEOUT_MS = '0';
+    vi.resetModules();
+    let mod = await import('./ai-registry');
+    expect(mod.EXTRACT_TIMEOUT_MS).toBe(90_000);
+
+    process.env.EXTRACT_TIMEOUT_MS = '-5000';
+    vi.resetModules();
+    mod = await import('./ai-registry');
+    expect(mod.EXTRACT_TIMEOUT_MS).toBe(90_000);
+  });
+});

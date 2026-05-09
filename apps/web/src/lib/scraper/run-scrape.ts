@@ -8,7 +8,13 @@ import { getCountryProfile } from './country-profiles';
 import { createVpnProvider, type VpnProviderType } from './vpn';
 import { expandQueryDates } from './scrape-dates';
 
-const RETRYABLE_FAILURES: ExtractionFailureReason[] = ['empty_extraction', 'page_not_loaded', 'no_json_in_response'];
+const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
+  'empty_extraction',
+  'page_not_loaded',
+  'no_json_in_response',
+  'llm_error',
+  'json_parse_error',
+];
 const MAX_EXTRACT_ATTEMPTS = 2;
 const DEBUG_DIR = '/tmp/fairtrail-debug';
 const VPN_INTER_COUNTRY_DELAY_MS = 12000;
@@ -310,6 +316,8 @@ async function scrapeQueryForCountry(
     no_json_in_response: 'LLM response contained no parseable JSON array. Page HTML may be a consent wall, error page, or empty shell.',
     empty_extraction: 'LLM parsed the page but returned 0 flights. Page likely loaded without flight content (rate-limited or empty response).',
     all_filtered_out: 'Flights were extracted but all removed by query filters (price/stops/airline).',
+    llm_error: 'LLM call failed (timeout, rate limit, or provider error). The provider may be temporarily unavailable.',
+    json_parse_error: 'LLM returned invalid JSON. Provider output was malformed or truncated.',
   };
   const errorMsg = failureReason ? failureMessages[failureReason] : undefined;
 
@@ -374,6 +382,10 @@ export async function runScrapeForQuery(
     );
   } catch (err) {
     const errorMsg = err instanceof Error ? err.message : String(err);
+    // Log before updating the DB row so cron operators can diagnose silent
+    // failures from logs alone (issue #65). Without this, the only signal
+    // was the cron summary line "0 ok, N failed".
+    console.error(`[scrape] runScrapeForQuery failed query=${queryId} err=${errorMsg}`);
     await prisma.fetchRun.update({
       where: { id: fetchRun.id },
       data: { status: 'failed', error: errorMsg, completedAt: new Date() },

@@ -15,7 +15,13 @@ import { expandContinuousRangeToDates } from '@/lib/scraper/scrape-dates';
 
 const PREVIEW_MAX_DATES = 7;
 
-const RETRYABLE_FAILURES: ExtractionFailureReason[] = ['empty_extraction', 'page_not_loaded', 'no_json_in_response'];
+const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
+  'empty_extraction',
+  'page_not_loaded',
+  'no_json_in_response',
+  'llm_error',
+  'json_parse_error',
+];
 const MAX_ATTEMPTS = 2;
 const DEBUG_DIR = '/tmp/fairtrail-debug';
 const PREVIEW_MAX_RESULTS = 20;
@@ -310,6 +316,8 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     no_json_in_response: `Could not extract flight data from ${sourceName}`,
     empty_extraction: `No flights found - ${sourceName} may be rate-limiting`,
     all_filtered_out: 'Flights exist but none matched your filters',
+    llm_error: 'Extraction provider failed (timeout or rate limit). Try again in a moment.',
+    json_parse_error: 'Extraction provider returned malformed output. Try again in a moment.',
   };
 
   throw new Error(messages[lastFailureReason!] ?? 'Flight extraction failed');

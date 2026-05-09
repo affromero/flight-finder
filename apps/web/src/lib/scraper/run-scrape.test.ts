@@ -511,6 +511,130 @@ describe('runScrapeForQuery sold-out scoping (issue #65)', () => {
   });
 });
 
+describe('runScrapeForQuery extraction failure surfacing (issue #65)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockPrisma.query.findUnique.mockResolvedValue(BASE_QUERY);
+    mockPrisma.fetchRun.create.mockResolvedValue({ id: 'run1' });
+    mockPrisma.fetchRun.update.mockResolvedValue({});
+    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      scrapeInterval: 3,
+      defaultCurrency: null,
+      defaultCountry: null,
+      vpnProvider: null,
+      vpnCountries: [],
+    });
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([]);
+    mockPrisma.priceSnapshot.createMany.mockResolvedValue({ count: 0 });
+    mockPrisma.apiUsageLog.create.mockResolvedValue({});
+  });
+
+  it('logs to console.error when scrapeQueryForCountry throws (silent-catch fix)', async () => {
+    const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockNavigateGoogleFlights.mockRejectedValue(new Error('browser crashed'));
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('browser crashed');
+    expect(consoleErr).toHaveBeenCalledWith(
+      expect.stringContaining('runScrapeForQuery failed'),
+    );
+    consoleErr.mockRestore();
+  });
+
+  it('retries when first attempt returns llm_error then succeeds', async () => {
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices
+      .mockResolvedValueOnce({
+        prices: [],
+        usage: { inputTokens: 0, outputTokens: 0 },
+        failureReason: 'llm_error',
+      })
+      .mockResolvedValueOnce({
+        prices: [{
+          travelDate: '2026-06-15',
+          price: 350,
+          currency: 'USD',
+          airline: 'Delta',
+          bookingUrl: '',
+          stops: 0,
+          duration: '5h',
+          departureTime: null,
+          arrivalTime: null,
+          seatsLeft: null,
+        }],
+        usage: { inputTokens: 100, outputTokens: 20 },
+      });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('success');
+    expect(mockExtractPrices).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it('retries when first attempt returns json_parse_error then succeeds', async () => {
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices
+      .mockResolvedValueOnce({
+        prices: [],
+        usage: { inputTokens: 100, outputTokens: 20 },
+        failureReason: 'json_parse_error',
+      })
+      .mockResolvedValueOnce({
+        prices: [{
+          travelDate: '2026-06-15',
+          price: 350,
+          currency: 'USD',
+          airline: 'Delta',
+          bookingUrl: '',
+          stops: 0,
+          duration: '5h',
+          departureTime: null,
+          arrivalTime: null,
+          seatsLeft: null,
+        }],
+        usage: { inputTokens: 100, outputTokens: 20 },
+      });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('success');
+    expect(mockExtractPrices).toHaveBeenCalledTimes(2);
+  }, 15_000);
+
+  it('writes human-readable llm_error message to FetchRun', async () => {
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<html>flights</html>',
+      url: 'https://flights.google.com',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+    mockExtractPrices.mockResolvedValue({
+      prices: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+      failureReason: 'llm_error',
+    });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('failed');
+    expect(result.error).toContain('LLM call failed');
+  }, 15_000);
+});
+
 describe('PriceSnapshot schema', () => {
   it('bookingUrl must be optional (String?) to accept LLM null values', () => {
     const schema = readFileSync(

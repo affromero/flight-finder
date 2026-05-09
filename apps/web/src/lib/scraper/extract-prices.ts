@@ -111,7 +111,9 @@ export type ExtractionFailureReason =
   | 'page_not_loaded'
   | 'no_json_in_response'
   | 'empty_extraction'
-  | 'all_filtered_out';
+  | 'all_filtered_out'
+  | 'llm_error'
+  | 'json_parse_error';
 
 export interface ExtractionResult {
   prices: PriceData[];
@@ -165,9 +167,16 @@ Page content:
 ${html}`;
 
   const systemPrompt = buildSystemPrompt(filters, maxResults, source, currency);
-  const result = await providerConfig.extract(apiKey, model, systemPrompt, userPrompt, {
-    baseUrl: config?.customBaseUrl ?? undefined,
-  });
+  let result;
+  try {
+    result = await providerConfig.extract(apiKey, model, systemPrompt, userPrompt, {
+      baseUrl: config?.customBaseUrl ?? undefined,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error(`[extract] FAIL llm_error provider=${provider} model=${model} err=${msg}`);
+    return { prices: [], usage: { inputTokens: 0, outputTokens: 0 }, failureReason: 'llm_error' };
+  }
 
   const jsonMatch = result.content.match(/\[[\s\S]*\]/);
   if (!jsonMatch) {
@@ -175,7 +184,15 @@ ${html}`;
     return { prices: [], usage: result.usage, failureReason: 'no_json_in_response' };
   }
 
-  const raw = JSON.parse(jsonMatch[0]) as PriceData[];
+  let raw: PriceData[];
+  try {
+    raw = JSON.parse(jsonMatch[0]) as PriceData[];
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const preview = jsonMatch[0].slice(0, 200);
+    console.error(`[extract] FAIL json_parse_error length=${jsonMatch[0].length} err=${msg} preview=${preview}`);
+    return { prices: [], usage: result.usage, failureReason: 'json_parse_error' };
+  }
 
   if (raw.length === 0) {
     console.log(`[extract] FAIL empty_extraction — LLM returned [] (${result.usage.inputTokens} input tokens)`);
