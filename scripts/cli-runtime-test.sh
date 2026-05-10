@@ -419,6 +419,39 @@ test_start_calls_up_dash_d() {
   done
 }
 
+test_logs_calls_dc_logs_f_web() {
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli logs
+    LAST_RUNTIME="$rt"; LAST_CMD="logs"
+    case "$rt" in
+      docker_v2)     assert_recorded "logs -> docker compose logs -f web"   '^docker compose -f docker-compose.yml logs -f web$' ;;
+      docker_v1)     assert_recorded "logs -> docker-compose logs -f web"   '^docker-compose -f docker-compose.yml logs -f web$' ;;
+      podman_native) assert_recorded "logs -> podman compose logs -f web"   '^podman compose -f docker-compose.yml logs -f web$' ;;
+      podman_pc)     assert_recorded "logs -> podman-compose logs -f web"   '^podman-compose -f docker-compose.yml logs -f web$' ;;
+    esac
+  done
+}
+
+test_no_arg_runs_full_foreground_pipeline() {
+  # Bare `fairtrail` triggers cmd_start_foreground:
+  #   dc up -d -> poll /api/health -> dc logs -f web (shim returns 0).
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli ""
+    LAST_RUNTIME="$rt"; LAST_CMD="(no-arg)"
+    assert_recorded "no-arg runs dc up -d before logs"  ' up -d( |$)'
+    assert_recorded "no-arg polls /api/health" \
+      '^curl GET http://localhost:3003/api/health$'
+    case "$rt" in
+      docker_v2)     assert_recorded "no-arg tails docker compose logs -f web"   '^docker compose -f docker-compose.yml logs -f web$' ;;
+      docker_v1)     assert_recorded "no-arg tails docker-compose logs -f web"   '^docker-compose -f docker-compose.yml logs -f web$' ;;
+      podman_native) assert_recorded "no-arg tails podman compose logs -f web"   '^podman compose -f docker-compose.yml logs -f web$' ;;
+      podman_pc)     assert_recorded "no-arg tails podman-compose logs -f web"   '^podman-compose -f docker-compose.yml logs -f web$' ;;
+    esac
+  done
+}
+
 test_stop_aborts_without_confirmation() {
   # Empty answer (just hitting Enter) → cancel branch. dc stop must NOT run.
   for rt in docker_v2 docker_v1 podman_native podman_pc; do
@@ -613,6 +646,8 @@ test_tui_headless_podman_pc
 test_tui_list_podman_pc
 test_update_pulls_then_force_recreates_web
 test_start_calls_up_dash_d
+test_logs_calls_dc_logs_f_web
+test_no_arg_runs_full_foreground_pipeline
 test_stop_aborts_without_confirmation
 test_stop_invokes_compose_on_y
 test_uninstall_aborts_without_confirmation
