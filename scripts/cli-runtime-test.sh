@@ -247,7 +247,7 @@ SHIM
 
 setup_sandbox() {
   SANDBOX=$(mktemp -d -t fairtrail-cli-test-XXXXXX)
-  mkdir -p "$SANDBOX/bin" "$SANDBOX/.fairtrail"
+  mkdir -p "$SANDBOX/bin" "$SANDBOX/sysbin" "$SANDBOX/.fairtrail"
   cat > "$SANDBOX/.fairtrail/docker-compose.yml" <<'YAML'
 services:
   web:
@@ -256,6 +256,23 @@ YAML
   RECORD_FILE="$SANDBOX/record.log"
   : > "$RECORD_FILE"
   export RECORD_FILE
+
+  # Curated sysbin: symlinks only to the system tools the CLI actually uses.
+  # Hermetic so `command -v docker` cannot find /usr/bin/docker on Ubuntu CI
+  # (where it would otherwise short-circuit every podman_* test).
+  local tool real
+  for tool in bash sh env mktemp \
+              printf echo cat sed grep head tail cut tr sort uniq awk \
+              mkdir rmdir rm cp mv ln chmod basename dirname \
+              date sleep uname id whoami tput tee pwd ls find \
+              xargs which true false stat touch \
+              python3 git ; do
+    real=""
+    for d in /usr/bin /bin /usr/local/bin; do
+      if [ -x "$d/$tool" ]; then real="$d/$tool"; break; fi
+    done
+    [ -n "$real" ] && ln -sf "$real" "$SANDBOX/sysbin/$tool"
+  done
 }
 
 teardown_sandbox() {
@@ -300,7 +317,7 @@ run_cli() {
   set +e
   printf '\n' \
     | HOME="$SANDBOX" \
-      PATH="$SANDBOX/bin:/usr/bin:/bin" \
+      PATH="$SANDBOX/bin:$SANDBOX/sysbin" \
       RECORD_FILE="$RECORD_FILE" \
       FAIRTRAIL_URL="http://test.invalid" \
       HOST_PORT=3003 \
@@ -322,7 +339,7 @@ run_cli_with_input() {
   set +e
   printf '%s' "$input" \
     | HOME="$SANDBOX" \
-      PATH="$SANDBOX/bin:/usr/bin:/bin" \
+      PATH="$SANDBOX/bin:$SANDBOX/sysbin" \
       RECORD_FILE="$RECORD_FILE" \
       FAIRTRAIL_URL="http://test.invalid" \
       HOST_PORT=3003 \
@@ -686,7 +703,7 @@ test_missing_helper_fails_loudly() {
   # No helper sibling — should fail with non-zero and print to stderr.
   local exit_code stderr_out
   set +e
-  stderr_out=$(HOME="$SANDBOX" PATH="$SANDBOX/bin:/usr/bin:/bin" \
+  stderr_out=$(HOME="$SANDBOX" PATH="$SANDBOX/bin:$SANDBOX/sysbin" \
     bash "$cli_copy" --headless </dev/null 2>&1 >/dev/null)
   exit_code=$?
   set -e
