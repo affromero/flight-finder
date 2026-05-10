@@ -44,14 +44,23 @@ _compose_exec_flags() {
         printf '%s' '-T'
       fi
       ;;
-    *)
-      # Docker-compatible flag surface (docker compose v2, docker-compose v1,
-      # podman compose native v5+).
+    "docker compose"|"docker-compose"|"podman compose")
+      # Docker-compatible flag surface: docker compose v2 native,
+      # docker-compose v1 standalone, podman compose v5+ native subcommand.
       if [ "$interactive" = "1" ]; then
         printf '%s' '-it'
       else
         printf '%s' '-i'
       fi
+      ;;
+    *)
+      # Hard-fail on unknown compose flavors (nerdctl, finch, lima
+      # nerdctl wrappers, etc.). Falling through to docker-compatible
+      # would silently assume the new tool accepts -i/-it — exactly the
+      # mistake that produced issue #72. Anyone wiring up a new flavor
+      # MUST add an explicit case here and a test in cli-runtime-test.sh.
+      printf '_compose_exec_flags: unsupported compose flavor "%s" — add explicit support in fairtrail-cli-flags.sh\n' "$dc" >&2
+      return 2
       ;;
   esac
 }

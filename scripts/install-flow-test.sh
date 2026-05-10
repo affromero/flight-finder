@@ -294,6 +294,17 @@ EXPECTED
     fail "_compose_exec_flags matrix mismatch (#72)"
     diff <(printf '%s\n' "$expected") <(printf '%s\n' "$out") || true
   fi
+
+  # Unknown compose flavors must hard-fail (return non-zero) so a future
+  # `nerdctl compose` / `finch compose` doesn't silently inherit docker
+  # flags. Anyone adding a new flavor must register it explicitly.
+  local rc=0
+  bash -c "source $helper; _compose_exec_flags 'nerdctl compose' 0 0" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    pass "_compose_exec_flags rejects unknown compose flavor (#72)"
+  else
+    fail "_compose_exec_flags must hard-fail on unknown compose flavor — got rc=$rc"
+  fi
 }
 
 # ---------------------------------------------------------------------------
