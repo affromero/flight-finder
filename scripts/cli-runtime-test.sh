@@ -1,0 +1,421 @@
+#!/usr/bin/env bash
+# Behavioral test harness for apps/web/public/fairtrail-cli.
+#
+# Why this exists: every previous CLI bug in this repo (issue #72 v1 — silent
+# `up -d` on podman; #72 v2 — -it rejected by podman-compose; #62 — Arch
+# detection; #62 — docker permission-denied vs daemon-down) shared a shape:
+# shell CLI behavior that diverges by container runtime or compose flavor.
+# The pre-existing install-flow-test.sh is grep-only and would pass on every
+# one of those bugs. This file runs the actual CLI against shimmed compose
+# binaries and asserts the recorded invocations.
+#
+# Coverage per command, per runtime:
+#   docker_v2       docker + `docker compose` (v2 native)
+#   docker_v1       docker + `docker-compose` (v1 standalone)
+#   podman_native   podman + `podman compose` (v5+ native subcommand)
+#   podman_pc       podman + `podman-compose` (standalone Python tool)
+#
+# Non-TTY only (stdin redirected from /dev/null). The TTY branch of
+# `cmd_tui` is covered by the helper unit test in install-flow-test.sh.
+
+set -euo pipefail
+
+BOLD='\033[1m'
+DIM='\033[2m'
+GREEN='\033[0;32m'
+RED='\033[0;31m'
+YELLOW='\033[0;33m'
+RESET='\033[0m'
+
+PASS=0
+FAIL=0
+LAST_RUNTIME=""
+LAST_CMD=""
+
+pass() { PASS=$((PASS + 1)); printf "${GREEN}PASS${RESET} [%s] %s\n" "${LAST_RUNTIME}/${LAST_CMD}" "$1"; }
+fail() {
+  FAIL=$((FAIL + 1))
+  printf "${RED}FAIL${RESET} [%s] %s\n" "${LAST_RUNTIME}/${LAST_CMD}" "$1"
+  if [ -n "${RECORD_FILE:-}" ] && [ -f "$RECORD_FILE" ]; then
+    printf "${DIM}     recorded:${RESET}\n"
+    sed 's/^/       /' "$RECORD_FILE"
+  fi
+}
+
+REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
+CLI="$REPO_ROOT/apps/web/public/fairtrail-cli"
+HELPER="$REPO_ROOT/apps/web/public/fairtrail-cli-flags.sh"
+
+[ -x "$CLI" ] || { printf "${RED}missing $CLI${RESET}\n"; exit 1; }
+[ -f "$HELPER" ] || { printf "${RED}missing $HELPER${RESET}\n"; exit 1; }
+
+# ---------------------------------------------------------------------------
+# Shim writers. Each test invokes setup_runtime <name> which populates
+# $SANDBOX/bin with exactly the binaries that runtime should expose.
+# Probes (info, compose version) return the right exit codes; everything
+# else appends "<binary> <args>" to $RECORD_FILE.
+# ---------------------------------------------------------------------------
+
+write_docker_shim() {
+  # $1: 0 if `docker compose` v2 available, 1 if not (forces docker-compose v1)
+  local has_v2="$1"
+  cat > "$SANDBOX/bin/docker" <<SHIM
+#!/usr/bin/env bash
+case "\$1" in
+  info) exit 0 ;;
+  compose)
+    case "\${2:-}" in
+      version) exit $has_v2 ;;
+      *)
+        if [ $has_v2 -eq 0 ]; then
+          printf 'docker %s\n' "\$*" >> "\$RECORD_FILE"
+          exit 0
+        fi
+        # If v2 isn't available we shouldn't be reaching here
+        printf 'docker %s\n' "\$*" >> "\$RECORD_FILE"
+        exit 1 ;;
+    esac ;;
+  *)
+    printf 'docker %s\n' "\$*" >> "\$RECORD_FILE"
+    exit 0 ;;
+esac
+SHIM
+  chmod +x "$SANDBOX/bin/docker"
+}
+
+write_docker_compose_v1_shim() {
+  cat > "$SANDBOX/bin/docker-compose" <<'SHIM'
+#!/usr/bin/env bash
+printf 'docker-compose %s\n' "$*" >> "$RECORD_FILE"
+exit 0
+SHIM
+  chmod +x "$SANDBOX/bin/docker-compose"
+}
+
+write_podman_shim() {
+  # $1: 0 if `podman compose` native subcommand available, 1 if not
+  local has_native="$1"
+  cat > "$SANDBOX/bin/podman" <<SHIM
+#!/usr/bin/env bash
+case "\$1" in
+  compose)
+    case "\${2:-}" in
+      version) exit $has_native ;;
+      *)
+        if [ $has_native -eq 0 ]; then
+          printf 'podman %s\n' "\$*" >> "\$RECORD_FILE"
+          exit 0
+        fi
+        exit 1 ;;
+    esac ;;
+  *)
+    printf 'podman %s\n' "\$*" >> "\$RECORD_FILE"
+    exit 0 ;;
+esac
+SHIM
+  chmod +x "$SANDBOX/bin/podman"
+}
+
+write_podman_compose_shim() {
+  cat > "$SANDBOX/bin/podman-compose" <<'SHIM'
+#!/usr/bin/env bash
+printf 'podman-compose %s\n' "$*" >> "$RECORD_FILE"
+exit 0
+SHIM
+  chmod +x "$SANDBOX/bin/podman-compose"
+}
+
+write_curl_shim() {
+  # Responds to /api/health, /api/version, /api/parse, /api/preview,
+  # /api/queries, and BASE_URL self-update fetches. Anything else exits 0
+  # silently — the CLI generally tolerates a no-op curl.
+  cat > "$SANDBOX/bin/curl" <<'SHIM'
+#!/usr/bin/env bash
+url=""
+out=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -o) out="$2"; shift 2 ;;
+    -*) shift ;;
+    http*|*://*) url="$1"; shift ;;
+    *) shift ;;
+  esac
+done
+case "$url" in
+  *"/api/health"*)
+    printf '{"activeQueries":1,"intervalHours":3,"nextScrape":"2026-05-10T12:00:00"}' ;;
+  *"/api/version"*)
+    printf '{"ok":true,"data":{"current":"0.5.4","commit":"3153f98abcdef"}}' ;;
+  *"/api/parse"*)
+    printf '{"ok":true,"data":{"confidence":"high","parsed":{"origin":"NYC","destination":"LAX","originName":"New York","destinationName":"Los Angeles","dateFrom":"2026-06-01","dateTo":"2026-06-15","origins":[{"code":"NYC"}],"destinations":[{"code":"LAX"}]}}}' ;;
+  *"/api/preview"*)
+    printf '{"data":{"flights":[],"routes":[]}}' ;;
+  *"/api/queries"*)
+    printf '{"ok":true,"data":{"queries":[{"id":"abc123"}]}}' ;;
+  *"/fairtrail-cli-flags.sh"*)
+    [ -n "$out" ] && printf '# stub helper\n_compose_exec_flags(){ printf %%s ""; }\n' > "$out" ;;
+  *"/fairtrail-cli"*)
+    [ -n "$out" ] && {
+      printf '#!/usr/bin/env bash\necho stub-cli\n' > "$out"
+      chmod +x "$out" 2>/dev/null || true
+    } ;;
+esac
+exit 0
+SHIM
+  chmod +x "$SANDBOX/bin/curl"
+}
+
+write_python3_passthrough() {
+  # Some cmd_search code paths call python3. Real python3 is fine if it's on
+  # PATH outside the sandbox — symlink it through.
+  if real_py=$(/usr/bin/env -i PATH=/usr/bin:/bin command -v python3 2>/dev/null); then
+    ln -sf "$real_py" "$SANDBOX/bin/python3"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Sandbox / runtime setup
+# ---------------------------------------------------------------------------
+
+setup_sandbox() {
+  SANDBOX=$(mktemp -d -t fairtrail-cli-test-XXXXXX)
+  mkdir -p "$SANDBOX/bin" "$SANDBOX/.fairtrail"
+  cat > "$SANDBOX/.fairtrail/docker-compose.yml" <<'YAML'
+services:
+  web:
+    image: ghcr.io/affromero/fairtrail:latest
+YAML
+  RECORD_FILE="$SANDBOX/record.log"
+  : > "$RECORD_FILE"
+  export RECORD_FILE
+}
+
+teardown_sandbox() {
+  [ -n "${SANDBOX:-}" ] && rm -rf "$SANDBOX"
+  SANDBOX=""
+  RECORD_FILE=""
+}
+
+setup_runtime() {
+  LAST_RUNTIME="$1"
+  rm -f "$SANDBOX"/bin/docker "$SANDBOX"/bin/docker-compose \
+        "$SANDBOX"/bin/podman "$SANDBOX"/bin/podman-compose
+  case "$1" in
+    docker_v2)
+      write_docker_shim 0 ;;
+    docker_v1)
+      write_docker_shim 1
+      write_docker_compose_v1_shim ;;
+    podman_native)
+      write_podman_shim 0 ;;
+    podman_pc)
+      write_podman_shim 1
+      write_podman_compose_shim ;;
+    *) printf "${RED}unknown runtime: $1${RESET}\n"; exit 1 ;;
+  esac
+  write_curl_shim
+  write_python3_passthrough
+}
+
+# Run the CLI under the sandbox. Replaces stdin with /dev/null so [ -t 0 ]
+# is false (covers the non-TTY branch — the TTY branch is unit-tested).
+run_cli() {
+  LAST_CMD="$1"
+  shift
+  : > "$RECORD_FILE"
+  HOME="$SANDBOX" \
+  PATH="$SANDBOX/bin:/usr/bin:/bin" \
+  RECORD_FILE="$RECORD_FILE" \
+  FAIRTRAIL_URL="http://test.invalid" \
+  HOST_PORT=3003 \
+  bash "$CLI" "$LAST_CMD" "$@" </dev/null >/dev/null 2>&1 || true
+}
+
+# Match a regex against the recorded invocations (one per line).
+assert_recorded() {
+  local label="$1" pattern="$2"
+  if grep -qE "$pattern" "$RECORD_FILE"; then
+    pass "$label"
+  else
+    fail "$label — no line matched: $pattern"
+  fi
+}
+
+# Inverse: assert no recorded line matches.
+assert_not_recorded() {
+  local label="$1" pattern="$2"
+  if ! grep -qE "$pattern" "$RECORD_FILE"; then
+    pass "$label"
+  else
+    fail "$label — unexpected line matched: $pattern"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Test cases — cmd_tui (the bug we shipped a fix for)
+# ---------------------------------------------------------------------------
+
+test_tui_headless_docker_v2() {
+  setup_runtime docker_v2
+  run_cli --headless
+  assert_recorded "tui sends docker compose exec -i web fairtrail-tui --headless" \
+    'docker compose -f docker-compose.yml exec -i web fairtrail-tui --headless'
+}
+
+test_tui_headless_docker_v1() {
+  setup_runtime docker_v1
+  run_cli --headless
+  assert_recorded "tui sends docker-compose exec -i web fairtrail-tui --headless" \
+    'docker-compose -f docker-compose.yml exec -i web fairtrail-tui --headless'
+}
+
+test_tui_headless_podman_native() {
+  setup_runtime podman_native
+  run_cli --headless
+  assert_recorded "tui sends podman compose exec -i web fairtrail-tui --headless" \
+    'podman compose -f docker-compose.yml exec -i web fairtrail-tui --headless'
+}
+
+test_tui_headless_podman_pc() {
+  # The bug from issue #72 — must NOT pass -i or -it; podman-compose only
+  # accepts -T to disable TTY.
+  setup_runtime podman_pc
+  run_cli --headless
+  assert_recorded "tui sends podman-compose exec -T web fairtrail-tui --headless (#72)" \
+    'podman-compose -f docker-compose.yml exec -T web fairtrail-tui --headless'
+  assert_not_recorded "tui never sends -it/-i to podman-compose (#72)" \
+    'podman-compose .* exec [^ ]*(-it|-i ) '
+}
+
+test_tui_list_podman_pc() {
+  setup_runtime podman_pc
+  run_cli --list
+  assert_recorded "tui --list sends podman-compose exec -T web fairtrail-tui --list" \
+    'podman-compose -f docker-compose.yml exec -T web fairtrail-tui --list'
+}
+
+# ---------------------------------------------------------------------------
+# Test cases — cmd_update (issue #72 v1)
+# ---------------------------------------------------------------------------
+
+test_update_pulls_then_force_recreates_web() {
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli update
+    LAST_RUNTIME="$rt"; LAST_CMD="update"
+    assert_recorded "update pulls web" \
+      ' pull web'
+    assert_recorded "update brings up db/redis with --no-recreate" \
+      ' up -d --no-recreate db redis'
+    assert_recorded "update force-recreates web (#72 v1)" \
+      ' up -d --force-recreate --no-deps --remove-orphans web'
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Test cases — cmd_start_background, cmd_stop, cmd_logs, cmd_status
+# ---------------------------------------------------------------------------
+
+test_start_calls_up_dash_d() {
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli start
+    LAST_RUNTIME="$rt"; LAST_CMD="start"
+    assert_recorded "start runs dc up -d" ' up -d( |$)'
+  done
+}
+
+test_stop_aborts_without_confirmation() {
+  # cmd_stop reads y/N from stdin. With stdin closed we get the cancel path,
+  # so dc stop is NOT called — verify that, since silently calling stop on a
+  # cancelled prompt would be a regression in itself.
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli stop
+    LAST_RUNTIME="$rt"; LAST_CMD="stop"
+    assert_not_recorded "stop respects N answer (no dc stop on cancel)" \
+      ' stop( |$)'
+  done
+}
+
+test_uninstall_aborts_without_confirmation() {
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli uninstall
+    LAST_RUNTIME="$rt"; LAST_CMD="uninstall"
+    assert_not_recorded "uninstall respects N answer (no dc down on cancel)" \
+      ' down -v( |$)'
+    [ -d "$SANDBOX/.fairtrail" ] && pass "uninstall did not remove ~/.fairtrail on cancel" \
+      || fail "uninstall removed ~/.fairtrail despite cancel"
+  done
+}
+
+test_status_only_calls_curl() {
+  # status should not invoke compose at all — pure /api/health probe.
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli status
+    LAST_RUNTIME="$rt"; LAST_CMD="status"
+    assert_not_recorded "status never invokes compose" '\b(up|down|stop|exec|pull) '
+  done
+}
+
+test_version_only_calls_curl() {
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli version
+    LAST_RUNTIME="$rt"; LAST_CMD="version"
+    assert_not_recorded "version never invokes compose" '\b(up|down|stop|exec|pull) '
+  done
+}
+
+# ---------------------------------------------------------------------------
+# Helper missing → CLI must exit non-zero (loud failure)
+# ---------------------------------------------------------------------------
+
+test_missing_helper_fails_loudly() {
+  setup_runtime docker_v2
+  LAST_RUNTIME="missing-helper"; LAST_CMD="--headless"
+  # Run a copy of the CLI without the helper next to it.
+  local cli_copy="$SANDBOX/bin/fairtrail-orphan"
+  cp "$CLI" "$cli_copy"
+  # No helper sibling — should fail with non-zero and print to stderr.
+  local exit_code stderr_out
+  set +e
+  stderr_out=$(HOME="$SANDBOX" PATH="$SANDBOX/bin:/usr/bin:/bin" \
+    bash "$cli_copy" --headless </dev/null 2>&1 >/dev/null)
+  exit_code=$?
+  set -e
+  if [ "$exit_code" -ne 0 ] && echo "$stderr_out" | grep -q "fairtrail-cli-flags.sh"; then
+    pass "CLI exits non-zero with helpful message when helper is missing"
+  else
+    fail "CLI must exit non-zero and mention fairtrail-cli-flags.sh — got exit=$exit_code, stderr=$stderr_out"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Run all tests
+# ---------------------------------------------------------------------------
+echo ""
+printf "${BOLD}Fairtrail CLI behavioral tests (runtime matrix)${RESET}\n"
+echo ""
+
+trap 'teardown_sandbox' EXIT
+setup_sandbox
+
+test_tui_headless_docker_v2
+test_tui_headless_docker_v1
+test_tui_headless_podman_native
+test_tui_headless_podman_pc
+test_tui_list_podman_pc
+test_update_pulls_then_force_recreates_web
+test_start_calls_up_dash_d
+test_stop_aborts_without_confirmation
+test_uninstall_aborts_without_confirmation
+test_status_only_calls_curl
+test_version_only_calls_curl
+test_missing_helper_fails_loudly
+
+echo ""
+printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"
+[ "$FAIL" -eq 0 ] || exit 1
