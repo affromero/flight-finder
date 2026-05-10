@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.5.5] - 2026-05-10
+
+### Fixed
+- **`fairtrail --headless` failed on podman-compose** (#72 follow-up): every TUI flag (`--headless`, `--list`, `--view`, `--backend`, `--model`) aborted with `podman-compose: error: unrecognized arguments: -it`. `cmd_tui` hardcoded `-it`/`-i` between `exec` and the service name, but `podman-compose exec` accepts only `-d`, `--privileged`, `-u`, `-T`, `--index`, `-e`, `-w` (verified against `podman_compose.py:4636-4683`); the other three compose flavors fairtrail-cli supports (docker compose v2, docker-compose v1, podman compose v5+ native) implement Docker's surface and accept `-it`/`-i` unchanged. Fix: new `apps/web/public/fairtrail-cli-flags.sh` exporting `_compose_exec_flags(dc, stdin_tty, stdout_tty)` that whitelists the four flavors and emits the right flags by flavor — empty/`-T` for `podman-compose`, `-it`/`-i` for the rest. Hard-fails on unknown flavors so future `nerdctl compose` / `finch compose` cannot silently inherit docker flags. Source guard at the top of `fairtrail-cli` aborts with a clear message if the helper is missing post-install. `install.sh` and `cmd_update` ship/refresh the helper alongside the CLI.
+- **VPN sidecar enabled by commented-out `EXPRESSVPN_CODE`**: `cmd_*` runtime detection used `grep -q "EXPRESSVPN_CODE" .env` which matched commented placeholder lines like `# EXPRESSVPN_CODE=` and unset entries like `EXPRESSVPN_CODE=`. A user with the default-generated `.env` example would silently start the ExpressVPN sidecar with no activation code. Now requires `^[[:space:]]*EXPRESSVPN_CODE=.+` — non-commented, non-empty value.
+
+### Changed
+- **Pre-Release Gate now requires `scripts/cli-runtime-test.sh`** alongside the existing `docker-smoke-test.sh` and `install-flow-test.sh`. The new behavioral harness runs the actual CLI under shimmed `docker`/`podman`/`*compose`/`curl`/`open` binaries across 4 runtime configurations (docker compose v2, docker-compose v1, podman compose native, podman-compose) and asserts every recorded invocation. The `podman-compose` shim mirrors the real argparser and rejects `-i`/`-it`/`-t`/`--interactive`/`--tty` with exit 2, so any future regression that hardcodes `-it` for podman fails the suite at runtime — the previous source-grep tests would have shipped #72 again. 89 assertions cover `cmd_tui`, `cmd_update` (issue #72 v1 force-recreate), `cmd_start_*`, `cmd_logs`, `cmd_stop`/`cmd_uninstall` cancel-and-confirm paths, `cmd_search` (3 POST endpoints + python3 dependency + browser-launch stubbed via `open`/`xdg-open`), `cmd_status`, `cmd_version`, override compose file composition, and the missing-helper failure path. `install-flow-test.sh` adds 6 static guards (helper API matrix, helper used by `cmd_tui`, no raw `-it`/`-i` in `$_DC exec`, install ships and update refreshes the helper, helper rejects unknown compose flavor). 110 total assertions; CI gates the `ci` job on both suites.
+
 ## [0.5.4] - 2026-05-09
 
 ### Fixed
