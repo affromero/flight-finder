@@ -260,6 +260,9 @@ STUB
   # Create a fake "fairtrail-cli" download server using a local file
   mkdir -p "$HOME/fake-server"
   cp /home/testuser/fairtrail-cli "$HOME/fake-server/fairtrail-cli"
+  # The CLI requires fairtrail-cli-flags.sh next to it (issue #72); ship it
+  # in the fake-server so install.sh's parallel curl succeeds.
+  cp /home/testuser/fairtrail-cli-flags.sh "$HOME/fake-server/fairtrail-cli-flags.sh"
 
   # Run installer in non-interactive mode with stubbed Docker and local CLI.
   # Pipe empty stdin so the API key prompt gets "" (skip), and FAIRTRAIL_YES=1

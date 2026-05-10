@@ -250,6 +250,128 @@ test_entrypoint_pins_prisma_major() {
 }
 
 # ---------------------------------------------------------------------------
+# Test: _compose_exec_flags emits the right flags for each compose flavor
+# (issue #72 follow-up). docker compose, docker-compose, and podman compose
+# accept Docker's -it/-i; podman-compose (standalone Python tool) rejects
+# them and uses -T to disable TTY.
+# ---------------------------------------------------------------------------
+test_compose_exec_flags_matrix() {
+  local helper="apps/web/public/fairtrail-cli-flags.sh"
+  if [ ! -f "$helper" ]; then
+    fail "missing helper file $helper"
+    return
+  fi
+
+  # Source in a subshell so set -u from the parent doesn't leak in.
+  local out
+  out=$(bash -c "source $helper
+    printf 'docker-compose +tty=[%s]\n'  \"\$(_compose_exec_flags 'docker-compose' 1 1)\"
+    printf 'docker-compose -tty=[%s]\n'  \"\$(_compose_exec_flags 'docker-compose' 0 0)\"
+    printf 'docker-compose-v2 +tty=[%s]\n' \"\$(_compose_exec_flags 'docker compose' 1 1)\"
+    printf 'docker-compose-v2 -tty=[%s]\n' \"\$(_compose_exec_flags 'docker compose' 0 0)\"
+    printf 'podman-native +tty=[%s]\n'  \"\$(_compose_exec_flags 'podman compose' 1 1)\"
+    printf 'podman-native -tty=[%s]\n'  \"\$(_compose_exec_flags 'podman compose' 0 0)\"
+    printf 'podman-compose +tty=[%s]\n' \"\$(_compose_exec_flags 'podman-compose' 1 1)\"
+    printf 'podman-compose -tty=[%s]\n' \"\$(_compose_exec_flags 'podman-compose' 0 0)\"
+  ")
+
+  local expected
+  expected=$(cat <<'EXPECTED'
+docker-compose +tty=[-it]
+docker-compose -tty=[-i]
+docker-compose-v2 +tty=[-it]
+docker-compose-v2 -tty=[-i]
+podman-native +tty=[-it]
+podman-native -tty=[-i]
+podman-compose +tty=[]
+podman-compose -tty=[-T]
+EXPECTED
+)
+
+  if [ "$out" = "$expected" ]; then
+    pass "_compose_exec_flags emits correct flags across the 4-flavor x 2-tty matrix (#72)"
+  else
+    fail "_compose_exec_flags matrix mismatch (#72)"
+    diff <(printf '%s\n' "$expected") <(printf '%s\n' "$out") || true
+  fi
+
+  # Unknown compose flavors must hard-fail (return non-zero) so a future
+  # `nerdctl compose` / `finch compose` doesn't silently inherit docker
+  # flags. Anyone adding a new flavor must register it explicitly.
+  local rc=0
+  bash -c "source $helper; _compose_exec_flags 'nerdctl compose' 0 0" >/dev/null 2>&1 || rc=$?
+  if [ "$rc" -ne 0 ]; then
+    pass "_compose_exec_flags rejects unknown compose flavor (#72)"
+  else
+    fail "_compose_exec_flags must hard-fail on unknown compose flavor — got rc=$rc"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Test: cmd_tui delegates exec-flag selection to _compose_exec_flags
+# (so future rewrites can't bypass the helper and re-introduce hardcoded -it)
+# ---------------------------------------------------------------------------
+test_cmd_tui_uses_helper() {
+  local cli="apps/web/public/fairtrail-cli"
+  local code_only
+  # Strip comment lines (leading-whitespace-then-#) so a "see _compose_exec_flags"
+  # comment can't satisfy the assertion on its own.
+  code_only=$(sed -n '/^cmd_tui()/,/^}/p' "$cli" | grep -vE '^[[:space:]]*#')
+  if echo "$code_only" | grep -q '_compose_exec_flags'; then
+    pass "cmd_tui calls _compose_exec_flags (#72)"
+  else
+    fail "cmd_tui must call _compose_exec_flags to pick exec flags by compose flavor (#72)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Test: no raw -it/-i flags survive in any \$_DC exec call site
+# (catches future commands that bypass the helper)
+# ---------------------------------------------------------------------------
+test_no_raw_it_flags_in_dc_exec() {
+  local cli="apps/web/public/fairtrail-cli"
+  # Strip comment-only lines first, then look for any literal -it / -i  flag
+  # passed to `$_DC ... exec` on the same line. The bug we're guarding against
+  # is hardcoded -it that survives the helper indirection — so also flag
+  # `exec_flags="-it"` style assignments that funnel into the same call.
+  local code_only hits
+  code_only=$(grep -vE '^[[:space:]]*#' "$cli")
+  hits=$(printf '%s\n' "$code_only" \
+    | grep -nE '(\$_DC[^#]*[[:space:]]exec[[:space:]]+(-it|-i[[:space:]]))|exec_flags=("|'"'"')-(it|i)("|'"'"')' \
+    || true)
+  if [ -z "$hits" ]; then
+    pass "no raw -it/-i flags in \$_DC exec call sites (#72)"
+  else
+    fail "found raw -it/-i flags in \$_DC exec — must use _compose_exec_flags helper:"
+    printf "%s\n" "$hits"
+  fi
+}
+
+# ---------------------------------------------------------------------------
+# Test: the helper file is shipped by install.sh and refreshed by cmd_update
+# (the CLI hard-fails on startup if the helper is missing, so install must
+# place it and update must refresh it)
+# ---------------------------------------------------------------------------
+test_helper_shipped_by_install_and_update() {
+  local installer="apps/web/public/install.sh"
+  local cli="apps/web/public/fairtrail-cli"
+
+  if grep -q 'fairtrail-cli-flags.sh' "$installer"; then
+    pass "install.sh ships fairtrail-cli-flags.sh"
+  else
+    fail "install.sh must download/copy fairtrail-cli-flags.sh next to fairtrail (#72)"
+  fi
+
+  local update_block
+  update_block=$(sed -n '/^cmd_update/,/^cmd_/p' "$cli")
+  if echo "$update_block" | grep -q 'fairtrail-cli-flags.sh'; then
+    pass "cmd_update refreshes fairtrail-cli-flags.sh"
+  else
+    fail "cmd_update must refresh fairtrail-cli-flags.sh alongside the CLI (#72)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo ""
@@ -271,6 +393,10 @@ test_install_supports_no_browser
 test_dockerfile_ships_cli
 test_install_supports_arch_family
 test_entrypoint_pins_prisma_major
+test_compose_exec_flags_matrix
+test_cmd_tui_uses_helper
+test_no_raw_it_flags_in_dc_exec
+test_helper_shipped_by_install_and_update
 
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"

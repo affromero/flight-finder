@@ -366,6 +366,13 @@ mkdir -p "$INSTALL_BIN"
 if [ -n "${FAIRTRAIL_CLI_SOURCE:-}" ] && [ -f "$FAIRTRAIL_CLI_SOURCE" ]; then
   cp "$FAIRTRAIL_CLI_SOURCE" "$INSTALL_BIN/fairtrail"
   chmod +x "$INSTALL_BIN/fairtrail"
+  # Helper sits next to the CLI source; copy it too (issue #72).
+  _flags_src="$(dirname "$FAIRTRAIL_CLI_SOURCE")/fairtrail-cli-flags.sh"
+  if [ -f "$_flags_src" ]; then
+    cp "$_flags_src" "$INSTALL_BIN/fairtrail-cli-flags.sh"
+  else
+    fail "Missing $_flags_src — required helper for compose-flavor flag handling"
+  fi
   ok "Installed fairtrail CLI from local source"
 else
   info "Downloading CLI..."
@@ -376,6 +383,13 @@ else
   else
     rm -f "$INSTALL_BIN/fairtrail.tmp"
     fail "Failed to download CLI from $BASE_URL/fairtrail-cli"
+  fi
+  # Compose-flavor flag helper (issue #72). Hard requirement on podman.
+  if curl -fsSL "$BASE_URL/fairtrail-cli-flags.sh" -o "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp" 2>/dev/null; then
+    mv -f "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp" "$INSTALL_BIN/fairtrail-cli-flags.sh"
+  else
+    rm -f "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp"
+    fail "Failed to download flag helper from $BASE_URL/fairtrail-cli-flags.sh"
   fi
 fi
 
