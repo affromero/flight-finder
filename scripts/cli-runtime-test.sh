@@ -117,30 +117,74 @@ SHIM
 }
 
 write_podman_compose_shim() {
+  # Mirror the real argparser at podman_compose.py:4636-4683. Walk the args,
+  # skipping any global -f flags before `exec`. Once we see `exec`, the only
+  # tokens valid before the service name are: -d, --detach, --privileged,
+  # -u/--user, -T, --index, -e/--env, -w/--workdir. Anything else (especially
+  # -i, -t, -it, --interactive, --tty) must abort with the same usage error
+  # the real binary produces. Without this, a buggy CLI passing -it would
+  # quietly record success and the test would lie.
   cat > "$SANDBOX/bin/podman-compose" <<'SHIM'
 #!/usr/bin/env bash
 printf 'podman-compose %s\n' "$*" >> "$RECORD_FILE"
+saw_exec=0
+i=0
+args=("$@")
+while [ $i -lt ${#args[@]} ]; do
+  a="${args[$i]}"
+  if [ $saw_exec -eq 0 ]; then
+    case "$a" in
+      exec) saw_exec=1 ;;
+      -f|--file) i=$((i + 1)) ;;  # pre-exec file flags consume the next arg
+      *) ;;
+    esac
+    i=$((i + 1)); continue
+  fi
+  # In exec args. Stop validating once we hit a non-flag (the service name).
+  case "$a" in
+    -d|--detach|--privileged|-T) ;;
+    -u|--user|--index|-e|--env|-w|--workdir) i=$((i + 1)) ;;
+    -*)
+      printf 'podman-compose: error: unrecognized arguments: %s\n' "$a" >&2
+      exit 2 ;;
+    *) break ;;  # service name reached — REMAINDER follows, never validate
+  esac
+  i=$((i + 1))
+done
 exit 0
 SHIM
   chmod +x "$SANDBOX/bin/podman-compose"
 }
 
 write_curl_shim() {
-  # Responds to /api/health, /api/version, /api/parse, /api/preview,
-  # /api/queries, and BASE_URL self-update fetches. Anything else exits 0
-  # silently — the CLI generally tolerates a no-op curl.
+  # Records each call as `curl <METHOD> <URL> [body=<BODY>]` to RECORD_FILE,
+  # then responds with a body shape matching the real /api/* contract.
+  # Anything not enumerated exits 0 silently (no-op).
   cat > "$SANDBOX/bin/curl" <<'SHIM'
 #!/usr/bin/env bash
 url=""
 out=""
+method="GET"
+body=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -o) out="$2"; shift 2 ;;
+    -X|--request) method="$2"; shift 2 ;;
+    -d|--data|--data-binary|--data-raw)
+      method="POST"; body="$2"; shift 2 ;;
+    -H|--header) shift 2 ;;
+    --max-time|--connect-timeout|-w|--write-out|--retry|--retry-delay|--retry-max-time)
+      shift 2 ;;
     -*) shift ;;
     http*|*://*) url="$1"; shift ;;
     *) shift ;;
   esac
 done
+if [ -n "$body" ]; then
+  printf 'curl %s %s body=%s\n' "$method" "$url" "$body" >> "$RECORD_FILE"
+else
+  printf 'curl %s %s\n' "$method" "$url" >> "$RECORD_FILE"
+fi
 case "$url" in
   *"/api/health"*)
     printf '{"activeQueries":1,"intervalHours":3,"nextScrape":"2026-05-10T12:00:00"}' ;;
