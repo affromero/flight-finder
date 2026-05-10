@@ -252,8 +252,17 @@ cmd_update() {
     done
   fi
 
+  # Ensure db/redis are running but do not touch them.
+  dc up -d --no-recreate db redis 2>&1 | while IFS= read -r line; do
+    printf "  ${DIM}%s${RESET}\n" "$line"
+  done
 
-  dc up -d 2>&1 | while IFS= read -r line; do
+  # Force-recreate the web container so the freshly-pulled (or rebuilt)
+  # image actually replaces the running one. Without --force-recreate,
+  # podman-compose does not always detect that :latest now points to a
+  # different digest and skips the recreate, leaving the user on the old
+  # image even though the pull succeeded (issue #72).
+  dc up -d --force-recreate --no-deps --remove-orphans web 2>&1 | while IFS= read -r line; do
     printf "  ${DIM}%s${RESET}\n" "$line"
   done
 
