@@ -56,27 +56,37 @@ HELPER="$REPO_ROOT/apps/web/public/fairtrail-cli-flags.sh"
 # else appends "<binary> <args>" to $RECORD_FILE.
 # ---------------------------------------------------------------------------
 
+# Common preamble injected into every shim. record_call <bin> <argv...>
+# uses `printf '%q '` per-arg so multi-word args ("--model 'gpt 5'") are
+# preserved with explicit boundaries instead of collapsing into "gpt 5".
+SHIM_PREAMBLE='record_call() {
+  local bin="$1"; shift
+  local args_str
+  if [ $# -gt 0 ]; then
+    args_str=$(printf "%q " "$@")
+    printf "%s %s\n" "$bin" "${args_str% }" >> "$RECORD_FILE"
+  else
+    printf "%s\n" "$bin" >> "$RECORD_FILE"
+  fi
+}'
+
 write_docker_shim() {
   # $1: 0 if `docker compose` v2 available, 1 if not (forces docker-compose v1)
   local has_v2="$1"
   cat > "$SANDBOX/bin/docker" <<SHIM
 #!/usr/bin/env bash
+$SHIM_PREAMBLE
 case "\$1" in
   info) exit 0 ;;
   compose)
     case "\${2:-}" in
       version) exit $has_v2 ;;
       *)
-        if [ $has_v2 -eq 0 ]; then
-          printf 'docker %s\n' "\$*" >> "\$RECORD_FILE"
-          exit 0
-        fi
-        # If v2 isn't available we shouldn't be reaching here
-        printf 'docker %s\n' "\$*" >> "\$RECORD_FILE"
-        exit 1 ;;
+        record_call docker "\$@"
+        exit $has_v2 ;;
     esac ;;
   *)
-    printf 'docker %s\n' "\$*" >> "\$RECORD_FILE"
+    record_call docker "\$@"
     exit 0 ;;
 esac
 SHIM
@@ -84,9 +94,10 @@ SHIM
 }
 
 write_docker_compose_v1_shim() {
-  cat > "$SANDBOX/bin/docker-compose" <<'SHIM'
+  cat > "$SANDBOX/bin/docker-compose" <<SHIM
 #!/usr/bin/env bash
-printf 'docker-compose %s\n' "$*" >> "$RECORD_FILE"
+$SHIM_PREAMBLE
+record_call docker-compose "\$@"
 exit 0
 SHIM
   chmod +x "$SANDBOX/bin/docker-compose"
@@ -97,19 +108,17 @@ write_podman_shim() {
   local has_native="$1"
   cat > "$SANDBOX/bin/podman" <<SHIM
 #!/usr/bin/env bash
+$SHIM_PREAMBLE
 case "\$1" in
   compose)
     case "\${2:-}" in
       version) exit $has_native ;;
       *)
-        if [ $has_native -eq 0 ]; then
-          printf 'podman %s\n' "\$*" >> "\$RECORD_FILE"
-          exit 0
-        fi
-        exit 1 ;;
+        record_call podman "\$@"
+        exit $has_native ;;
     esac ;;
   *)
-    printf 'podman %s\n' "\$*" >> "\$RECORD_FILE"
+    record_call podman "\$@"
     exit 0 ;;
 esac
 SHIM
@@ -124,32 +133,32 @@ write_podman_compose_shim() {
   # -i, -t, -it, --interactive, --tty) must abort with the same usage error
   # the real binary produces. Without this, a buggy CLI passing -it would
   # quietly record success and the test would lie.
-  cat > "$SANDBOX/bin/podman-compose" <<'SHIM'
+  cat > "$SANDBOX/bin/podman-compose" <<SHIM
 #!/usr/bin/env bash
-printf 'podman-compose %s\n' "$*" >> "$RECORD_FILE"
+$SHIM_PREAMBLE
+record_call podman-compose "\$@"
 saw_exec=0
 i=0
-args=("$@")
-while [ $i -lt ${#args[@]} ]; do
-  a="${args[$i]}"
-  if [ $saw_exec -eq 0 ]; then
-    case "$a" in
+args=("\$@")
+while [ \$i -lt \${#args[@]} ]; do
+  a="\${args[\$i]}"
+  if [ \$saw_exec -eq 0 ]; then
+    case "\$a" in
       exec) saw_exec=1 ;;
-      -f|--file) i=$((i + 1)) ;;  # pre-exec file flags consume the next arg
+      -f|--file) i=\$((i + 1)) ;;
       *) ;;
     esac
-    i=$((i + 1)); continue
+    i=\$((i + 1)); continue
   fi
-  # In exec args. Stop validating once we hit a non-flag (the service name).
-  case "$a" in
+  case "\$a" in
     -d|--detach|--privileged|-T) ;;
-    -u|--user|--index|-e|--env|-w|--workdir) i=$((i + 1)) ;;
+    -u|--user|--index|-e|--env|-w|--workdir) i=\$((i + 1)) ;;
     -*)
-      printf 'podman-compose: error: unrecognized arguments: %s\n' "$a" >&2
+      printf 'podman-compose: error: unrecognized arguments: %s\n' "\$a" >&2
       exit 2 ;;
-    *) break ;;  # service name reached — REMAINDER follows, never validate
+    *) break ;;
   esac
-  i=$((i + 1))
+  i=\$((i + 1))
 done
 exit 0
 SHIM
@@ -386,6 +395,25 @@ test_tui_list_podman_pc() {
   run_cli --list
   assert_recorded "tui --list sends podman-compose exec -T web fairtrail-tui --list" \
     'podman-compose -f docker-compose.yml exec -T web fairtrail-tui --list'
+}
+
+# Codex audit gap 10: argv boundaries must survive recording so a
+# multi-word arg ("--model 'gpt 5 turbo'") is distinguishable from three
+# separate words. The shims use printf %q per arg, which backslash-
+# escapes spaces in multi-word tokens.
+test_tui_preserves_multi_word_arg_boundaries() {
+  setup_runtime podman_pc
+  run_cli --headless --model "gpt 5 turbo"
+  LAST_RUNTIME="podman_pc"; LAST_CMD="--headless"
+  # The %q quoting renders 'gpt 5 turbo' as gpt\ 5\ turbo. The pattern
+  # below matches the escaped form on the same line as fairtrail-tui.
+  assert_recorded "multi-word --model arg recorded with boundaries intact (#72)" \
+    'fairtrail-tui --headless --model gpt\\ 5\\ turbo'
+  # Negative control: the unsplit form 'gpt 5 turbo' (three plain tokens)
+  # must NOT appear, otherwise we would not be able to tell argv-3 from
+  # argv-1-with-spaces.
+  assert_not_recorded "multi-word arg is not recorded as three plain tokens" \
+    'fairtrail-tui --headless --model gpt 5 turbo$'
 }
 
 # ---------------------------------------------------------------------------
@@ -708,6 +736,7 @@ test_tui_headless_docker_v1
 test_tui_headless_podman_native
 test_tui_headless_podman_pc
 test_tui_list_podman_pc
+test_tui_preserves_multi_word_arg_boundaries
 test_update_pulls_then_force_recreates_web
 test_start_calls_up_dash_d
 test_logs_calls_dc_logs_f_web
