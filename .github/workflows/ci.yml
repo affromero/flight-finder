@@ -23,6 +23,7 @@ jobs:
         working-directory: apps/web
       - run: npm run build
       - run: bash scripts/install-flow-test.sh
+      - run: bash scripts/cli-runtime-test.sh
 
   install-smoke:
     runs-on: ubuntu-latest

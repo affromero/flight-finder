@@ -130,14 +130,20 @@ Departure board / atmospheric aviation aesthetic — deep navy, amber glow, prec
 
 ## Pre-Release Gate (MANDATORY before `/create-release`)
 
-Both tests must pass before tagging a release:
+All three tests must pass before tagging a release:
 
 ```bash
 ./scripts/docker-smoke-test.sh    # Docker infra: build, health, chromium, extraction, DB
-./scripts/install-flow-test.sh    # User flow: install.sh, CLI commands, search
+./scripts/install-flow-test.sh    # Static + grep regression checks on install.sh / fairtrail-cli
+./scripts/cli-runtime-test.sh     # Behavioral CLI runtime matrix (docker v1/v2, podman compose, podman-compose)
 ```
 
-If either fails, fix the issue and re-run. Do NOT tag without both passing.
+If any fails, fix the issue and re-run. Do NOT tag without all three passing.
+
+The runtime-matrix harness (`cli-runtime-test.sh`) is what catches the
+"works on docker, broken on podman" class of bug (issues #62, #72). It
+shims `docker`/`podman`/`*compose`/`curl` and asserts the recorded
+invocations — every CLI command across every compose flavor.
 
 ## DON'T
 
