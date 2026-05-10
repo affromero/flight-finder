@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.5.4] - 2026-05-09
+
+### Fixed
+- **`fairtrail update` did not actually update the running container** (#72): `cmd_update` called `dc up -d` after `dc pull web`. On podman-compose, plain `up -d` does not always detect that `ghcr.io/affromero/fairtrail:latest` now points to a different digest and skips the recreate, so users kept running the old image even though the pull succeeded. Now ensures db/redis are up via `dc up -d --no-recreate db redis`, then force-recreates web with `dc up -d --force-recreate --no-deps --remove-orphans web` (the same pattern the production deploy script already uses). Regression test added to `scripts/install-flow-test.sh` asserting the `cmd_update` block carries `--force-recreate` and `--no-deps` for the web service.
+
 ## [0.5.3] - 2026-05-09
 
 ### Fixed
