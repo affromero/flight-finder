@@ -25,6 +25,19 @@ FAIRTRAIL_DIR="$HOME/.fairtrail"
 PORT="${HOST_PORT:-${PORT:-3003}}"
 BASE_URL="${FAIRTRAIL_URL:-https://fairtrail.org}"
 
+# Compose-flavor flag helpers (issue #72). Lives next to this script so
+# `command -v fairtrail` and dev-mode (bin/fairtrail → apps/web/public/) both
+# resolve it via dirname "$0". Required, not optional — a missing helper on
+# podman would silently break `fairtrail --headless` again.
+_FLAGS_LIB="$(dirname "$0")/fairtrail-cli-flags.sh"
+if [ ! -f "$_FLAGS_LIB" ]; then
+  printf "\033[0;31m\033[1m✗\033[0m Missing %s — re-run installer:\n  curl -fsSL %s/install.sh | bash\n" \
+    "$_FLAGS_LIB" "${FAIRTRAIL_URL:-https://fairtrail.org}" >&2
+  exit 1
+fi
+# shellcheck source=fairtrail-cli-flags.sh
+. "$_FLAGS_LIB"
+
 if [ ! -f "$FAIRTRAIL_DIR/docker-compose.yml" ]; then
   printf "${RED}${BOLD}✗${RESET} Fairtrail not found. Run the installer first:\n"
   printf "  curl -fsSL https://fairtrail.org/install.sh | bash\n"
@@ -234,6 +247,18 @@ cmd_update() {
   else
     rm -f "${CLI_PATH}.tmp"
     printf "${YELLOW}${BOLD}!${RESET} CLI update skipped (couldn't reach %s)\n" "$BASE_URL"
+  fi
+
+  # Refresh the compose-flavor flag helper alongside the CLI (issue #72).
+  # If the CLI updated but the helper didn't, podman-compose users would
+  # fall through to undefined `_compose_exec_flags`. Treat as best-effort:
+  # the source guard at the top of the CLI errors out clearly if missing.
+  FLAGS_PATH="${CLI_DIR}/fairtrail-cli-flags.sh"
+  if curl -fsSL "$BASE_URL/fairtrail-cli-flags.sh" -o "${FLAGS_PATH}.tmp"; then
+    mv -f "${FLAGS_PATH}.tmp" "$FLAGS_PATH"
+  else
+    rm -f "${FLAGS_PATH}.tmp"
+    printf "${YELLOW}${BOLD}!${RESET} Flag helper update skipped (couldn't reach %s)\n" "$BASE_URL"
   fi
 
   # Try pulling pre-built image; fall back to local build if unavailable
@@ -480,14 +505,16 @@ cmd_tui() {
     exit 1
   fi
 
-  local exec_flags
-  if [ -t 0 ] && [ -t 1 ]; then
-    exec_flags="-it"
-  else
-    exec_flags="-i"
-  fi
+  # Compose flavors disagree on exec flags (issue #72). _compose_exec_flags
+  # picks -it/-i for docker-style, empty/-T for podman-compose standalone.
+  local stdin_tty stdout_tty exec_flags
+  [ -t 0 ] && stdin_tty=1 || stdin_tty=0
+  [ -t 1 ] && stdout_tty=1 || stdout_tty=0
+  exec_flags=$(_compose_exec_flags "$_DC" "$stdin_tty" "$stdout_tty")
 
   # `exec` cannot run shell functions, so call $_DC directly instead of dc().
+  # $exec_flags is intentionally unquoted: empty string must word-split to
+  # nothing, otherwise podman-compose receives an empty arg and rejects it.
   exec $_DC $COMPOSE_FILES exec $exec_flags web fairtrail-tui "$@"
 }
 
