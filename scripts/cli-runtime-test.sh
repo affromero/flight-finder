@@ -212,9 +212,24 @@ SHIM
 write_python3_passthrough() {
   # Some cmd_search code paths call python3. Real python3 is fine if it's on
   # PATH outside the sandbox — symlink it through.
-  if real_py=$(/usr/bin/env -i PATH=/usr/bin:/bin command -v python3 2>/dev/null); then
+  if real_py=$(PATH=/usr/bin:/bin bash -c 'command -v python3' 2>/dev/null); then
     ln -sf "$real_py" "$SANDBOX/bin/python3"
   fi
+}
+
+write_browser_stubs() {
+  # cmd_search/cmd_start_* call `open` (macOS) or `xdg-open` (Linux) on
+  # success. Without stubs, every test run pops a real browser tab on the
+  # developer's machine. Record but don't actually open anything.
+  cat > "$SANDBOX/bin/open" <<'SHIM'
+#!/usr/bin/env bash
+printf 'open %s\n' "$*" >> "$RECORD_FILE"
+SHIM
+  cat > "$SANDBOX/bin/xdg-open" <<'SHIM'
+#!/usr/bin/env bash
+printf 'xdg-open %s\n' "$*" >> "$RECORD_FILE"
+SHIM
+  chmod +x "$SANDBOX/bin/open" "$SANDBOX/bin/xdg-open"
 }
 
 # ---------------------------------------------------------------------------
@@ -259,6 +274,7 @@ setup_runtime() {
   esac
   write_curl_shim
   write_python3_passthrough
+  write_browser_stubs
 }
 
 # Run the CLI under the sandbox. stdin is a single newline (not /dev/null)
@@ -468,6 +484,51 @@ YAML
   done
 }
 
+# ---------------------------------------------------------------------------
+# Test cases — cmd_search (POSTs to /api/parse, /api/preview, /api/queries)
+# ---------------------------------------------------------------------------
+
+test_search_hits_all_three_endpoints() {
+  # cmd_search must POST query→/api/parse, then POST parsed→/api/preview,
+  # then POST tracker body→/api/queries. Runtime-independent (no compose).
+  for rt in docker_v2 podman_pc; do
+    setup_runtime "$rt"
+    run_cli search "NYC to LAX next month"
+    LAST_RUNTIME="$rt"; LAST_CMD="search"
+    assert_recorded "search POSTs /api/parse with query body" \
+      '^curl POST http://localhost:3003/api/parse body=\{.*"query":[[:space:]]*"NYC to LAX next month".*\}$'
+    assert_recorded "search POSTs /api/preview with parsed origin/destination" \
+      '^curl POST http://localhost:3003/api/preview body=\{.*"origin":[[:space:]]*"NYC".*"destination":[[:space:]]*"LAX".*\}$'
+    assert_recorded "search POSTs /api/queries with rawInput tracker body" \
+      '^curl POST http://localhost:3003/api/queries body=\{.*"rawInput":[[:space:]]*"NYC to LAX next month".*\}$'
+    assert_not_recorded "search never invokes compose" \
+      '\b(up|down|stop|exec|pull|logs) '
+  done
+}
+
+test_search_aborts_when_health_fails() {
+  # If /api/health returns nothing, cmd_search must NOT proceed to /api/parse.
+  setup_runtime docker_v2
+  # Replace curl shim with one that returns empty for /api/health.
+  cat > "$SANDBOX/bin/curl" <<'SHIM'
+#!/usr/bin/env bash
+url=""; for arg in "$@"; do case "$arg" in http*) url="$arg" ;; esac; done
+printf 'curl GET %s\n' "$url" >> "$RECORD_FILE"
+exit 0
+SHIM
+  chmod +x "$SANDBOX/bin/curl"
+  EXPECT_NONZERO=1 run_cli search "NYC to LAX"
+  unset EXPECT_NONZERO
+  LAST_RUNTIME="docker_v2"; LAST_CMD="search"
+  if [ "$LAST_EXIT" -ne 0 ]; then
+    pass "search exits non-zero when /api/health is unreachable"
+  else
+    fail "search should exit non-zero when /api/health is unreachable"
+  fi
+  assert_not_recorded "search does not POST /api/parse when health fails" \
+    '/api/parse'
+}
+
 test_status_only_calls_curl() {
   # status should not invoke compose at all — pure /api/health probe.
   for rt in docker_v2 docker_v1 podman_native podman_pc; do
@@ -556,6 +617,8 @@ test_stop_aborts_without_confirmation
 test_stop_invokes_compose_on_y
 test_uninstall_aborts_without_confirmation
 test_uninstall_invokes_compose_and_removes_dir_on_y
+test_search_hits_all_three_endpoints
+test_search_aborts_when_health_fails
 test_status_only_calls_curl
 test_version_only_calls_curl
 test_missing_helper_fails_loudly
