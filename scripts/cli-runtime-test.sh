@@ -404,15 +404,28 @@ test_start_calls_up_dash_d() {
 }
 
 test_stop_aborts_without_confirmation() {
-  # cmd_stop reads y/N from stdin. With stdin closed we get the cancel path,
-  # so dc stop is NOT called — verify that, since silently calling stop on a
-  # cancelled prompt would be a regression in itself.
+  # Empty answer (just hitting Enter) → cancel branch. dc stop must NOT run.
   for rt in docker_v2 docker_v1 podman_native podman_pc; do
     setup_runtime "$rt"
     run_cli stop
     LAST_RUNTIME="$rt"; LAST_CMD="stop"
-    assert_not_recorded "stop respects N answer (no dc stop on cancel)" \
+    assert_not_recorded "stop respects empty answer (no dc stop on cancel)" \
       ' stop( |$)'
+  done
+}
+
+test_stop_invokes_compose_on_y() {
+  # Answer "y" → dc stop must run with the runtime-correct prefix.
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli_with_input $'y\n' stop
+    LAST_RUNTIME="$rt"; LAST_CMD="stop"
+    case "$rt" in
+      docker_v2)     assert_recorded "stop -> docker compose stop"   '^docker compose -f docker-compose.yml stop$' ;;
+      docker_v1)     assert_recorded "stop -> docker-compose stop"   '^docker-compose -f docker-compose.yml stop$' ;;
+      podman_native) assert_recorded "stop -> podman compose stop"   '^podman compose -f docker-compose.yml stop$' ;;
+      podman_pc)     assert_recorded "stop -> podman-compose stop"   '^podman-compose -f docker-compose.yml stop$' ;;
+    esac
   done
 }
 
@@ -421,10 +434,37 @@ test_uninstall_aborts_without_confirmation() {
     setup_runtime "$rt"
     run_cli uninstall
     LAST_RUNTIME="$rt"; LAST_CMD="uninstall"
-    assert_not_recorded "uninstall respects N answer (no dc down on cancel)" \
+    assert_not_recorded "uninstall respects empty answer (no dc down on cancel)" \
       ' down -v( |$)'
-    [ -d "$SANDBOX/.fairtrail" ] && pass "uninstall did not remove ~/.fairtrail on cancel" \
+    [ -d "$SANDBOX/.fairtrail" ] \
+      && pass "uninstall did not remove ~/.fairtrail on cancel" \
       || fail "uninstall removed ~/.fairtrail despite cancel"
+  done
+}
+
+test_uninstall_invokes_compose_and_removes_dir_on_y() {
+  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+    setup_runtime "$rt"
+    run_cli_with_input $'y\n' uninstall
+    LAST_RUNTIME="$rt"; LAST_CMD="uninstall"
+    case "$rt" in
+      docker_v2)     assert_recorded "uninstall -> docker compose down -v"   '^docker compose -f docker-compose.yml down -v$' ;;
+      docker_v1)     assert_recorded "uninstall -> docker-compose down -v"   '^docker-compose -f docker-compose.yml down -v$' ;;
+      podman_native) assert_recorded "uninstall -> podman compose down -v"   '^podman compose -f docker-compose.yml down -v$' ;;
+      podman_pc)     assert_recorded "uninstall -> podman-compose down -v"   '^podman-compose -f docker-compose.yml down -v$' ;;
+    esac
+    if [ ! -d "$SANDBOX/.fairtrail" ]; then
+      pass "uninstall removed ~/.fairtrail on confirm=y"
+    else
+      fail "uninstall did not remove ~/.fairtrail on confirm=y"
+    fi
+    # Recreate sandbox state so subsequent tests still find docker-compose.yml.
+    mkdir -p "$SANDBOX/.fairtrail"
+    cat > "$SANDBOX/.fairtrail/docker-compose.yml" <<'YAML'
+services:
+  web:
+    image: ghcr.io/affromero/fairtrail:latest
+YAML
   done
 }
 
@@ -513,7 +553,9 @@ test_tui_list_podman_pc
 test_update_pulls_then_force_recreates_web
 test_start_calls_up_dash_d
 test_stop_aborts_without_confirmation
+test_stop_invokes_compose_on_y
 test_uninstall_aborts_without_confirmation
+test_uninstall_invokes_compose_and_removes_dir_on_y
 test_status_only_calls_curl
 test_version_only_calls_curl
 test_missing_helper_fails_loudly
