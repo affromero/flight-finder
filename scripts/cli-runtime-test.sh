@@ -582,6 +582,70 @@ test_version_only_calls_curl() {
 }
 
 # ---------------------------------------------------------------------------
+# Test cases — compose file composition (override + VPN auto-inclusion)
+# ---------------------------------------------------------------------------
+
+test_compose_files_includes_override_when_present() {
+  setup_runtime docker_v2
+  echo "services: { web: { environment: { FOO: bar } } }" \
+    > "$SANDBOX/.fairtrail/docker-compose.override.yml"
+  run_cli start
+  LAST_RUNTIME="docker_v2"; LAST_CMD="start"
+  assert_recorded "override file appended to -f chain" \
+    '^docker compose -f docker-compose.yml -f docker-compose.override.yml up -d'
+  rm -f "$SANDBOX/.fairtrail/docker-compose.override.yml"
+}
+
+test_vpn_compose_excluded_without_env() {
+  # No .env file at all → VPN sidecar must NOT be included.
+  setup_runtime docker_v2
+  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
+  rm -f "$SANDBOX/.fairtrail/.env"
+  run_cli start
+  LAST_RUNTIME="docker_v2"; LAST_CMD="start"
+  assert_not_recorded "no .env -> VPN sidecar omitted" 'docker-compose.vpn.yml'
+  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
+}
+
+test_vpn_compose_excluded_when_commented() {
+  # .env has the token only inside a comment → must be treated as disabled.
+  # This is the actual bug Codex audit found: `grep -q "EXPRESSVPN_CODE"`
+  # used to match commented lines and enable the VPN sidecar.
+  setup_runtime docker_v2
+  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
+  printf '# EXPRESSVPN_CODE=placeholder\nDB_URL=postgres://x\n' \
+    > "$SANDBOX/.fairtrail/.env"
+  run_cli start
+  LAST_RUNTIME="docker_v2"; LAST_CMD="start"
+  assert_not_recorded "commented EXPRESSVPN_CODE -> VPN sidecar omitted" \
+    'docker-compose.vpn.yml'
+  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml" "$SANDBOX/.fairtrail/.env"
+}
+
+test_vpn_compose_excluded_when_empty_value() {
+  # EXPRESSVPN_CODE= (no value) is also disabled.
+  setup_runtime docker_v2
+  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
+  printf 'EXPRESSVPN_CODE=\n' > "$SANDBOX/.fairtrail/.env"
+  run_cli start
+  LAST_RUNTIME="docker_v2"; LAST_CMD="start"
+  assert_not_recorded "empty EXPRESSVPN_CODE -> VPN sidecar omitted" \
+    'docker-compose.vpn.yml'
+  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml" "$SANDBOX/.fairtrail/.env"
+}
+
+test_vpn_compose_included_when_enabled() {
+  setup_runtime docker_v2
+  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
+  printf 'EXPRESSVPN_CODE=ABC123XYZ\n' > "$SANDBOX/.fairtrail/.env"
+  run_cli start
+  LAST_RUNTIME="docker_v2"; LAST_CMD="start"
+  assert_recorded "EXPRESSVPN_CODE=value -> VPN sidecar appended" \
+    '^docker compose -f docker-compose.yml -f docker-compose.vpn.yml up -d'
+  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml" "$SANDBOX/.fairtrail/.env"
+}
+
+# ---------------------------------------------------------------------------
 # Helper missing → CLI must exit non-zero (loud failure)
 # ---------------------------------------------------------------------------
 
@@ -656,6 +720,11 @@ test_search_hits_all_three_endpoints
 test_search_aborts_when_health_fails
 test_status_only_calls_curl
 test_version_only_calls_curl
+test_compose_files_includes_override_when_present
+test_vpn_compose_excluded_without_env
+test_vpn_compose_excluded_when_commented
+test_vpn_compose_excluded_when_empty_value
+test_vpn_compose_included_when_enabled
 test_missing_helper_fails_loudly
 test_run_cli_captures_exit
 

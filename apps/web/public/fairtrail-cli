@@ -59,8 +59,12 @@ fi
 # Resolve override files
 COMPOSE_FILES="-f docker-compose.yml"
 [ -f "docker-compose.override.yml" ] && COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.override.yml"
-# Auto-include VPN sidecar if activation code is configured
-if [ -f "docker-compose.vpn.yml" ] && grep -q "EXPRESSVPN_CODE" .env 2>/dev/null; then
+# Auto-include VPN sidecar only if EXPRESSVPN_CODE is set to a non-empty
+# value at the start of a line (commented-out or unset entries don't count).
+# Previous form `grep -q "EXPRESSVPN_CODE"` matched `# EXPRESSVPN_CODE=` too,
+# silently enabling the VPN sidecar from a disabled-by-comment placeholder.
+if [ -f "docker-compose.vpn.yml" ] \
+  && grep -Eq '^[[:space:]]*EXPRESSVPN_CODE=.+' .env 2>/dev/null; then
   COMPOSE_FILES="$COMPOSE_FILES -f docker-compose.vpn.yml"
 fi
 
