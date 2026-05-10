@@ -261,18 +261,52 @@ setup_runtime() {
   write_python3_passthrough
 }
 
-# Run the CLI under the sandbox. Replaces stdin with /dev/null so [ -t 0 ]
-# is false (covers the non-TTY branch — the TTY branch is unit-tested).
+# Run the CLI under the sandbox. stdin is a single newline (not /dev/null)
+# so that interactive `read -rp` prompts (cmd_stop, cmd_uninstall) get an
+# empty answer and take the cancel path, not crash from EOF under set -e.
+# To answer "y", use run_cli_with_input "y\n" <cmd>.
+# Captures exit code into LAST_EXIT for assertions; default expectation is
+# 0 unless the test sets EXPECT_NONZERO=1 before calling.
+LAST_EXIT=0
 run_cli() {
   LAST_CMD="$1"
   shift
   : > "$RECORD_FILE"
-  HOME="$SANDBOX" \
-  PATH="$SANDBOX/bin:/usr/bin:/bin" \
-  RECORD_FILE="$RECORD_FILE" \
-  FAIRTRAIL_URL="http://test.invalid" \
-  HOST_PORT=3003 \
-  bash "$CLI" "$LAST_CMD" "$@" </dev/null >/dev/null 2>&1 || true
+  set +e
+  printf '\n' \
+    | HOME="$SANDBOX" \
+      PATH="$SANDBOX/bin:/usr/bin:/bin" \
+      RECORD_FILE="$RECORD_FILE" \
+      FAIRTRAIL_URL="http://test.invalid" \
+      HOST_PORT=3003 \
+      bash "$CLI" "$LAST_CMD" "$@" >/dev/null 2>&1
+  LAST_EXIT=$?
+  set -e
+  if [ "${EXPECT_NONZERO:-0}" != "1" ] && [ $LAST_EXIT -ne 0 ]; then
+    fail "CLI exited $LAST_EXIT — assertions on its recorded calls are unreliable"
+  fi
+}
+
+# Same as run_cli, but pipes a string into stdin so confirm prompts get
+# answered. Use for stop/uninstall confirm=Y tests.
+run_cli_with_input() {
+  local input="$1"
+  LAST_CMD="$2"
+  shift 2
+  : > "$RECORD_FILE"
+  set +e
+  printf '%s' "$input" \
+    | HOME="$SANDBOX" \
+      PATH="$SANDBOX/bin:/usr/bin:/bin" \
+      RECORD_FILE="$RECORD_FILE" \
+      FAIRTRAIL_URL="http://test.invalid" \
+      HOST_PORT=3003 \
+      bash "$CLI" "$LAST_CMD" "$@" >/dev/null 2>&1
+  LAST_EXIT=$?
+  set -e
+  if [ "${EXPECT_NONZERO:-0}" != "1" ] && [ $LAST_EXIT -ne 0 ]; then
+    fail "CLI exited $LAST_EXIT — assertions on its recorded calls are unreliable"
+  fi
 }
 
 # Match a regex against the recorded invocations (one per line).
@@ -437,6 +471,30 @@ test_missing_helper_fails_loudly() {
   fi
 }
 
+# Negative-control: a CLI that crashes during dispatch must NOT silently
+# pass tests like "status never invokes compose". Rewrite the CLI's
+# `status` dispatcher to exit 7, run via run_cli with EXPECT_NONZERO=1 to
+# bypass fail(), and assert LAST_EXIT was captured.
+test_run_cli_captures_exit() {
+  setup_runtime docker_v2
+  LAST_RUNTIME="harness"; LAST_CMD="self-check"
+  local crashy_cli="$SANDBOX/bin/fairtrail-crashy"
+  sed 's#status)    cmd_status ;;#status)    exit 7 ;;#' "$CLI" > "$crashy_cli"
+  chmod +x "$crashy_cli"
+  # The helper must sit next to the CLI for the source guard to pass.
+  cp "$HELPER" "$SANDBOX/bin/fairtrail-cli-flags.sh"
+  local prev_cli="$CLI"
+  CLI="$crashy_cli"
+  EXPECT_NONZERO=1 run_cli status
+  CLI="$prev_cli"
+  unset EXPECT_NONZERO
+  if [ "$LAST_EXIT" = "7" ]; then
+    pass "run_cli captures CLI exit code (LAST_EXIT=7)"
+  else
+    fail "run_cli should capture exit code 7, got $LAST_EXIT"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
@@ -459,6 +517,7 @@ test_uninstall_aborts_without_confirmation
 test_status_only_calls_curl
 test_version_only_calls_curl
 test_missing_helper_fails_loudly
+test_run_cli_captures_exit
 
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"
