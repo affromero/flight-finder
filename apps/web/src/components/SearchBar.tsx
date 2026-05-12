@@ -201,6 +201,18 @@ export function SearchBar({
     let cancelled = false;
     let timer: number | null = null;
 
+    const checkCutoff = (): boolean => {
+      const saved = readSavedPreview(storageKey);
+      if (saved && Date.now() - saved.startedAt > PREVIEW_POLL_TIMEOUT_MS) {
+        setError('Flight search took too long. Please try again.');
+        setPreviewLoading(false);
+        setPreviewRunId(null);
+        clearSavedPreview(storageKey);
+        return true;
+      }
+      return false;
+    };
+
     const poll = async () => {
       try {
         const res = await fetch(`/api/preview/${previewRunId}`, { cache: 'no-store' });
@@ -237,18 +249,15 @@ export function SearchBar({
           return;
         }
 
-        const saved = readSavedPreview(storageKey);
-        if (saved && Date.now() - saved.startedAt > PREVIEW_POLL_TIMEOUT_MS) {
-          setError('Flight search took too long. Please try again.');
-          setPreviewLoading(false);
-          setPreviewRunId(null);
-          clearSavedPreview(storageKey);
-          return;
-        }
+        if (checkCutoff()) return;
 
         timer = window.setTimeout(poll, 2000);
       } catch {
         if (cancelled) return;
+        // Catch path also has to respect the cutoff. Without this, a
+        // network or JSON failure that persists for 30+ minutes would
+        // keep polling forever and never surface the timeout error.
+        if (checkCutoff()) return;
         timer = window.setTimeout(poll, 3000);
       }
     };

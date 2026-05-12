@@ -121,6 +121,18 @@ export interface ExtractionResult {
   failureReason?: ExtractionFailureReason;
 }
 
+/**
+ * Slim subset of ExtractionConfig that extractPrices needs. Allows callers
+ * (preview-runner, run-scrape) to read the config once up front and pass
+ * it through every per-attempt call, instead of extractPrices hitting the
+ * DB on every attempt. Issue 65 audit finding A4.
+ */
+export interface ExtractionConfigOverride {
+  provider: string;
+  model: string;
+  customBaseUrl: string | null;
+}
+
 export async function extractPrices(
   html: string,
   searchUrl: string,
@@ -129,16 +141,20 @@ export async function extractPrices(
   maxResults: number = DEFAULT_MAX_RESULTS,
   resultsFound: boolean = true,
   source: NavigationSource = 'google_flights',
-  currency: string | null = null
+  currency: string | null = null,
+  configOverride?: ExtractionConfigOverride
 ): Promise<ExtractionResult> {
   if (!resultsFound) {
     console.log(`[extract] skipped — page did not load results (source=${source})`);
     return { prices: [], usage: { inputTokens: 0, outputTokens: 0 }, failureReason: 'page_not_loaded' };
   }
 
-  const config = await prisma.extractionConfig.findFirst({
-    where: { id: 'singleton' },
-  });
+  // When the caller already resolved the config (eg. preview-runner hoists
+  // it once per preview), skip the DB read. Backwards compatible for the
+  // /api/test/scrape endpoint and tests that pass minimal args.
+  const config = configOverride
+    ? { provider: configOverride.provider, model: configOverride.model, customBaseUrl: configOverride.customBaseUrl }
+    : await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
 
   const provider = config?.provider ?? 'anthropic';
   const model = config?.model ?? 'claude-haiku-4-5-20251001';

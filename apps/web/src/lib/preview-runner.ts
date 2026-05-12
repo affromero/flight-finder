@@ -38,13 +38,16 @@ export type RouteResult = RouteResultPayload;
 
 /**
  * Resolved extraction context shared across all routes in a single
- * runPreview call. Hoisted out of scrapeRoute (was re-read from the DB
- * three times per route) so a 20 route preview reads the config once
- * instead of 60 times. Parallel workers share this same object.
+ * runPreview call. Hoisted out of scrapeRoute and out of extractPrices
+ * (both used to re-read from the DB per attempt) so a 20 route preview
+ * reads the config once instead of dozens of times. Parallel workers
+ * share this same object. Issue 65 audit finding A4: customBaseUrl
+ * added so extractPrices can avoid its own DB read.
  */
 export interface ExtractionContext {
   provider: string;
   model: string;
+  customBaseUrl: string | null;
   costs: { costPer1kInput: number; costPer1kOutput: number };
 }
 
@@ -63,6 +66,10 @@ interface ScrapeRouteParams {
   timePreference: string;
   currency: string | null;
   context: ExtractionContext;
+  /** Unique task slot. Threaded into the debug HTML filename so two
+   *  workers scraping the same (origin, destination) on different dates
+   *  in the same millisecond cannot collide. */
+  taskIndex: number;
 }
 
 interface PreviewValidationResult {
@@ -194,7 +201,12 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
       PREVIEW_MAX_RESULTS,
       nav.resultsFound,
       nav.source,
-      params.currency
+      params.currency,
+      {
+        provider: params.context.provider,
+        model: params.context.model,
+        customBaseUrl: params.context.customBaseUrl,
+      }
     );
 
     totalInputTokens += usage.inputTokens;
@@ -226,7 +238,11 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     try {
       await mkdir(DEBUG_DIR, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const path = `${DEBUG_DIR}/preview-${origin}-${destination}-attempt${attempt}-${ts}.html`;
+      // taskIndex + dateFromStr disambiguate concurrent same-route writes
+      // (issue 65 audit finding A4). Two workers scraping JFK to LAX on
+      // different dates in the same millisecond can no longer overwrite
+      // each other's debug HTML.
+      const path = `${DEBUG_DIR}/preview-task${params.taskIndex}-${origin}-${destination}-${dateFromStr}-attempt${attempt}-${ts}.html`;
       await writeFile(path, nav.html, 'utf-8');
       console.log(`[preview] saved debug HTML -> ${path} (${nav.html.length} chars)`);
     } catch {
@@ -284,6 +300,7 @@ export async function runPreview(
   const context: ExtractionContext = {
     provider,
     model,
+    customBaseUrl: config?.customBaseUrl ?? null,
     costs: getModelCosts(provider, model),
   };
   const outboundDates = payload.outboundDates;
@@ -348,6 +365,7 @@ export async function runPreview(
           timePreference: timePreference || 'any',
           currency,
           context,
+          taskIndex,
         })
       );
 
