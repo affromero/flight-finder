@@ -42,6 +42,26 @@ interface PreviewRunStore {
   update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<PreviewRunRow>;
   findFirst(args: { where: Record<string, unknown>; orderBy: { createdAt: 'desc' } }): Promise<PreviewRunRow | null>;
   create(args: { data: Record<string, unknown> }): Promise<PreviewRunRow>;
+  count(args: { where: Record<string, unknown> }): Promise<number>;
+}
+
+/**
+ * Cap on concurrent active previews per source IP. Audit finding D2:
+ * without this, one client can spawn unbounded background scrapes by
+ * issuing distinct queries fast. The count query filters by clientIp,
+ * active status, AND fresh updatedAt, so stale rows do not block
+ * admission even if the background sweep has not run yet.
+ */
+const PREVIEW_ADMISSION_CAP = (() => {
+  const raw = process.env.PREVIEW_ADMISSION_CAP;
+  if (raw === undefined) return 3;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 3;
+  return Math.min(parsed, 50);
+})();
+
+function getClientIp(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 }
 
 const previewRunStore = (prisma as unknown as { previewRun: PreviewRunStore }).previewRun;
@@ -166,9 +186,18 @@ export async function POST(request: NextRequest) {
 
   const requestHash = buildPreviewRequestHash(payload);
   const now = new Date();
+  const clientIp = getClientIp(request);
 
-  await cleanupExpiredPreviewRuns(now);
-  await markStalePreviewRunsFailed(requestHash, now);
+  // Audit finding B4: cleanup and stale sweep used to block the
+  // request. Both are now fire and forget; admission counting filters
+  // by fresh updatedAt so stale rows that have not yet been swept do
+  // not falsely count against the cap.
+  void cleanupExpiredPreviewRuns(now).catch((err) =>
+    console.error('[preview] cleanupExpiredPreviewRuns failed', err)
+  );
+  void markStalePreviewRunsFailed(requestHash, now).catch((err) =>
+    console.error('[preview] markStalePreviewRunsFailed failed', err)
+  );
 
   const existingRun = await previewRunStore.findFirst({
     where: {
@@ -186,12 +215,34 @@ export async function POST(request: NextRequest) {
     }, 202);
   }
 
+  // Audit finding D2: cap concurrent active previews per source IP.
+  // updatedAt freshness in the filter means a stuck or zombie row
+  // (heartbeat stopped, sweep not yet run) does not block new
+  // submissions from the same IP.
+  if (clientIp !== 'unknown') {
+    const freshSince = new Date(now.getTime() - PREVIEW_ACTIVE_TIMEOUT_MS);
+    const activeForIp = await previewRunStore.count({
+      where: {
+        clientIp,
+        status: { in: [...ACTIVE_PREVIEW_STATUSES] },
+        updatedAt: { gte: freshSince },
+      },
+    });
+    if (activeForIp >= PREVIEW_ADMISSION_CAP) {
+      return apiError(
+        `Too many active previews for this client (cap ${PREVIEW_ADMISSION_CAP}). Wait for one to finish or try again later.`,
+        429,
+      );
+    }
+  }
+
   const previewRun = await previewRunStore.create({
     data: {
       requestHash,
       status: 'pending',
       requestPayload: payload as unknown as Prisma.InputJsonValue,
       expiresAt: new Date(now.getTime() + PREVIEW_RUN_TTL_MS),
+      clientIp,
     },
   });
 
