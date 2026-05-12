@@ -32,7 +32,23 @@ const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
 const MAX_ATTEMPTS = 2;
 const DEBUG_DIR = '/tmp/fairtrail-debug';
 const PREVIEW_MAX_RESULTS = 20;
-export const PREVIEW_CONCURRENCY = 3;
+
+/**
+ * Default max concurrent scrapeRoute calls. Each scrapeRoute launches a
+ * fresh chromium via Playwright (roughly 150 MB), so on a small VPS the
+ * memory ceiling is the binding constraint. Override via env when host
+ * resources differ from the 3 concurrent ceiling that fits a 2 GB box.
+ * Clamped to [1, 10].
+ */
+function parsePreviewConcurrency(): number {
+  const raw = process.env.PREVIEW_CONCURRENCY;
+  if (raw === undefined) return 3;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 3;
+  return Math.min(parsed, 10);
+}
+
+export const PREVIEW_CONCURRENCY = parsePreviewConcurrency();
 
 export type RouteResult = RouteResultPayload;
 

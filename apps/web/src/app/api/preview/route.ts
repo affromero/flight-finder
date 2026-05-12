@@ -14,6 +14,15 @@ import { runPreview, validatePreviewPayload } from '@/lib/preview-runner';
 import type { Airport } from '@/lib/scraper/parse-query';
 
 const PREVIEW_RUN_TTL_MS = 24 * 60 * 60 * 1000;
+/**
+ * Independent heartbeat cadence. Belt and suspenders alongside the per
+ * task onTaskComplete heartbeat: if a single updatePreviewRun write
+ * fails or stalls, this interval still bumps updatedAt within
+ * HEARTBEAT_INTERVAL_MS, keeping the GET stale marker from falsely
+ * failing a healthy long scrape. Cadence well under
+ * PREVIEW_ACTIVE_TIMEOUT_MS (30 min).
+ */
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 
 interface PreviewRunRow {
   id: string;
@@ -111,15 +120,22 @@ async function updatePreviewRun(id: string, data: Record<string, unknown>) {
 async function runPreviewInBackground(id: string, payload: PreviewRequestPayload) {
   await updatePreviewRun(id, { status: 'running', error: null });
 
+  // Independent timer based heartbeat. Audit finding A2: the per task
+  // onTaskComplete heartbeat is the primary signal, but a single task
+  // can run for tens of seconds (Playwright launch + LLM extract) and
+  // any single updatePreviewRun call can fail transiently. A timer
+  // running at HEARTBEAT_INTERVAL_MS guarantees updatedAt advances even
+  // if those signals stall, so the stale marker in [id]/route.ts and
+  // markStalePreviewRunsFailed cannot falsely fail a healthy run.
+  const heartbeatTimer = setInterval(() => {
+    void updatePreviewRun(id, { status: 'running' });
+  }, HEARTBEAT_INTERVAL_MS);
+
   try {
     const result = await runPreview(payload, {
-      // Heartbeat: bump updatedAt after every task settles so the backend
-      // stale marker in [id]/route.ts and markStalePreviewRunsFailed do
-      // not falsely fail healthy long scrapes. Explicit status payload
-      // documents intent even though Prisma's @updatedAt fires on any
-      // update.
       onTaskComplete: () => updatePreviewRun(id, { status: 'running' }),
     });
+    clearInterval(heartbeatTimer);
     await updatePreviewRun(id, {
       status: 'completed',
       resultPayload: result as unknown as Prisma.InputJsonValue,
@@ -127,6 +143,7 @@ async function runPreviewInBackground(id: string, payload: PreviewRequestPayload
       expiresAt: new Date(Date.now() + PREVIEW_RUN_TTL_MS),
     });
   } catch (error) {
+    clearInterval(heartbeatTimer);
     await updatePreviewRun(id, {
       status: 'failed',
       error: error instanceof Error ? error.message : 'Failed to preview flights',
