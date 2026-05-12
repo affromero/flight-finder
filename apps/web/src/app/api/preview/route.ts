@@ -5,7 +5,15 @@ import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
-import type { PreviewRequestPayload, PreviewResultPayload, RouteResultPayload } from '@/lib/preview-run';
+import {
+  ACTIVE_PREVIEW_STATUSES,
+  PREVIEW_ACTIVE_TIMEOUT_MS,
+  PREVIEW_TIMEOUT_ERROR,
+  TERMINAL_PREVIEW_STATUSES,
+  type PreviewRequestPayload,
+  type PreviewResultPayload,
+  type RouteResultPayload,
+} from '@/lib/preview-run';
 import { getModelCosts } from '@/lib/scraper/ai-registry';
 import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
@@ -26,10 +34,6 @@ const MAX_ATTEMPTS = 2;
 const DEBUG_DIR = '/tmp/fairtrail-debug';
 const PREVIEW_MAX_RESULTS = 20;
 const PREVIEW_RUN_TTL_MS = 24 * 60 * 60 * 1000;
-const PREVIEW_ACTIVE_TIMEOUT_MS = 10 * 60 * 1000;
-const ACTIVE_PREVIEW_STATUSES = ['pending', 'running'] as const;
-const TERMINAL_PREVIEW_STATUSES = ['completed', 'failed'] as const;
-const PREVIEW_TIMEOUT_ERROR = 'Preview run timed out before completing';
 
 interface PreviewRunRow {
   id: string;
