@@ -59,6 +59,19 @@ const previewRunStore = (prisma as unknown as { previewRun: PreviewRunStore }).p
 
 export type RouteResult = RouteResultPayload;
 
+/**
+ * Resolved extraction context shared across all routes in a single
+ * runPreview call. Hoisted out of scrapeRoute (was re-read from the DB
+ * three times per route) so a 20 route preview reads the config once
+ * instead of 60 times. Parallel workers in runPreview share this same
+ * object.
+ */
+interface ExtractionContext {
+  provider: string;
+  model: string;
+  costs: { costPer1kInput: number; costPer1kOutput: number };
+}
+
 interface ScrapeRouteParams {
   origin: string;
   destination: string;
@@ -73,7 +86,10 @@ interface ScrapeRouteParams {
   preferredAirlines: string[];
   timePreference: string;
   currency: string | null;
+  context: ExtractionContext;
 }
+
+const PREVIEW_CONCURRENCY = 3;
 
 interface PreviewValidationResult {
   origins: Airport[];
@@ -218,10 +234,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     cabinClass,
   };
 
-  const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
-  const provider = config?.provider ?? 'anthropic';
-  const model = config?.model ?? 'claude-haiku-4-5-20251001';
-  const costs = getModelCosts(provider, model);
+  const { provider, model, costs } = params.context;
 
   let totalInputTokens = 0;
   let totalOutputTokens = 0;
@@ -303,8 +316,8 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
 
   await prisma.apiUsageLog.create({
     data: {
-      provider: (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.provider ?? 'anthropic',
-      model: (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.model ?? 'claude-haiku-4-5-20251001',
+      provider,
+      model,
       inputTokens: totalInputTokens,
       outputTokens: totalOutputTokens,
       costUsd: totalCost,
@@ -327,11 +340,38 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
   throw new Error(messages[lastFailureReason!] ?? 'Flight extraction failed');
 }
 
-async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResultPayload> {
+export interface RunPreviewOptions {
+  /**
+   * Invoked after each task settles, regardless of success or failure.
+   * runPreviewInBackground uses this to bump updatedAt on the PreviewRun
+   * row so the backend stale marker does not falsely fail a healthy long
+   * running scrape. Errors thrown from the callback are swallowed; they
+   * must not abort the worker pool.
+   */
+  onTaskComplete?: () => void | Promise<void>;
+  /**
+   * Max concurrent scrapeRoute calls. Defaults to PREVIEW_CONCURRENCY.
+   * Tests override to 1 to assert serial behavior, or to N to verify the
+   * gate caps in flight work at N.
+   */
+  concurrency?: number;
+}
+
+async function runPreview(
+  payload: PreviewRequestPayload,
+  options: RunPreviewOptions = {}
+): Promise<PreviewResultPayload> {
   const { origins, destinations, isOneWay } = validatePreviewPayload(payload);
   const { dateFrom, dateTo, maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference, cabinClass, tripType, currency: bodyCurrency } = payload;
   const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
   const currency: string | null = config?.defaultCurrency ?? bodyCurrency;
+  const provider = config?.provider ?? 'anthropic';
+  const model = config?.model ?? 'claude-haiku-4-5-20251001';
+  const context: ExtractionContext = {
+    provider,
+    model,
+    costs: getModelCosts(provider, model),
+  };
   const outboundDates = payload.outboundDates;
   const returnDates = payload.returnDates;
 
@@ -359,9 +399,11 @@ async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResult
     }
   }
 
-  const routes: RouteResult[] = [];
+  const routes: RouteResult[] = new Array(tasks.length);
+  let nextIndex = 0;
 
-  for (const task of tasks) {
+  const runOne = async (taskIndex: number): Promise<void> => {
+    const task = tasks[taskIndex]!;
     const { combo, outboundDate, returnDate } = task;
     const taskFrom = new Date(outboundDate + 'T00:00:00Z');
     const taskTo = new Date(returnDate + 'T00:00:00Z');
@@ -391,10 +433,11 @@ async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResult
           preferredAirlines,
           timePreference: timePreference || 'any',
           currency,
+          context,
         })
       );
 
-      routes.push({
+      routes[taskIndex] = {
         origin: combo.origin.code,
         originName: combo.origin.name,
         destination: combo.destination.code,
@@ -402,9 +445,9 @@ async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResult
         flights,
         date: outboundDate,
         returnDate,
-      });
+      };
     } catch (error) {
-      routes.push({
+      routes[taskIndex] = {
         origin: combo.origin.code,
         originName: combo.origin.name,
         destination: combo.destination.code,
@@ -413,9 +456,31 @@ async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResult
         date: outboundDate,
         returnDate,
         error: error instanceof Error ? error.message : 'Failed to search this route',
-      });
+      };
     }
-  }
+
+    if (options.onTaskComplete) {
+      try {
+        await options.onTaskComplete();
+      } catch (callbackError) {
+        console.error('[preview] onTaskComplete callback threw', callbackError);
+      }
+    }
+  };
+
+  // Worker pool: each worker pulls the next index off the shared counter
+  // and writes its result into a preallocated slot, so output order
+  // matches input task order regardless of which worker finishes first.
+  // JS is single threaded, so nextIndex++ is atomic.
+  const concurrency = Math.max(1, Math.min(options.concurrency ?? PREVIEW_CONCURRENCY, tasks.length));
+  const worker = async () => {
+    while (true) {
+      const taskIndex = nextIndex++;
+      if (taskIndex >= tasks.length) return;
+      await runOne(taskIndex);
+    }
+  };
+  await Promise.all(Array.from({ length: concurrency }, worker));
 
   if (!routes.some((route) => route.flights.length > 0)) {
     const firstError = routes.find((route) => route.error)?.error ?? 'No flights found for any route';
@@ -444,7 +509,14 @@ async function runPreviewInBackground(id: string, payload: PreviewRequestPayload
   await updatePreviewRun(id, { status: 'running', error: null });
 
   try {
-    const result = await runPreview(payload);
+    const result = await runPreview(payload, {
+      // Heartbeat: bump updatedAt after every task settles so the backend
+      // stale marker in [id]/route.ts and markStalePreviewRunsFailed do
+      // not falsely fail healthy long scrapes. Explicit status payload
+      // documents intent even though Prisma's @updatedAt fires on any
+      // update.
+      onTaskComplete: () => updatePreviewRun(id, { status: 'running' }),
+    });
     await updatePreviewRun(id, {
       status: 'completed',
       resultPayload: result as unknown as Prisma.InputJsonValue,
