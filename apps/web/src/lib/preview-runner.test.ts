@@ -14,12 +14,21 @@ const {
   mockExtractPrices,
   mockNavigateGoogleFlights,
   mockNavigateAirlineDirect,
+  mockWriteFile,
+  mockMkdir,
 } = vi.hoisted(() => ({
   mockExtractionConfigFindFirst: vi.fn(),
   mockApiUsageLogCreate: vi.fn().mockResolvedValue({}),
   mockExtractPrices: vi.fn(),
   mockNavigateGoogleFlights: vi.fn(),
   mockNavigateAirlineDirect: vi.fn(),
+  mockWriteFile: vi.fn().mockResolvedValue(undefined),
+  mockMkdir: vi.fn().mockResolvedValue(undefined),
+}));
+
+vi.mock('fs/promises', () => ({
+  writeFile: mockWriteFile,
+  mkdir: mockMkdir,
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -48,7 +57,7 @@ vi.mock('@/lib/scraper/airline-urls', () => ({
   isKnownAirline: () => false,
 }));
 
-import { runPreview } from './preview-runner';
+import { runPreview, parsePreviewConcurrency } from './preview-runner';
 
 function makePayload(overrides: Partial<PreviewRequestPayload> = {}): PreviewRequestPayload {
   return {
@@ -88,6 +97,8 @@ beforeEach(() => {
   mockExtractPrices.mockReset();
   mockNavigateGoogleFlights.mockReset();
   mockNavigateAirlineDirect.mockReset();
+  mockWriteFile.mockClear();
+  mockMkdir.mockClear();
 
   mockExtractionConfigFindFirst.mockResolvedValue({
     id: 'singleton',
@@ -179,18 +190,35 @@ describe('runPreview heartbeat invariant', () => {
 
 describe('runPreview parallelism gate', () => {
   /**
-   * Instrument navigateGoogleFlights so each call signals start, waits on
-   * a release barrier, and signals finish. The test then asserts peak
-   * concurrent in-flight calls equals the configured ceiling.
+   * Deterministic barrier instrumentation (audit C1). Each navigate
+   * call signals "I have started" via a resolve hook, waits on a
+   * release barrier, then signals finish. The waitForInFlight helper
+   * is event driven instead of setTimeout polled, so tests do not
+   * depend on real wall clock progress and are not flaky on slow CI.
    */
   function instrumentedNavigate() {
     let inFlight = 0;
     let peak = 0;
+    let autoRelease = false;
     const releasers: Array<() => void> = [];
+    const startWatchers: Array<{ target: number; resolve: () => void }> = [];
+
+    const notifyStart = () => {
+      for (let i = startWatchers.length - 1; i >= 0; i--) {
+        if (inFlight >= startWatchers[i]!.target) {
+          startWatchers[i]!.resolve();
+          startWatchers.splice(i, 1);
+        }
+      }
+    };
+
     mockNavigateGoogleFlights.mockImplementation(async () => {
       inFlight++;
       peak = Math.max(peak, inFlight);
-      await new Promise<void>((resolve) => releasers.push(resolve));
+      notifyStart();
+      if (!autoRelease) {
+        await new Promise<void>((resolve) => releasers.push(resolve));
+      }
       inFlight--;
       return {
         html: '<html></html>',
@@ -199,9 +227,27 @@ describe('runPreview parallelism gate', () => {
         resultsFound: true,
       };
     });
-    const releaseAll = () => releasers.forEach((r) => r());
-    const releaseOne = () => releasers.shift()?.();
-    return { getPeak: () => peak, getInFlight: () => inFlight, releaseAll, releaseOne, getPending: () => releasers.length };
+
+    const waitForInFlight = (target: number): Promise<void> => {
+      if (inFlight >= target) return Promise.resolve();
+      return new Promise<void>((resolve) => startWatchers.push({ target, resolve }));
+    };
+
+    return {
+      getPeak: () => peak,
+      getInFlight: () => inFlight,
+      getPending: () => releasers.length,
+      releaseAll: () => releasers.splice(0).forEach((r) => r()),
+      releaseOne: () => releasers.shift()?.(),
+      // Releases all currently pending navigates AND switches future
+      // navigate calls to no-await mode. Used to let the worker pool
+      // drain to completion after the test has captured the peak.
+      drain: () => {
+        autoRelease = true;
+        releasers.splice(0).forEach((r) => r());
+      },
+      waitForInFlight,
+    };
   }
 
   it('caps in flight scrapeRoute calls at the configured concurrency', async () => {
@@ -215,18 +261,18 @@ describe('runPreview parallelism gate', () => {
     const probe = instrumentedNavigate();
     const promise = runPreview(payload, { concurrency: 3 });
 
-    // Yield enough microtasks for the first batch of workers to enter
-    // navigateGoogleFlights and bump inFlight.
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Deterministic: wait until 3 workers have entered navigate.
+    await probe.waitForInFlight(3);
     expect(probe.getInFlight()).toBe(3);
+    // The remaining 3 tasks are queued: no worker has released yet, so
+    // only 3 navigates are pending.
     expect(probe.getPending()).toBe(3);
 
-    probe.releaseAll();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    // After releasing the first wave, the next 3 should run.
-    probe.releaseAll();
+    // Drain the queue to completion. Peak must not have exceeded 3.
+    probe.drain();
     await promise;
     expect(probe.getPeak()).toBe(3);
+    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(6);
   });
 
   it('runs serially when concurrency=1 (regression for opt out)', async () => {
@@ -238,16 +284,15 @@ describe('runPreview parallelism gate', () => {
     const probe = instrumentedNavigate();
     const promise = runPreview(payload, { concurrency: 1 });
 
-    await new Promise((resolve) => setTimeout(resolve, 10));
+    // Single worker active at all times.
+    await probe.waitForInFlight(1);
     expect(probe.getInFlight()).toBe(1);
+    expect(probe.getPending()).toBe(1);
 
-    probe.releaseOne();
-    await new Promise((resolve) => setTimeout(resolve, 10));
-    expect(probe.getInFlight()).toBe(1);
-
-    probe.releaseAll();
+    probe.drain();
     await promise;
     expect(probe.getPeak()).toBe(1);
+    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -274,5 +319,62 @@ describe('runPreview output ordering', () => {
 
     const result = await runPreview(payload, { concurrency: 3 });
     expect(result.routes.map((r) => r.origin)).toEqual(['JFK', 'EWR', 'LGA']);
+  });
+});
+
+describe('parsePreviewConcurrency (audit D1)', () => {
+  it('defaults to 3 when env is unset', () => {
+    expect(parsePreviewConcurrency(undefined)).toBe(3);
+  });
+
+  it('returns the parsed value within range', () => {
+    expect(parsePreviewConcurrency('1')).toBe(1);
+    expect(parsePreviewConcurrency('5')).toBe(5);
+    expect(parsePreviewConcurrency('10')).toBe(10);
+  });
+
+  it('clamps values above 10 to 10', () => {
+    expect(parsePreviewConcurrency('25')).toBe(10);
+    expect(parsePreviewConcurrency('1000')).toBe(10);
+  });
+
+  it('falls back to 3 on garbage or non positive input', () => {
+    expect(parsePreviewConcurrency('garbage')).toBe(3);
+    expect(parsePreviewConcurrency('0')).toBe(3);
+    expect(parsePreviewConcurrency('-5')).toBe(3);
+    expect(parsePreviewConcurrency('')).toBe(3);
+  });
+});
+
+describe('runPreview debug filename uniqueness (audit A4)', () => {
+  it('writes per task debug paths that encode taskIndex and dateFromStr', async () => {
+    // Force the failure branch so the debug write path runs.
+    // all_filtered_out is non retryable, so we settle on attempt 1
+    // and avoid the 5-10s retry backoff.
+    mockExtractPrices.mockResolvedValue({
+      prices: [],
+      usage: { inputTokens: 0, outputTokens: 0 },
+      failureReason: 'all_filtered_out',
+    });
+
+    const payload = makePayload({
+      origins: [{ code: 'JFK', name: 'A' }],
+      destinations: [{ code: 'LAX', name: 'B' }],
+      tripType: 'one_way',
+      dateFrom: '2026-11-09',
+      dateTo: '2026-11-10',
+    });
+
+    await expect(runPreview(payload, { concurrency: 2 })).rejects.toThrow();
+
+    const paths = mockWriteFile.mock.calls.map((call) => call[0] as string);
+    expect(paths.length).toBeGreaterThanOrEqual(2);
+    // Every path includes the taskN tag so two workers cannot collide.
+    expect(paths.every((p) => /\/preview-task\d+-/.test(p))).toBe(true);
+    // Each task's date appears in its own path.
+    expect(paths.some((p) => p.includes('-2026-11-09-'))).toBe(true);
+    expect(paths.some((p) => p.includes('-2026-11-10-'))).toBe(true);
+    // Unique paths overall, regardless of timestamp collision.
+    expect(new Set(paths).size).toBe(paths.length);
   });
 });

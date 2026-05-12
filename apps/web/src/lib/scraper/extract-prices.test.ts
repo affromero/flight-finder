@@ -343,3 +343,43 @@ describe('extractPrices', () => {
     consoleErr.mockRestore();
   });
 });
+
+describe('extractPrices configOverride (audit A4)', () => {
+  beforeEach(() => {
+    mockExtract.mockReset();
+    mockExtract.mockResolvedValue({
+      content: '[{ "airline": "Test", "price": 100, "duration": "5h", "stops": 0, "travelDate": "2026-06-15", "bookingUrl": "https://e.com" }]',
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+  });
+
+  it('skips the prisma.extractionConfig.findFirst call when a configOverride is passed', async () => {
+    const prismaMod = await import('@/lib/prisma');
+    const findFirstSpy = vi.spyOn(prismaMod.prisma.extractionConfig, 'findFirst');
+    findFirstSpy.mockClear();
+
+    await extractPrices(
+      'page content',
+      'https://flights.google.com',
+      '2026-06-15',
+      { maxPrice: null, maxStops: null, maxDurationHours: null, preferredAirlines: [], timePreference: 'any', cabinClass: 'economy' },
+      10,
+      true,
+      'google_flights',
+      'USD',
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', customBaseUrl: null },
+    );
+
+    expect(findFirstSpy).not.toHaveBeenCalled();
+  });
+
+  it('still reads from prisma when no configOverride is passed (back compat)', async () => {
+    const prismaMod = await import('@/lib/prisma');
+    const findFirstSpy = vi.spyOn(prismaMod.prisma.extractionConfig, 'findFirst');
+    findFirstSpy.mockClear();
+
+    await extractPrices('page content', 'https://flights.google.com', '2026-06-15');
+
+    expect(findFirstSpy).toHaveBeenCalledTimes(1);
+  });
+});

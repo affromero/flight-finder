@@ -40,8 +40,7 @@ const PREVIEW_MAX_RESULTS = 20;
  * resources differ from the 3 concurrent ceiling that fits a 2 GB box.
  * Clamped to [1, 10].
  */
-function parsePreviewConcurrency(): number {
-  const raw = process.env.PREVIEW_CONCURRENCY;
+export function parsePreviewConcurrency(raw: string | undefined = process.env.PREVIEW_CONCURRENCY): number {
   if (raw === undefined) return 3;
   const parsed = parseInt(raw, 10);
   if (!Number.isFinite(parsed) || parsed <= 0) return 3;

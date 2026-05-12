@@ -195,4 +195,32 @@ describe('SearchBar preview polling', () => {
     // sessionStorage stays populated (poll loop has not given up).
     expect(window.sessionStorage.getItem(PREVIEW_STORAGE_KEY)).toBeTruthy();
   });
+
+  it('surfaces the cutoff error from the catch branch on a sustained fetch failure past the window (audit A1)', async () => {
+    // Audit A1: previously the catch branch only scheduled another
+    // poll without checking the cutoff. A network or JSON error that
+    // outlasted the cutoff window would loop forever. With the fix,
+    // the catch branch invokes the same cutoff helper as the success
+    // path.
+    const past = Date.now() - POLL_TIMEOUT_MS - 1000;
+    window.sessionStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(savedPreview({ startedAt: past })));
+
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === '/api/admin/config') return configResponse();
+      if (url.includes('/api/preview/')) {
+        // Throw to land in the SearchBar poll's catch branch.
+        throw new Error('network down');
+      }
+      throw new Error(`unexpected fetch ${url}`);
+    });
+    vi.stubGlobal('fetch', fetchMock);
+
+    render(<SearchBar />);
+
+    await waitFor(() => {
+      expect(screen.getByText(/took too long/i)).toBeInTheDocument();
+    });
+    expect(window.sessionStorage.getItem(PREVIEW_STORAGE_KEY)).toBeNull();
+  });
 });
