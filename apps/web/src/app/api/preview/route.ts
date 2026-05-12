@@ -1,35 +1,28 @@
-import { mkdir, writeFile } from 'fs/promises';
 import { createHash } from 'crypto';
 import type { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
-import { cached } from '@/lib/redis';
-import type { PreviewRequestPayload, PreviewResultPayload, RouteResultPayload } from '@/lib/preview-run';
-import { getModelCosts } from '@/lib/scraper/ai-registry';
-import { isKnownAirline } from '@/lib/scraper/airline-urls';
-import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
-import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navigate';
+import {
+  ACTIVE_PREVIEW_STATUSES,
+  PREVIEW_ACTIVE_TIMEOUT_MS,
+  PREVIEW_TIMEOUT_ERROR,
+  TERMINAL_PREVIEW_STATUSES,
+  type PreviewRequestPayload,
+} from '@/lib/preview-run';
+import { runPreview, validatePreviewPayload } from '@/lib/preview-runner';
 import type { Airport } from '@/lib/scraper/parse-query';
-import { expandContinuousRangeToDates } from '@/lib/scraper/scrape-dates';
 
-const PREVIEW_MAX_DATES = 7;
-
-const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
-  'empty_extraction',
-  'page_not_loaded',
-  'no_json_in_response',
-  'llm_error',
-  'json_parse_error',
-];
-const MAX_ATTEMPTS = 2;
-const DEBUG_DIR = '/tmp/fairtrail-debug';
-const PREVIEW_MAX_RESULTS = 20;
 const PREVIEW_RUN_TTL_MS = 24 * 60 * 60 * 1000;
-const PREVIEW_ACTIVE_TIMEOUT_MS = 10 * 60 * 1000;
-const ACTIVE_PREVIEW_STATUSES = ['pending', 'running'] as const;
-const TERMINAL_PREVIEW_STATUSES = ['completed', 'failed'] as const;
-const PREVIEW_TIMEOUT_ERROR = 'Preview run timed out before completing';
+/**
+ * Independent heartbeat cadence. Belt and suspenders alongside the per
+ * task onTaskComplete heartbeat: if a single updatePreviewRun write
+ * fails or stalls, this interval still bumps updatedAt within
+ * HEARTBEAT_INTERVAL_MS, keeping the GET stale marker from falsely
+ * failing a healthy long scrape. Cadence well under
+ * PREVIEW_ACTIVE_TIMEOUT_MS (30 min).
+ */
+const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 
 interface PreviewRunRow {
   id: string;
@@ -49,49 +42,29 @@ interface PreviewRunStore {
   update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<PreviewRunRow>;
   findFirst(args: { where: Record<string, unknown>; orderBy: { createdAt: 'desc' } }): Promise<PreviewRunRow | null>;
   create(args: { data: Record<string, unknown> }): Promise<PreviewRunRow>;
+  count(args: { where: Record<string, unknown> }): Promise<number>;
+}
+
+/**
+ * Cap on concurrent active previews per source IP. Audit finding D2:
+ * without this, one client can spawn unbounded background scrapes by
+ * issuing distinct queries fast. The count query filters by clientIp,
+ * active status, AND fresh updatedAt, so stale rows do not block
+ * admission even if the background sweep has not run yet.
+ */
+const PREVIEW_ADMISSION_CAP = (() => {
+  const raw = process.env.PREVIEW_ADMISSION_CAP;
+  if (raw === undefined) return 3;
+  const parsed = parseInt(raw, 10);
+  if (!Number.isFinite(parsed) || parsed <= 0) return 3;
+  return Math.min(parsed, 50);
+})();
+
+function getClientIp(request: NextRequest): string {
+  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
 }
 
 const previewRunStore = (prisma as unknown as { previewRun: PreviewRunStore }).previewRun;
-
-export type RouteResult = RouteResultPayload;
-
-interface ScrapeRouteParams {
-  origin: string;
-  destination: string;
-  dateFrom: Date;
-  dateTo: Date;
-  dateFromStr: string;
-  cabinClass: string;
-  tripType: string;
-  maxPrice: number | null;
-  maxStops: number | null;
-  maxDurationHours: number | null;
-  preferredAirlines: string[];
-  timePreference: string;
-  currency: string | null;
-}
-
-interface PreviewValidationResult {
-  origins: Airport[];
-  destinations: Airport[];
-  isOneWay: boolean;
-}
-
-function buildCacheKey(
-  origin: string,
-  destination: string,
-  dateFrom: string,
-  dateTo: string,
-  cabinClass: string,
-  tripType: string,
-  currency: string | null
-): string {
-  const hash = createHash('sha256')
-    .update(`${origin}:${destination}:${dateFrom}:${dateTo}:${cabinClass}:${tripType}:${currency ?? 'auto'}`)
-    .digest('hex')
-    .slice(0, 16);
-  return `preview:${hash}`;
-}
 
 function buildPreviewRequestHash(payload: PreviewRequestPayload): string {
   return createHash('sha256')
@@ -129,52 +102,6 @@ function toPreviewRequestPayload(body: Record<string, unknown>): PreviewRequestP
   };
 }
 
-function validatePreviewPayload(payload: PreviewRequestPayload): PreviewValidationResult {
-  const { dateFrom, dateTo, outboundDates, returnDates, origins, destinations, tripType } = payload;
-
-  if (origins.length === 0 || destinations.length === 0 || !dateFrom || !dateTo) {
-    throw new Error('Missing required fields: origins, destinations, dateFrom, dateTo');
-  }
-
-  for (const airport of [...origins, ...destinations]) {
-    if (!/^[A-Z]{3}$/.test(airport.code)) {
-      throw new Error(`Invalid airport code "${airport.code}" - must be 3 uppercase letters`);
-    }
-  }
-
-  const from = new Date(dateFrom + 'T00:00:00Z');
-  const to = new Date(dateTo + 'T00:00:00Z');
-  if (isNaN(from.getTime()) || isNaN(to.getTime())) {
-    throw new Error('Invalid date format');
-  }
-
-  const isOneWay = tripType === 'one_way';
-  if (!isOneWay && from >= to) {
-    throw new Error('dateFrom must be before dateTo');
-  }
-
-  const combos = origins.length * destinations.length;
-  // For continuous one-way ranges (no enumerated outboundDates), expand
-  // [dateFrom, dateTo] into per-day samples capped at PREVIEW_MAX_DATES so
-  // a +/- N flex query scrapes every day of the window. Round-trip continuous
-  // preview stays single-pair to fit the combos * dates <= 24 budget; the
-  // cron path does the wider grid.
-  const datesToScrape = outboundDates ?? (isOneWay
-    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
-    : [dateFrom]);
-  const totalTasks = combos * datesToScrape.length;
-
-  if (totalTasks > 24) {
-    throw new Error(`Too many date/route combinations (${totalTasks}). Cap is 24 (combos x dates).`);
-  }
-
-  if (returnDates && outboundDates && !isOneWay && returnDates.length !== outboundDates.length) {
-    throw new Error('Return dates must match outbound dates');
-  }
-
-  return { origins, destinations, isOneWay };
-}
-
 async function cleanupExpiredPreviewRuns(now = new Date()) {
   await previewRunStore.deleteMany({
     where: {
@@ -199,232 +126,6 @@ async function markStalePreviewRunsFailed(requestHash?: string, now = new Date()
   });
 }
 
-async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
-  const { origin, destination, dateFrom, dateTo, dateFromStr, cabinClass, tripType } = params;
-
-  const searchParams = { origin, destination, dateFrom, dateTo, cabinClass, tripType, currency: params.currency };
-  const airlines = params.preferredAirlines;
-  const directAirline = airlines.length === 1 && isKnownAirline(airlines[0]!) ? airlines[0]! : null;
-  const filters = {
-    maxPrice: params.maxPrice,
-    maxStops: params.maxStops,
-    maxDurationHours: params.maxDurationHours,
-    preferredAirlines: airlines,
-    timePreference: params.timePreference,
-    cabinClass,
-  };
-
-  const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
-  const provider = config?.provider ?? 'anthropic';
-  const model = config?.model ?? 'claude-haiku-4-5-20251001';
-  const costs = getModelCosts(provider, model);
-
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
-  let lastFailureReason: ExtractionFailureReason | undefined;
-  let lastSource = 'google_flights';
-
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    console.log(`[preview] ${origin}->${destination} attempt ${attempt}/${MAX_ATTEMPTS}`);
-
-    let nav;
-    try {
-      nav = directAirline
-        ? await navigateAirlineDirect(searchParams, directAirline)
-        : await navigateGoogleFlights(searchParams);
-    } catch {
-      nav = await navigateGoogleFlights(searchParams);
-    }
-
-    lastSource = nav.source;
-
-    const { prices: extracted, usage, failureReason } = await extractPrices(
-      nav.html,
-      nav.url,
-      dateFromStr,
-      filters,
-      PREVIEW_MAX_RESULTS,
-      nav.resultsFound,
-      nav.source,
-      params.currency
-    );
-
-    totalInputTokens += usage.inputTokens;
-    totalOutputTokens += usage.outputTokens;
-
-    if (!failureReason) {
-      const cost =
-        (totalInputTokens / 1000) * costs.costPer1kInput +
-        (totalOutputTokens / 1000) * costs.costPer1kOutput;
-
-      await prisma.apiUsageLog.create({
-        data: {
-          provider,
-          model,
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
-          costUsd: cost,
-          operation: 'preview-flights',
-          durationMs: 0,
-        },
-      });
-
-      console.log(`[preview] ${origin}->${destination} OK - ${extracted.length} flights (attempt ${attempt})`);
-      return extracted;
-    }
-
-    lastFailureReason = failureReason;
-
-    try {
-      await mkdir(DEBUG_DIR, { recursive: true });
-      const ts = new Date().toISOString().replace(/[:.]/g, '-');
-      const path = `${DEBUG_DIR}/preview-${origin}-${destination}-attempt${attempt}-${ts}.html`;
-      await writeFile(path, nav.html, 'utf-8');
-      console.log(`[preview] saved debug HTML -> ${path} (${nav.html.length} chars)`);
-    } catch {
-      // ignore write errors
-    }
-
-    if (attempt < MAX_ATTEMPTS && RETRYABLE_FAILURES.includes(failureReason)) {
-      const delay = 5000 + Math.random() * 5000;
-      console.log(`[preview] ${origin}->${destination} retrying after ${Math.round(delay)}ms (reason: ${failureReason})`);
-      await new Promise((resolve) => setTimeout(resolve, delay));
-      continue;
-    }
-  }
-
-  const totalCost =
-    (totalInputTokens / 1000) * costs.costPer1kInput +
-    (totalOutputTokens / 1000) * costs.costPer1kOutput;
-
-  await prisma.apiUsageLog.create({
-    data: {
-      provider: (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.provider ?? 'anthropic',
-      model: (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.model ?? 'claude-haiku-4-5-20251001',
-      inputTokens: totalInputTokens,
-      outputTokens: totalOutputTokens,
-      costUsd: totalCost,
-      operation: 'preview-flights',
-      durationMs: 0,
-      error: `[${lastFailureReason}] ${origin} -> ${destination}`,
-    },
-  });
-
-  const sourceName = lastSource === 'airline_direct' ? 'The airline website' : 'Google Flights';
-  const messages: Record<string, string> = {
-    page_not_loaded: `${sourceName} did not load results - blocked or CAPTCHA'd`,
-    no_json_in_response: `Could not extract flight data from ${sourceName}`,
-    empty_extraction: `No flights found - ${sourceName} may be rate-limiting`,
-    all_filtered_out: 'Flights exist but none matched your filters',
-    llm_error: 'Extraction provider failed (timeout or rate limit). Try again in a moment.',
-    json_parse_error: 'Extraction provider returned malformed output. Try again in a moment.',
-  };
-
-  throw new Error(messages[lastFailureReason!] ?? 'Flight extraction failed');
-}
-
-async function runPreview(payload: PreviewRequestPayload): Promise<PreviewResultPayload> {
-  const { origins, destinations, isOneWay } = validatePreviewPayload(payload);
-  const { dateFrom, dateTo, maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference, cabinClass, tripType, currency: bodyCurrency } = payload;
-  const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
-  const currency: string | null = config?.defaultCurrency ?? bodyCurrency;
-  const outboundDates = payload.outboundDates;
-  const returnDates = payload.returnDates;
-
-  const combos: Array<{ origin: Airport; destination: Airport }> = [];
-  for (const origin of origins) {
-    for (const destination of destinations) {
-      combos.push({ origin, destination });
-    }
-  }
-
-  const datesToScrape = outboundDates ?? (isOneWay
-    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
-    : [dateFrom]);
-  const tasks: Array<{ combo: { origin: Airport; destination: Airport }; outboundDate: string; returnDate: string }> = [];
-
-  for (const combo of combos) {
-    for (let i = 0; i < datesToScrape.length; i++) {
-      const outboundDate = datesToScrape[i]!;
-      const resolvedReturnDate = isOneWay ? outboundDate : (returnDates?.[i] ?? dateTo);
-      tasks.push({
-        combo,
-        outboundDate,
-        returnDate: resolvedReturnDate,
-      });
-    }
-  }
-
-  const routes: RouteResult[] = [];
-
-  for (const task of tasks) {
-    const { combo, outboundDate, returnDate } = task;
-    const taskFrom = new Date(outboundDate + 'T00:00:00Z');
-    const taskTo = new Date(returnDate + 'T00:00:00Z');
-    const cacheKey = buildCacheKey(
-      combo.origin.code,
-      combo.destination.code,
-      outboundDate,
-      returnDate,
-      cabinClass || 'economy',
-      tripType || 'round_trip',
-      currency
-    );
-
-    try {
-      const flights = await cached<PriceData[]>(cacheKey, () =>
-        scrapeRoute({
-          origin: combo.origin.code,
-          destination: combo.destination.code,
-          dateFrom: taskFrom,
-          dateTo: taskTo,
-          dateFromStr: outboundDate,
-          cabinClass: cabinClass || 'economy',
-          tripType: tripType || 'round_trip',
-          maxPrice: maxPrice ? Number(maxPrice) : null,
-          maxStops: maxStops !== undefined && maxStops !== null ? Number(maxStops) : null,
-          maxDurationHours,
-          preferredAirlines,
-          timePreference: timePreference || 'any',
-          currency,
-        })
-      );
-
-      routes.push({
-        origin: combo.origin.code,
-        originName: combo.origin.name,
-        destination: combo.destination.code,
-        destinationName: combo.destination.name,
-        flights,
-        date: outboundDate,
-        returnDate,
-      });
-    } catch (error) {
-      routes.push({
-        origin: combo.origin.code,
-        originName: combo.origin.name,
-        destination: combo.destination.code,
-        destinationName: combo.destination.name,
-        flights: [],
-        date: outboundDate,
-        returnDate,
-        error: error instanceof Error ? error.message : 'Failed to search this route',
-      });
-    }
-  }
-
-  if (!routes.some((route) => route.flights.length > 0)) {
-    const firstError = routes.find((route) => route.error)?.error ?? 'No flights found for any route';
-    throw new Error(firstError);
-  }
-
-  if (routes.length === 1) {
-    return { flights: routes[0]!.flights, routes };
-  }
-
-  return { routes };
-}
-
 async function updatePreviewRun(id: string, data: Record<string, unknown>) {
   try {
     await previewRunStore.update({
@@ -439,8 +140,22 @@ async function updatePreviewRun(id: string, data: Record<string, unknown>) {
 async function runPreviewInBackground(id: string, payload: PreviewRequestPayload) {
   await updatePreviewRun(id, { status: 'running', error: null });
 
+  // Independent timer based heartbeat. Audit finding A2: the per task
+  // onTaskComplete heartbeat is the primary signal, but a single task
+  // can run for tens of seconds (Playwright launch + LLM extract) and
+  // any single updatePreviewRun call can fail transiently. A timer
+  // running at HEARTBEAT_INTERVAL_MS guarantees updatedAt advances even
+  // if those signals stall, so the stale marker in [id]/route.ts and
+  // markStalePreviewRunsFailed cannot falsely fail a healthy run.
+  const heartbeatTimer = setInterval(() => {
+    void updatePreviewRun(id, { status: 'running' });
+  }, HEARTBEAT_INTERVAL_MS);
+
   try {
-    const result = await runPreview(payload);
+    const result = await runPreview(payload, {
+      onTaskComplete: () => updatePreviewRun(id, { status: 'running' }),
+    });
+    clearInterval(heartbeatTimer);
     await updatePreviewRun(id, {
       status: 'completed',
       resultPayload: result as unknown as Prisma.InputJsonValue,
@@ -448,6 +163,7 @@ async function runPreviewInBackground(id: string, payload: PreviewRequestPayload
       expiresAt: new Date(Date.now() + PREVIEW_RUN_TTL_MS),
     });
   } catch (error) {
+    clearInterval(heartbeatTimer);
     await updatePreviewRun(id, {
       status: 'failed',
       error: error instanceof Error ? error.message : 'Failed to preview flights',
@@ -470,9 +186,18 @@ export async function POST(request: NextRequest) {
 
   const requestHash = buildPreviewRequestHash(payload);
   const now = new Date();
+  const clientIp = getClientIp(request);
 
-  await cleanupExpiredPreviewRuns(now);
-  await markStalePreviewRunsFailed(requestHash, now);
+  // Audit finding B4: cleanup and stale sweep used to block the
+  // request. Both are now fire and forget; admission counting filters
+  // by fresh updatedAt so stale rows that have not yet been swept do
+  // not falsely count against the cap.
+  void cleanupExpiredPreviewRuns(now).catch((err) =>
+    console.error('[preview] cleanupExpiredPreviewRuns failed', err)
+  );
+  void markStalePreviewRunsFailed(requestHash, now).catch((err) =>
+    console.error('[preview] markStalePreviewRunsFailed failed', err)
+  );
 
   const existingRun = await previewRunStore.findFirst({
     where: {
@@ -490,12 +215,34 @@ export async function POST(request: NextRequest) {
     }, 202);
   }
 
+  // Audit finding D2: cap concurrent active previews per source IP.
+  // updatedAt freshness in the filter means a stuck or zombie row
+  // (heartbeat stopped, sweep not yet run) does not block new
+  // submissions from the same IP.
+  if (clientIp !== 'unknown') {
+    const freshSince = new Date(now.getTime() - PREVIEW_ACTIVE_TIMEOUT_MS);
+    const activeForIp = await previewRunStore.count({
+      where: {
+        clientIp,
+        status: { in: [...ACTIVE_PREVIEW_STATUSES] },
+        updatedAt: { gte: freshSince },
+      },
+    });
+    if (activeForIp >= PREVIEW_ADMISSION_CAP) {
+      return apiError(
+        `Too many active previews for this client (cap ${PREVIEW_ADMISSION_CAP}). Wait for one to finish or try again later.`,
+        429,
+      );
+    }
+  }
+
   const previewRun = await previewRunStore.create({
     data: {
       requestHash,
       status: 'pending',
       requestPayload: payload as unknown as Prisma.InputJsonValue,
       expiresAt: new Date(now.getTime() + PREVIEW_RUN_TTL_MS),
+      clientIp,
     },
   });
 

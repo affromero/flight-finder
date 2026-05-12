@@ -1,11 +1,15 @@
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
-import type { PreviewResultPayload, PreviewRunStatusPayload } from '@/lib/preview-run';
+import {
+  ACTIVE_PREVIEW_STATUSES,
+  PREVIEW_ACTIVE_TIMEOUT_MS,
+  PREVIEW_TIMEOUT_ERROR,
+  type PreviewResultPayload,
+  type PreviewRunStatusPayload,
+} from '@/lib/preview-run';
 
-const PREVIEW_ACTIVE_TIMEOUT_MS = 10 * 60 * 1000;
-const TERMINAL_PREVIEW_STATUSES = new Set(['completed', 'failed']);
-const ACTIVE_PREVIEW_STATUSES = new Set(['pending', 'running']);
-const PREVIEW_TIMEOUT_ERROR = 'Preview run timed out before completing';
+const ACTIVE_STATUS_SET = new Set<string>(ACTIVE_PREVIEW_STATUSES);
+const TERMINAL_STATUS_SET = new Set(['completed', 'failed']);
 
 interface PreviewRunRow {
   id: string;
@@ -18,7 +22,7 @@ interface PreviewRunRow {
 
 interface PreviewRunStore {
   findUnique(args: { where: { id: string } }): Promise<PreviewRunRow | null>;
-  update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<PreviewRunRow>;
+  updateMany(args: { where: Record<string, unknown>; data: Record<string, unknown> }): Promise<{ count: number }>;
 }
 
 const previewRunStore = (prisma as unknown as { previewRun: PreviewRunStore }).previewRun;
@@ -47,20 +51,36 @@ export async function GET(
     return notFound();
   }
 
+  // Stale-marker with race guard. Between the findUnique above and any
+  // subsequent update, runPreviewInBackground can flip the row to completed
+  // or failed. A naive update by id alone would overwrite that terminal
+  // state with our stale-failed marker. updateMany with status + updatedAt
+  // in the where clause is atomic: if the row already moved out of the
+  // ACTIVE set, the update affects zero rows and we just return the latest
+  // state. The heartbeat in runPreview shrinks the time window further by
+  // bumping updatedAt every task.
   if (
-    ACTIVE_PREVIEW_STATUSES.has(previewRun.status) &&
+    ACTIVE_STATUS_SET.has(previewRun.status) &&
     previewRun.updatedAt.getTime() <= Date.now() - PREVIEW_ACTIVE_TIMEOUT_MS
   ) {
-    previewRun = await previewRunStore.update({
-      where: { id },
+    const staleBefore = new Date(Date.now() - PREVIEW_ACTIVE_TIMEOUT_MS);
+    await previewRunStore.updateMany({
+      where: {
+        id,
+        status: { in: [...ACTIVE_PREVIEW_STATUSES] },
+        updatedAt: { lt: staleBefore },
+      },
       data: {
         status: 'failed',
         error: PREVIEW_TIMEOUT_ERROR,
       },
     });
+    const refreshed = await previewRunStore.findUnique({ where: { id } });
+    if (!refreshed) return notFound();
+    previewRun = refreshed;
   }
 
-  if (TERMINAL_PREVIEW_STATUSES.has(previewRun.status) && isExpired(previewRun.expiresAt)) {
+  if (TERMINAL_STATUS_SET.has(previewRun.status) && isExpired(previewRun.expiresAt)) {
     return notFound();
   }
 

@@ -15,7 +15,7 @@ import { LinkBanner, type CreatedTracker } from './LinkBanner';
 import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
 
 const PREVIEW_STORAGE_KEY_BASE = 'ft-preview-run';
-const PREVIEW_POLL_TIMEOUT_MS = 5 * 60 * 1000;
+const PREVIEW_POLL_TIMEOUT_MS = 30 * 60 * 1000;
 
 function previewStorageKey(surface: SearchSurface): string {
   return surface === 'admin' ? `${PREVIEW_STORAGE_KEY_BASE}-admin` : PREVIEW_STORAGE_KEY_BASE;
@@ -201,6 +201,18 @@ export function SearchBar({
     let cancelled = false;
     let timer: number | null = null;
 
+    const checkCutoff = (): boolean => {
+      const saved = readSavedPreview(storageKey);
+      if (saved && Date.now() - saved.startedAt > PREVIEW_POLL_TIMEOUT_MS) {
+        setError('Flight search took too long. Please try again.');
+        setPreviewLoading(false);
+        setPreviewRunId(null);
+        clearSavedPreview(storageKey);
+        return true;
+      }
+      return false;
+    };
+
     const poll = async () => {
       try {
         const res = await fetch(`/api/preview/${previewRunId}`, { cache: 'no-store' });
@@ -217,16 +229,9 @@ export function SearchBar({
         }
 
         const preview = data.data as PreviewRunStatusPayload;
-        const saved = readSavedPreview(storageKey);
 
-        if (saved && Date.now() - saved.startedAt > PREVIEW_POLL_TIMEOUT_MS) {
-          setError('Flight search took too long. Please try again.');
-          setPreviewLoading(false);
-          setPreviewRunId(null);
-          clearSavedPreview(storageKey);
-          return;
-        }
-
+        // Terminal states beat the cutoff: if the backend finished at
+        // T+cutoff+1ms, we still honor the result instead of throwing it away.
         if (preview.status === 'completed' && preview.result) {
           playNotificationSound();
           setPreviewRoutes(preview.result.routes);
@@ -244,9 +249,15 @@ export function SearchBar({
           return;
         }
 
+        if (checkCutoff()) return;
+
         timer = window.setTimeout(poll, 2000);
       } catch {
         if (cancelled) return;
+        // Catch path also has to respect the cutoff. Without this, a
+        // network or JSON failure that persists for 30+ minutes would
+        // keep polling forever and never surface the timeout error.
+        if (checkCutoff()) return;
         timer = window.setTimeout(poll, 3000);
       }
     };

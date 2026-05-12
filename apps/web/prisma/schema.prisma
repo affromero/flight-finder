@@ -141,10 +141,15 @@ model PreviewRun {
   expiresAt      DateTime
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
+  /// IP that started this run. Used by the POST handler to cap concurrent
+  /// active previews per source (issue 65 audit finding D2). Nullable so
+  /// requests behind a proxy that strips x-forwarded-for still admit.
+  clientIp       String?
 
   @@index([status, createdAt])
   @@index([expiresAt])
   @@index([requestHash, status, expiresAt])
+  @@index([clientIp, status, updatedAt])
 }
 
 model CommunityApiKey {
