@@ -2,6 +2,7 @@ import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, type ExtractionUs
 import { prisma } from '@/lib/prisma';
 import { parseDurationToMinutes } from './duration';
 import type { NavigationSource } from './navigate';
+import { acquireProviderToken } from './rate-limit';
 
 export interface PriceData {
   travelDate: string; // ISO date
@@ -183,6 +184,12 @@ Page content:
 ${html}`;
 
   const systemPrompt = buildSystemPrompt(filters, maxResults, source, currency);
+  // Block briefly when the rolling per minute window for this provider
+  // is full. Audit finding D3: PREVIEW_CONCURRENCY=3 plus llm_error
+  // retries can otherwise burst past free tier RPM caps and trip
+  // additional retries in a feedback loop. acquireProviderToken is a
+  // no-op for local and CLI providers.
+  await acquireProviderToken(provider);
   let result;
   try {
     result = await providerConfig.extract(apiKey, model, systemPrompt, userPrompt, {
