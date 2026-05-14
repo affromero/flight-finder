@@ -17,6 +17,17 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
+const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
+const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
+
+vi.mock('@/lib/multi-user', () => ({
+  isMultiUserEnabled: () => mockIsMultiUserEnabled(),
+}));
+
+vi.mock('@/lib/user-auth', () => ({
+  getCurrentUser: () => mockGetCurrentUser(),
+}));
+
 import { DELETE, PATCH } from './route';
 
 function makeDeleteRequest(id: string, body?: Record<string, unknown>): [NextRequest, { params: Promise<{ id: string }> }] {
@@ -34,6 +45,8 @@ describe('DELETE /api/queries/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueryDelete.mockResolvedValue({});
+    mockIsMultiUserEnabled.mockResolvedValue(false);
+    mockGetCurrentUser.mockResolvedValue(null);
     delete process.env.SELF_HOSTED;
   });
 
@@ -108,6 +121,50 @@ describe('DELETE /api/queries/[id]', () => {
     const res = await DELETE(...makeDeleteRequest('q1', {}));
     expect(res.status).toBe(401);
   });
+
+  describe('self hosted multi user mode', () => {
+    beforeEach(() => {
+      process.env.SELF_HOSTED = 'true';
+      mockIsMultiUserEnabled.mockResolvedValue(true);
+    });
+
+    it('lets admin delete any query without token', async () => {
+      mockGetCurrentUser.mockResolvedValue({ id: 'admin_1', isAdmin: true });
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'someone_else' });
+      const res = await DELETE(...makeDeleteRequest('q1'));
+      expect(res.status).toBe(200);
+      expect(mockQueryDelete).toHaveBeenCalledWith({ where: { id: 'q1' } });
+    });
+
+    it('lets the owner delete via user session', async () => {
+      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'user_1' });
+      const res = await DELETE(...makeDeleteRequest('q1'));
+      expect(res.status).toBe(200);
+    });
+
+    it('rejects a non owner non admin user with 403', async () => {
+      mockGetCurrentUser.mockResolvedValue({ id: 'user_2', isAdmin: false });
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'user_1' });
+      const res = await DELETE(...makeDeleteRequest('q1'));
+      expect(res.status).toBe(403);
+      expect(mockQueryDelete).not.toHaveBeenCalled();
+    });
+
+    it('still accepts a matching deleteToken even without a session', async () => {
+      mockGetCurrentUser.mockResolvedValue(null);
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'user_1' });
+      const res = await DELETE(...makeDeleteRequest('q1', { deleteToken: 'real-token' }));
+      expect(res.status).toBe(200);
+    });
+
+    it('rejects an unowned query (userId null) from a non admin user', async () => {
+      mockGetCurrentUser.mockResolvedValue({ id: 'user_2', isAdmin: false });
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, userId: null });
+      const res = await DELETE(...makeDeleteRequest('q1'));
+      expect(res.status).toBe(403);
+    });
+  });
 });
 
 function makePatchRequest(id: string, body: Record<string, unknown>): [NextRequest, { params: Promise<{ id: string }> }] {
@@ -126,6 +183,8 @@ describe('PATCH /api/queries/[id]', () => {
     vi.clearAllMocks();
     mockQueryFindMany.mockResolvedValue([]);
     mockQueryUpdateMany.mockResolvedValue({ count: 1 });
+    mockIsMultiUserEnabled.mockResolvedValue(false);
+    mockGetCurrentUser.mockResolvedValue(null);
     delete process.env.SELF_HOSTED;
   });
 

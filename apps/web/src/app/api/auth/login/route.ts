@@ -1,6 +1,9 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
-import { verifyPassword, createSessionToken, setSessionCookie } from '@/lib/admin-auth';
+import { prisma } from '@/lib/prisma';
+import { verifyHashedPassword } from '@/lib/password';
+import { setSessionCookie } from '@/lib/admin-auth';
+import { createUserSessionToken } from '@/lib/user-auth';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import {
   incrementAuthFailure,
@@ -21,17 +24,20 @@ function getClientIp(request: NextRequest): string {
 }
 
 export async function POST(request: NextRequest) {
-  if (await isMultiUserEnabled()) {
-    return apiError('Use /api/auth/login', 410);
+  if (!(await isMultiUserEnabled())) {
+    return apiError('Not found', 404);
   }
 
   const body = await request.json().catch(() => null);
-  if (!body?.password) {
-    return apiError('Missing password', 400);
+  const username = typeof body?.username === 'string' ? body.username.trim() : '';
+  const password = typeof body?.password === 'string' ? body.password : '';
+
+  if (!username || !password) {
+    return apiError('Missing username or password', 400);
   }
 
   const ip = getClientIp(request);
-  const rateKey = `${ip}:admin`;
+  const rateKey = `${ip}:${username}`;
 
   const failures = await getAuthFailureCount(rateKey);
   if (failures >= MAX_FAILURES) {
@@ -48,14 +54,28 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  if (!(await verifyPassword(body.password))) {
+  const user = await prisma.user.findUnique({ where: { username } });
+  if (!user) {
     await incrementAuthFailure(rateKey);
-    return apiError('Invalid password', 401);
+    return apiError('Invalid username or password', 401);
+  }
+
+  const ok = await verifyHashedPassword(password, user.passwordHash);
+  if (!ok) {
+    await incrementAuthFailure(rateKey);
+    return apiError('Invalid username or password', 401);
   }
 
   await clearAuthFailures(rateKey);
-  const token = createSessionToken();
+  const token = createUserSessionToken(user.id);
   await setSessionCookie(token);
 
-  return apiSuccess({ ok: true });
+  return apiSuccess({
+    user: {
+      id: user.id,
+      username: user.username,
+      displayName: user.displayName,
+      isAdmin: user.isAdmin,
+    },
+  });
 }
