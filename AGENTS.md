@@ -119,6 +119,12 @@ Content-Type: application/json
 
 Save the `id` to check prices later. Save the `deleteToken` if you want to delete the query.
 
+**Multi user mode:** if a self hosted instance has multi user mode enabled
+(`ExtractionConfig.multiUserMode = true`), unauthenticated POSTs return
+`401 Sign in to create a tracker`. Authenticate first via
+`POST /api/auth/login` and reuse the `ft-session` cookie. Solo and hosted
+deployments are unaffected.
+
 ---
 
 ### Get price data
