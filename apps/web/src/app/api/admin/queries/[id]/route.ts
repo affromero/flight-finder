@@ -26,6 +26,13 @@ export async function PATCH(
   } else if (typeof body.maxDurationHours === 'number' && Number.isInteger(body.maxDurationHours) && body.maxDurationHours >= 1 && body.maxDurationHours <= 48) {
     data.maxDurationHours = body.maxDurationHours;
   }
+  if (body.userId === null) {
+    data.userId = null;
+  } else if (typeof body.userId === 'string' && body.userId.length > 0) {
+    const target = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
+    if (!target) return apiError(`User not found: ${body.userId}`, 400);
+    data.userId = body.userId;
+  }
 
   const updated = await prisma.query.update({ where: { id }, data });
   return apiSuccess(updated);
