@@ -1,6 +1,8 @@
 # Multi user mode screenshots
 
-Reference images for the household-accounts feature. Captured from the
+Reference images for the household-accounts feature. Lives under
+`assets/` to match the existing project convention (`assets/home.png`,
+`assets/explore.png`, `assets/demo.gif`). Captured from the
 **production Docker build** (`docker compose up -d` then Playwright
 against `localhost:HOST_PORT`) so the gallery matches what self
 hosters actually see.

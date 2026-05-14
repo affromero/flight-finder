@@ -352,12 +352,12 @@ right person.
 The wizard gets one new optional step at the end (self-hosted only).
 Skip it if you're solo.
 
-<img src="docs/screenshots/accounts/03-setup-step3-accounts-skip.png" alt="Setup wizard accounts step (skip)" width="100%">
+<img src="assets/accounts/03-setup-step3-accounts-skip.png" alt="Setup wizard accounts step (skip)" width="100%">
 
 Flip the toggle on and the form expands for the admin username and
 password:
 
-<img src="docs/screenshots/accounts/04-setup-step3-accounts-fill.png" alt="Setup wizard accounts step (filled)" width="100%">
+<img src="assets/accounts/04-setup-step3-accounts-fill.png" alt="Setup wizard accounts step (filled)" width="100%">
 
 </details>
 
@@ -367,7 +367,7 @@ password:
 One login page for everyone. Post-login redirect picks `/admin` or
 `/account` based on whether the user is admin.
 
-<img src="docs/screenshots/accounts/05-login-empty.png" alt="Unified login form" width="100%">
+<img src="assets/accounts/05-login-empty.png" alt="Unified login form" width="100%">
 
 </details>
 
@@ -378,7 +378,7 @@ The admin nav gets a "Users" link and a Logout button in multi user
 mode (the existing self-hosted nav had no logout because there was no
 session).
 
-<img src="docs/screenshots/accounts/06-admin-dashboard-with-users-link.png" alt="Admin dashboard with Users link" width="100%">
+<img src="assets/accounts/06-admin-dashboard-with-users-link.png" alt="Admin dashboard with Users link" width="100%">
 
 </details>
 
@@ -388,11 +388,11 @@ session).
 First visit after enabling shows a dismissible banner with the backfill
 count. Add new household members with the form below.
 
-<img src="docs/screenshots/accounts/07-admin-users-empty.png" alt="Admin users page with backfill banner" width="100%">
+<img src="assets/accounts/07-admin-users-empty.png" alt="Admin users page with backfill banner" width="100%">
 
 After adding a second user:
 
-<img src="docs/screenshots/accounts/09-admin-users-with-partner.png" alt="Admin users page with two users" width="100%">
+<img src="assets/accounts/09-admin-users-with-partner.png" alt="Admin users page with two users" width="100%">
 
 </details>
 
@@ -401,7 +401,7 @@ After adding a second user:
 
 Once enabled, Settings shows a link to the user management page.
 
-<img src="docs/screenshots/accounts/10-settings-multi-user-enabled.png" alt="Settings multi user mode section" width="100%">
+<img src="assets/accounts/10-settings-multi-user-enabled.png" alt="Settings multi user mode section" width="100%">
 
 </details>
 
@@ -411,11 +411,11 @@ Once enabled, Settings shows a link to the user management page.
 Each non-admin user sees only their own trackers. Empty state for a
 new account looks like this:
 
-<img src="docs/screenshots/accounts/11-account-empty-partner.png" alt="Account page empty state for a non-admin user" width="100%">
+<img src="assets/accounts/11-account-empty-partner.png" alt="Account page empty state for a non-admin user" width="100%">
 
 The matching settings page lets each person set their own defaults:
 
-<img src="docs/screenshots/accounts/12-account-settings-partner.png" alt="Account settings form for currency, country, airlines, cabin class" width="100%">
+<img src="assets/accounts/12-account-settings-partner.png" alt="Account settings form for currency, country, airlines, cabin class" width="100%">
 
 </details>
 
@@ -425,7 +425,7 @@ The matching settings page lets each person set their own defaults:
 Small "Signed in as ..." line replaces the silent state from solo
 mode, with quick links to `/account` and logout.
 
-<img src="docs/screenshots/accounts/13-landing-signed-in.png" alt="Landing page welcome line" width="100%">
+<img src="assets/accounts/13-landing-signed-in.png" alt="Landing page welcome line" width="100%">
 
 </details>
 

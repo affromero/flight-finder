@@ -7,7 +7,7 @@
 //   BASE_URL=http://localhost:3004 \
 //     node scripts/screenshot-accounts.mjs
 //
-// Output: docs/screenshots/accounts/*.png
+// Output: assets/accounts/*.png
 
 import { chromium } from 'playwright';
 import { mkdir } from 'node:fs/promises';
@@ -15,7 +15,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const OUT_DIR = path.join(__dirname, '..', 'docs', 'screenshots', 'accounts');
+const OUT_DIR = path.join(__dirname, '..', 'assets', 'accounts');
 const BASE = process.env.BASE_URL || 'http://localhost:3004';
 
 const VIEWPORT = { width: 1280, height: 800 };
