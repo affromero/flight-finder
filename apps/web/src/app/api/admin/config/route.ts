@@ -7,6 +7,7 @@ import { registerForCommunity } from '@/lib/community-sync';
 import { encryptVpnCode } from '@/lib/vpn-crypto';
 import { isThemeId } from '@/lib/theme';
 import { updateCronInterval } from '@/lib/cron';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 function stripHashes(config: Record<string, unknown>) {
   const { adminPasswordHash, vpnActivationCode, ...rest } = config;
@@ -19,6 +20,8 @@ function stripHashes(config: Record<string, unknown>) {
 }
 
 export async function GET() {
+  const denial = await requireAdminApi();
+  if (denial) return denial;
   const config = await prisma.extractionConfig.upsert({
     where: { id: 'singleton' },
     update: {},
@@ -29,6 +32,9 @@ export async function GET() {
 }
 
 export async function PATCH(request: NextRequest) {
+  const denial = await requireAdminApi();
+  if (denial) return denial;
+
   const body = await request.json().catch(() => null);
   if (!body) return apiError('Invalid JSON body', 400);
 

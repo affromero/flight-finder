@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 const mockConfigFindUnique = vi.fn();
 const mockConfigUpsert = vi.fn();
+const mockConfigUpdateMany = vi.fn();
 const mockUserCreate = vi.fn();
 const mockQueryUpdateMany = vi.fn();
 
@@ -17,6 +18,7 @@ vi.mock('@/lib/prisma', () => ({
     extractionConfig: {
       findUnique: (...args: unknown[]) => mockConfigFindUnique(...args),
       upsert: (...args: unknown[]) => mockConfigUpsert(...args),
+      updateMany: (...args: unknown[]) => mockConfigUpdateMany(...args),
     },
     user: {
       create: (...args: unknown[]) => mockUserCreate(...args),
@@ -27,7 +29,10 @@ vi.mock('@/lib/prisma', () => ({
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
         user: { create: (...args: unknown[]) => mockUserCreate(...args) },
-        extractionConfig: { upsert: (...args: unknown[]) => mockConfigUpsert(...args) },
+        extractionConfig: {
+          upsert: (...args: unknown[]) => mockConfigUpsert(...args),
+          updateMany: (...args: unknown[]) => mockConfigUpdateMany(...args),
+        },
         query: { updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args) },
       }),
   },
@@ -76,6 +81,7 @@ describe('POST /api/admin/multi-user', () => {
       isAdmin: true,
     });
     mockConfigUpsert.mockResolvedValue({});
+    mockConfigUpdateMany.mockResolvedValue({ count: 1 });
     mockQueryUpdateMany.mockResolvedValue({ count: 0 });
   });
 
@@ -133,5 +139,17 @@ describe('POST /api/admin/multi-user', () => {
     mockVerifySessionToken.mockReturnValue(true);
     const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
     expect(res.status).toBe(201);
+  });
+
+  it('returns 409 when the guarded updateMany returns count=0 (concurrent enable race)', async () => {
+    // Fast-path findUnique sees multiUserMode=false, but by the time the
+    // transaction runs another caller has already flipped the flag, so the
+    // guarded updateMany matches zero rows.
+    mockConfigUpdateMany.mockResolvedValue({ count: 0 });
+    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
+    expect(res.status).toBe(409);
+    expect(mockUserCreate).not.toHaveBeenCalled();
+    expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+    expect(mockInvalidateCache).not.toHaveBeenCalled();
   });
 });

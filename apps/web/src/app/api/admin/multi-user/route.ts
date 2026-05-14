@@ -34,11 +34,21 @@ interface ToggleBody {
  *   - SELF_HOSTED solo mode (middleware bypasses admin auth there anyway)
  * Once multi user mode is on, this route is a no-op and returns 409.
  */
+class AlreadyEnabledError extends Error {
+  constructor() {
+    super('Multi user mode is already enabled');
+    this.name = 'AlreadyEnabledError';
+  }
+}
+
 export async function POST(request: NextRequest) {
   if (process.env.SELF_HOSTED !== 'true') {
     return apiError('Multi user mode is only available in self-hosted deployments', 400);
   }
 
+  // Early read for the fast-path 409. The authoritative check is inside the
+  // transaction (guarded `updateMany` on multiUserMode=false) so concurrent
+  // enables can't both pass.
   const cfg = await prisma.extractionConfig.findUnique({
     where: { id: 'singleton' },
     select: { multiUserMode: true },
@@ -75,29 +85,46 @@ export async function POST(request: NextRequest) {
 
   const passwordHash = await hashPassword(adminPassword);
 
-  const result = await prisma.$transaction(async (tx) => {
-    const user = await tx.user.create({
-      data: {
-        username: adminUsername,
-        displayName,
-        passwordHash,
-        isAdmin: true,
-      },
-    });
+  let result;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      // Ensure the singleton row exists, then atomically flip multiUserMode
+      // only when it is currently false. If two concurrent calls reach here,
+      // exactly one updateMany returns count=1; the other returns 0 and we
+      // bail out.
+      await tx.extractionConfig.upsert({
+        where: { id: 'singleton' },
+        create: { id: 'singleton' },
+        update: {},
+      });
+      const flip = await tx.extractionConfig.updateMany({
+        where: { id: 'singleton', multiUserMode: false },
+        data: { multiUserMode: true },
+      });
+      if (flip.count === 0) throw new AlreadyEnabledError();
 
-    await tx.extractionConfig.upsert({
-      where: { id: 'singleton' },
-      create: { id: 'singleton', multiUserMode: true },
-      update: { multiUserMode: true },
-    });
+      const user = await tx.user.create({
+        data: {
+          username: adminUsername,
+          displayName,
+          passwordHash,
+          isAdmin: true,
+        },
+      });
 
-    const backfill = await tx.query.updateMany({
-      where: { userId: null, isSeed: false },
-      data: { userId: user.id },
-    });
+      const backfill = await tx.query.updateMany({
+        where: { userId: null, isSeed: false },
+        data: { userId: user.id },
+      });
 
-    return { user, backfillCount: backfill.count };
-  });
+      return { user, backfillCount: backfill.count };
+    });
+  } catch (err) {
+    if (err instanceof AlreadyEnabledError) {
+      return apiError('Multi user mode is already enabled', 409);
+    }
+    throw err;
+  }
 
   await invalidateMultiUserCache();
 
