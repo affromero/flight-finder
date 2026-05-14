@@ -22,6 +22,8 @@ interface Config {
   vpnProvider: string | null;
   vpnCountries: string[];
   hasVpnActivationCode: boolean;
+  multiUserMode: boolean;
+  isSelfHosted: boolean;
 }
 
 export default function SettingsPage() {
@@ -675,7 +677,140 @@ export default function SettingsPage() {
             </div>
           )}
         </div>
+
+        {config.isSelfHosted && (
+          <MultiUserSection
+            enabled={config.multiUserMode}
+            onEnabled={(backfillCount) => {
+              setConfig({ ...config, multiUserMode: true });
+              if (typeof window !== 'undefined') {
+                window.localStorage.setItem('ft-backfill-count', String(backfillCount));
+                window.localStorage.removeItem('ft-backfill-banner-dismissed');
+              }
+            }}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+interface MultiUserSectionProps {
+  enabled: boolean;
+  onEnabled: (backfillCount: number) => void;
+}
+
+function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
+  const [showForm, setShowForm] = useState(false);
+  const [adminUsername, setAdminUsername] = useState('');
+  const [adminPassword, setAdminPassword] = useState('');
+  const [displayName, setDisplayName] = useState('');
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  if (enabled) {
+    return (
+      <div className={styles.section}>
+        <h2 className={styles.sectionTitle}>Multi user mode</h2>
+        <p className={styles.toggleHint}>
+          Each household member has their own account, trackers, and preferences.
+        </p>
+        <Link href="/admin/users" className={styles.link}>
+          Manage users
+        </Link>
+      </div>
+    );
+  }
+
+  const handleEnable = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setError('');
+    setSubmitting(true);
+
+    const res = await fetch('/api/admin/multi-user', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        adminUsername: adminUsername.trim(),
+        adminPassword,
+        displayName: displayName.trim() || null,
+      }),
+    });
+
+    const data = await res.json();
+    setSubmitting(false);
+
+    if (!data.ok) {
+      setError(data.error || 'Failed to enable multi user mode');
+      return;
+    }
+
+    onEnabled(data.data.backfillCount);
+    setShowForm(false);
+    setAdminPassword('');
+  };
+
+  return (
+    <div className={styles.section}>
+      <h2 className={styles.sectionTitle}>Multi user mode</h2>
+
+      <div className={styles.toggleRow}>
+        <button
+          type="button"
+          className={`${styles.toggle} ${showForm ? styles.toggleOn : ''}`}
+          onClick={() => setShowForm((v) => !v)}
+        >
+          <span className={styles.toggleKnob} />
+        </button>
+        <div>
+          <span className={styles.toggleLabel}>
+            {showForm ? 'Enabling' : 'Disabled'}
+          </span>
+          <p className={styles.toggleHint}>
+            Turn on to host multiple accounts on this instance (family, household).
+            You stay admin; new users get their own trackers and preferences.
+          </p>
+        </div>
+      </div>
+
+      {showForm && (
+        <form className={styles.fields} onSubmit={handleEnable}>
+          <input
+            type="text"
+            className={styles.input}
+            placeholder="Admin username"
+            value={adminUsername}
+            onChange={(e) => setAdminUsername(e.target.value)}
+            autoComplete="username"
+            required
+          />
+          <input
+            type="text"
+            className={styles.input}
+            placeholder="Display name (optional)"
+            value={displayName}
+            onChange={(e) => setDisplayName(e.target.value)}
+          />
+          <input
+            type="password"
+            className={styles.input}
+            placeholder="Admin password (8+ chars)"
+            value={adminPassword}
+            onChange={(e) => setAdminPassword(e.target.value)}
+            autoComplete="new-password"
+            minLength={8}
+            required
+          />
+          {error && <p className={styles.error}>{error}</p>}
+          <button
+            type="submit"
+            className={styles.saveButton}
+            disabled={submitting}
+          >
+            {submitting ? 'Enabling...' : 'Enable multi user mode'}
+          </button>
+        </form>
+      )}
     </div>
   );
 }

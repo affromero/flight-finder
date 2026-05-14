@@ -1,11 +1,15 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denial = await requireAdminApi();
+  if (denial) return denial;
+
   const { id } = await params;
   const body = await request.json().catch(() => null);
   if (!body) return apiError('Invalid JSON body', 400);
@@ -33,6 +37,9 @@ export async function DELETE(
   _request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
+  const denial = await requireAdminApi();
+  if (denial) return denial;
+
   const { id } = await params;
 
   const existing = await prisma.query.findUnique({ where: { id } });

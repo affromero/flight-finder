@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { redirect } from 'next/navigation';
 import styles from './page.module.css';
 import { SearchBar } from '@/components/SearchBar';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -11,12 +12,32 @@ import { Footer } from '@/components/Footer';
 import { DemoGif } from '@/components/DemoGif';
 import { InstallCommand } from '@/components/InstallCommand';
 import { getSessionToken, verifySessionToken } from '@/lib/admin-auth';
+import { isMultiUserEnabled } from '@/lib/multi-user';
+import { getCurrentUser } from '@/lib/user-auth';
+
+// Force dynamic — isMultiUserEnabled + getCurrentUser run per request to
+// decide between the public landing, the multi user login redirect, and
+// the welcome line for an authenticated household member.
+export const dynamic = 'force-dynamic';
 
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
 export default async function HomePage() {
+  const multiUserEnabled = await isMultiUserEnabled();
+  const user = multiUserEnabled ? await getCurrentUser() : null;
+
+  // Self-hosted multi user mode requires a logged in user even for the landing page.
+  // The household setting means there's no public surface to share with strangers.
+  if (multiUserEnabled && !user) {
+    redirect('/login?next=/');
+  }
+
   const token = await getSessionToken();
-  const isAdmin = token ? verifySessionToken(token) : false;
+  const isAdmin = multiUserEnabled
+    ? Boolean(user?.isAdmin)
+    : token
+      ? verifySessionToken(token)
+      : false;
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -80,10 +101,20 @@ export default async function HomePage() {
         )}
         {isSelfHosted ? (
           <>
+            {multiUserEnabled && user && (
+              <p className={styles.welcomeLine}>
+                Signed in as <strong>{user.displayName || user.username}</strong>{' '}
+                <Link href="/account" className={styles.welcomeLink}>account</Link>
+                {' / '}
+                <form action="/api/auth/logout" method="POST" style={{ display: 'inline' }}>
+                  <button type="submit" className={styles.welcomeButton}>logout</button>
+                </form>
+              </p>
+            )}
             <SearchBar />
             <UpdateBanner />
             <PriceAlerts />
-            <SavedTrackers />
+            <SavedTrackers isAuthenticated={multiUserEnabled && !!user} />
             <UsageStats />
           </>
         ) : (

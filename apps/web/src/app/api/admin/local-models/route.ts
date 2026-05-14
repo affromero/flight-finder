@@ -3,6 +3,7 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
 import { LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 interface OllamaModel {
   name: string;
@@ -79,6 +80,9 @@ async function fetchOpenAICompatModels(provider: string, host: string): Promise<
 }
 
 export async function GET(request: NextRequest) {
+  const denial = await requireAdminApi();
+  if (denial) return denial;
+
   const provider = request.nextUrl.searchParams.get('provider');
   if (!provider || !LOCAL_PROVIDERS.has(provider)) {
     return apiError('provider must be one of: ' + [...LOCAL_PROVIDERS].join(', '), 400);

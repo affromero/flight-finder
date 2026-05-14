@@ -4,6 +4,26 @@ import type { ParsedFlightQuery } from '../../../../apps/web/src/lib/scraper/par
 import type { PriceData } from '../../../../apps/web/src/lib/scraper/extract-prices.js';
 import type { RouteResult } from './preview.js';
 
+/**
+ * When the instance has multi user mode enabled, CLI created trackers attach
+ * to the first admin user so they show up on /account instead of being
+ * orphaned (userId = null). Solo mode keeps them unowned, matching today's
+ * behavior.
+ */
+async function resolveOwnerId(): Promise<string | null> {
+  const cfg = await prisma.extractionConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { multiUserMode: true },
+  });
+  if (!cfg?.multiUserMode) return null;
+  const admin = await prisma.user.findFirst({
+    where: { isAdmin: true },
+    orderBy: { createdAt: 'asc' },
+    select: { id: true },
+  });
+  return admin?.id ?? null;
+}
+
 interface RouteSelection {
   route: RouteResult;
   flights: PriceData[];
@@ -28,6 +48,7 @@ export async function createTrackedQueries(
   const to = new Date(parsed.dateTo + 'T00:00:00Z');
   const flex = Math.max(0, Math.min(parsed.flexibility || 0, 14));
   const groupId = crypto.randomUUID();
+  const ownerId = await resolveOwnerId();
 
   const results: CreatedQuery[] = [];
 
@@ -60,6 +81,7 @@ export async function createTrackedQueries(
         expiresAt: routeExpiry,
         deleteToken,
         groupId,
+        userId: ownerId,
       },
     });
 

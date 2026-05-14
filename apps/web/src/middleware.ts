@@ -12,6 +12,11 @@ async function verifyHmacToken(token: string): Promise<boolean> {
   if (lastDot === -1) return false;
 
   const payload = token.slice(0, lastDot);
+  // Edge middleware gates admin paths only. Reject non-admin payloads
+  // (e.g. user:<id>:<ts>) so a token issued for a household member in
+  // self-hosted multi user mode can't be replayed as admin against a
+  // hosted deployment that happens to share ADMIN_SESSION_SECRET.
+  if (!payload.startsWith('admin:')) return false;
   const sig = token.slice(lastDot + 1);
 
   try {

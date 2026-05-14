@@ -15,23 +15,31 @@ const ALL_NAV_ITEMS = [
   { href: '/admin/config', label: 'Config', selfHosted: true },
 ];
 
+const USERS_NAV_ITEM = { href: '/admin/users', label: 'Users' };
+
 export function DashboardNav({
   isSelfHosted,
+  multiUserEnabled = false,
   children,
 }: {
   isSelfHosted: boolean;
+  multiUserEnabled?: boolean;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
 
-  const navItems = isSelfHosted
+  const baseItems = isSelfHosted
     ? ALL_NAV_ITEMS.filter((item) => item.selfHosted)
     : ALL_NAV_ITEMS;
+  const navItems = multiUserEnabled ? [...baseItems, USERS_NAV_ITEM] : baseItems;
 
   const handleLogout = async () => {
-    await fetch('/api/admin/auth/logout', { method: 'POST' });
-    window.location.href = '/admin/login';
+    const url = multiUserEnabled ? '/api/auth/logout' : '/api/admin/auth/logout';
+    await fetch(url, { method: 'POST' });
+    window.location.href = multiUserEnabled ? '/login' : '/admin/login';
   };
+
+  const showLogout = !isSelfHosted || multiUserEnabled;
 
   return (
     <div className={styles.root}>
@@ -49,7 +57,7 @@ export function DashboardNav({
           ))}
         </div>
         <ThemeToggle />
-        {!isSelfHosted && (
+        {showLogout && (
           <button className={styles.logout} onClick={handleLogout}>
             Logout
           </button>

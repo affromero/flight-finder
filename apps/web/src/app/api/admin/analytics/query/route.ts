@@ -20,6 +20,7 @@ import {
 } from '@/lib/analytics/query';
 import type { BotFilter } from '@/lib/analytics/query';
 import { apiSuccess, apiError } from '@/lib/api-response';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 function parseBotFilter(value: string | null): BotFilter {
   if (value === 'bots' || value === 'all') return value;
@@ -27,6 +28,9 @@ function parseBotFilter(value: string | null): BotFilter {
 }
 
 export async function GET(request: NextRequest) {
+  const denial = await requireAdminApi();
+  if (denial) return denial;
+
   const { searchParams } = request.nextUrl;
   const metric = searchParams.get('metric');
   const from = searchParams.get('from');

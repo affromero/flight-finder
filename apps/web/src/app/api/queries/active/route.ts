@@ -1,17 +1,31 @@
 import { apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { isMultiUserEnabled } from '@/lib/multi-user';
+import { getCurrentUser } from '@/lib/user-auth';
 
 export const dynamic = 'force-dynamic';
 
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
 export async function GET() {
+  const multiUser = await isMultiUserEnabled();
+
+  // In multi user mode, only return the current user's queries. Admins still
+  // get every tracker via /api/admin/queries; this endpoint powers the per
+  // user landing page list.
+  let userFilter: { userId: string } | null = null;
+  if (multiUser) {
+    const user = await getCurrentUser();
+    if (!user) return apiSuccess({ queries: [] });
+    userFilter = { userId: user.id };
+  }
 
   // Self-hosted: include paused queries too so users can resume them
   const queries = await prisma.query.findMany({
     where: {
       isSeed: false,
       ...(isSelfHosted ? {} : { active: true }),
+      ...(userFilter ?? {}),
       OR: [{ expiresAt: { gt: new Date() } }],
     },
     orderBy: { createdAt: 'desc' },

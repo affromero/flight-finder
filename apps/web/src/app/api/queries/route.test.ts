@@ -19,6 +19,17 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
+const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
+const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
+
+vi.mock('@/lib/multi-user', () => ({
+  isMultiUserEnabled: () => mockIsMultiUserEnabled(),
+}));
+
+vi.mock('@/lib/user-auth', () => ({
+  getCurrentUser: () => mockGetCurrentUser(),
+}));
+
 import { POST } from './route';
 
 function makeRequest(body: unknown): NextRequest {
@@ -48,6 +59,8 @@ describe('POST /api/queries', () => {
   beforeEach(() => {
     mockQueryCreate.mockClear();
     mockSnapshotCreateMany.mockClear();
+    mockIsMultiUserEnabled.mockResolvedValue(false);
+    mockGetCurrentUser.mockResolvedValue(null);
   });
 
   it('allows unauthenticated request (public endpoint)', async () => {
@@ -240,5 +253,31 @@ describe('POST /api/queries', () => {
     const createCall = mockQueryCreate.mock.calls[0]![0];
     expect(createCall.data.dateFrom).toEqual(new Date('2026-06-15T00:00:00Z'));
     expect(createCall.data.dateTo).toEqual(new Date('2026-06-15T00:00:00Z'));
+  });
+
+  it('rejects anonymous submission with 401 when multi user mode is on', async () => {
+    mockIsMultiUserEnabled.mockResolvedValue(true);
+    mockGetCurrentUser.mockResolvedValue(null);
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(401);
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('attaches userId when a user session is present in multi user mode', async () => {
+    mockIsMultiUserEnabled.mockResolvedValue(true);
+    mockGetCurrentUser.mockResolvedValue({ id: 'user_42' });
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(201);
+    const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { userId: string | null } };
+    expect(createCall.data.userId).toBe('user_42');
+  });
+
+  it('leaves userId null in solo mode even when a user session is present', async () => {
+    mockIsMultiUserEnabled.mockResolvedValue(false);
+    mockGetCurrentUser.mockResolvedValue({ id: 'user_42' });
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(201);
+    const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { userId: string | null } };
+    expect(createCall.data.userId).toBeNull();
   });
 });

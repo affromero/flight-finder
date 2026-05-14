@@ -3,7 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { verifyHashedPassword } from '@/lib/password';
 
-const SESSION_COOKIE = 'ft-session';
+export const SESSION_COOKIE = 'ft-session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 
 function getSecret(): string {
@@ -12,23 +12,12 @@ function getSecret(): string {
   return secret;
 }
 
-export function createSessionToken(): string {
-  const payload = `admin:${Date.now()}`;
-  const sig = createHmac('sha256', getSecret()).update(payload).digest('hex');
-  return `${payload}.${sig}`;
+export function signPayload(payload: string): string {
+  return createHmac('sha256', getSecret()).update(payload).digest('hex');
 }
 
-export function verifySessionToken(token: string): boolean {
-  const lastDot = token.lastIndexOf('.');
-  if (lastDot === -1) return false;
-
-  const payload = token.slice(0, lastDot);
-  const sig = token.slice(lastDot + 1);
-
-  const expected = createHmac('sha256', getSecret())
-    .update(payload)
-    .digest('hex');
-
+export function verifyPayload(payload: string, sig: string): boolean {
+  const expected = signPayload(payload);
   try {
     return timingSafeEqual(Buffer.from(sig, 'hex'), Buffer.from(expected, 'hex'));
   } catch {
@@ -36,8 +25,28 @@ export function verifySessionToken(token: string): boolean {
   }
 }
 
-export async function verifyPassword(input: string): Promise<boolean> {
-  // Check DB hash first
+export function createSessionToken(): string {
+  const payload = `admin:${Date.now()}`;
+  return `${payload}.${signPayload(payload)}`;
+}
+
+export function verifySessionToken(token: string): boolean {
+  const lastDot = token.lastIndexOf('.');
+  if (lastDot === -1) return false;
+
+  const payload = token.slice(0, lastDot);
+  if (!payload.startsWith('admin:')) return false;
+
+  const sig = token.slice(lastDot + 1);
+  return verifyPayload(payload, sig);
+}
+
+export async function verifyPassword(
+  input: string,
+  opts: { allowEnvFallback?: boolean } = {},
+): Promise<boolean> {
+  const allowEnvFallback = opts.allowEnvFallback ?? true;
+
   const config = await prisma.extractionConfig.findUnique({
     where: { id: 'singleton' },
     select: { adminPasswordHash: true },
@@ -47,7 +56,8 @@ export async function verifyPassword(input: string): Promise<boolean> {
     return verifyHashedPassword(input, config.adminPasswordHash);
   }
 
-  // Fall back to env var
+  if (!allowEnvFallback) return false;
+
   const password = process.env.ADMIN_PASSWORD;
   if (!password) return false;
 

@@ -47,19 +47,30 @@ npm run ci                     # lint + typecheck + build
 | `page.tsx` | Landing page — natural language search bar |
 | `layout.tsx` | Root layout — fonts, metadata |
 | `q/[id]/page.tsx` | Public shareable chart page (no auth) |
-| `admin/(auth)/login/page.tsx` | Admin login |
+| `admin/(auth)/login/page.tsx` | Admin login (legacy, redirects to /login in multi user mode) |
 | `admin/(dashboard)/page.tsx` | Admin dashboard — active queries, costs |
-| `admin/(dashboard)/queries/page.tsx` | Query management — pause/resume/delete |
+| `admin/(dashboard)/queries/page.tsx` | Query management — pause/resume/delete/reassign |
 | `admin/(dashboard)/config/page.tsx` | LLM agent config — provider/model selection |
+| `admin/(dashboard)/users/page.tsx` | User management (multi user mode only) — create/reset/delete |
+| `login/page.tsx` | Unified login (multi user mode only) — admin + non admin |
+| `account/page.tsx` | Logged in user's tracker list (multi user mode only) |
+| `account/settings/page.tsx` | Per user preferences — currency, country, airlines, cabin |
 | `api/parse/route.ts` | POST — LLM parses natural language flight query |
-| `api/queries/route.ts` | POST — create new tracked query |
+| `api/queries/route.ts` | POST — create new tracked query (401 anon in multi user mode) |
 | `api/queries/[id]/prices/route.ts` | GET — public price data for chart |
 | `api/cron/scrape/route.ts` | GET — trigger scrape run (CRON_SECRET auth) |
-| `api/admin/auth/route.ts` | POST — admin login |
+| `api/auth/login/route.ts` | POST — user login (multi user mode only); rate limited |
+| `api/auth/logout/route.ts` | POST — clears the shared ft-session cookie |
+| `api/auth/me/route.ts` | GET — current user; 401/404 outside multi user mode |
+| `api/admin/auth/route.ts` | POST — legacy admin login; 410 in multi user mode |
 | `api/admin/auth/logout/route.ts` | POST — admin logout |
 | `api/admin/queries/route.ts` | GET — list all queries |
-| `api/admin/queries/[id]/route.ts` | PATCH/DELETE — manage query |
-| `api/admin/config/route.ts` | GET/PATCH — extraction config |
+| `api/admin/queries/[id]/route.ts` | PATCH/DELETE — manage query; PATCH accepts userId reassignment |
+| `api/admin/config/route.ts` | GET/PATCH — extraction config (exposes isSelfHosted) |
+| `api/admin/multi-user/route.ts` | POST — enable multi user mode atomically (creates first admin, backfills) |
+| `api/admin/users/route.ts` | GET/POST — list/create users (admin only) |
+| `api/admin/users/[id]/route.ts` | PATCH/DELETE — reset password, toggle isAdmin, delete |
+| `api/account/settings/route.ts` | GET/PATCH — current user's preferences |
 | `api/health/route.ts` | GET — health check (DB + Redis) |
 
 ### `apps/web/src/components/` — UI components
@@ -79,7 +90,11 @@ npm run ci                     # lint + typecheck + build
 | `prisma.ts` | Prisma client singleton |
 | `redis.ts` | Redis client + cache helpers |
 | `api-response.ts` | `apiSuccess()`/`apiError()` response helpers |
-| `admin-auth.ts` | HMAC session tokens, password verification |
+| `admin-auth.ts` | HMAC session tokens (admin), password verification, shared signPayload/verifyPayload |
+| `user-auth.ts` | User session tokens, parseSession discriminated union, getCurrentUser (DB-backed) |
+| `multi-user.ts` | `isMultiUserEnabled()` (hard gated on SELF_HOSTED, cached 60s) |
+| `rate-limit.ts` | Redis backed login throttling (5 per 15 min per IP+username) |
+| `password.ts` | scrypt hashing and verification |
 
 ### `apps/web/src/lib/scraper/` — Extraction pipeline
 
@@ -93,7 +108,7 @@ npm run ci                     # lint + typecheck + build
 
 ## Prisma Schema
 
-Models: `Query` (tracked flights), `PriceSnapshot` (price data points), `FetchRun` (scrape run logs), `ExtractionConfig` (LLM settings singleton), `ApiUsageLog` (cost tracking).
+Models: `Query` (tracked flights, optional `userId` owner), `PriceSnapshot` (price data points), `FetchRun` (scrape run logs), `ExtractionConfig` (LLM settings singleton; `multiUserMode` flag), `ApiUsageLog` (cost tracking), `User` (multi user accounts, self hosted only).
 
 ## Design System: "Altitude"
 
@@ -118,6 +133,7 @@ Departure board / atmospheric aviation aesthetic — deep navy, amber glow, prec
 - **API Route**: Validate → query → `NextResponse.json()` with `apiSuccess()`/`apiError()`.
 - **Scraper**: Playwright navigate → capture HTML → LLM extract → store snapshots.
 - **Admin auth**: HMAC session cookie, verified in `middleware.ts` for pages, in handler for cron.
+- **Accounts (self hosted multi user mode)**: opt-in DB flag (`ExtractionConfig.multiUserMode`) gated by `SELF_HOSTED=true`. Admin enables via Settings or setup wizard; the toggle handler atomically creates the first admin User, flips the flag, and backfills existing unowned non-seed queries. User auth is per-route via `getCurrentUser()` (DB lookup so deleted users lose access immediately). Token shape: `admin:<ts>.<sig>` for legacy admin, `user:<userId>:<ts>.<sig>` for users; both share the `ft-session` cookie. Login rate limited via `lib/rate-limit.ts`.
 
 ## DO
 

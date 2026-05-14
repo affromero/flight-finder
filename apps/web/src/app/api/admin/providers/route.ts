@@ -1,5 +1,6 @@
 import { apiSuccess } from '@/lib/api-response';
 import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders } from '@/lib/scraper/ai-registry';
+import { requireAdminApi } from '@/lib/admin-guard';
 
 interface ProviderStatus {
   displayName: string;
@@ -8,6 +9,9 @@ interface ProviderStatus {
 }
 
 export async function GET() {
+  const denial = await requireAdminApi();
+  if (denial) return denial;
+
   const available = await detectAvailableProviders();
   const isSelfHosted = process.env.SELF_HOSTED === 'true';
 

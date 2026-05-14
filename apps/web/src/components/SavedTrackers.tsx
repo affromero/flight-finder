@@ -51,11 +51,13 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
-export function SavedTrackers() {
+export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: boolean } = {}) {
   const [trackers, setTrackers] = useState<DisplayTracker[]>([]);
 
   useEffect(() => {
-    const localTrackers = getSavedTrackers();
+    // In multi user mode the server response is authoritative for the current
+    // user — localStorage fallback only made sense in the deleteToken era.
+    const localTrackers = isAuthenticated ? [] : getSavedTrackers();
     const deleteTokenMap = new Map(
       localTrackers.filter((t) => t.deleteToken).map((t) => [t.id, t.deleteToken!])
     );
@@ -65,15 +67,19 @@ export function SavedTrackers() {
       .then((res) => res.json())
       .then((data) => {
         if (!data.ok || !data.data?.queries) {
-          // Fallback to localStorage-only
+          if (isAuthenticated) {
+            setTrackers([]);
+            return;
+          }
           fallbackToLocal(localTrackers);
           return;
         }
 
         const serverQueries: ActiveQuery[] = data.data.queries;
 
-        if (serverQueries.length > 0) {
-          // Server has queries — use those (self-hosted or authed user)
+        if (serverQueries.length > 0 || isAuthenticated) {
+          // Server response is authoritative when logged in. Solo/anonymous
+          // still gets the localStorage merge for backward compat.
           const display: DisplayTracker[] = serverQueries.map((q) => ({
             id: q.id,
             origin: q.origin,
@@ -92,7 +98,8 @@ export function SavedTrackers() {
         }
       })
       .catch(() => {
-        fallbackToLocal(localTrackers);
+        if (isAuthenticated) setTrackers([]);
+        else fallbackToLocal(localTrackers);
       });
 
     function fallbackToLocal(saved: typeof localTrackers) {
@@ -132,7 +139,7 @@ export function SavedTrackers() {
           );
         });
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const handleRemove = async (id: string) => {
     const token = getDeleteToken(id);

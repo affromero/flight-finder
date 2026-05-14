@@ -2,6 +2,8 @@ import crypto from 'crypto';
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { isMultiUserEnabled } from '@/lib/multi-user';
+import { getCurrentUser } from '@/lib/user-auth';
 
 interface RouteInput {
   origin: string;
@@ -23,6 +25,11 @@ interface RouteInput {
 }
 
 export async function POST(request: NextRequest) {
+  const multiUser = await isMultiUserEnabled();
+  const currentUser = multiUser ? await getCurrentUser() : null;
+  if (multiUser && !currentUser) {
+    return apiError('Sign in to create a tracker', 401);
+  }
 
   const body = await request.json().catch(() => null);
   if (!body) return apiError('Invalid JSON body', 400);
@@ -151,6 +158,7 @@ export async function POST(request: NextRequest) {
         firstViewedAt: new Date(),
         deleteToken,
         groupId,
+        userId: currentUser?.id ?? null,
       },
     });
 
