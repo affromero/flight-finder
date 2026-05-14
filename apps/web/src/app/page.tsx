@@ -15,6 +15,11 @@ import { getSessionToken, verifySessionToken } from '@/lib/admin-auth';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 
+// Force dynamic — isMultiUserEnabled + getCurrentUser run per request to
+// decide between the public landing, the multi user login redirect, and
+// the welcome line for an authenticated household member.
+export const dynamic = 'force-dynamic';
+
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
 export default async function HomePage() {

@@ -3,6 +3,12 @@ import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { LoginForm } from './LoginForm';
 
+// Force dynamic rendering — isMultiUserEnabled and getCurrentUser depend on
+// the DB and the request cookie. Without this, Next.js prerenders the page
+// at build time (when neither is reachable), bakes the notFound() result
+// into a static 404, and serves that forever in production.
+export const dynamic = 'force-dynamic';
+
 interface PageProps {
   searchParams: Promise<{ next?: string }>;
 }
