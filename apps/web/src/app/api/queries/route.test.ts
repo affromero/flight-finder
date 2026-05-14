@@ -146,6 +146,42 @@ describe('POST /api/queries', () => {
     expect(mockSnapshotCreateMany).toHaveBeenCalled();
   });
 
+  // Issue 65: a picked Turkish flight used to silently flag the saved query as
+  // preferredAirlines=['Turkish'], which then routed cron through a broken
+  // turkishairlines.com URL forever. Picked flights now seed snapshots only and
+  // never poison the cron navigation strategy.
+  it('does NOT auto-derive preferredAirlines from selectedFlights when preferredAirlines is empty', async () => {
+    const bodyWithPickedTurkish = {
+      ...validBody,
+      preferredAirlines: [],
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: 431, airline: 'Turkish Airlines', bookingUrl: 'https://turkishairlines.com' },
+        ],
+      }],
+    };
+    await POST(makeRequest(bodyWithPickedTurkish));
+    const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { preferredAirlines: string[] } };
+    expect(createCall.data.preferredAirlines).toEqual([]);
+  });
+
+  it('preserves explicit preferredAirlines even when selectedFlights contain other airlines', async () => {
+    const bodyWithExplicitAirlines = {
+      ...validBody,
+      preferredAirlines: ['Lufthansa'],
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: 431, airline: 'Turkish Airlines', bookingUrl: 'https://turkishairlines.com' },
+        ],
+      }],
+    };
+    await POST(makeRequest(bodyWithExplicitAirlines));
+    const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { preferredAirlines: string[] } };
+    expect(createCall.data.preferredAirlines).toEqual(['Lufthansa']);
+  });
+
   it('supports multi-route format', async () => {
     const multiRoute = {
       ...validBody,

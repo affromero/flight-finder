@@ -119,12 +119,6 @@ export async function POST(request: NextRequest) {
   for (const route of routeInputs) {
     const flights = route.selectedFlights || [];
 
-    // Derive airlines from selected flights if not explicitly set
-    let routeAirlines = airlines;
-    if (routeAirlines.length === 0 && flights.length > 0) {
-      routeAirlines = [...new Set(flights.map((f) => f.airline))];
-    }
-
     const deleteToken = crypto.randomUUID();
 
     // Per-date pinning: when route has a specific date, pin dateFrom to outbound and dateTo to return
@@ -147,7 +141,7 @@ export async function POST(request: NextRequest) {
         maxPrice: maxPrice ? Number(maxPrice) : null,
         maxStops: maxStops !== undefined && maxStops !== null ? Number(maxStops) : null,
         maxDurationHours: maxDurationHoursValidated,
-        preferredAirlines: routeAirlines,
+        preferredAirlines: airlines,
         timePreference: timePreference || 'any',
         cabinClass: cabinClass || 'economy',
         tripType: tripType === 'one_way' ? 'one_way' : 'round_trip',

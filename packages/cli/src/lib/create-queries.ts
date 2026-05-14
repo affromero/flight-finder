@@ -40,11 +40,6 @@ export async function createTrackedQueries(
     const routeExpiry = new Date(routeTo);
     routeExpiry.setDate(routeExpiry.getDate() + routeFlex);
 
-    let routeAirlines = parsed.preferredAirlines;
-    if (routeAirlines.length === 0 && flights.length > 0) {
-      routeAirlines = [...new Set(flights.map((f) => f.airline))];
-    }
-
     const query = await prisma.query.create({
       data: {
         rawInput,
@@ -57,7 +52,7 @@ export async function createTrackedQueries(
         flexibility: routeFlex,
         maxPrice: parsed.maxPrice,
         maxStops: parsed.maxStops,
-        preferredAirlines: routeAirlines,
+        preferredAirlines: parsed.preferredAirlines,
         timePreference: parsed.timePreference || 'any',
         cabinClass: parsed.cabinClass || 'economy',
         tripType: parsed.tripType === 'one_way' ? 'one_way' : 'round_trip',
