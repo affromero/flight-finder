@@ -122,8 +122,11 @@ Save the `id` to check prices later. Save the `deleteToken` if you want to delet
 **Multi user mode:** if a self hosted instance has multi user mode enabled
 (`ExtractionConfig.multiUserMode = true`), unauthenticated POSTs return
 `401 Sign in to create a tracker`. Authenticate first via
-`POST /api/auth/login` and reuse the `ft-session` cookie. Solo and hosted
-deployments are unaffected.
+`POST /api/auth/login` and reuse the `ft-session` cookie. The bundled
+headless CLI (`fairtrail --headless`) talks directly to Postgres and
+auto-attaches new trackers to the first admin user in multi user mode,
+so it keeps working without auth. Solo and hosted deployments are
+unaffected.
 
 ---
 
