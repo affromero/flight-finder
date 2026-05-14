@@ -689,3 +689,26 @@
     text-align: center;
   }
 }
+
+.fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.error {
+  font-size: 0.8125rem;
+  color: var(--price-up);
+}
+
+.link {
+  font-size: 0.875rem;
+  color: var(--accent);
+  text-decoration: underline;
+  margin-top: 0.5rem;
+}
+
+.link:hover {
+  opacity: 0.85;
+}

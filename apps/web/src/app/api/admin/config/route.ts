@@ -14,6 +14,7 @@ function stripHashes(config: Record<string, unknown>) {
     ...rest,
     hasAdminPassword: !!adminPasswordHash,
     hasVpnActivationCode: !!vpnActivationCode,
+    isSelfHosted: process.env.SELF_HOSTED === 'true',
   };
 }
 

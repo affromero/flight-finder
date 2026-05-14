@@ -22,6 +22,10 @@ export default function SetupPage() {
   const [customModel, setCustomModel] = useState('');
   const [customBaseUrl, setCustomBaseUrl] = useState('');
   const [communitySharing, setCommunitySharing] = useState(false);
+  const [enableMultiUser, setEnableMultiUser] = useState(false);
+  const [multiUserUsername, setMultiUserUsername] = useState('');
+  const [multiUserPassword, setMultiUserPassword] = useState('');
+  const [multiUserDisplayName, setMultiUserDisplayName] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -112,7 +116,13 @@ export default function SetupPage() {
       return;
     }
 
-    // Step 2: complete setup
+    if (step === 2 && status?.isSelfHosted) {
+      // Self hosted gets a follow-on optional accounts step
+      setStep(3);
+      return;
+    }
+
+    // Final step: complete setup (hosted: step 2, self hosted: step 3)
     const effectiveModel = customModel.trim() || model;
     setLoading(true);
     const res = await fetch('/api/setup', {
@@ -121,13 +131,42 @@ export default function SetupPage() {
       body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, communitySharing, customBaseUrl: customBaseUrl.trim() || null }),
     });
 
-    if (res.ok) {
-      window.location.href = '/';
-    } else {
+    if (!res.ok) {
       const data = await res.json();
       setError(data.error || 'Setup failed');
       setLoading(false);
+      return;
     }
+
+    if (status?.isSelfHosted && enableMultiUser) {
+      const username = multiUserUsername.trim();
+      if (!username || multiUserPassword.length < 8) {
+        setError('Username required and password must be at least 8 characters');
+        setLoading(false);
+        return;
+      }
+      const muRes = await fetch('/api/admin/multi-user', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          adminUsername: username,
+          adminPassword: multiUserPassword,
+          displayName: multiUserDisplayName.trim() || null,
+        }),
+      });
+      const muData = await muRes.json();
+      if (!muRes.ok) {
+        setError(muData.error || 'Failed to enable multi user mode');
+        setLoading(false);
+        return;
+      }
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('ft-backfill-count', String(muData.data.backfillCount));
+        window.localStorage.removeItem('ft-backfill-banner-dismissed');
+      }
+    }
+
+    window.location.href = '/';
   };
 
   if (!status) {
@@ -149,7 +188,15 @@ export default function SetupPage() {
     'Set your admin password',
     'Choose your LLM provider',
     'Join the community',
+    'Multi user mode (optional)',
   ];
+
+  const isFinalStep = isSelfHosted ? step === 3 : step === 2;
+  const submitLabel = loading
+    ? 'Setting up...'
+    : isFinalStep
+      ? (isSelfHosted && enableMultiUser ? 'Complete setup and enable accounts' : 'Complete Setup')
+      : 'Next';
 
   return (
     <main className={styles.root}>
@@ -167,6 +214,12 @@ export default function SetupPage() {
           <span className={`${styles.step} ${step >= 1 ? styles.active : ''}`}>{isSelfHosted ? '1' : '2'}. Provider</span>
           <span className={styles.stepDivider}>/</span>
           <span className={`${styles.step} ${step >= 2 ? styles.active : ''}`}>{isSelfHosted ? '2' : '3'}. Community</span>
+          {isSelfHosted && (
+            <>
+              <span className={styles.stepDivider}>/</span>
+              <span className={`${styles.step} ${step >= 3 ? styles.active : ''}`}>3. Accounts</span>
+            </>
+          )}
         </div>
 
         {step === 0 && (
@@ -314,6 +367,57 @@ export default function SetupPage() {
           </div>
         )}
 
+        {step === 3 && isSelfHosted && (
+          <div className={styles.fields}>
+            <div className={styles.communityCard}>
+              <h3 className={styles.communityTitle}>
+                Run Fairtrail for a household?
+              </h3>
+              <p className={styles.communityText}>
+                Multi user mode lets each member of your household have their own
+                trackers and preferences. You stay admin and create accounts for
+                them. Skip this if you&apos;re the only user.
+              </p>
+              <button
+                className={`${styles.communityToggle} ${enableMultiUser ? styles.communityActive : ''}`}
+                onClick={() => setEnableMultiUser(!enableMultiUser)}
+              >
+                {enableMultiUser ? 'Enabled' : 'Skip'}
+              </button>
+            </div>
+            {enableMultiUser && (
+              <>
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="Admin username"
+                  value={multiUserUsername}
+                  onChange={(e) => setMultiUserUsername(e.target.value)}
+                  autoComplete="username"
+                />
+                <input
+                  type="text"
+                  className={styles.input}
+                  placeholder="Display name (optional)"
+                  value={multiUserDisplayName}
+                  onChange={(e) => setMultiUserDisplayName(e.target.value)}
+                />
+                <input
+                  type="password"
+                  className={styles.input}
+                  placeholder="Admin password (8+ chars)"
+                  value={multiUserPassword}
+                  onChange={(e) => setMultiUserPassword(e.target.value)}
+                  autoComplete="new-password"
+                />
+              </>
+            )}
+            <p className={styles.communityHint}>
+              You can enable this later from the admin Settings page.
+            </p>
+          </div>
+        )}
+
         {error && <p className={styles.error}>{error}</p>}
 
         <div className={styles.actions}>
@@ -330,7 +434,7 @@ export default function SetupPage() {
             onClick={handleSubmit}
             disabled={loading}
           >
-            {loading ? 'Setting up...' : step < 2 ? 'Next' : 'Complete Setup'}
+            {submitLabel}
           </button>
         </div>
       </div>
