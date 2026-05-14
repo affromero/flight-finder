@@ -2,6 +2,7 @@ import { describe, it, expect } from 'vitest';
 import {
   buildGoogleFlightsUrl,
   buildGoogleFlightsUrlCandidates,
+  hasFlightPriceSignal,
   pageHasRequestedRoute,
   pageRedirectedToHomepage,
 } from './navigate';
@@ -445,5 +446,61 @@ describe('pageRedirectedToHomepage (the #65 headline failure mode)', () => {
 
   it('returns false on malformed URL inputs (defensive)', () => {
     expect(pageRedirectedToHomepage('not a url', 'also not a url')).toBe(false);
+  });
+});
+
+// Issue 65: navigateAirlineDirect previously accepted any "currency symbol or
+// code + digit" page as having flight prices, including a Turkish stub at
+// 1964 chars that just mentioned "EUR pricing" in marketing copy. The
+// two-criterion signal requires both currency density (3+ mentions) and at
+// least one price-shaped token with letter-boundary protection.
+describe('hasFlightPriceSignal (two-criterion airline page heuristic, issue #65)', () => {
+  it('rejects a stub page with one EUR mention and no digits', () => {
+    expect(hasFlightPriceSignal('Discover EUR fares with flexible booking.')).toBe(false);
+  });
+
+  it('rejects a page with TRY embedded in INDUSTRY (lookbehind blocks the mid-word match)', () => {
+    expect(hasFlightPriceSignal('Aviation INDUSTRY 2026 entry pricing for the new industry')).toBe(false);
+  });
+
+  it('rejects EURO trip (lookahead blocks trailing letter)', () => {
+    expect(hasFlightPriceSignal('EURO trip planner 1990 - EURO destinations EURO regions')).toBe(false);
+  });
+
+  it('rejects 1-mention text even with a valid price token', () => {
+    expect(hasFlightPriceSignal('Get flights from EUR 431 today.')).toBe(false);
+  });
+
+  it('rejects 2-mention text', () => {
+    expect(hasFlightPriceSignal('Save with EUR pricing and book in EUR easily.')).toBe(false);
+  });
+
+  it('accepts a real-shaped airline results page (5+ EUR prices)', () => {
+    const text = [
+      'BRI to JFK Direct Flight Options',
+      'Turkish Airlines EUR 431 - 12h 30m - 1 stop',
+      'Lufthansa EUR 522 - 11h 45m - 1 stop',
+      'Air France EUR 480 - 13h 10m - 1 stop',
+      'KLM EUR 720 - 14h 05m - 2 stops',
+      'Alitalia EUR 1,200 - 9h 30m - nonstop',
+    ].join('\n');
+    expect(hasFlightPriceSignal(text)).toBe(true);
+  });
+
+  it('accepts symbol-form prices (€431, €99, €350)', () => {
+    expect(hasFlightPriceSignal('€431 / €99 / €350 / €480')).toBe(true);
+  });
+
+  it('accepts mixed currency tokens summing to >= 3 mentions', () => {
+    expect(hasFlightPriceSignal('USD 431 / EUR 99 / GBP 350')).toBe(true);
+  });
+
+  it('rejects a legitimate "no flights available" page with currency in chrome only (3 mentions, no token)', () => {
+    const text = 'Change currency: USD EUR GBP. No flights match your search. Try different dates.';
+    expect(hasFlightPriceSignal(text)).toBe(false);
+  });
+
+  it('accepts EUR99 (no space between code and digits)', () => {
+    expect(hasFlightPriceSignal('EUR99 EUR131 EUR205')).toBe(true);
   });
 });
