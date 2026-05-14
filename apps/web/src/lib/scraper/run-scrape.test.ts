@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 
-const { mockPrisma, mockNavigateGoogleFlights, mockExtractPrices } = vi.hoisted(() => {
+const { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockExtractPrices, mockIsKnownAirline } = vi.hoisted(() => {
   const mockPrisma = {
     query: { findUnique: vi.fn() },
     fetchRun: { create: vi.fn(), update: vi.fn() },
@@ -11,15 +11,17 @@ const { mockPrisma, mockNavigateGoogleFlights, mockExtractPrices } = vi.hoisted(
     apiUsageLog: { create: vi.fn() },
   };
   const mockNavigateGoogleFlights = vi.fn();
+  const mockNavigateAirlineDirect = vi.fn();
   const mockExtractPrices = vi.fn();
-  return { mockPrisma, mockNavigateGoogleFlights, mockExtractPrices };
+  const mockIsKnownAirline = vi.fn();
+  return { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockExtractPrices, mockIsKnownAirline };
 });
 
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
 
 vi.mock('./navigate', () => ({
   navigateGoogleFlights: (...args: unknown[]) => mockNavigateGoogleFlights(...args),
-  navigateAirlineDirect: vi.fn(),
+  navigateAirlineDirect: (...args: unknown[]) => mockNavigateAirlineDirect(...args),
 }));
 
 vi.mock('./extract-prices', () => ({
@@ -31,7 +33,7 @@ vi.mock('./ai-registry', () => ({
 }));
 
 vi.mock('./airline-urls', () => ({
-  isKnownAirline: vi.fn().mockReturnValue(false),
+  isKnownAirline: (...args: unknown[]) => mockIsKnownAirline(...args),
 }));
 
 vi.mock('./country-profiles', () => ({
@@ -81,6 +83,7 @@ const BASE_QUERY = {
 describe('runScrapeForQuery', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockIsKnownAirline.mockReturnValue(false);
     mockPrisma.query.findUnique.mockResolvedValue(BASE_QUERY);
     mockPrisma.fetchRun.create.mockResolvedValue({ id: 'run1' });
     mockPrisma.fetchRun.update.mockResolvedValue({});
@@ -757,6 +760,151 @@ describe('runScrapeForQuery extraction failure surfacing (issue #65)', () => {
     expect(result.status).toBe('failed');
     expect(result.error).toContain('LLM call failed');
   }, 15_000);
+});
+
+describe('runScrapeForQuery airline_direct -> google_flights diversification (issue #65)', () => {
+  const TURKISH_QUERY = {
+    ...BASE_QUERY,
+    origin: 'BRI',
+    destination: 'JFK',
+    dateFrom: new Date('2026-11-07'),
+    dateTo: new Date('2026-11-07'),
+    tripType: 'one_way',
+    preferredAirlines: ['Turkish Airlines'],
+    currency: 'EUR',
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsKnownAirline.mockReturnValue(true);
+    mockPrisma.query.findUnique.mockResolvedValue(TURKISH_QUERY);
+    mockPrisma.fetchRun.create.mockResolvedValue({ id: 'run1' });
+    mockPrisma.fetchRun.update.mockResolvedValue({});
+    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      scrapeInterval: 3,
+      defaultCurrency: null,
+      defaultCountry: null,
+      vpnProvider: null,
+      vpnCountries: [],
+    });
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([]);
+    mockPrisma.priceSnapshot.createMany.mockResolvedValue({ count: 1 });
+    mockPrisma.apiUsageLog.create.mockResolvedValue({});
+    mockNavigateAirlineDirect.mockResolvedValue({
+      html: '<stub-page-1964-chars>',
+      url: 'https://www.turkishairlines.com/en-us/flights/?origin=BRI&destination=JFK',
+      resultsFound: true,
+      source: 'airline_direct',
+    });
+    mockNavigateGoogleFlights.mockResolvedValue({
+      html: '<google-results>',
+      url: 'https://www.google.com/travel/flights?q=BRI+to+JFK',
+      resultsFound: true,
+      source: 'google_flights',
+    });
+  });
+
+  // T3: the headline issue 65 fix. Turkish stub passes navigation but yields 0
+  // prices on extraction. Same attempt now tries Google Flights and succeeds.
+  it('falls back to Google Flights when airline_direct extracts empty_extraction', async () => {
+    mockExtractPrices
+      .mockResolvedValueOnce({
+        prices: [],
+        usage: { inputTokens: 100, outputTokens: 0 },
+        failureReason: 'empty_extraction',
+      })
+      .mockResolvedValueOnce({
+        prices: [{
+          travelDate: '2026-11-07',
+          price: 431,
+          currency: 'EUR',
+          airline: 'Turkish Airlines',
+          bookingUrl: 'https://google.com/booking',
+          stops: 1,
+          duration: '12h 30m',
+          departureTime: '10:25 AM',
+          arrivalTime: '2:55 PM',
+          seatsLeft: null,
+        }],
+        usage: { inputTokens: 200, outputTokens: 50 },
+      });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('success');
+    expect(result.snapshotsCount).toBe(1);
+    expect(mockNavigateAirlineDirect).toHaveBeenCalledTimes(1);
+    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(1);
+    expect(mockExtractPrices).toHaveBeenCalledTimes(2);
+
+    // FetchRun.source records the composite label so operators can grep for
+    // diversification events without a schema migration.
+    const fetchRunUpdate = mockPrisma.fetchRun.update.mock.calls[0]![0] as { data: { source: string } };
+    expect(fetchRunUpdate.data.source).toContain('airline_direct');
+    expect(fetchRunUpdate.data.source).toContain('google_flights');
+  });
+
+  // T4: real flights existed but the LLM correctly filtered them out per the
+  // user-supplied maxStops/maxPrice. That is a true signal, not a stub-page
+  // failure: diversification must NOT fire (no Google Flights navigation).
+  // The outer attempt loop still iterates on non-retryable reasons (the
+  // RETRYABLE_FAILURES gate only suppresses the inter-attempt delay), so the
+  // airline-direct call count is incidental — the diversification check is
+  // strictly: did we trigger a Google Flights navigation?
+  it('does NOT diversify when airline_direct returns all_filtered_out', async () => {
+    mockExtractPrices.mockResolvedValue({
+      prices: [],
+      usage: { inputTokens: 100, outputTokens: 10 },
+      failureReason: 'all_filtered_out',
+    });
+
+    const result = await runScrapeForQuery('q1');
+
+    expect(result.status).toBe('failed');
+    expect(mockNavigateGoogleFlights).not.toHaveBeenCalled();
+  });
+
+  // T5: a user typing "only Lufthansa flights from FRA to JFK" still gets the
+  // airline filter applied on the Google fallback extraction. Removing the
+  // auto-derive in Phase 1 was about the IMPLICIT case; explicit user intent
+  // must survive.
+  it('preserves explicit preferredAirlines on the Google fallback extractPrices call', async () => {
+    mockPrisma.query.findUnique.mockResolvedValue({
+      ...TURKISH_QUERY,
+      preferredAirlines: ['Lufthansa'],
+    });
+    mockExtractPrices
+      .mockResolvedValueOnce({
+        prices: [],
+        usage: { inputTokens: 100, outputTokens: 0 },
+        failureReason: 'empty_extraction',
+      })
+      .mockResolvedValueOnce({
+        prices: [{
+          travelDate: '2026-11-07',
+          price: 522,
+          currency: 'EUR',
+          airline: 'Lufthansa',
+          bookingUrl: 'https://google.com/booking',
+          stops: 1,
+          duration: '11h 45m',
+          departureTime: '8:00 AM',
+          arrivalTime: '12:45 PM',
+          seatsLeft: null,
+        }],
+        usage: { inputTokens: 200, outputTokens: 50 },
+      });
+
+    await runScrapeForQuery('q1');
+
+    // 4th positional argument to extractPrices is the QueryFilters object
+    const googleExtractCall = mockExtractPrices.mock.calls[1];
+    expect(googleExtractCall).toBeDefined();
+    const filtersArg = googleExtractCall![3] as { preferredAirlines: string[] };
+    expect(filtersArg.preferredAirlines).toEqual(['Lufthansa']);
+  });
 });
 
 describe('PriceSnapshot schema', () => {

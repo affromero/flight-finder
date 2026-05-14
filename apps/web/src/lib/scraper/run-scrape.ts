@@ -66,9 +66,14 @@ async function scrapeOneDatePair(
   let inputTokens = 0;
   let outputTokens = 0;
   let lastFailureReason: string | undefined;
+  // Hoisted so the diversification block (issue 65) can flip airline-direct off
+  // for the retry: once we know a route returns a stub on the airline site, the
+  // attempt-2 retry must skip the broken Playwright launch and go straight to
+  // Google Flights.
+  let attemptUseAirlineDirect = useAirlineDirect;
 
   async function navigateAll(): Promise<NavigationResult[]> {
-    if (useAirlineDirect) {
+    if (attemptUseAirlineDirect) {
       const results = await Promise.all(
         directAirlines.map(async (airline) => {
           try {
@@ -106,6 +111,41 @@ async function scrapeOneDatePair(
       if (result.failureReason) {
         lastFailureReason = result.failureReason;
         await saveDebugHtml(queryId, nav.html, attempt);
+      }
+    }
+
+    // Issue 65: when airline-direct navigation succeeds (stub page passes
+    // hasFlightPriceSignal) but extraction yields zero prices, fall back to
+    // Google Flights in the same attempt rather than retrying the same broken
+    // airline page. all_filtered_out is not diversifiable: that means real
+    // flights existed and the user filters excluded them.
+    const usedAirlineDirect = navResults.some((n) => n.source === 'airline_direct');
+    const usedGoogleFlights = navResults.some((n) => n.source === 'google_flights');
+    const diversifiableReasons: ExtractionFailureReason[] = ['empty_extraction', 'no_json_in_response', 'page_not_loaded', 'llm_error'];
+    const shouldDiversify =
+      usedAirlineDirect && !usedGoogleFlights && prices.length === 0 &&
+      lastFailureReason !== undefined &&
+      diversifiableReasons.includes(lastFailureReason as ExtractionFailureReason);
+    if (shouldDiversify) {
+      console.log(`[scrape] query=${queryId} pair=${travelDateFallback} diversifying airline_direct -> google_flights (reason: ${lastFailureReason})`);
+      try {
+        const gNav = await navigateGoogleFlights(pairParams, countryProfile, proxyUrl);
+        sources.add(gNav.source);
+        const gResult = await extractPrices(
+          gNav.html, gNav.url, travelDateFallback, filters, undefined, gNav.resultsFound, gNav.source, effectiveCurrency,
+        );
+        prices = prices.concat(gResult.prices);
+        inputTokens += gResult.usage.inputTokens;
+        outputTokens += gResult.usage.outputTokens;
+        if (gResult.failureReason) {
+          lastFailureReason = gResult.failureReason;
+          await saveDebugHtml(queryId, gNav.html, attempt);
+        } else {
+          lastFailureReason = undefined;
+        }
+        attemptUseAirlineDirect = false;
+      } catch (err) {
+        console.error(`[scrape] query=${queryId} pair=${travelDateFallback} google_flights diversification threw err=${err instanceof Error ? err.message : err}`);
       }
     }
 
