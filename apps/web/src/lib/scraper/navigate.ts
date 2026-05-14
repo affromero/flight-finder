@@ -71,6 +71,27 @@ export function isoDate(d: Date): string {
   return d.toISOString().split('T')[0]!;
 }
 
+// Issue 65: navigateAirlineDirect previously used a loose regex that accepted
+// any single currency symbol plus digit. A Turkish stub page (1964 chars,
+// "EUR" appearing in marketing copy) passed the gate, then extraction returned
+// zero prices and the cron silently saved nothing every cycle. Two-criterion
+// signal:
+//   1. Currency must be mentioned at least MIN_CURRENCY_MENTIONS times. Real
+//      airline result pages render many flight rows each with a price;
+//      marketing stubs typically mention currency 0 to 2 times in chrome.
+//   2. At least one price-shaped token (symbol or bounded code adjacent to a
+//      digit). Lookaround prevents matching "TRY" inside INDUSTRY or "EUR"
+//      inside EURO trip.
+export const CURRENCY_MENTION_PATTERN = '€|£|\\$|EUR|GBP|USD|TRY|JPY|CHF';
+export const PRICE_TOKEN_PATTERN = '(?:€|£|\\$)\\s?\\d|(?<![A-Za-z])(?:EUR|GBP|USD|TRY|JPY|CHF)(?![A-Za-z])\\s?\\d';
+export const MIN_CURRENCY_MENTIONS = 3;
+
+export function hasFlightPriceSignal(text: string): boolean {
+  const mentions = (text.match(new RegExp(CURRENCY_MENTION_PATTERN, 'g')) || []).length;
+  if (mentions < MIN_CURRENCY_MENTIONS) return false;
+  return new RegExp(PRICE_TOKEN_PATTERN).test(text);
+}
+
 function buildFlightsUrl(qPhrase: string, params: FlightSearchParams): string {
   const url = new URL('https://www.google.com/travel/flights');
   url.searchParams.set('q', qPhrase);
@@ -579,19 +600,22 @@ export async function navigateAirlineDirect(
       // No consent dialog — continue
     }
 
-    // Heuristic: check if any price-like content loaded (currency symbols or digits)
+    // Two-criterion price signal (see hasFlightPriceSignal at module top, issue 65).
     let resultsFound = false;
     try {
       await page.waitForFunction(
-        () => {
+        (params: { mention: string; token: string; min: number }) => {
           const text = document.body?.innerText ?? '';
-          return /\$\s?\d|€\s?\d|£\s?\d|USD|EUR|GBP|\d+\.\d{2}/.test(text);
+          const mentions = (text.match(new RegExp(params.mention, 'g')) || []).length;
+          if (mentions < params.min) return false;
+          return new RegExp(params.token).test(text);
         },
+        { mention: CURRENCY_MENTION_PATTERN, token: PRICE_TOKEN_PATTERN, min: MIN_CURRENCY_MENTIONS },
         { timeout: 15_000 }
       );
       resultsFound = true;
     } catch {
-      // No price content detected — page may be blocked or empty
+      // No price signal detected — page may be a stub, marketing redirect, or block.
     }
 
     const html = await page.evaluate(() => document.body.innerText);
