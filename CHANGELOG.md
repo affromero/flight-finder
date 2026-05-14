@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Fixed
+- **Cron silently failed for queries whose picked flights were on a "known" airline** (#65 follow-up): when a user picked a flight in the preview picker (e.g. Turkish Airlines for BRI to JFK), `apps/web/src/app/api/queries/route.ts` and `packages/cli/src/lib/create-queries.ts` auto-derived `preferredAirlines` from the picked flights. The cron scraper then treated `preferredAirlines` as a navigation strategy (`useAirlineDirect = directAirlines.length > 0`) and routed every cycle to `https://www.turkishairlines.com/.../?origin=BRI&destination=JFK`. Turkish's site does not accept raw IATA codes, auto-resolves BRI to Lecce, and renders a 1964 char marketing stub. The stub satisfied `navigateAirlineDirect`'s loose `/€|EUR|USD/` regex so the existing Google Flights fallback never fired. Three-layer fix: (1) `queries/route.ts` and `create-queries.ts` no longer auto-derive `preferredAirlines` from `selectedFlights`; (2) new `hasFlightPriceSignal` helper in `navigate.ts` requires both currency density (3+ mentions) and a letter-bounded price token, rejecting stubs while accepting `EUR99` / `EUR 1,200` / `€431` / `EUR 1.299`; (3) `scrapeOneDatePair` now diversifies to Google Flights when `airline_direct` extracts zero prices with `empty_extraction`/`no_json_in_response`/`page_not_loaded`/`llm_error`, but never on `all_filtered_out` (real flights, filters worked). Once diversification fires, attempt-2 retry skips the broken airline launch. Composite source label (`airline_direct+google_flights`) on `FetchRun.source` for operators to grep. Existing rows with stale `preferredAirlines` recover via (3); no DB migration needed. 13 new behavioral tests across `route.test.ts`, `create-queries.test.ts` (new), `navigate.test.ts`, `run-scrape.test.ts`.
+
 ## [0.6.0] - 2026-05-12
 
 ### Added
