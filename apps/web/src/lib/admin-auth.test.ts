@@ -60,6 +60,12 @@ describe('verifySessionToken', () => {
   it('rejects empty string', () => {
     expect(verifySessionToken('')).toBe(false);
   });
+
+  it('rejects a valid user: token (admin-only verifier)', async () => {
+    const { createUserSessionToken } = await import('./user-auth');
+    const userToken = createUserSessionToken('uid_x');
+    expect(verifySessionToken(userToken)).toBe(false);
+  });
 });
 
 describe('verifyPassword', () => {
