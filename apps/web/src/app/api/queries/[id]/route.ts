@@ -75,15 +75,30 @@ export async function PATCH(
   const auth = await authorizeMutation(query, token);
   if (!auth.ok) return apiError(auth.error ?? 'Forbidden', auth.status ?? 403);
 
-  // Accept null (means "follow global") or one of the allowed numeric intervals.
-  let interval: number | null;
-  if (body.scrapeInterval === null) {
-    interval = null;
-  } else {
-    interval = Number(body.scrapeInterval);
-    if (!ALLOWED_INTERVALS.includes(interval)) {
-      return apiError(`scrapeInterval must be null or one of: ${ALLOWED_INTERVALS.join(', ')}`, 400);
+  const updateData: { scrapeInterval?: number | null; active?: boolean } = {};
+
+  if (body && Object.prototype.hasOwnProperty.call(body, 'scrapeInterval')) {
+    let interval: number | null;
+    if (body.scrapeInterval === null) {
+      interval = null;
+    } else {
+      interval = Number(body.scrapeInterval);
+      if (!ALLOWED_INTERVALS.includes(interval)) {
+        return apiError(`scrapeInterval must be null or one of: ${ALLOWED_INTERVALS.join(', ')}`, 400);
+      }
     }
+    updateData.scrapeInterval = interval;
+  }
+
+  if (body && Object.prototype.hasOwnProperty.call(body, 'active')) {
+    if (typeof body.active !== 'boolean') {
+      return apiError('active must be a boolean', 400);
+    }
+    updateData.active = body.active;
+  }
+
+  if (Object.keys(updateData).length === 0) {
+    return apiError('No updatable fields supplied', 400);
   }
 
   // Update this query and all siblings in the group
@@ -98,10 +113,10 @@ export async function PATCH(
 
   await prisma.query.updateMany({
     where: { id: { in: idsToUpdate } },
-    data: { scrapeInterval: interval },
+    data: updateData,
   });
 
-  return apiSuccess({ scrapeInterval: interval, updated: idsToUpdate.length });
+  return apiSuccess({ ...updateData, updated: idsToUpdate.length });
 }
 
 export async function DELETE(
@@ -112,10 +127,11 @@ export async function DELETE(
 
   const body = await request.json().catch(() => null);
   const token = body?.deleteToken;
+  const groupDelete = body?.groupDelete === true;
 
   const query = await prisma.query.findUnique({
     where: { id },
-    select: { deleteToken: true, userId: true },
+    select: { deleteToken: true, groupId: true, userId: true },
   });
 
   if (!query) {
@@ -125,7 +141,12 @@ export async function DELETE(
   const auth = await authorizeMutation(query, token);
   if (!auth.ok) return apiError(auth.error ?? 'Forbidden', auth.status ?? 403);
 
+  if (groupDelete && query.groupId) {
+    const result = await prisma.query.deleteMany({ where: { groupId: query.groupId } });
+    return apiSuccess({ deleted: true, groupDeleted: true, count: result.count });
+  }
+
   await prisma.query.delete({ where: { id } });
 
-  return apiSuccess({ deleted: true });
+  return apiSuccess({ deleted: true, groupDeleted: false });
 }

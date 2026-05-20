@@ -54,6 +54,18 @@
   color: var(--muted);
 }
 
+.rowGroupTag {
+  margin-left: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-secondary);
+  background: var(--elevated);
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  letter-spacing: 0.02em;
+}
+
 .rowMeta {
   display: flex;
   align-items: center;

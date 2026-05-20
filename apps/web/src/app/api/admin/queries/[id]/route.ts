@@ -3,6 +3,11 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { requireAdminApi } from '@/lib/admin-guard';
 
+// Fields that cascade across a query's group when groupId is set. userId
+// reassignment stays single-row because it would not make sense to move an
+// entire group to a different owner via a UI nudge.
+const GROUP_CASCADING_FIELDS = new Set(['active', 'scrapeInterval', 'maxDurationHours']);
+
 export async function PATCH(
   request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
@@ -14,7 +19,7 @@ export async function PATCH(
   const body = await request.json().catch(() => null);
   if (!body) return apiError('Invalid JSON body', 400);
 
-  const existing = await prisma.query.findUnique({ where: { id } });
+  const existing = await prisma.query.findUnique({ where: { id }, select: { groupId: true } });
   if (!existing) return apiError('Query not found', 404);
 
   const data: Record<string, unknown> = {};
@@ -38,12 +43,26 @@ export async function PATCH(
     data.userId = body.userId;
   }
 
+  // Cascade group-safe fields to every sibling when this query is part of a
+  // group, mirroring the user PATCH route's behavior. Owner reassignment is
+  // single-row only.
+  const updatedKeys = Object.keys(data);
+  const cascade = existing.groupId && updatedKeys.every((k) => GROUP_CASCADING_FIELDS.has(k));
+
+  if (cascade && existing.groupId) {
+    const result = await prisma.query.updateMany({
+      where: { groupId: existing.groupId },
+      data,
+    });
+    return apiSuccess({ ...data, updated: result.count });
+  }
+
   const updated = await prisma.query.update({ where: { id }, data });
   return apiSuccess(updated);
 }
 
 export async function DELETE(
-  _request: NextRequest,
+  request: NextRequest,
   { params }: { params: Promise<{ id: string }> }
 ) {
   const denial = await requireAdminApi();
@@ -51,9 +70,17 @@ export async function DELETE(
 
   const { id } = await params;
 
-  const existing = await prisma.query.findUnique({ where: { id } });
+  const body = await request.json().catch(() => null);
+  const groupDelete = body?.groupDelete === true;
+
+  const existing = await prisma.query.findUnique({ where: { id }, select: { groupId: true } });
   if (!existing) return apiError('Query not found', 404);
 
+  if (groupDelete && existing.groupId) {
+    const result = await prisma.query.deleteMany({ where: { groupId: existing.groupId } });
+    return apiSuccess({ deleted: true, groupDeleted: true, count: result.count });
+  }
+
   await prisma.query.delete({ where: { id } });
-  return apiSuccess({ deleted: true });
+  return apiSuccess({ deleted: true, groupDeleted: false });
 }

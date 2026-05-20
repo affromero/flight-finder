@@ -3,6 +3,7 @@ import { redirect, notFound } from 'next/navigation';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
+import { groupQueries, type GroupableQuery } from '@/lib/query-grouping';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -27,11 +28,31 @@ export default async function AccountPage() {
       active: true,
       expiresAt: true,
       createdAt: true,
+      groupId: true,
+      scrapeInterval: true,
       _count: { select: { snapshots: true } },
     },
   });
 
-  const fmt = (d: Date) => d.toISOString().split('T')[0];
+  const groupable: GroupableQuery[] = queries.map((q) => ({
+    id: q.id,
+    origin: q.origin,
+    destination: q.destination,
+    originName: q.originName,
+    destinationName: q.destinationName,
+    dateFrom: q.dateFrom.toISOString(),
+    dateTo: q.dateTo.toISOString(),
+    groupId: q.groupId,
+    active: q.active,
+    expiresAt: q.expiresAt.toISOString(),
+    scrapeInterval: q.scrapeInterval,
+    snapshotCount: q._count.snapshots,
+    createdAt: q.createdAt.toISOString(),
+  }));
+
+  const groups = groupQueries(groupable);
+
+  const fmt = (iso: string) => iso.split('T')[0];
 
   return (
     <main className={styles.root}>
@@ -50,25 +71,32 @@ export default async function AccountPage() {
 
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>Your trackers</h2>
-        {queries.length === 0 ? (
+        {groups.length === 0 ? (
           <p className={styles.empty}>
             No trackers yet. <Link href="/">Search for a flight</Link> to get started.
           </p>
         ) : (
           <div className={styles.list}>
-            {queries.map((q) => (
-              <Link key={q.id} href={`/q/${q.id}`} className={styles.row}>
-                <div className={styles.rowRoute}>
-                  <span className={styles.rowCode}>{q.origin}</span>
-                  <span className={styles.rowArrow}>→</span>
-                  <span className={styles.rowCode}>{q.destination}</span>
-                </div>
-                <div className={styles.rowMeta}>
-                  {fmt(q.dateFrom)} {' '} {fmt(q.dateTo)} {' '} {q._count.snapshots} snapshots
-                  {!q.active && <span className={styles.paused}>paused</span>}
-                </div>
-              </Link>
-            ))}
+            {groups.map((g) => {
+              const extraDestinations = g.destinations.length - 1;
+              return (
+                <Link key={g.primaryId} href={`/q/${g.primaryId}`} className={styles.row}>
+                  <div className={styles.rowRoute}>
+                    <span className={styles.rowCode}>{g.origin}</span>
+                    <span className={styles.rowArrow}>→</span>
+                    <span className={styles.rowCode}>{g.destination}</span>
+                    {extraDestinations > 0 && (
+                      <span className={styles.rowMeta}>+ {extraDestinations} more</span>
+                    )}
+                  </div>
+                  <div className={styles.rowMeta}>
+                    {fmt(g.dateFrom)} {' '} {fmt(g.dateTo)} {' '} {g.snapshotCount} snapshots
+                    {g.routeCount > 1 && ` · ${g.routeCount} charts`}
+                    {!g.anyActive && <span className={styles.paused}>paused</span>}
+                  </div>
+                </Link>
+              );
+            })}
           </div>
         )}
       </section>

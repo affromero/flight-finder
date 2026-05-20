@@ -11,6 +11,7 @@ import { ScrapeInterval } from '@/components/ScrapeInterval';
 import { ChartActions } from '@/components/ChartActions';
 import { PriceCalendar } from '@/components/PriceCalendar';
 import { Footer } from '@/components/Footer';
+import { StackedSortControls, type StackedItem } from '@/components/StackedSortControls';
 import styles from './page.module.css';
 
 interface Props {
@@ -56,6 +57,7 @@ interface QueryWithSnapshots {
     dateFrom: Date;
     dateTo: Date;
     flexibility: number;
+    tripType: string;
     expiresAt: Date;
     createdAt: Date;
     firstViewedAt: Date | null;
@@ -85,6 +87,90 @@ interface QueryWithSnapshots {
   }>;
   lastRun: { startedAt: Date } | null;
   globalScrapeInterval: number;
+}
+
+function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean) {
+  const isRoundTrip = qData.query.tripType === 'round_trip';
+  const hasDistinctReturn = qData.query.dateFrom.getTime() < qData.query.dateTo.getTime();
+  const dateLabel = isRoundTrip && hasDistinctReturn
+    ? `${formatDate(qData.query.dateFrom)} → ${formatDate(qData.query.dateTo)}`
+    : formatDate(qData.query.dateFrom);
+
+  return (
+    <div key={qData.query.id} className={styles.routeBlock}>
+      {isMultiRoute && (
+        <div className={styles.routeBlockHeader}>
+          <span className={styles.routeBlockCode}>{qData.query.origin}</span>
+          <span className={styles.routeBlockArrow}>→</span>
+          <span className={styles.routeBlockCode}>{qData.query.destination}</span>
+          <span className={styles.routeBlockName}>
+            {qData.query.originName} to {qData.query.destinationName}
+          </span>
+          <span className={styles.routeBlockDate}>{dateLabel}</span>
+        </div>
+      )}
+
+      <section className={styles.chart}>
+        <PriceChart snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
+        {qData.query.vpnCountries.length > 0 && !qData.snapshots.some((s) => s.vpnCountry) && (
+          <p className={styles.vpnPending}>
+            VPN comparison in progress -- prices from {qData.query.vpnCountries.map((c) =>
+              String.fromCodePoint(...c.split('').map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) + ' ' + c
+            ).join(', ')} will appear after the next scrape
+          </p>
+        )}
+      </section>
+
+      <section className={styles.best}>
+        <BestPrice snapshots={qData.snapshots} />
+      </section>
+
+      <section className={styles.history}>
+        <PriceHistory snapshots={qData.snapshots} />
+      </section>
+
+      <section className={styles.calendar}>
+        <PriceCalendar snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
+      </section>
+    </div>
+  );
+}
+
+/**
+ * "Current price" per sibling = the lowest latest-scrape price across the
+ * distinct flights that were scraped for this route. We group snapshots by
+ * `flightId ?? airline`, keep the most recent `scrapedAt` per group, then
+ * take the minimum across those latest snapshots. Sold-out flights are
+ * excluded so the price sort can't rank a row by an unavailable fare
+ * (matches the bookable filter used in BestPrice). Returns null when the
+ * row has no available snapshots so the sort dropdown can push it to the
+ * bottom in "lowest price first" mode.
+ */
+function currentPriceForSibling(qData: QueryWithSnapshots): number | null {
+  if (qData.snapshots.length === 0) return null;
+  const latestByGroup = new Map<string, { price: number; scrapedAt: string; status: string }>();
+  for (const s of qData.snapshots) {
+    const key = s.flightId ?? s.airline;
+    const existing = latestByGroup.get(key);
+    if (!existing || s.scrapedAt > existing.scrapedAt) {
+      latestByGroup.set(key, { price: s.price, scrapedAt: s.scrapedAt, status: s.status });
+    }
+  }
+  let min = Number.POSITIVE_INFINITY;
+  for (const v of latestByGroup.values()) {
+    if (v.status === 'sold_out') continue;
+    if (v.price < min) min = v.price;
+  }
+  return Number.isFinite(min) ? min : null;
+}
+
+function buildStackedItem(qData: QueryWithSnapshots): StackedItem {
+  return {
+    key: qData.query.id,
+    outboundDate: qData.query.dateFrom.toISOString().slice(0, 10),
+    currentPrice: currentPriceForSibling(qData),
+    node: renderRouteBlock(qData, true),
+  };
 }
 
 async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | null> {
@@ -180,8 +266,17 @@ export default async function ChartPage({ params }: Props) {
   }
 
   const isMultiRoute = allQueries.length > 1;
-  const expired = new Date() > primary.query.expiresAt;
-  const daysLeft = daysUntil(primary.query.expiresAt);
+  // Expiry is computed across the whole group so a partly-expired flex query
+  // (earliest sibling past its expiresAt but later siblings still active)
+  // keeps the tracker controls visible. The page-level countdown shows the
+  // *latest* expiresAt so the user sees the most generous remaining window.
+  const now = Date.now();
+  const groupExpiresAt = allQueries.reduce<Date>(
+    (max, q) => (q.query.expiresAt.getTime() > max.getTime() ? q.query.expiresAt : max),
+    primary.query.expiresAt,
+  );
+  const expired = allQueries.every((q) => now > q.query.expiresAt.getTime());
+  const daysLeft = daysUntil(groupExpiresAt);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -269,48 +364,16 @@ export default async function ChartPage({ params }: Props) {
 
       {expired ? (
         <div className={styles.expiredNotice}>
-          <p>This tracker expired on {formatDate(primary.query.expiresAt)}.</p>
+          <p>This tracker expired on {formatDate(groupExpiresAt)}.</p>
           <p>The data below is a snapshot of prices collected during the tracking period.</p>
         </div>
       ) : null}
 
-      {allQueries.map((qData) => (
-        <div key={qData.query.id} className={styles.routeBlock}>
-          {isMultiRoute && (
-            <div className={styles.routeBlockHeader}>
-              <span className={styles.routeBlockCode}>{qData.query.origin}</span>
-              <span className={styles.routeBlockArrow}>→</span>
-              <span className={styles.routeBlockCode}>{qData.query.destination}</span>
-              <span className={styles.routeBlockName}>
-                {qData.query.originName} to {qData.query.destinationName}
-              </span>
-            </div>
-          )}
-
-          <section className={styles.chart}>
-            <PriceChart snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
-            {qData.query.vpnCountries.length > 0 && !qData.snapshots.some((s) => s.vpnCountry) && (
-              <p className={styles.vpnPending}>
-                VPN comparison in progress -- prices from {qData.query.vpnCountries.map((c) =>
-                  String.fromCodePoint(...c.split('').map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) + ' ' + c
-                ).join(', ')} will appear after the next scrape
-              </p>
-            )}
-          </section>
-
-          <section className={styles.best}>
-            <BestPrice snapshots={qData.snapshots} />
-          </section>
-
-          <section className={styles.history}>
-            <PriceHistory snapshots={qData.snapshots} />
-          </section>
-
-          <section className={styles.calendar}>
-            <PriceCalendar snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
-          </section>
-        </div>
-      ))}
+      {isMultiRoute ? (
+        <StackedSortControls items={allQueries.map(buildStackedItem)} />
+      ) : (
+        renderRouteBlock(primary, false)
+      )}
 
       <div className={styles.footerMeta}>
         <div className={styles.footerRow}>
