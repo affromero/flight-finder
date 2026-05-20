@@ -12,6 +12,7 @@ import { ChartActions } from '@/components/ChartActions';
 import { PriceCalendar } from '@/components/PriceCalendar';
 import { Footer } from '@/components/Footer';
 import { StackedSortControls, type StackedItem } from '@/components/StackedSortControls';
+import { groupDateRange } from './group-date-range';
 import styles from './page.module.css';
 
 interface Props {
@@ -24,8 +25,23 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
   if (!query) return {};
 
+  // When the row is part of a flex group, every sibling stores a single
+  // pinned date, so the row's own dateFrom/dateTo span only one day. Fetch
+  // the siblings to surface the real travel window on the share card.
+  let dateFrom = query.dateFrom;
+  let dateTo = query.dateTo;
+  if (query.groupId) {
+    const siblings = await prisma.query.findMany({
+      where: { groupId: query.groupId },
+      select: { dateFrom: true, dateTo: true },
+    });
+    if (siblings.length > 0) {
+      ({ dateFrom, dateTo } = groupDateRange(siblings));
+    }
+  }
+
   const title = `${query.originName} to ${query.destinationName} Flight Prices`;
-  const dateRange = `${formatDate(query.dateFrom)} - ${formatDate(query.dateTo)}`;
+  const dateRange = `${formatDate(dateFrom)} - ${formatDate(dateTo)}`;
   const description = `Track ${query.origin} → ${query.destination} flight prices (${dateRange}). See price history, compare airlines, and book at the right moment.`;
 
   return {
@@ -266,14 +282,17 @@ export default async function ChartPage({ params }: Props) {
   }
 
   const isMultiRoute = allQueries.length > 1;
-  // Expiry is computed across the whole group so a partly-expired flex query
-  // (earliest sibling past its expiresAt but later siblings still active)
-  // keeps the tracker controls visible. The page-level countdown shows the
-  // *latest* expiresAt so the user sees the most generous remaining window.
+  // Expiry and the page-level date bubble both span the whole group. Each
+  // sibling in a flex group stores a single pinned date (dateFrom == dateTo),
+  // so reading the primary alone would show "Nov 7 - Nov 7" for a window
+  // that actually runs Nov 7 to Nov 11.
   const now = Date.now();
   const groupExpiresAt = allQueries.reduce<Date>(
     (max, q) => (q.query.expiresAt.getTime() > max.getTime() ? q.query.expiresAt : max),
     primary.query.expiresAt,
+  );
+  const { dateFrom: groupDateFrom, dateTo: groupDateTo } = groupDateRange(
+    allQueries.map((q) => q.query),
   );
   const expired = allQueries.every((q) => now > q.query.expiresAt.getTime());
   const daysLeft = daysUntil(groupExpiresAt);
@@ -316,7 +335,7 @@ export default async function ChartPage({ params }: Props) {
               <span>{primary.query.rawInput}</span>
             </div>
             <div className={styles.meta}>
-              <span>{formatDate(primary.query.dateFrom)} — {formatDate(primary.query.dateTo)}</span>
+              <span>{formatDate(groupDateFrom)} — {formatDate(groupDateTo)}</span>
               {primary.query.flexibility > 0 && (
                 <>
                   <span className={styles.sep}>·</span>
@@ -335,7 +354,7 @@ export default async function ChartPage({ params }: Props) {
             <div className={styles.meta}>
               <span>{primary.query.originName} to {primary.query.destinationName}</span>
               <span className={styles.sep}>·</span>
-              <span>{formatDate(primary.query.dateFrom)} — {formatDate(primary.query.dateTo)}</span>
+              <span>{formatDate(groupDateFrom)} — {formatDate(groupDateTo)}</span>
               {primary.query.flexibility > 0 && (
                 <>
                   <span className={styles.sep}>·</span>
