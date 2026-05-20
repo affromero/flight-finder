@@ -23,7 +23,7 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
   const extraDestinations = group.destinations.length - 1;
 
   const handleToggle = async () => {
-    await fetch(`/api/queries/${group.primaryId}`, {
+    await fetch(`/api/admin/queries/${group.primaryId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ active: !group.anyActive }),
@@ -35,7 +35,7 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
     const label = `${group.origin} → ${group.destination}`;
     const suffix = group.routeCount > 1 ? ` (${group.routeCount} charts)?` : '?';
     if (!confirm(`Delete tracker for ${label}${suffix}`)) return;
-    await fetch(`/api/queries/${group.primaryId}`, {
+    await fetch(`/api/admin/queries/${group.primaryId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ groupDelete: group.routeCount > 1 }),
@@ -45,7 +45,7 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
 
   const handleIntervalChange = async (e: React.ChangeEvent<HTMLSelectElement>) => {
     const value = e.target.value === '' ? null : Number(e.target.value);
-    await fetch(`/api/queries/${group.primaryId}`, {
+    await fetch(`/api/admin/queries/${group.primaryId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ scrapeInterval: value }),

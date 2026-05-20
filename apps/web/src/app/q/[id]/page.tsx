@@ -140,22 +140,25 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean) {
  * "Current price" per sibling = the lowest latest-scrape price across the
  * distinct flights that were scraped for this route. We group snapshots by
  * `flightId ?? airline`, keep the most recent `scrapedAt` per group, then
- * take the minimum across those latest snapshots. Returns null when the row
- * has no snapshots yet so the sort dropdown can push it to the bottom in
- * "lowest price first" mode.
+ * take the minimum across those latest snapshots. Sold-out flights are
+ * excluded so the price sort can't rank a row by an unavailable fare
+ * (matches the bookable filter used in BestPrice). Returns null when the
+ * row has no available snapshots so the sort dropdown can push it to the
+ * bottom in "lowest price first" mode.
  */
 function currentPriceForSibling(qData: QueryWithSnapshots): number | null {
   if (qData.snapshots.length === 0) return null;
-  const latestByGroup = new Map<string, { price: number; scrapedAt: string }>();
+  const latestByGroup = new Map<string, { price: number; scrapedAt: string; status: string }>();
   for (const s of qData.snapshots) {
     const key = s.flightId ?? s.airline;
     const existing = latestByGroup.get(key);
     if (!existing || s.scrapedAt > existing.scrapedAt) {
-      latestByGroup.set(key, { price: s.price, scrapedAt: s.scrapedAt });
+      latestByGroup.set(key, { price: s.price, scrapedAt: s.scrapedAt, status: s.status });
     }
   }
   let min = Number.POSITIVE_INFINITY;
   for (const v of latestByGroup.values()) {
+    if (v.status === 'sold_out') continue;
     if (v.price < min) min = v.price;
   }
   return Number.isFinite(min) ? min : null;
@@ -263,8 +266,17 @@ export default async function ChartPage({ params }: Props) {
   }
 
   const isMultiRoute = allQueries.length > 1;
-  const expired = new Date() > primary.query.expiresAt;
-  const daysLeft = daysUntil(primary.query.expiresAt);
+  // Expiry is computed across the whole group so a partly-expired flex query
+  // (earliest sibling past its expiresAt but later siblings still active)
+  // keeps the tracker controls visible. The page-level countdown shows the
+  // *latest* expiresAt so the user sees the most generous remaining window.
+  const now = Date.now();
+  const groupExpiresAt = allQueries.reduce<Date>(
+    (max, q) => (q.query.expiresAt.getTime() > max.getTime() ? q.query.expiresAt : max),
+    primary.query.expiresAt,
+  );
+  const expired = allQueries.every((q) => now > q.query.expiresAt.getTime());
+  const daysLeft = daysUntil(groupExpiresAt);
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -352,7 +364,7 @@ export default async function ChartPage({ params }: Props) {
 
       {expired ? (
         <div className={styles.expiredNotice}>
-          <p>This tracker expired on {formatDate(primary.query.expiresAt)}.</p>
+          <p>This tracker expired on {formatDate(groupExpiresAt)}.</p>
           <p>The data below is a snapshot of prices collected during the tracking period.</p>
         </div>
       ) : null}
