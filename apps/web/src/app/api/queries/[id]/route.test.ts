@@ -3,6 +3,7 @@ import { NextRequest } from 'next/server';
 
 const mockQueryFindUnique = vi.fn();
 const mockQueryDelete = vi.fn();
+const mockQueryDeleteMany = vi.fn();
 const mockQueryFindMany = vi.fn();
 const mockQueryUpdateMany = vi.fn();
 
@@ -11,6 +12,7 @@ vi.mock('@/lib/prisma', () => ({
     query: {
       findUnique: (...args: unknown[]) => mockQueryFindUnique(...args),
       delete: (...args: unknown[]) => mockQueryDelete(...args),
+      deleteMany: (...args: unknown[]) => mockQueryDeleteMany(...args),
       findMany: (...args: unknown[]) => mockQueryFindMany(...args),
       updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args),
     },
@@ -45,6 +47,7 @@ describe('DELETE /api/queries/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockQueryDelete.mockResolvedValue({});
+    mockQueryDeleteMany.mockResolvedValue({ count: 0 });
     mockIsMultiUserEnabled.mockResolvedValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
     delete process.env.SELF_HOSTED;
@@ -165,6 +168,69 @@ describe('DELETE /api/queries/[id]', () => {
       expect(res.status).toBe(403);
     });
   });
+
+  describe('groupDelete', () => {
+    it('deletes all siblings via deleteMany when groupDelete=true (hosted)', async () => {
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: null });
+      mockQueryDeleteMany.mockResolvedValue({ count: 3 });
+      const res = await DELETE(...makeDeleteRequest('q1', { deleteToken: 'real-token', groupDelete: true }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toEqual({ deleted: true, groupDeleted: true, count: 3 });
+      expect(mockQueryDeleteMany).toHaveBeenCalledWith({ where: { groupId: 'g1' } });
+      expect(mockQueryDelete).not.toHaveBeenCalled();
+    });
+
+    it('rejects groupDelete with wrong token (hosted, no deleteMany call)', async () => {
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: null });
+      const res = await DELETE(...makeDeleteRequest('q1', { deleteToken: 'wrong', groupDelete: true }));
+      expect(res.status).toBe(403);
+      expect(mockQueryDeleteMany).not.toHaveBeenCalled();
+      expect(mockQueryDelete).not.toHaveBeenCalled();
+    });
+
+    it('admin can groupDelete without token in multi user mode', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockIsMultiUserEnabled.mockResolvedValue(true);
+      mockGetCurrentUser.mockResolvedValue({ id: 'admin_1', isAdmin: true });
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: 'someone_else' });
+      mockQueryDeleteMany.mockResolvedValue({ count: 2 });
+      const res = await DELETE(...makeDeleteRequest('q1', { groupDelete: true }));
+      expect(res.status).toBe(200);
+      expect(mockQueryDeleteMany).toHaveBeenCalledWith({ where: { groupId: 'g1' } });
+    });
+
+    it('owner can groupDelete via user session in multi user mode', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockIsMultiUserEnabled.mockResolvedValue(true);
+      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: 'user_1' });
+      mockQueryDeleteMany.mockResolvedValue({ count: 4 });
+      const res = await DELETE(...makeDeleteRequest('q1', { groupDelete: true }));
+      expect(res.status).toBe(200);
+      expect(mockQueryDeleteMany).toHaveBeenCalledWith({ where: { groupId: 'g1' } });
+    });
+
+    it('falls back to single-row delete when groupId is null even if groupDelete=true', async () => {
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: null, userId: null });
+      const res = await DELETE(...makeDeleteRequest('q1', { deleteToken: 'real-token', groupDelete: true }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toEqual({ deleted: true, groupDeleted: false });
+      expect(mockQueryDelete).toHaveBeenCalledWith({ where: { id: 'q1' } });
+      expect(mockQueryDeleteMany).not.toHaveBeenCalled();
+    });
+
+    it('single-row delete still works when groupDelete omitted on a grouped row', async () => {
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: null });
+      const res = await DELETE(...makeDeleteRequest('q1', { deleteToken: 'real-token' }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toEqual({ deleted: true, groupDeleted: false });
+      expect(mockQueryDelete).toHaveBeenCalledWith({ where: { id: 'q1' } });
+      expect(mockQueryDeleteMany).not.toHaveBeenCalled();
+    });
+  });
 });
 
 function makePatchRequest(id: string, body: Record<string, unknown>): [NextRequest, { params: Promise<{ id: string }> }] {
@@ -220,5 +286,73 @@ describe('PATCH /api/queries/[id]', () => {
     mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null });
     const res = await PATCH(...makePatchRequest('q1', { scrapeInterval: 99 }));
     expect(res.status).toBe(400);
+  });
+
+  it('rejects empty body (no updatable fields)', async () => {
+    process.env.SELF_HOSTED = 'true';
+    mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null });
+    const res = await PATCH(...makePatchRequest('q1', {}));
+    const data = await res.json();
+    expect(res.status).toBe(400);
+    expect(data.error).toContain('No updatable fields');
+  });
+
+  describe('active toggle', () => {
+    it('updates active with valid token (hosted) and cascades by groupId', async () => {
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: null });
+      mockQueryFindMany.mockResolvedValue([{ id: 'q2' }, { id: 'q3' }]);
+      mockQueryUpdateMany.mockResolvedValue({ count: 3 });
+      const res = await PATCH(...makePatchRequest('q1', { deleteToken: 'real-token', active: false }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toMatchObject({ active: false, updated: 3 });
+      expect(mockQueryUpdateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['q1', 'q2', 'q3'] } },
+        data: { active: false },
+      });
+    });
+
+    it('updates active without cascade when groupId is null', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { active: true }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toMatchObject({ active: true, updated: 1 });
+      expect(mockQueryUpdateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['q1'] } },
+        data: { active: true },
+      });
+    });
+
+    it('rejects non-boolean active', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { active: 'yes' }));
+      const data = await res.json();
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('active');
+    });
+
+    it('updates both scrapeInterval and active in one call', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
+      mockQueryFindMany.mockResolvedValue([{ id: 'q2' }]);
+      const res = await PATCH(...makePatchRequest('q1', { scrapeInterval: 3, active: true }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toMatchObject({ scrapeInterval: 3, active: true, updated: 2 });
+      expect(mockQueryUpdateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['q1', 'q2'] } },
+        data: { scrapeInterval: 3, active: true },
+      });
+    });
+
+    it('rejects active toggle without token (hosted)', async () => {
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { active: false }));
+      expect(res.status).toBe(401);
+      expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+    });
   });
 });
