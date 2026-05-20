@@ -1,5 +1,15 @@
 # Changelog
 
+## [0.7.1] - 2026-05-20
+
+### Added
+- **Unified tracking link and per chart dates for flex queries** (#78): flex (`flex=N`) and multi route searches used to fan out into 10 or 20 sibling rows in every dashboard, and the stacked chart page omitted the date on every block past the page header. The dashboard surfaces (`SavedTrackers`, `/account`, `/admin/queries`) now collapse siblings by the `groupId` the create handler was already stamping, rendering one card per query with a `N charts` chip when the group has more than one date and a `+ N more` tail when it spans multiple destinations. Every chart block on `/q/[id]` now reads its own outbound date (plus return date for round trips) next to the route header. New sort dropdown on the stacked view orders by ascending date (default) or lowest current price first, skipping sold out flights so a stale snapshot can't rank a route as cheapest. View, pause, and delete from any dashboard operate on the whole group. New `lib/query-grouping.ts` helper plus 11 unit tests; new cascade and `groupDelete` coverage on both `/api/queries/[id]` and `/api/admin/queries/[id]`.
+
+### Fixed
+- **`/api/queries/[id]` PATCH only updated `scrapeInterval`** (#78): the handler ignored an `active` body field, so a future "pause group" UX would have silently broken. PATCH now accepts an `active` boolean and cascades it to every sibling sharing the row's `groupId`, the same way `scrapeInterval` already did. Blank body 400s rather than no-op'ing. Admin PATCH on `/api/admin/queries/[id]` gained the matching cascade (active, scrapeInterval, maxDurationHours); `userId` reassignment stays single row.
+- **`SavedTrackers` pause hit the admin route** (#78): the landing page pause button used to fetch `/api/admin/queries/[id]`, which 401s for anonymous and non admin users. Now it hits the user PATCH route with the primary's `deleteToken` (or the user/admin session) and uses the new cascade so every sibling flips together.
+- **Stacked chart page reported group expired when only the earliest sibling had passed** (#78): `expired` was derived from the primary sibling alone, but `primaryId` is the earliest sibling by `dateFrom`, so on a per date flex group the earliest can be in the past while later siblings are still active. Page level `expired` now uses `allQueries.every(q => now > q.expiresAt)` and the countdown surfaces the latest `expiresAt`.
+
 ## [0.7.0] - 2026-05-14
 
 ### Added
