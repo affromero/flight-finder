@@ -2,7 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
-import { getSavedTrackers, getDeleteToken, removeSavedTracker } from '@/lib/tracker-storage';
+import { getSavedTrackers, getDeleteToken, removeSavedTracker, type SavedTracker } from '@/lib/tracker-storage';
+import { groupQueries, type GroupableQuery, type QueryGroup } from '@/lib/query-grouping';
 import styles from './SavedTrackers.module.css';
 
 interface ActiveQuery {
@@ -21,14 +22,13 @@ interface ActiveQuery {
   createdAt: string;
 }
 
-interface DisplayTracker {
-  id: string;
-  origin: string;
-  destination: string;
-  dateFrom: string;
-  dateTo: string;
-  snapshotCount: number;
-  lastScrapedAt: string | null;
+interface DisplayQuery extends GroupableQuery {
+  status: 'active' | 'paused' | 'expired' | 'deleted';
+  hasDeleteToken: boolean;
+}
+
+interface DisplayGroup {
+  group: QueryGroup<DisplayQuery>;
   status: 'active' | 'paused' | 'expired' | 'deleted';
   hasDeleteToken: boolean;
 }
@@ -51,15 +51,33 @@ function timeAgo(iso: string): string {
   return `${days}d ago`;
 }
 
+function deriveGroupStatus(group: QueryGroup<DisplayQuery>): DisplayGroup['status'] {
+  // If every sibling is "deleted" upstream (only happens in the localStorage
+  // fallback path) → group is deleted. Otherwise prefer active over paused
+  // over expired so a partly-active group keeps the tracking badge.
+  if (group.queries.every((q) => q.status === 'deleted')) return 'deleted';
+  if (group.queries.some((q) => q.status === 'active')) return 'active';
+  if (group.queries.some((q) => q.status === 'paused')) return 'paused';
+  return 'expired';
+}
+
+function toDisplayGroups(queries: DisplayQuery[]): DisplayGroup[] {
+  return groupQueries(queries).map((group) => ({
+    group,
+    status: deriveGroupStatus(group),
+    hasDeleteToken: group.queries.some((q) => q.hasDeleteToken),
+  }));
+}
+
 export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: boolean } = {}) {
-  const [trackers, setTrackers] = useState<DisplayTracker[]>([]);
+  const [groups, setGroups] = useState<DisplayGroup[]>([]);
 
   useEffect(() => {
     // In multi user mode the server response is authoritative for the current
     // user — localStorage fallback only made sense in the deleteToken era.
     const localTrackers = isAuthenticated ? [] : getSavedTrackers();
-    const deleteTokenMap = new Map(
-      localTrackers.filter((t) => t.deleteToken).map((t) => [t.id, t.deleteToken!])
+    const deleteTokenSet = new Set(
+      localTrackers.filter((t) => t.deleteToken).map((t) => t.id)
     );
 
     // Fetch all active queries from server
@@ -68,7 +86,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
       .then((data) => {
         if (!data.ok || !data.data?.queries) {
           if (isAuthenticated) {
-            setTrackers([]);
+            setGroups([]);
             return;
           }
           fallbackToLocal(localTrackers);
@@ -80,29 +98,34 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
         if (serverQueries.length > 0 || isAuthenticated) {
           // Server response is authoritative when logged in. Solo/anonymous
           // still gets the localStorage merge for backward compat.
-          const display: DisplayTracker[] = serverQueries.map((q) => ({
+          const display: DisplayQuery[] = serverQueries.map((q) => ({
             id: q.id,
             origin: q.origin,
             destination: q.destination,
+            originName: q.originName,
+            destinationName: q.destinationName,
             dateFrom: q.dateFrom,
             dateTo: q.dateTo,
+            groupId: q.groupId,
+            active: q.active,
+            createdAt: q.createdAt,
             snapshotCount: q.snapshotCount,
             lastScrapedAt: q.lastScrapedAt,
             status: q.active ? 'active' : 'paused',
-            hasDeleteToken: deleteTokenMap.has(q.id),
+            hasDeleteToken: deleteTokenSet.has(q.id),
           }));
-          setTrackers(display);
+          setGroups(toDisplayGroups(display));
         } else {
           // No server queries — fall back to localStorage
           fallbackToLocal(localTrackers);
         }
       })
       .catch(() => {
-        if (isAuthenticated) setTrackers([]);
+        if (isAuthenticated) setGroups([]);
         else fallbackToLocal(localTrackers);
       });
 
-    function fallbackToLocal(saved: typeof localTrackers) {
+    function fallbackToLocal(saved: SavedTracker[]) {
       if (saved.length === 0) return;
       fetch('/api/queries/status', {
         method: 'POST',
@@ -113,41 +136,56 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
         .then((data) => {
           if (!data.ok) return;
           const statusMap = data.data as Record<string, 'active' | 'expired' | 'deleted'>;
-          setTrackers(
-            saved.map((t) => ({
-              id: t.id,
-              origin: t.origin,
-              destination: t.destination,
-              dateFrom: t.dateFrom,
-              dateTo: t.dateTo,
-              snapshotCount: 0,
-              lastScrapedAt: null,
-              status: statusMap[t.id] ?? 'deleted',
-              hasDeleteToken: Boolean(t.deleteToken),
-            }))
-          );
+          const display: DisplayQuery[] = saved.map((t) => ({
+            id: t.id,
+            origin: t.origin,
+            destination: t.destination,
+            originName: t.originName,
+            destinationName: t.destinationName,
+            dateFrom: t.dateFrom,
+            dateTo: t.dateTo,
+            groupId: null,
+            createdAt: t.createdAt,
+            snapshotCount: 0,
+            lastScrapedAt: null,
+            status: statusMap[t.id] ?? 'deleted',
+            hasDeleteToken: Boolean(t.deleteToken),
+          }));
+          setGroups(toDisplayGroups(display));
         })
         .catch(() => {
-          setTrackers(
-            saved.map((t) => ({
-              ...t,
-              snapshotCount: 0,
-              lastScrapedAt: null,
-              status: 'active' as const,
-              hasDeleteToken: Boolean(t.deleteToken),
-            }))
-          );
+          const display: DisplayQuery[] = saved.map((t) => ({
+            id: t.id,
+            origin: t.origin,
+            destination: t.destination,
+            originName: t.originName,
+            destinationName: t.destinationName,
+            dateFrom: t.dateFrom,
+            dateTo: t.dateTo,
+            groupId: null,
+            createdAt: t.createdAt,
+            snapshotCount: 0,
+            lastScrapedAt: null,
+            status: 'active',
+            hasDeleteToken: Boolean(t.deleteToken),
+          }));
+          setGroups(toDisplayGroups(display));
         });
     }
   }, [isAuthenticated]);
 
-  const handleRemove = async (id: string) => {
-    const token = getDeleteToken(id);
+  const handleRemove = async (entry: DisplayGroup) => {
+    const { group } = entry;
+    const label = `${group.origin} → ${group.destination}`;
+    const suffix = group.routeCount > 1 ? ` (${group.routeCount} charts)` : '';
+    if (!confirm(`Delete tracker for ${label}${suffix}?`)) return;
+
+    const token = getDeleteToken(group.primaryId);
     try {
-      const res = await fetch(`/api/queries/${id}`, {
+      const res = await fetch(`/api/queries/${group.primaryId}`, {
         method: 'DELETE',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deleteToken: token }),
+        body: JSON.stringify({ deleteToken: token, groupDelete: group.routeCount > 1 }),
       });
       const data = await res.json();
       if (!data.ok) {
@@ -157,27 +195,47 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
     } catch {
       // Network error -- still remove from local view
     }
-    removeSavedTracker(id);
-    setTrackers((prev) => prev.filter((t) => t.id !== id));
+    for (const q of group.queries) {
+      removeSavedTracker(q.id);
+    }
+    setGroups((prev) => prev.filter((g) => g.group.primaryId !== group.primaryId));
   };
 
-  const handleTogglePause = async (id: string, currentlyActive: boolean) => {
-    const res = await fetch(`/api/admin/queries/${id}`, {
+  const handleTogglePause = async (entry: DisplayGroup) => {
+    const { group } = entry;
+    const currentlyActive = entry.status === 'active';
+    const nextActive = !currentlyActive;
+    const token = getDeleteToken(group.primaryId);
+    const res = await fetch(`/api/queries/${group.primaryId}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ active: !currentlyActive }),
+      body: JSON.stringify({ deleteToken: token, active: nextActive }),
     });
     const data = await res.json();
-    if (data.ok) {
-      setTrackers((prev) =>
-        prev.map((t) =>
-          t.id === id ? { ...t, status: currentlyActive ? 'paused' : 'active' } : t
-        )
-      );
-    }
+    if (!data.ok) return;
+    setGroups((prev) =>
+      prev.map((g) =>
+        g.group.primaryId !== group.primaryId
+          ? g
+          : {
+              ...g,
+              status: nextActive ? 'active' : 'paused',
+              group: {
+                ...g.group,
+                anyActive: nextActive,
+                anyPaused: !nextActive,
+                queries: g.group.queries.map((q) => ({
+                  ...q,
+                  active: nextActive,
+                  status: nextActive ? 'active' : 'paused',
+                })),
+              },
+            }
+      )
+    );
   };
 
-  if (trackers.length === 0) {
+  if (groups.length === 0) {
     return (
       <div className={styles.root}>
         <div className={styles.empty}>
@@ -193,75 +251,90 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
     <div className={styles.root}>
       <h3 className={styles.title}>Your Trackers</h3>
       <div className={styles.list}>
-        {trackers.map((t) => (
-          <div key={t.id} className={styles.card}>
-            <button
-              className={styles.remove}
-              onClick={() => handleRemove(t.id)}
-              title="Remove"
-              aria-label="Remove tracker"
-            >
-              &times;
-            </button>
+        {groups.map((entry) => {
+          const { group, status } = entry;
+          const extraDestinations = group.destinations.length - 1;
+          return (
+            <div key={group.primaryId} className={styles.card}>
+              <button
+                className={styles.remove}
+                onClick={() => handleRemove(entry)}
+                title="Remove"
+                aria-label="Remove tracker"
+              >
+                &times;
+              </button>
 
-            {t.status === 'deleted' ? (
-              <div className={styles.content}>
-                <div className={styles.route}>
-                  <span className={styles.code}>{t.origin}</span>
-                  <span className={styles.arrow}>&rarr;</span>
-                  <span className={styles.code}>{t.destination}</span>
-                </div>
-                <span className={`${styles.badge} ${styles.badgeDeleted}`}>Unavailable</span>
-              </div>
-            ) : (
-              <Link href={`/q/${t.id}`} className={styles.link}>
+              {status === 'deleted' ? (
                 <div className={styles.content}>
                   <div className={styles.route}>
-                    <span className={styles.code}>{t.origin}</span>
+                    <span className={styles.code}>{group.origin}</span>
                     <span className={styles.arrow}>&rarr;</span>
-                    <span className={styles.code}>{t.destination}</span>
-                  </div>
-                  <span className={styles.dates}>
-                    {formatDate(t.dateFrom)} &mdash; {formatDate(t.dateTo)}
-                  </span>
-                  <div className={styles.meta}>
-                    {t.snapshotCount > 0 && (
-                      <span className={styles.snapshots}>
-                        {t.snapshotCount} price{t.snapshotCount !== 1 ? 's' : ''}
-                      </span>
-                    )}
-                    {t.lastScrapedAt && (
-                      <span className={styles.lastScrape}>
-                        {timeAgo(t.lastScrapedAt)}
-                      </span>
+                    <span className={styles.code}>{group.destination}</span>
+                    {extraDestinations > 0 && (
+                      <span className={styles.dates}>+ {extraDestinations} more</span>
                     )}
                   </div>
-                  <div className={styles.cardActions}>
-                    <span className={`${styles.badge} ${
-                      t.status === 'active' ? styles.badgeActive
-                        : t.status === 'paused' ? styles.badgePaused
-                        : styles.badgeExpired
-                    }`}>
-                      {t.status === 'active' ? 'Tracking' : t.status === 'paused' ? 'Paused' : 'Expired'}
-                    </span>
-                    {(t.status === 'active' || t.status === 'paused') && (
-                      <button
-                        className={styles.pauseBtn}
-                        onClick={(e) => {
-                          e.preventDefault();
-                          handleTogglePause(t.id, t.status === 'active');
-                        }}
-                        title={t.status === 'active' ? 'Pause tracking' : 'Resume tracking'}
-                      >
-                        {t.status === 'active' ? '⏸' : '▶'}
-                      </button>
-                    )}
-                  </div>
+                  <span className={`${styles.badge} ${styles.badgeDeleted}`}>Unavailable</span>
                 </div>
-              </Link>
-            )}
-          </div>
-        ))}
+              ) : (
+                <Link href={`/q/${group.primaryId}`} className={styles.link}>
+                  <div className={styles.content}>
+                    <div className={styles.route}>
+                      <span className={styles.code}>{group.origin}</span>
+                      <span className={styles.arrow}>&rarr;</span>
+                      <span className={styles.code}>{group.destination}</span>
+                      {extraDestinations > 0 && (
+                        <span className={styles.dates}>+ {extraDestinations} more</span>
+                      )}
+                    </div>
+                    <span className={styles.dates}>
+                      {formatDate(group.dateFrom)} &mdash; {formatDate(group.dateTo)}
+                    </span>
+                    <div className={styles.meta}>
+                      {group.routeCount > 1 && (
+                        <span className={styles.snapshots}>
+                          {group.routeCount} charts
+                        </span>
+                      )}
+                      {group.snapshotCount > 0 && (
+                        <span className={styles.snapshots}>
+                          {group.snapshotCount} price{group.snapshotCount !== 1 ? 's' : ''}
+                        </span>
+                      )}
+                      {group.lastScrapedAt && (
+                        <span className={styles.lastScrape}>
+                          {timeAgo(group.lastScrapedAt)}
+                        </span>
+                      )}
+                    </div>
+                    <div className={styles.cardActions}>
+                      <span className={`${styles.badge} ${
+                        status === 'active' ? styles.badgeActive
+                          : status === 'paused' ? styles.badgePaused
+                          : styles.badgeExpired
+                      }`}>
+                        {status === 'active' ? 'Tracking' : status === 'paused' ? 'Paused' : 'Expired'}
+                      </span>
+                      {(status === 'active' || status === 'paused') && (
+                        <button
+                          className={styles.pauseBtn}
+                          onClick={(e) => {
+                            e.preventDefault();
+                            handleTogglePause(entry);
+                          }}
+                          title={status === 'active' ? 'Pause tracking' : 'Resume tracking'}
+                        >
+                          {status === 'active' ? '⏸' : '▶'}
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                </Link>
+              )}
+            </div>
+          );
+        })}
       </div>
     </div>
   );
