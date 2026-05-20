@@ -131,7 +131,7 @@
 
 .routeBlockHeader {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 0.5rem;
   flex-wrap: wrap;
 }
@@ -153,6 +153,14 @@
   font-size: 0.875rem;
   color: var(--text-secondary);
   margin-left: 0.5rem;
+}
+
+.routeBlockDate {
+  margin-left: auto;
+  font-family: var(--font-mono);
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  letter-spacing: 0.02em;
 }
 
 /* Sections */

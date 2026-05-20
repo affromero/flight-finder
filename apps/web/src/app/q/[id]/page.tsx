@@ -56,6 +56,7 @@ interface QueryWithSnapshots {
     dateFrom: Date;
     dateTo: Date;
     flexibility: number;
+    tripType: string;
     expiresAt: Date;
     createdAt: Date;
     firstViewedAt: Date | null;
@@ -274,43 +275,52 @@ export default async function ChartPage({ params }: Props) {
         </div>
       ) : null}
 
-      {allQueries.map((qData) => (
-        <div key={qData.query.id} className={styles.routeBlock}>
-          {isMultiRoute && (
-            <div className={styles.routeBlockHeader}>
-              <span className={styles.routeBlockCode}>{qData.query.origin}</span>
-              <span className={styles.routeBlockArrow}>→</span>
-              <span className={styles.routeBlockCode}>{qData.query.destination}</span>
-              <span className={styles.routeBlockName}>
-                {qData.query.originName} to {qData.query.destinationName}
-              </span>
-            </div>
-          )}
+      {allQueries.map((qData) => {
+        const isRoundTrip = qData.query.tripType === 'round_trip';
+        const hasDistinctReturn = qData.query.dateFrom.getTime() < qData.query.dateTo.getTime();
+        const dateLabel = isRoundTrip && hasDistinctReturn
+          ? `${formatDate(qData.query.dateFrom)} → ${formatDate(qData.query.dateTo)}`
+          : formatDate(qData.query.dateFrom);
 
-          <section className={styles.chart}>
-            <PriceChart snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
-            {qData.query.vpnCountries.length > 0 && !qData.snapshots.some((s) => s.vpnCountry) && (
-              <p className={styles.vpnPending}>
-                VPN comparison in progress -- prices from {qData.query.vpnCountries.map((c) =>
-                  String.fromCodePoint(...c.split('').map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) + ' ' + c
-                ).join(', ')} will appear after the next scrape
-              </p>
+        return (
+          <div key={qData.query.id} className={styles.routeBlock}>
+            {isMultiRoute && (
+              <div className={styles.routeBlockHeader}>
+                <span className={styles.routeBlockCode}>{qData.query.origin}</span>
+                <span className={styles.routeBlockArrow}>→</span>
+                <span className={styles.routeBlockCode}>{qData.query.destination}</span>
+                <span className={styles.routeBlockName}>
+                  {qData.query.originName} to {qData.query.destinationName}
+                </span>
+                <span className={styles.routeBlockDate}>{dateLabel}</span>
+              </div>
             )}
-          </section>
 
-          <section className={styles.best}>
-            <BestPrice snapshots={qData.snapshots} />
-          </section>
+            <section className={styles.chart}>
+              <PriceChart snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
+              {qData.query.vpnCountries.length > 0 && !qData.snapshots.some((s) => s.vpnCountry) && (
+                <p className={styles.vpnPending}>
+                  VPN comparison in progress -- prices from {qData.query.vpnCountries.map((c) =>
+                    String.fromCodePoint(...c.split('').map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) + ' ' + c
+                  ).join(', ')} will appear after the next scrape
+                </p>
+              )}
+            </section>
 
-          <section className={styles.history}>
-            <PriceHistory snapshots={qData.snapshots} />
-          </section>
+            <section className={styles.best}>
+              <BestPrice snapshots={qData.snapshots} />
+            </section>
 
-          <section className={styles.calendar}>
-            <PriceCalendar snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
-          </section>
-        </div>
-      ))}
+            <section className={styles.history}>
+              <PriceHistory snapshots={qData.snapshots} />
+            </section>
+
+            <section className={styles.calendar}>
+              <PriceCalendar snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
+            </section>
+          </div>
+        );
+      })}
 
       <div className={styles.footerMeta}>
         <div className={styles.footerRow}>
