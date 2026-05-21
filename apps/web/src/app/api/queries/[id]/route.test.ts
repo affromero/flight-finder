@@ -30,6 +30,16 @@ vi.mock('@/lib/user-auth', () => ({
   getCurrentUser: () => mockGetCurrentUser(),
 }));
 
+// After authorizeMutation moved to @/lib/query-auth, every hosted mode path
+// calls getSessionToken() -> cookies() from next/headers. Without this mock
+// jsdom-less Vitest blows up the moment authorizeMutation is invoked.
+const mockGetSessionToken = vi.fn().mockResolvedValue(undefined);
+const mockVerifySessionToken = vi.fn().mockReturnValue(false);
+vi.mock('@/lib/admin-auth', () => ({
+  getSessionToken: () => mockGetSessionToken(),
+  verifySessionToken: (token: string) => mockVerifySessionToken(token),
+}));
+
 import { DELETE, PATCH } from './route';
 
 function makeDeleteRequest(id: string, body?: Record<string, unknown>): [NextRequest, { params: Promise<{ id: string }> }] {
@@ -123,6 +133,24 @@ describe('DELETE /api/queries/[id]', () => {
     mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token' });
     const res = await DELETE(...makeDeleteRequest('q1', {}));
     expect(res.status).toBe(401);
+  });
+
+  it('hosted mode: legacy admin session cookie authorizes without a token', async () => {
+    mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token' });
+    mockGetSessionToken.mockResolvedValueOnce('admin:1234.abc');
+    mockVerifySessionToken.mockReturnValueOnce(true);
+    const res = await DELETE(...makeDeleteRequest('q1', {}));
+    expect(res.status).toBe(200);
+    expect(mockQueryDelete).toHaveBeenCalledWith({ where: { id: 'q1' } });
+  });
+
+  it('hosted mode: invalid admin session falls through to token check', async () => {
+    mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token' });
+    mockGetSessionToken.mockResolvedValueOnce('admin:1234.deadbeef');
+    mockVerifySessionToken.mockReturnValueOnce(false);
+    const res = await DELETE(...makeDeleteRequest('q1', {}));
+    expect(res.status).toBe(401);
+    expect(mockQueryDelete).not.toHaveBeenCalled();
   });
 
   describe('self hosted multi user mode', () => {
