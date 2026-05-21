@@ -2,6 +2,9 @@
 
 import { useRouter } from 'next/navigation';
 import { type QueryGroup, type GroupableQuery } from '@/lib/query-grouping';
+import { aggregateScrapeStatus } from '@/lib/scrape-status';
+import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
+import { ForceScrapeButton } from '@/components/ForceScrapeButton';
 import styles from './page.module.css';
 
 export interface AdminQuery extends GroupableQuery {
@@ -10,6 +13,8 @@ export interface AdminQuery extends GroupableQuery {
   scrapeInterval: number | null;
   snapshotCount: number;
   runCount: number;
+  scrapeStatus: string | null;
+  scrapeError: string | null;
 }
 
 function formatDate(iso: string): string {
@@ -21,6 +26,13 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
   const expired = group.allExpired;
   const runCount = group.queries.reduce((sum, q) => sum + q.runCount, 0);
   const extraDestinations = group.destinations.length - 1;
+  const aggregate = aggregateScrapeStatus(
+    group.queries.map((q) => ({
+      status: q.scrapeStatus,
+      error: q.scrapeError,
+      startedAt: q.lastScrapedAt ?? null,
+    })),
+  );
 
   const handleToggle = async () => {
     await fetch(`/api/admin/queries/${group.primaryId}`, {
@@ -67,6 +79,11 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
         )}
       </div>
       <div className={styles.rowMeta}>
+        <ScrapeStatusDot
+          status={aggregate.status}
+          error={aggregate.error}
+          lastScrapedAt={aggregate.startedAt}
+        />
         <span>{formatDate(group.dateFrom)} — {formatDate(group.dateTo)}</span>
         <span className={styles.rowSep}>·</span>
         <span>{group.snapshotCount} snapshots</span>
@@ -86,6 +103,13 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
           <option value={12}>Every 12h</option>
           <option value={24}>Every 24h</option>
         </select>
+        {group.anyActive && !expired && (
+          <ForceScrapeButton
+            queryId={group.primaryId}
+            onScraped={(result) => { if (result.accepted) router.refresh(); }}
+            ariaLabel="Refresh prices now"
+          />
+        )}
         <button
           className={group.anyActive ? styles.pauseButton : styles.resumeButton}
           onClick={handleToggle}

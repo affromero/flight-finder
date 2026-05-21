@@ -12,6 +12,9 @@ import { ChartActions } from '@/components/ChartActions';
 import { PriceCalendar } from '@/components/PriceCalendar';
 import { Footer } from '@/components/Footer';
 import { StackedSortControls, type StackedItem } from '@/components/StackedSortControls';
+import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
+import { ForceScrapeButton } from '@/components/ForceScrapeButton';
+import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { groupDateRange } from './group-date-range';
 import styles from './page.module.css';
 
@@ -74,6 +77,7 @@ interface QueryWithSnapshots {
     dateTo: Date;
     flexibility: number;
     tripType: string;
+    active: boolean;
     expiresAt: Date;
     createdAt: Date;
     firstViewedAt: Date | null;
@@ -101,7 +105,7 @@ interface QueryWithSnapshots {
     vpnCountry: string | null;
     scrapedAt: string;
   }>;
-  lastRun: { startedAt: Date } | null;
+  lastRun: { startedAt: Date; status: string; error: string | null } | null;
   globalScrapeInterval: number;
 }
 
@@ -220,7 +224,7 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
   const lastRun = await prisma.fetchRun.findFirst({
     where: { queryId: id },
     orderBy: { startedAt: 'desc' },
-    select: { startedAt: true },
+    select: { startedAt: true, status: true, error: true },
   });
 
   const globalConfig = await prisma.extractionConfig.findFirst({
@@ -296,6 +300,13 @@ export default async function ChartPage({ params }: Props) {
   );
   const expired = allQueries.every((q) => now > q.query.expiresAt.getTime());
   const daysLeft = daysUntil(groupExpiresAt);
+  const scrapeAggregate = aggregateScrapeStatus(
+    allQueries.map((q) => ({
+      status: q.lastRun?.status ?? null,
+      error: q.lastRun?.error ?? null,
+      startedAt: q.lastRun?.startedAt.toISOString() ?? null,
+    })),
+  );
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -397,6 +408,11 @@ export default async function ChartPage({ params }: Props) {
       <div className={styles.footerMeta}>
         <div className={styles.footerRow}>
           <p className={styles.footerText}>
+            <ScrapeStatusDot
+              status={scrapeAggregate.status}
+              error={scrapeAggregate.error}
+              lastScrapedAt={scrapeAggregate.startedAt}
+            />
             Tracked since {formatDate(primary.query.createdAt)}
             {allQueries[0]?.lastRun && ` · Last checked ${timeAgo(allQueries[0].lastRun.startedAt)}`}
             {allQueries[0]?.lastRun && !expired && ` · Next check in ~${primary.query.scrapeInterval ?? primary.globalScrapeInterval}h`}
@@ -404,6 +420,9 @@ export default async function ChartPage({ params }: Props) {
           </p>
           {!expired && (
             <>
+              {primary.query.active && (
+                <ForceScrapeButton queryId={id} ariaLabel="Refresh prices now" />
+              )}
               <ScrapeInterval queryId={id} currentInterval={primary.query.scrapeInterval} />
               <DeleteTracker queryId={id} />
             </>

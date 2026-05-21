@@ -4,6 +4,9 @@ import { useState, useEffect } from 'react';
 import Link from 'next/link';
 import { getSavedTrackers, getDeleteToken, removeSavedTracker, type SavedTracker } from '@/lib/tracker-storage';
 import { groupQueries, type GroupableQuery, type QueryGroup } from '@/lib/query-grouping';
+import { aggregateScrapeStatus, type AggregatedScrape } from '@/lib/scrape-status';
+import { ScrapeStatusDot } from './ScrapeStatusDot';
+import { ForceScrapeButton } from './ForceScrapeButton';
 import styles from './SavedTrackers.module.css';
 
 interface ActiveQuery {
@@ -18,6 +21,8 @@ interface ActiveQuery {
   scrapeInterval: number;
   snapshotCount: number;
   lastScrapedAt: string | null;
+  lastScrapeStatus: string | null;
+  lastScrapeError: string | null;
   groupId: string | null;
   createdAt: string;
 }
@@ -25,12 +30,15 @@ interface ActiveQuery {
 interface DisplayQuery extends GroupableQuery {
   status: 'active' | 'paused' | 'expired' | 'deleted';
   hasDeleteToken: boolean;
+  scrapeStatus: string | null;
+  scrapeError: string | null;
 }
 
 interface DisplayGroup {
   group: QueryGroup<DisplayQuery>;
   status: 'active' | 'paused' | 'expired' | 'deleted';
   hasDeleteToken: boolean;
+  aggregate: AggregatedScrape;
 }
 
 function formatDate(iso: string): string {
@@ -66,6 +74,13 @@ function toDisplayGroups(queries: DisplayQuery[]): DisplayGroup[] {
     group,
     status: deriveGroupStatus(group),
     hasDeleteToken: group.queries.some((q) => q.hasDeleteToken),
+    aggregate: aggregateScrapeStatus(
+      group.queries.map((q) => ({
+        status: q.scrapeStatus,
+        error: q.scrapeError,
+        startedAt: q.lastScrapedAt ?? null,
+      })),
+    ),
   }));
 }
 
@@ -113,6 +128,8 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
             lastScrapedAt: q.lastScrapedAt,
             status: q.active ? 'active' : 'paused',
             hasDeleteToken: deleteTokenSet.has(q.id),
+            scrapeStatus: q.lastScrapeStatus,
+            scrapeError: q.lastScrapeError,
           }));
           setGroups(toDisplayGroups(display));
         } else {
@@ -150,6 +167,8 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
             lastScrapedAt: null,
             status: statusMap[t.id] ?? 'deleted',
             hasDeleteToken: Boolean(t.deleteToken),
+            scrapeStatus: null,
+            scrapeError: null,
           }));
           setGroups(toDisplayGroups(display));
         })
@@ -168,6 +187,8 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
             lastScrapedAt: null,
             status: 'active',
             hasDeleteToken: Boolean(t.deleteToken),
+            scrapeStatus: null,
+            scrapeError: null,
           }));
           setGroups(toDisplayGroups(display));
         });
@@ -199,6 +220,40 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
       removeSavedTracker(q.id);
     }
     setGroups((prev) => prev.filter((g) => g.group.primaryId !== group.primaryId));
+  };
+
+  const refetchActive = () => {
+    fetch('/api/queries/active')
+      .then((res) => res.json())
+      .then((data) => {
+        if (!data.ok || !data.data?.queries) return;
+        const serverQueries: ActiveQuery[] = data.data.queries;
+        const localTokens = new Set(
+          isAuthenticated
+            ? []
+            : getSavedTrackers().filter((t) => t.deleteToken).map((t) => t.id),
+        );
+        const display: DisplayQuery[] = serverQueries.map((q) => ({
+          id: q.id,
+          origin: q.origin,
+          destination: q.destination,
+          originName: q.originName,
+          destinationName: q.destinationName,
+          dateFrom: q.dateFrom,
+          dateTo: q.dateTo,
+          groupId: q.groupId,
+          active: q.active,
+          createdAt: q.createdAt,
+          snapshotCount: q.snapshotCount,
+          lastScrapedAt: q.lastScrapedAt,
+          status: q.active ? 'active' : 'paused',
+          hasDeleteToken: localTokens.has(q.id),
+          scrapeStatus: q.lastScrapeStatus,
+          scrapeError: q.lastScrapeError,
+        }));
+        setGroups(toDisplayGroups(display));
+      })
+      .catch(() => {});
   };
 
   const handleTogglePause = async (entry: DisplayGroup) => {
@@ -252,8 +307,9 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
       <h3 className={styles.title}>Your Trackers</h3>
       <div className={styles.list}>
         {groups.map((entry) => {
-          const { group, status } = entry;
+          const { group, status, aggregate } = entry;
           const extraDestinations = group.destinations.length - 1;
+          const primaryToken = getDeleteToken(group.primaryId);
           return (
             <div key={group.primaryId} className={styles.card}>
               <button
@@ -304,6 +360,11 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                       )}
                       {group.lastScrapedAt && (
                         <span className={styles.lastScrape}>
+                          <ScrapeStatusDot
+                            status={aggregate.status}
+                            error={aggregate.error}
+                            lastScrapedAt={aggregate.startedAt}
+                          />
                           {timeAgo(group.lastScrapedAt)}
                         </span>
                       )}
@@ -316,6 +377,14 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                       }`}>
                         {status === 'active' ? 'Tracking' : status === 'paused' ? 'Paused' : 'Expired'}
                       </span>
+                      {status === 'active' && (
+                        <ForceScrapeButton
+                          queryId={group.primaryId}
+                          deleteToken={primaryToken}
+                          onScraped={(result) => { if (result.accepted) refetchActive(); }}
+                          ariaLabel="Refresh prices now"
+                        />
+                      )}
                       {(status === 'active' || status === 'paused') && (
                         <button
                           className={styles.pauseBtn}

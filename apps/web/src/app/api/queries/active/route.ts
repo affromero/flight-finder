@@ -45,7 +45,7 @@ export async function GET() {
       fetchRuns: {
         orderBy: { startedAt: 'desc' },
         take: 1,
-        select: { startedAt: true },
+        select: { startedAt: true, status: true, error: true },
       },
       _count: {
         select: { snapshots: true },
@@ -65,6 +65,8 @@ export async function GET() {
     scrapeInterval: q.scrapeInterval,
     snapshotCount: q._count.snapshots,
     lastScrapedAt: q.fetchRuns[0]?.startedAt.toISOString() ?? null,
+    lastScrapeStatus: q.fetchRuns[0]?.status ?? null,
+    lastScrapeError: q.fetchRuns[0]?.error ?? null,
     groupId: q.groupId,
     createdAt: q.createdAt.toISOString(),
   }));
