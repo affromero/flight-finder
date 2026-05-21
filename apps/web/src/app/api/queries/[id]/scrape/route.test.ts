@@ -4,6 +4,7 @@ import { NextRequest } from 'next/server';
 const mockQueryFindUnique = vi.fn();
 const mockQueryFindMany = vi.fn();
 const mockFetchRunCreate = vi.fn();
+const mockFetchRunFindFirst = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -13,6 +14,7 @@ vi.mock('@/lib/prisma', () => ({
     },
     fetchRun: {
       create: (...args: unknown[]) => mockFetchRunCreate(...args),
+      findFirst: (...args: unknown[]) => mockFetchRunFindFirst(...args),
     },
   },
 }));
@@ -63,6 +65,21 @@ async function flushIifeMicrotasks() {
   await new Promise((r) => setImmediate(r));
 }
 
+const FAR_FUTURE = new Date('2099-01-01T00:00:00Z');
+const FAR_PAST = new Date('2000-01-01T00:00:00Z');
+
+function rowDefaults(overrides: Record<string, unknown> = {}) {
+  return {
+    deleteToken: 'real-token',
+    groupId: null,
+    userId: null,
+    active: true,
+    isSeed: false,
+    expiresAt: FAR_FUTURE,
+    ...overrides,
+  };
+}
+
 describe('POST /api/queries/[id]/scrape', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -72,6 +89,7 @@ describe('POST /api/queries/[id]/scrape', () => {
     mockFetchRunCreate.mockImplementation(({ data }: { data: { queryId: string } }) =>
       Promise.resolve({ id: `fr_${data.queryId}`, queryId: data.queryId }),
     );
+    mockFetchRunFindFirst.mockResolvedValue(null);
     mockIsMultiUserEnabled.mockResolvedValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
     mockGetSessionToken.mockResolvedValue(undefined);
@@ -91,27 +109,21 @@ describe('POST /api/queries/[id]/scrape', () => {
   });
 
   it('returns 401 in hosted mode without a token or admin cookie', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
     const res = await POST(...makeRequest('q1', {}));
     expect(res.status).toBe(401);
     expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
   });
 
   it('returns 403 in hosted mode with a wrong token', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
     const res = await POST(...makeRequest('q1', { deleteToken: 'nope' }));
     expect(res.status).toBe(403);
     expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
   });
 
   it('returns 409 on a paused tracker', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: false, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults({ active: false }));
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     const data = await res.json();
     expect(res.status).toBe(409);
@@ -120,18 +132,44 @@ describe('POST /api/queries/[id]/scrape', () => {
   });
 
   it('returns 409 on a seed query', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: true, isSeed: true,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults({ isSeed: true }));
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     expect(res.status).toBe(409);
     expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
   });
 
+  it('returns 410 on an expired tracker (active but past expiresAt)', async () => {
+    mockQueryFindUnique.mockResolvedValue(rowDefaults({ expiresAt: FAR_PAST }));
+    const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+    const data = await res.json();
+    expect(res.status).toBe(410);
+    expect(data.error).toContain('expired');
+    expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
+  });
+
+  it('returns 429 when a sibling already has an in_progress FetchRun row', async () => {
+    mockQueryFindUnique.mockResolvedValue(rowDefaults({ groupId: 'g1' }));
+    mockQueryFindMany.mockResolvedValue([{ id: 'q1' }, { id: 'q2' }]);
+    mockFetchRunFindFirst.mockResolvedValueOnce({ id: 'stuck-run' });
+    const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+    const data = await res.json();
+    expect(res.status).toBe(429);
+    expect(data.error).toContain('already running');
+    expect(mockFetchRunCreate).not.toHaveBeenCalled();
+    expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
+  });
+
+  it('still blocks an in-progress run even when Redis is disabled', async () => {
+    mockRedisRef.current = null;
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
+    mockFetchRunFindFirst.mockResolvedValueOnce({ id: 'stuck-run' });
+    const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+    expect(res.status).toBe(429);
+    expect(mockFetchRunCreate).not.toHaveBeenCalled();
+  });
+
   it('hosted mode + valid token: fires once, pre-creates one FetchRun row, returns accepted', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     const data = await res.json();
     expect(res.status).toBe(200);
@@ -146,9 +184,7 @@ describe('POST /api/queries/[id]/scrape', () => {
   });
 
   it('cascades across siblings in serial when the row has a groupId', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: 'g1', userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults({ groupId: 'g1' }));
     mockQueryFindMany.mockResolvedValue([
       { id: 'q1' }, { id: 'q2' }, { id: 'q3' }, { id: 'q4' },
     ]);
@@ -166,9 +202,7 @@ describe('POST /api/queries/[id]/scrape', () => {
   });
 
   it('returns 429 when Redis says the throttle key already exists', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: 'g1', userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults({ groupId: 'g1' }));
     mockQueryFindMany.mockResolvedValue([{ id: 'q1' }, { id: 'q2' }]);
     mockRedisSet.mockResolvedValueOnce(null);
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
@@ -178,9 +212,7 @@ describe('POST /api/queries/[id]/scrape', () => {
   });
 
   it('continues when Redis throws (graceful degrade)', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
     mockRedisSet.mockRejectedValueOnce(new Error('redis down'));
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     expect(res.status).toBe(200);
@@ -190,9 +222,7 @@ describe('POST /api/queries/[id]/scrape', () => {
 
   it('continues when Redis is disabled (redis === null)', async () => {
     mockRedisRef.current = null;
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     const data = await res.json();
     expect(res.status).toBe(200);
@@ -202,9 +232,7 @@ describe('POST /api/queries/[id]/scrape', () => {
   });
 
   it('hosted mode legacy admin session authorises without a token', async () => {
-    mockQueryFindUnique.mockResolvedValue({
-      deleteToken: 'real-token', groupId: null, userId: null, active: true, isSeed: false,
-    });
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
     mockGetSessionToken.mockResolvedValueOnce('admin:1234.abc');
     mockVerifySessionToken.mockReturnValueOnce(true);
     const res = await POST(...makeRequest('q1', {}));
@@ -221,9 +249,7 @@ describe('POST /api/queries/[id]/scrape', () => {
 
     it('admin session passes without token', async () => {
       mockGetCurrentUser.mockResolvedValue({ id: 'admin_1', isAdmin: true });
-      mockQueryFindUnique.mockResolvedValue({
-        deleteToken: 'real-token', groupId: null, userId: 'someone_else', active: true, isSeed: false,
-      });
+      mockQueryFindUnique.mockResolvedValue(rowDefaults({ userId: 'someone_else' }));
       const res = await POST(...makeRequest('q1', {}));
       expect(res.status).toBe(200);
       await flushIifeMicrotasks();
@@ -232,18 +258,14 @@ describe('POST /api/queries/[id]/scrape', () => {
 
     it('owner user passes', async () => {
       mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
-      mockQueryFindUnique.mockResolvedValue({
-        deleteToken: 'real-token', groupId: null, userId: 'user_1', active: true, isSeed: false,
-      });
+      mockQueryFindUnique.mockResolvedValue(rowDefaults({ userId: 'user_1' }));
       const res = await POST(...makeRequest('q1', {}));
       expect(res.status).toBe(200);
     });
 
     it('non owner non admin gets 403', async () => {
       mockGetCurrentUser.mockResolvedValue({ id: 'user_2', isAdmin: false });
-      mockQueryFindUnique.mockResolvedValue({
-        deleteToken: 'real-token', groupId: null, userId: 'user_1', active: true, isSeed: false,
-      });
+      mockQueryFindUnique.mockResolvedValue(rowDefaults({ userId: 'user_1' }));
       const res = await POST(...makeRequest('q1', {}));
       expect(res.status).toBe(403);
       expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();

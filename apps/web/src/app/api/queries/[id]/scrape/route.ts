@@ -14,6 +14,13 @@ const THROTTLE_SECONDS = 60;
  * pre-created so the UI dot can light up before the network IO begins;
  * the actual scrapes run sequentially in a background IIFE so multiple
  * siblings never race on the shared VPN sidecar.
+ *
+ * Two layered locks prevent overlapping kickoffs:
+ *   - Redis SET NX EX (60s) catches accidental double-clicks at zero DB
+ *     cost. Skipped gracefully when Redis is null or throws.
+ *   - "Any in_progress FetchRun for any target" is a precise lock that
+ *     outlasts the Redis TTL on multi-VPN runs (a single VPN connect can
+ *     already take 30+ seconds). Always checked, even with Redis off.
  */
 export async function POST(
   request: NextRequest,
@@ -32,6 +39,7 @@ export async function POST(
       userId: true,
       active: true,
       isSeed: true,
+      expiresAt: true,
     },
   });
 
@@ -44,9 +52,21 @@ export async function POST(
     return apiError('Tracker is paused or a seed; resume it before refreshing.', 409);
   }
 
+  if (query.expiresAt.getTime() <= Date.now()) {
+    return apiError('Tracker has expired; create a fresh one to keep scraping.', 410);
+  }
+
+  // Only target siblings that are themselves still alive (active, non-seed,
+  // not expired). The primary already passed those checks above.
+  const now = new Date();
   const targetIds = query.groupId
     ? (await prisma.query.findMany({
-        where: { groupId: query.groupId, active: true, isSeed: false },
+        where: {
+          groupId: query.groupId,
+          active: true,
+          isSeed: false,
+          expiresAt: { gt: now },
+        },
         select: { id: true },
       })).map((q) => q.id)
     : [id];
@@ -67,6 +87,18 @@ export async function POST(
   }
   if (throttled) {
     return apiError('Force scrape was triggered less than a minute ago. Try again shortly.', 429);
+  }
+
+  // Second lock that outlasts the Redis TTL. Multi-sibling or multi-VPN
+  // runs can take many minutes; the Redis key expires long before then. A
+  // direct DB check on `in_progress` rows catches that case AND also works
+  // when Redis is disabled entirely.
+  const stale = await prisma.fetchRun.findFirst({
+    where: { queryId: { in: targetIds }, status: 'in_progress' },
+    select: { id: true },
+  });
+  if (stale) {
+    return apiError('A scrape is already running for this tracker. Wait for it to finish.', 429);
   }
 
   // Pre-create one FetchRun row per target so the next /api/queries/active

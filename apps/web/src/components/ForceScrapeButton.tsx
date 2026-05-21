@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type MouseEvent } from 'react';
+import { getDeleteToken } from '@/lib/tracker-storage';
 import styles from './ForceScrapeButton.module.css';
 
 export interface ForceScrapeResult {
@@ -11,6 +12,9 @@ export interface ForceScrapeResult {
 
 export interface ForceScrapeButtonProps {
   queryId: string;
+  /** Optional explicit token. When omitted, the component reads it from
+   *  localStorage on click (same pattern as DeleteTracker), so hosted
+   *  tracker owners visiting /q/[id] authenticate via their saved token. */
   deleteToken?: string | null;
   onScraped?: (result: ForceScrapeResult) => void;
   ariaLabel?: string;
@@ -33,11 +37,15 @@ export function ForceScrapeButton({
     if (pending) return;
     setPending(true);
     setHint(null);
+    // Fall back to the locally-saved token so hosted tracker owners can
+    // refresh their own tracker without an admin session. Callers that
+    // already have a token (SavedTrackers, admin row) pass it explicitly.
+    const token = deleteToken ?? (typeof window !== 'undefined' ? getDeleteToken(queryId) : null);
     try {
       const res = await fetch(`/api/queries/${queryId}/scrape`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ deleteToken: deleteToken ?? null }),
+        body: JSON.stringify({ deleteToken: token }),
       });
       const data = await res.json().catch(() => ({}));
       if (res.ok && data?.ok) {
