@@ -89,38 +89,56 @@ export async function POST(
     return apiError('Force scrape was triggered less than a minute ago. Try again shortly.', 429);
   }
 
-  // Second lock that outlasts the Redis TTL. Multi-sibling or multi-VPN
-  // runs can take many minutes; the Redis key expires long before then. A
-  // direct DB check on `in_progress` rows catches that case AND also works
-  // when Redis is disabled entirely.
-  const stale = await prisma.fetchRun.findFirst({
-    where: { queryId: { in: targetIds }, status: 'in_progress' },
-    select: { id: true },
-  });
-  if (stale) {
-    return apiError('A scrape is already running for this tracker. Wait for it to finish.', 429);
+  // Atomic check-and-reserve. Two concurrent POSTs (different tabs, admin +
+  // account view on the same group) could both read "no in_progress rows"
+  // before either inserted, then both pre-create + fire. A Serializable
+  // transaction makes one of them retry (the loser sees Prisma's P2034 or
+  // a Postgres 40001) so only one scrape kicks off. Also catches the case
+  // where Redis is disabled entirely.
+  //
+  // Only the row for the originally-clicked id (`id`, not every sibling) is
+  // pre-created. Sibling rows are created inside `runScrapeForQuery` when
+  // the loop reaches them, so an early-exit (paused mid-cascade, process
+  // crash, etc.) cannot leave orphaned in_progress rows behind to block
+  // future refreshes.
+  let primaryFetchRun: { id: string };
+  try {
+    primaryFetchRun = await prisma.$transaction(async (tx) => {
+      const inProgress = await tx.fetchRun.findFirst({
+        where: { queryId: { in: targetIds }, status: 'in_progress' },
+        select: { id: true },
+      });
+      if (inProgress) {
+        throw new Error('SCRAPE_IN_PROGRESS');
+      }
+      return tx.fetchRun.create({
+        data: { queryId: id, status: 'in_progress', source: 'manual' },
+        select: { id: true },
+      });
+    }, { isolationLevel: 'Serializable' });
+  } catch (err) {
+    if (err instanceof Error && err.message === 'SCRAPE_IN_PROGRESS') {
+      return apiError('A scrape is already running for this tracker. Wait for it to finish.', 429);
+    }
+    const code = (err as { code?: string } | null)?.code;
+    if (code === 'P2034') {
+      // Postgres serialization conflict — another request beat us to it.
+      return apiError('A scrape is already running for this tracker. Wait for it to finish.', 429);
+    }
+    throw err;
   }
 
-  // Pre-create one FetchRun row per target so the next /api/queries/active
-  // call sees status=in_progress immediately, well before VPN connect.
-  const fetchRuns = await Promise.all(
-    targetIds.map((qid) =>
-      prisma.fetchRun.create({
-        data: { queryId: qid, status: 'in_progress', source: 'manual' },
-        select: { id: true, queryId: true },
-      }),
-    ),
-  );
-
-  // Fire scrapes serially in the background so siblings don't race the VPN
-  // sidecar. Errors are swallowed per sibling (the FetchRun row's own
-  // failed status surfaces them in the UI).
-  const fetchRunByQuery = new Map(fetchRuns.map((fr) => [fr.queryId, fr.id]));
+  // Reorder so the user-clicked row scrapes first (and reuses the pre-
+  // created row). Subsequent siblings get their FetchRun rows created
+  // just-in-time inside runScrapeForQuery; any sibling we never reach
+  // simply has no row, instead of an orphan stuck at in_progress.
+  const orderedTargets = [id, ...targetIds.filter((qid) => qid !== id)];
   void (async () => {
-    for (const qid of targetIds) {
-      const fetchRunId = fetchRunByQuery.get(qid);
+    for (let i = 0; i < orderedTargets.length; i++) {
+      const qid = orderedTargets[i]!;
+      const passOpts = i === 0 ? { fetchRunId: primaryFetchRun.id } : undefined;
       try {
-        await runFullScrapeForQuery(qid, fetchRunId ? { fetchRunId } : undefined);
+        await runFullScrapeForQuery(qid, passOpts);
       } catch (err) {
         console.error(
           `[scrape] manual run failed query=${qid}: ${err instanceof Error ? err.message : err}`,

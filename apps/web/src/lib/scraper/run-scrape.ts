@@ -412,7 +412,17 @@ export async function runScrapeForQuery(
 ): Promise<ScrapeResult> {
   const query = await prisma.query.findUnique({ where: { id: queryId } });
   if (!query || !query.active) {
-    return { queryId, status: 'failed', snapshotsCount: 0, extractionCost: 0, error: 'Query not found or inactive' };
+    const errorMsg = 'Query not found or inactive';
+    // If the caller pre-created an in_progress row, finalize it here so
+    // the manual scrape endpoint's lock doesn't see a stuck row forever
+    // and refuse all future refreshes.
+    if (opts?.fetchRunId) {
+      await prisma.fetchRun.update({
+        where: { id: opts.fetchRunId },
+        data: { status: 'failed', error: errorMsg, completedAt: new Date() },
+      }).catch(() => {});
+    }
+    return { queryId, status: 'failed', snapshotsCount: 0, extractionCost: 0, error: errorMsg };
   }
 
   const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });

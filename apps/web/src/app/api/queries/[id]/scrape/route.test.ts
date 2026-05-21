@@ -1,13 +1,20 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
-const mockQueryFindUnique = vi.fn();
-const mockQueryFindMany = vi.fn();
-const mockFetchRunCreate = vi.fn();
-const mockFetchRunFindFirst = vi.fn();
+const {
+  mockQueryFindUnique,
+  mockQueryFindMany,
+  mockFetchRunCreate,
+  mockFetchRunFindFirst,
+} = vi.hoisted(() => ({
+  mockQueryFindUnique: vi.fn(),
+  mockQueryFindMany: vi.fn(),
+  mockFetchRunCreate: vi.fn(),
+  mockFetchRunFindFirst: vi.fn(),
+}));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const txClient = {
     query: {
       findUnique: (...args: unknown[]) => mockQueryFindUnique(...args),
       findMany: (...args: unknown[]) => mockQueryFindMany(...args),
@@ -16,8 +23,17 @@ vi.mock('@/lib/prisma', () => ({
       create: (...args: unknown[]) => mockFetchRunCreate(...args),
       findFirst: (...args: unknown[]) => mockFetchRunFindFirst(...args),
     },
-  },
-}));
+  };
+  return {
+    prisma: {
+      ...txClient,
+      $transaction: async (
+        cb: (tx: typeof txClient) => Promise<unknown>,
+        _opts?: unknown,
+      ) => cb(txClient),
+    },
+  };
+});
 
 const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
 const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
@@ -168,7 +184,7 @@ describe('POST /api/queries/[id]/scrape', () => {
     expect(mockFetchRunCreate).not.toHaveBeenCalled();
   });
 
-  it('hosted mode + valid token: fires once, pre-creates one FetchRun row, returns accepted', async () => {
+  it('hosted mode + valid token: pre-creates only the primary row, fires once, returns accepted', async () => {
     mockQueryFindUnique.mockResolvedValue(rowDefaults());
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     const data = await res.json();
@@ -177,28 +193,38 @@ describe('POST /api/queries/[id]/scrape', () => {
     expect(mockFetchRunCreate).toHaveBeenCalledTimes(1);
     expect(mockFetchRunCreate).toHaveBeenCalledWith({
       data: { queryId: 'q1', status: 'in_progress', source: 'manual' },
-      select: { id: true, queryId: true },
+      select: { id: true },
     });
     await flushIifeMicrotasks();
     expect(mockRunFullScrapeForQuery).toHaveBeenCalledWith('q1', { fetchRunId: 'fr_q1' });
   });
 
-  it('cascades across siblings in serial when the row has a groupId', async () => {
+  it('cascades across siblings in serial: primary first with reused row, rest without opts', async () => {
     mockQueryFindUnique.mockResolvedValue(rowDefaults({ groupId: 'g1' }));
     mockQueryFindMany.mockResolvedValue([
-      { id: 'q1' }, { id: 'q2' }, { id: 'q3' }, { id: 'q4' },
+      { id: 'q2' }, { id: 'q1' }, { id: 'q3' }, { id: 'q4' },
     ]);
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     const data = await res.json();
     expect(res.status).toBe(200);
     expect(data.data).toMatchObject({ accepted: true, count: 4, groupId: 'g1' });
-    expect(mockFetchRunCreate).toHaveBeenCalledTimes(4);
-    // Run a few microtasks so the IIFE can reach every sibling.
+    // Only the primary's row is pre-created. Sibling rows are created
+    // inside runScrapeForQuery as the loop reaches them (mocked out here).
+    expect(mockFetchRunCreate).toHaveBeenCalledTimes(1);
+    expect(mockFetchRunCreate).toHaveBeenCalledWith({
+      data: { queryId: 'q1', status: 'in_progress', source: 'manual' },
+      select: { id: true },
+    });
+    // Run microtasks so the serial IIFE can reach every sibling.
     for (let i = 0; i < 6; i++) {
       await new Promise((r) => setImmediate(r));
     }
     expect(mockRunFullScrapeForQuery).toHaveBeenCalledTimes(4);
+    // Primary runs first and reuses the pre-created row id; the rest pass
+    // no opts and let runScrapeForQuery create rows just-in-time.
     expect(mockRunFullScrapeForQuery.mock.calls.map((c) => c[0])).toEqual(['q1', 'q2', 'q3', 'q4']);
+    expect(mockRunFullScrapeForQuery.mock.calls[0]?.[1]).toEqual({ fetchRunId: 'fr_q1' });
+    expect(mockRunFullScrapeForQuery.mock.calls[1]?.[1]).toBeUndefined();
   });
 
   it('returns 429 when Redis says the throttle key already exists', async () => {

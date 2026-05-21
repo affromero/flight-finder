@@ -124,7 +124,7 @@ export default async function AccountPage() {
                       {!g.anyActive && <span className={styles.paused}>paused</span>}
                     </div>
                   </Link>
-                  {g.anyActive && (
+                  {g.anyActive && !g.allExpired && (
                     <ForceScrapeButton
                       queryId={g.primaryId}
                       ariaLabel="Refresh prices now"
