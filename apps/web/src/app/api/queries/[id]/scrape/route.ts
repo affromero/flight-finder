@@ -6,6 +6,10 @@ import { redis } from '@/lib/redis';
 import { runFullScrapeForQuery } from '@/lib/scraper/run-scrape';
 
 const THROTTLE_SECONDS = 60;
+// A multi-VPN run can stretch past 10 minutes per sibling. Anything older
+// than this cutoff is treated as a stale row from a crashed process so the
+// lock can't deadlock indefinitely on a stuck in_progress row.
+const STALE_LOCK_AFTER_MS = 15 * 60 * 1000;
 
 /**
  * Manual force-scrape endpoint. Fires `runFullScrapeForQuery` for the row
@@ -15,12 +19,20 @@ const THROTTLE_SECONDS = 60;
  * the actual scrapes run sequentially in a background IIFE so multiple
  * siblings never race on the shared VPN sidecar.
  *
- * Two layered locks prevent overlapping kickoffs:
+ * Two layered locks prevent overlapping kickoffs FOR THIS GROUP:
  *   - Redis SET NX EX (60s) catches accidental double-clicks at zero DB
  *     cost. Skipped gracefully when Redis is null or throws.
- *   - "Any in_progress FetchRun for any target" is a precise lock that
- *     outlasts the Redis TTL on multi-VPN runs (a single VPN connect can
- *     already take 30+ seconds). Always checked, even with Redis off.
+ *   - "Any non-stale in_progress FetchRun for any target" is a precise
+ *     lock that outlasts the Redis TTL on multi-VPN runs (a single VPN
+ *     connect can already take 30+ seconds). Rows older than 15 minutes
+ *     are treated as crashed and ignored, so a half-finished scrape
+ *     can't deadlock the group forever.
+ *
+ * Cross-group serialization (a manual click on Group A while cron or
+ * another manual click on Group B is mid-VPN-connect) is NOT enforced
+ * here. Both Fairtrail's cron and this endpoint share one ExpressVPN
+ * sidecar; a global serializer would coordinate them. Accepted v1
+ * tradeoff. See "Race with active cron" in the plan.
  */
 export async function POST(
   request: NextRequest,
@@ -101,11 +113,16 @@ export async function POST(
   // the loop reaches them, so an early-exit (paused mid-cascade, process
   // crash, etc.) cannot leave orphaned in_progress rows behind to block
   // future refreshes.
+  const staleBefore = new Date(Date.now() - STALE_LOCK_AFTER_MS);
   let primaryFetchRun: { id: string };
   try {
     primaryFetchRun = await prisma.$transaction(async (tx) => {
       const inProgress = await tx.fetchRun.findFirst({
-        where: { queryId: { in: targetIds }, status: 'in_progress' },
+        where: {
+          queryId: { in: targetIds },
+          status: 'in_progress',
+          startedAt: { gt: staleBefore },
+        },
         select: { id: true },
       });
       if (inProgress) {

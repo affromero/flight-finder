@@ -188,6 +188,22 @@ describe('POST /api/queries/[id]/scrape', () => {
     expect(mockFetchRunCreate).not.toHaveBeenCalled();
   });
 
+  it('ignores stale in_progress rows older than the staleness cutoff', async () => {
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
+    // No in-progress row younger than the cutoff -> findFirst returns null.
+    // We assert the query the endpoint sent includes a startedAt>staleBefore
+    // filter so a half-finished crashed run cannot deadlock the group.
+    mockFetchRunFindFirst.mockImplementation(({ where }: { where: { startedAt?: { gt?: Date } } }) => {
+      expect(where.startedAt?.gt).toBeInstanceOf(Date);
+      expect(where.startedAt!.gt!.getTime()).toBeLessThan(Date.now());
+      return Promise.resolve(null);
+    });
+    const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+    expect(res.status).toBe(200);
+    await flushIifeMicrotasks();
+    expect(mockRunFullScrapeForQuery).toHaveBeenCalledTimes(1);
+  });
+
   it('hosted mode + valid token: pre-creates only the primary row, fires once, returns accepted', async () => {
     mockQueryFindUnique.mockResolvedValue(rowDefaults());
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
