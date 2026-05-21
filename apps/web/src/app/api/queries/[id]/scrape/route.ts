@@ -140,9 +140,20 @@ export async function POST(
       try {
         await runFullScrapeForQuery(qid, passOpts);
       } catch (err) {
-        console.error(
-          `[scrape] manual run failed query=${qid}: ${err instanceof Error ? err.message : err}`,
-        );
+        const errorMsg = err instanceof Error ? err.message : String(err);
+        console.error(`[scrape] manual run failed query=${qid}: ${errorMsg}`);
+        // If runFullScrapeForQuery throws before runScrapeForQuery has a
+        // chance to finalise the pre-created primary row, that row stays
+        // at in_progress forever and the DB lock blocks every future
+        // refresh for this group. Best-effort failure update closes the
+        // loop on the i=0 case (cron/sibling rows are created inside
+        // runFullScrapeForQuery's loop so they finalise themselves).
+        if (i === 0) {
+          await prisma.fetchRun.update({
+            where: { id: primaryFetchRun.id },
+            data: { status: 'failed', error: errorMsg, completedAt: new Date() },
+          }).catch(() => {});
+        }
       }
     }
   })();

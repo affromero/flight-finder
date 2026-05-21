@@ -473,10 +473,14 @@ export async function runScrapeForQuery(
  * Scrape a single query across all its VPN countries (local + VPN passes).
  *
  * When `opts.fetchRunId` is provided, the FIRST country pass (always the
- * local null pass) reuses that pre-created row. Subsequent VPN passes still
- * create their own rows via the standard runScrapeForQuery path. This lets
- * the manual /scrape endpoint pre-create one in_progress row synchronously
- * so the UI dot starts pulsing before the actual network IO begins.
+ * local null pass) reuses that pre-created row. Subsequent VPN passes
+ * each create their own row at the TOP of the loop iteration (before the
+ * VPN connect/disconnect), so the manual scrape endpoint's "any sibling
+ * has an in_progress row" lock stays held continuously across passes
+ * instead of opening a 30+ second window during the next country's VPN
+ * connect. Each row is then passed back into runScrapeForQuery via
+ * fetchRunId so the row gets finalised by the same code path that the
+ * cron uses (no double-creation).
  */
 export async function runFullScrapeForQuery(
   queryId: string,
@@ -502,10 +506,31 @@ export async function runFullScrapeForQuery(
     const country = countriesToScrape[ci]!;
     const isVpnPass = country !== null;
 
+    // Create (or reuse) this pass's FetchRun BEFORE any VPN
+    // connect/disconnect. The previous iteration's row has just been
+    // finalised by runScrapeForQuery; without this pre-creation the
+    // manual scrape endpoint could see "no in_progress rows" during the
+    // 30+ second VPN connect window and accept a second concurrent run.
+    let passFetchRunId: string;
+    if (ci === 0 && opts?.fetchRunId) {
+      passFetchRunId = opts.fetchRunId;
+    } else {
+      const row = await prisma.fetchRun.create({
+        data: { queryId, status: 'in_progress', vpnCountry: country },
+        select: { id: true },
+      });
+      passFetchRunId = row.id;
+    }
+
     if (isVpnPass) {
       const connected = await vpnProvider.connect(country);
       if (!connected) {
         console.error(`[scrape] failed to connect VPN to ${country}, skipping`);
+        // Don't leave the just-pre-created row stuck at in_progress.
+        await prisma.fetchRun.update({
+          where: { id: passFetchRunId },
+          data: { status: 'failed', error: `VPN connect to ${country} failed`, completedAt: new Date() },
+        }).catch(() => {});
         continue;
       }
       await new Promise((r) => setTimeout(r, 3000));
@@ -513,8 +538,7 @@ export async function runFullScrapeForQuery(
       await vpnProvider.disconnect();
     }
 
-    const passOpts = ci === 0 && opts?.fetchRunId ? { fetchRunId: opts.fetchRunId } : undefined;
-    const result = await runScrapeForQuery(queryId, country, isVpnPass ? proxyUrl : undefined, passOpts);
+    const result = await runScrapeForQuery(queryId, country, isVpnPass ? proxyUrl : undefined, { fetchRunId: passFetchRunId });
     results.push(result);
 
     if (isVpnPass && ci < countriesToScrape.length - 1) {

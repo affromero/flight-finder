@@ -6,11 +6,13 @@ const {
   mockQueryFindMany,
   mockFetchRunCreate,
   mockFetchRunFindFirst,
+  mockFetchRunUpdate,
 } = vi.hoisted(() => ({
   mockQueryFindUnique: vi.fn(),
   mockQueryFindMany: vi.fn(),
   mockFetchRunCreate: vi.fn(),
   mockFetchRunFindFirst: vi.fn(),
+  mockFetchRunUpdate: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => {
@@ -22,6 +24,7 @@ vi.mock('@/lib/prisma', () => {
     fetchRun: {
       create: (...args: unknown[]) => mockFetchRunCreate(...args),
       findFirst: (...args: unknown[]) => mockFetchRunFindFirst(...args),
+      update: (...args: unknown[]) => mockFetchRunUpdate(...args),
     },
   };
   return {
@@ -106,6 +109,7 @@ describe('POST /api/queries/[id]/scrape', () => {
       Promise.resolve({ id: `fr_${data.queryId}`, queryId: data.queryId }),
     );
     mockFetchRunFindFirst.mockResolvedValue(null);
+    mockFetchRunUpdate.mockResolvedValue({});
     mockIsMultiUserEnabled.mockResolvedValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
     mockGetSessionToken.mockResolvedValue(undefined);
@@ -255,6 +259,21 @@ describe('POST /api/queries/[id]/scrape', () => {
     expect(data.data.throttledUntil).toBeNull();
     await flushIifeMicrotasks();
     expect(mockRunFullScrapeForQuery).toHaveBeenCalledTimes(1);
+  });
+
+  it('marks the pre-created primary row failed when runFullScrapeForQuery throws', async () => {
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
+    mockRunFullScrapeForQuery.mockRejectedValueOnce(new Error('boom'));
+    const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+    expect(res.status).toBe(200);
+    // Let the background IIFE settle.
+    for (let i = 0; i < 4; i++) {
+      await new Promise((r) => setImmediate(r));
+    }
+    expect(mockFetchRunUpdate).toHaveBeenCalledWith(expect.objectContaining({
+      where: { id: 'fr_q1' },
+      data: expect.objectContaining({ status: 'failed', error: 'boom' }),
+    }));
   });
 
   it('hosted mode legacy admin session authorises without a token', async () => {
