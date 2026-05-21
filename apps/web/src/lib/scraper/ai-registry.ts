@@ -57,6 +57,17 @@ export function filterCliStderr(stderr: string): string {
     .trim();
 }
 
+/**
+ * Local OpenAI compat servers (Ollama, llama.cpp, vLLM) expose chat completions
+ * at `/v1/chat/completions`. The OpenAI SDK just appends `/chat/completions` to
+ * whatever baseURL it gets, so a URL missing `/v1` lands on Ollama's catchall
+ * 404 and the SDK rewraps it as `404 404 page not found`.
+ */
+export function ensureV1Suffix(url: string): string {
+  const trimmed = url.replace(/\/+$/, '');
+  return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/v1`;
+}
+
 export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
   anthropic: {
     displayName: 'Anthropic',
@@ -150,8 +161,10 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     models: [],
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
-      const baseURL = options?.baseUrl
-        || (process.env.OLLAMA_HOST ? process.env.OLLAMA_HOST + '/v1' : 'http://localhost:11434/v1');
+      const rawBaseURL = options?.baseUrl
+        || process.env.OLLAMA_HOST
+        || 'http://localhost:11434';
+      const baseURL = ensureV1Suffix(rawBaseURL);
       const client = new OpenAI({ apiKey: 'unused', baseURL });
       const response = await client.chat.completions.create(
         {
@@ -183,7 +196,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     models: [],
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
-      const baseURL = options?.baseUrl || 'http://localhost:8080/v1';
+      const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8080');
       const client = new OpenAI({ apiKey: 'unused', baseURL });
       const response = await client.chat.completions.create(
         {
@@ -215,7 +228,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     models: [],
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
-      const baseURL = options?.baseUrl || 'http://localhost:8000/v1';
+      const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8000');
       const client = new OpenAI({ apiKey: 'unused', baseURL });
       const response = await client.chat.completions.create(
         {
