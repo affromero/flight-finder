@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.7.2] - 2026-05-21
+
+### Added
+- **Manual force scrape per tracker** (#78): refresh icon next to the pause / delete actions on the landing card, `/account` row, `/admin/queries` row, and the `/q/[id]` footer. New `POST /api/queries/[id]/scrape` cascades across siblings sharing the row's `groupId` (same shape as pause and delete), pre creates a `FetchRun` row with `status=in_progress, source=manual` so the status dot lights up the moment you click, then runs the actual scrapes serially in the background so they do not race the shared ExpressVPN sidecar. Per group throttle is 60 seconds; longer running scrapes also block repeat clicks via a non stale `in_progress` lock that auto expires after 15 minutes to recover from crashed processes. A 20 sibling flex group is roughly 10 minutes of background work, so each click can produce a non trivial LLM bill on a busy account.
+- **Visual scrape status indicator** (#78): coloured dot next to the "last checked" timestamp on every dashboard surface (`SavedTrackers`, `/account`, `/admin/queries`, `/q/[id]` footer). Green success, red failed (tooltip surfaces the underlying error: "LLM response contained no parseable JSON array", "Page did not load results", etc.), yellow partial, pulsing blue while in flight. Aggregates across siblings with `in_progress > failed > partial > success` precedence so an active refresh always pulses and a single failing sibling cannot hide behind successful ones.
+- **Custom Model ID input for Google provider** (#81): `allowCustomModel` is now on the google registry entry alongside openai, ollama, llamacpp, and vllm. Settings, setup, and `/admin/config` render the "Or type a custom model ID" text input for Google. Users hitting the `gemini-2.5-flash` 20 RPD free tier cap on flex trackers running a 3h cron can now type `gemini-3.1-flash-lite` (500 RPD free) or any other Gemini model id without waiting for the curated dropdown to catch up. Custom ids fall through `getModelCosts()` and report 0 input / 0 output, same as the OpenAI custom path.
+
+### Fixed
+- **Stacked chart header date bubble showed a one day range for flex groups** (#78): `/q/[id]` read `primary.query.dateFrom` and `primary.query.dateTo` from the primary sibling, but for a flex group every sibling is a single pinned day, so the header bubble rendered as "Nov 7 to Nov 7" instead of the actual group span. Extracted the date range into a `lib/query-grouping.ts` helper that walks every sibling, with a regression test that uses the exact Nov 7 to Nov 11 case from the reporter's screenshot. The same helper drives the OpenGraph share card title which had the same bug.
+- **Manual force scrape endpoint review findings** (PR #82 second and third passes): stale lock cutoff bumped from 5 to 15 minutes so a long flex group does not get killed mid run; VPN pass lock gap closed so a sidecar pass acquired but never released cannot wedge the group; startup failure inside the background IIFE marks the pre created `FetchRun` row as failed instead of leaving it stuck in `in_progress`; documented the cross group cron tradeoff in the endpoint comment so it does not get re introduced.
+
 ## [0.7.1] - 2026-05-20
 
 ### Added
