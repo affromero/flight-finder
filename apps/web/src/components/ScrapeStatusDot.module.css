@@ -1,0 +1,35 @@
+.dot {
+  display: inline-block;
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  margin: 0 0.25rem 0 0.125rem;
+  vertical-align: middle;
+  flex-shrink: 0;
+}
+
+.success {
+  background: var(--price-down, #10b981);
+  box-shadow: 0 0 0 1px rgba(16, 185, 129, 0.25);
+}
+
+.failed {
+  background: var(--price-up, #ef4444);
+  box-shadow: 0 0 0 1px rgba(239, 68, 68, 0.25);
+}
+
+.partial {
+  background: var(--warning, #f59e0b);
+  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25);
+}
+
+.in_progress {
+  background: var(--accent, #06b6d4);
+  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.25);
+  animation: scrapePulse 1.4s ease-in-out infinite;
+}
+
+@keyframes scrapePulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.4; transform: scale(0.75); }
+}
