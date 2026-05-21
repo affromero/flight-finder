@@ -10,6 +10,11 @@ export default async function QueriesPage() {
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { snapshots: true, fetchRuns: true } },
+      fetchRuns: {
+        orderBy: { startedAt: 'desc' },
+        take: 1,
+        select: { startedAt: true, status: true, error: true },
+      },
     },
   });
 
@@ -28,6 +33,9 @@ export default async function QueriesPage() {
     snapshotCount: q._count.snapshots,
     runCount: q._count.fetchRuns,
     createdAt: q.createdAt.toISOString(),
+    lastScrapedAt: q.fetchRuns[0]?.startedAt.toISOString() ?? null,
+    scrapeStatus: q.fetchRuns[0]?.status ?? null,
+    scrapeError: q.fetchRuns[0]?.error ?? null,
   }));
 
   const groups = groupQueries(adminRows);
