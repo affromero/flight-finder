@@ -408,6 +408,7 @@ export async function runScrapeForQuery(
   queryId: string,
   vpnCountry?: string | null,
   proxyUrl?: string,
+  opts?: { fetchRunId?: string },
 ): Promise<ScrapeResult> {
   const query = await prisma.query.findUnique({ where: { id: queryId } });
   if (!query || !query.active) {
@@ -431,9 +432,14 @@ export async function runScrapeForQuery(
       }
     : { ...query, cabinClass: query.cabinClass, tripType: query.tripType, currency: effectiveCurrency, country: effectiveCountry };
 
-  const fetchRun = await prisma.fetchRun.create({
-    data: { queryId, status: 'in_progress', vpnCountry: vpnCountry ?? null },
-  });
+  // Reuse a pre-created row when the caller (e.g. the manual /scrape endpoint)
+  // already wrote an `in_progress` row so the UI dot lights up before the
+  // network IO starts. Falls back to creating a fresh row for the cron path.
+  const fetchRun = opts?.fetchRunId
+    ? { id: opts.fetchRunId }
+    : await prisma.fetchRun.create({
+        data: { queryId, status: 'in_progress', vpnCountry: vpnCountry ?? null },
+      });
 
   try {
     return await scrapeQueryForCountry(
@@ -453,8 +459,19 @@ export async function runScrapeForQuery(
   }
 }
 
-/** Scrape a single query across all its VPN countries (local + VPN passes). */
-export async function runFullScrapeForQuery(queryId: string): Promise<ScrapeResult[]> {
+/**
+ * Scrape a single query across all its VPN countries (local + VPN passes).
+ *
+ * When `opts.fetchRunId` is provided, the FIRST country pass (always the
+ * local null pass) reuses that pre-created row. Subsequent VPN passes still
+ * create their own rows via the standard runScrapeForQuery path. This lets
+ * the manual /scrape endpoint pre-create one in_progress row synchronously
+ * so the UI dot starts pulsing before the actual network IO begins.
+ */
+export async function runFullScrapeForQuery(
+  queryId: string,
+  opts?: { fetchRunId?: string },
+): Promise<ScrapeResult[]> {
   const query = await prisma.query.findUnique({ where: { id: queryId } });
   if (!query) return [];
 
@@ -486,7 +503,8 @@ export async function runFullScrapeForQuery(queryId: string): Promise<ScrapeResu
       await vpnProvider.disconnect();
     }
 
-    const result = await runScrapeForQuery(queryId, country, isVpnPass ? proxyUrl : undefined);
+    const passOpts = ci === 0 && opts?.fetchRunId ? { fetchRunId: opts.fetchRunId } : undefined;
+    const result = await runScrapeForQuery(queryId, country, isVpnPass ? proxyUrl : undefined, passOpts);
     results.push(result);
 
     if (isVpnPass && ci < countriesToScrape.length - 1) {

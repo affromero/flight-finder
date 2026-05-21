@@ -9,6 +9,11 @@ export async function GET() {
     orderBy: { createdAt: 'desc' },
     include: {
       _count: { select: { snapshots: true, fetchRuns: true } },
+      fetchRuns: {
+        orderBy: { startedAt: 'desc' },
+        take: 1,
+        select: { startedAt: true, status: true, error: true },
+      },
     },
   });
 
