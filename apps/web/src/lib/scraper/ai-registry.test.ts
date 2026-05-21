@@ -137,8 +137,9 @@ describe('ai-registry', () => {
   });
 
   describe('allowCustomModel', () => {
-    it('is enabled for openai, ollama, llamacpp, and vllm providers', () => {
+    it('is enabled for openai, google, ollama, llamacpp, and vllm providers', () => {
       expect(EXTRACTION_PROVIDERS.openai!.allowCustomModel).toBe(true);
+      expect(EXTRACTION_PROVIDERS.google!.allowCustomModel).toBe(true);
       expect(EXTRACTION_PROVIDERS.ollama!.allowCustomModel).toBe(true);
       expect(EXTRACTION_PROVIDERS.llamacpp!.allowCustomModel).toBe(true);
       expect(EXTRACTION_PROVIDERS.vllm!.allowCustomModel).toBe(true);
@@ -146,7 +147,6 @@ describe('ai-registry', () => {
 
     it('is not enabled for other providers', () => {
       expect(EXTRACTION_PROVIDERS.anthropic!.allowCustomModel).toBeUndefined();
-      expect(EXTRACTION_PROVIDERS.google!.allowCustomModel).toBeUndefined();
     });
   });
 

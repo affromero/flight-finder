@@ -241,6 +241,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
   google: {
     displayName: 'Google',
     envKey: 'GOOGLE_AI_API_KEY',
+    allowCustomModel: true,
     models: [
       {
         id: 'gemini-2.5-flash',
