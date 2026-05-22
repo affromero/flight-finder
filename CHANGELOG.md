@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.3] - 2026-05-22
+
+### Fixed
+* **Ollama search returned `404 404 page not found` from `/api/parse`** (#84): a saved `customBaseUrl` without the `/v1` suffix (e.g. `http://host.docker.internal:11434`) sent the OpenAI SDK to `<host>/chat/completions`, which Ollama answers with its catchall 404. The SDK rewrapped the response as `404 404 page not found` (status + body) and `/api/parse` surfaced it inside a 422 envelope, while model discovery kept working because the `local-models` route already strips a trailing `/v1` before calling Ollama native `/api/tags`. New `ensureV1Suffix()` helper in `ai-registry.ts` normalises the URL for every local provider (ollama, llamacpp, vllm), and the `OLLAMA_HOST` env path was simplified to the bare host and routed through the same helper. 11 new regression tests cover idempotency, trailing slash, `host.docker.internal` style addresses, env var only, and the bare fallback.
+* **`Failed to parse LLM response as JSON` on local providers** (#84 follow up): small Ollama models occasionally returned prose, partial markdown, or a refusal that contained no `{...}` block, so the parser regex bailed with no logging at all. parse-query now opts into OpenAI's `response_format: { type: 'json_object' }` via a new `responseFormat?: 'json_object'` option on `ExtractOptions`, gated to `LOCAL_PROVIDERS` only so custom `OPENAI_BASE_URL` endpoints (OpenRouter, etc.) that route to models without JSON mode support do not start 400ing. Both failure modes (no JSON in response, JSON.parse error) now log a 200 char preview of the raw LLM content under `[parse-query] FAIL ...`, mirroring the existing pattern in `extract-prices.ts`, so future Ollama misconfig is diagnosable from container logs.
+
+### Documentation
+* **Picking a local model** subsection in the LLM Providers README block: short size based guidance for current generation families (Qwen3, Qwen3.5, Gemma 3n, Gemma 4) plus an explicit "avoid" line for models under 1B (TinyLlama, etc.) and older generations (Llama 3.x, Qwen 2.5). Driven by issue #84 reporter feedback after they spent time on TinyLlama and llama3.1:8b without guidance.
+
 ## [0.7.2] - 2026-05-21
 
 ### Added
