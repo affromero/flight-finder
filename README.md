@@ -174,6 +174,17 @@ Fairtrail needs an LLM for two things: parsing natural language queries and extr
 - **Subscription users** (Claude Pro/Max, ChatGPT Pro) -- auto-detected, auth tokens mounted read-only.
 - **API key users** -- paste a key, passed via env var, never written to disk.
 - **Local model users** -- select Ollama/llama.cpp/vLLM in the admin UI, type your model ID.
+
+**Picking a local model (Ollama, llama.cpp, vLLM):**
+
+The parse step needs a model that follows strict JSON instructions. Tiny models tend to ramble or refuse. Stick with current generation families that have reliable structured output. Qwen3 / Qwen3.5 currently have the most stable tool calling and JSON behaviour in the small model class; Gemma 3n / Gemma 4 are strong alternatives with native function calling on the laptop tier.
+
+* **CPU only, tight RAM**: `qwen3:0.6b` (523MB) or `qwen3.5:0.8b` (1.0GB). JSON mode is forced server side, so even these can produce parseable output.
+* **CPU only, typical desktop**: `qwen3:1.7b` (1.4GB) or `qwen3:4b` (2.5GB, sweet spot if you have the RAM).
+* **CPU or GPU edge (5 to 8GB)**: `gemma3n:e2b` (5.6GB, 32K context) or `gemma4:e2b` (7.2GB, 128K context, newer).
+* **GPU (8GB+ VRAM)**: `qwen3.5:9b` (6.6GB, best JSON quality and speed balance), `qwen3:8b` (5.2GB), or `gemma4:e4b` (9.6GB, native function calling).
+
+Avoid models under 1B (TinyLlama, etc.) and older generations (Llama 3.x, Qwen 2.5). They tend to ramble even with JSON mode forcing valid syntax, because the field values still need to be semantically correct. For slow CPUs, bump `EXTRACT_TIMEOUT_MS` in `.env` if larger models keep timing out (default 90000).
 </details>
 
 ## How It Works
