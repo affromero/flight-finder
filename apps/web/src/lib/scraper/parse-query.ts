@@ -259,15 +259,38 @@ export async function parseFlightQuery(
     model,
     buildSystemPrompt(),
     fullPrompt,
-    { baseUrl: config?.customBaseUrl ?? undefined }
+    {
+      baseUrl: config?.customBaseUrl ?? undefined,
+      // Constrain local providers to emit a JSON object. Without this, small
+      // Ollama models occasionally return prose or a refusal and the regex
+      // below finds nothing (issue #84). Gated to LOCAL_PROVIDERS only because
+      // custom OpenAI compatible endpoints (OPENAI_BASE_URL, OpenRouter, etc.)
+      // may route to models that reject `response_format` outright; the
+      // default OpenAI model follows the JSON instruction reliably anyway.
+      ...(isLocalProvider ? { responseFormat: 'json_object' as const } : {}),
+    }
   );
 
   const jsonMatch = result.content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
+    const preview = result.content.slice(0, 200).replace(/\s+/g, ' ');
+    console.error(
+      `[parse-query] FAIL no_json_in_response provider=${provider} model=${model} length=${result.content.length} preview=${preview}`,
+    );
     throw new Error('Failed to parse LLM response as JSON');
   }
 
-  const raw = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const preview = jsonMatch[0].slice(0, 200).replace(/\s+/g, ' ');
+    console.error(
+      `[parse-query] FAIL json_parse_error provider=${provider} model=${model} length=${jsonMatch[0].length} err=${msg} preview=${preview}`,
+    );
+    throw new Error('Failed to parse LLM response as JSON');
+  }
 
   // Handle both old format (flat ParsedFlightQuery) and new format (with confidence envelope)
   let parsed: ParsedFlightQuery | null;

@@ -30,6 +30,14 @@ interface ModelInfo {
 
 export interface ExtractOptions {
   baseUrl?: string;
+  /**
+   * Force the model into a structured output mode. `'json_object'` maps to
+   * OpenAI's `response_format: { type: 'json_object' }`, which Ollama (>= 0.1.34),
+   * llama.cpp, vLLM, and OpenAI all honour via constrained generation. Without
+   * it small models occasionally return prose or a refusal and `/api/parse`
+   * fails with `Failed to parse LLM response as JSON` (issue #84).
+   */
+  responseFormat?: 'json_object';
 }
 
 interface ProviderConfig {
@@ -55,6 +63,17 @@ export function filterCliStderr(stderr: string): string {
     .filter(line => !line.includes('could not update PATH'))
     .join('\n')
     .trim();
+}
+
+/**
+ * Local OpenAI compat servers (Ollama, llama.cpp, vLLM) expose chat completions
+ * at `/v1/chat/completions`. The OpenAI SDK just appends `/chat/completions` to
+ * whatever baseURL it gets, so a URL missing `/v1` lands on Ollama's catchall
+ * 404 and the SDK rewraps it as `404 404 page not found`.
+ */
+export function ensureV1Suffix(url: string): string {
+  const trimmed = url.replace(/\/+$/, '');
+  return /\/v1$/i.test(trimmed) ? trimmed : `${trimmed}/v1`;
 }
 
 export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
@@ -128,6 +147,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );
@@ -150,8 +172,10 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     models: [],
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
-      const baseURL = options?.baseUrl
-        || (process.env.OLLAMA_HOST ? process.env.OLLAMA_HOST + '/v1' : 'http://localhost:11434/v1');
+      const rawBaseURL = options?.baseUrl
+        || process.env.OLLAMA_HOST
+        || 'http://localhost:11434';
+      const baseURL = ensureV1Suffix(rawBaseURL);
       const client = new OpenAI({ apiKey: 'unused', baseURL });
       const response = await client.chat.completions.create(
         {
@@ -161,6 +185,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );
@@ -183,7 +210,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     models: [],
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
-      const baseURL = options?.baseUrl || 'http://localhost:8080/v1';
+      const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8080');
       const client = new OpenAI({ apiKey: 'unused', baseURL });
       const response = await client.chat.completions.create(
         {
@@ -193,6 +220,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );
@@ -215,7 +245,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     models: [],
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
-      const baseURL = options?.baseUrl || 'http://localhost:8000/v1';
+      const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8000');
       const client = new OpenAI({ apiKey: 'unused', baseURL });
       const response = await client.chat.completions.create(
         {
@@ -225,6 +255,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );

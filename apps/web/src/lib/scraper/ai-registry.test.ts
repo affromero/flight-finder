@@ -17,8 +17,24 @@ vi.mock('fs', async (importOriginal) => {
   return { ...actual, existsSync: (...args: unknown[]) => mockExistsSync(...args) };
 });
 
+// Mock the openai SDK so local provider extract paths can assert what baseURL
+// the client was constructed with (issue #84: 404 page not found from Ollama
+// when customBaseUrl lacked the /v1 suffix). The default export is invoked
+// with `new`, so the implementation must be a regular function expression:
+// arrow functions cannot be called as constructors.
+const mockOpenAIConstructor = vi.fn();
+const mockChatCompletionsCreate = vi.fn();
+vi.mock('openai', () => ({
+  default: vi.fn(function (this: unknown, opts: { apiKey?: string; baseURL?: string }) {
+    mockOpenAIConstructor(opts);
+    return {
+      chat: { completions: { create: mockChatCompletionsCreate } },
+    };
+  }),
+}));
+
 // Must import after mocks
-const { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders, filterCliStderr, isLocalProviderReachable } = await import(
+const { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders, ensureV1Suffix, filterCliStderr, isLocalProviderReachable } = await import(
   './ai-registry'
 );
 
@@ -335,6 +351,205 @@ describe('ai-registry', () => {
       // Clean up: resolve the promise
       fakeProc.emit('close', 0);
       await extractPromise.catch(() => {});
+    });
+  });
+
+  describe('ensureV1Suffix', () => {
+    it('appends /v1 to a host without a path', () => {
+      expect(ensureV1Suffix('http://localhost:11434')).toBe('http://localhost:11434/v1');
+    });
+
+    it('appends /v1 to a host with a trailing slash', () => {
+      expect(ensureV1Suffix('http://localhost:11434/')).toBe('http://localhost:11434/v1');
+    });
+
+    it('is idempotent when /v1 is already present', () => {
+      expect(ensureV1Suffix('http://localhost:11434/v1')).toBe('http://localhost:11434/v1');
+    });
+
+    it('strips a trailing slash after /v1', () => {
+      expect(ensureV1Suffix('http://localhost:11434/v1/')).toBe('http://localhost:11434/v1');
+    });
+
+    it('handles host.docker.internal style addresses', () => {
+      expect(ensureV1Suffix('http://host.docker.internal:11434')).toBe(
+        'http://host.docker.internal:11434/v1',
+      );
+    });
+  });
+
+  // Regression for issue #84: a customBaseUrl saved without /v1 sent the
+  // OpenAI SDK to <host>/chat/completions, which Ollama answers with its
+  // catchall 404. Assert that every local provider passes a /v1 suffixed
+  // baseURL into the SDK constructor regardless of what the caller supplied.
+  describe('local provider extract: /v1 suffix normalization (issue #84)', () => {
+    const savedOllamaHost = process.env.OLLAMA_HOST;
+
+    beforeEach(() => {
+      mockOpenAIConstructor.mockClear();
+      mockChatCompletionsCreate.mockReset();
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: '{"parsed": null, "confidence": "low", "ambiguities": []}' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      });
+      delete process.env.OLLAMA_HOST;
+    });
+
+    afterEach(() => {
+      if (savedOllamaHost === undefined) delete process.env.OLLAMA_HOST;
+      else process.env.OLLAMA_HOST = savedOllamaHost;
+    });
+
+    it('ollama: appends /v1 when caller passes baseUrl without it', async () => {
+      await EXTRACTION_PROVIDERS.ollama!.extract(
+        '',
+        'llama3.1:8b',
+        'system',
+        'user',
+        { baseUrl: 'http://host.docker.internal:11434' },
+      );
+      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ baseURL: 'http://host.docker.internal:11434/v1' }),
+      );
+    });
+
+    it('ollama: keeps /v1 when caller already supplied it', async () => {
+      await EXTRACTION_PROVIDERS.ollama!.extract(
+        '',
+        'llama3.1:8b',
+        'system',
+        'user',
+        { baseUrl: 'http://host.docker.internal:11434/v1' },
+      );
+      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ baseURL: 'http://host.docker.internal:11434/v1' }),
+      );
+    });
+
+    it('ollama: appends /v1 when only OLLAMA_HOST env is set (no /v1)', async () => {
+      process.env.OLLAMA_HOST = 'http://host.docker.internal:11434';
+      await EXTRACTION_PROVIDERS.ollama!.extract('', 'llama3.1:8b', 'system', 'user');
+      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ baseURL: 'http://host.docker.internal:11434/v1' }),
+      );
+    });
+
+    it('ollama: falls back to localhost:11434/v1 when nothing is configured', async () => {
+      await EXTRACTION_PROVIDERS.ollama!.extract('', 'llama3.1:8b', 'system', 'user');
+      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ baseURL: 'http://localhost:11434/v1' }),
+      );
+    });
+
+    it('llamacpp: appends /v1 when caller passes baseUrl without it', async () => {
+      await EXTRACTION_PROVIDERS.llamacpp!.extract(
+        '',
+        'gguf-model',
+        'system',
+        'user',
+        { baseUrl: 'http://host.docker.internal:8080' },
+      );
+      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ baseURL: 'http://host.docker.internal:8080/v1' }),
+      );
+    });
+
+    it('vllm: appends /v1 when caller passes baseUrl without it', async () => {
+      await EXTRACTION_PROVIDERS.vllm!.extract(
+        '',
+        'mistral-7b',
+        'system',
+        'user',
+        { baseUrl: 'http://host.docker.internal:8000' },
+      );
+      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
+        expect.objectContaining({ baseURL: 'http://host.docker.internal:8000/v1' }),
+      );
+    });
+  });
+
+  // Issue #84 follow up: enabling responseFormat must thread through every
+  // OpenAI compatible extract path so small models (Ollama, llama.cpp, vLLM)
+  // get constrained generation. Without it the parser regex would occasionally
+  // find no JSON in the response and bail.
+  describe('responseFormat: json_object plumbing (issue #84)', () => {
+    beforeEach(() => {
+      mockOpenAIConstructor.mockClear();
+      mockChatCompletionsCreate.mockReset();
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: '{}' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      });
+    });
+
+    it('openai: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.openai!.extract(
+        'sk-test',
+        'gpt-4.1-mini',
+        'system',
+        'user',
+        { responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('openai: omits response_format when caller does not opt in', async () => {
+      await EXTRACTION_PROVIDERS.openai!.extract('sk-test', 'gpt-4.1-mini', 'system', 'user');
+      const callArgs = mockChatCompletionsCreate.mock.calls[0]![0] as Record<string, unknown>;
+      expect(callArgs).not.toHaveProperty('response_format');
+    });
+
+    it('ollama: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.ollama!.extract(
+        '',
+        'llama3.1:8b',
+        'system',
+        'user',
+        { baseUrl: 'http://localhost:11434/v1', responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('llamacpp: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.llamacpp!.extract(
+        '',
+        'gguf-model',
+        'system',
+        'user',
+        { responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('vllm: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.vllm!.extract(
+        '',
+        'mistral-7b',
+        'system',
+        'user',
+        { responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
     });
   });
 

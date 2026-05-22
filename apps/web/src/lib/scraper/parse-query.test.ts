@@ -23,9 +23,17 @@ vi.mock('./ai-registry', () => ({
       models: [],
       extract: mockExtract,
     },
+    ollama: {
+      displayName: 'Ollama',
+      envKey: undefined,
+      allowCustomModel: true,
+      allowCustomBaseUrl: true,
+      models: [],
+      extract: mockExtract,
+    },
   },
   CLI_PROVIDERS: {},
-  LOCAL_PROVIDERS: new Set(),
+  LOCAL_PROVIDERS: new Set(['ollama']),
 }));
 
 // Provide a fake API key so the provider check passes
@@ -359,6 +367,111 @@ describe('parseFlightQuery', () => {
     });
 
     await expect(parseFlightQuery('asdfghjkl')).rejects.toThrow('Failed to parse LLM response as JSON');
+  });
+
+  it('logs a preview of the raw LLM content when no JSON block is found (issue #84)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockExtract.mockResolvedValue({
+      content: 'I am sorry, I cannot help with that request.',
+      usage: { inputTokens: 50, outputTokens: 20 },
+    });
+
+    await expect(parseFlightQuery('asdfghjkl')).rejects.toThrow('Failed to parse LLM response as JSON');
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('FAIL no_json_in_response'),
+    );
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('preview=I am sorry'),
+    );
+    spy.mockRestore();
+  });
+
+  it('logs a preview when JSON parse fails on a malformed block (issue #84)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Regex finds { ... } but the contents are not valid JSON (unquoted keys).
+    mockExtract.mockResolvedValue({
+      content: 'Here is the result: { foo: bar } and more',
+      usage: { inputTokens: 50, outputTokens: 20 },
+    });
+
+    await expect(parseFlightQuery('asdfghjkl')).rejects.toThrow('Failed to parse LLM response as JSON');
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('FAIL json_parse_error'),
+    );
+    spy.mockRestore();
+  });
+
+  it('opts into responseFormat json_object for local providers (issue #84)', async () => {
+    const { prisma } = await import('@/lib/prisma');
+    vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
+      provider: 'ollama',
+      model: 'llama3.1:8b',
+    } as never);
+
+    mockExtract.mockResolvedValue({
+      content: makeLlmResponse({
+        confidence: 'high',
+        ambiguities: [],
+        parsed: {
+          origins: [{ code: 'JFK', name: 'JFK' }],
+          destinations: [{ code: 'LAX', name: 'LAX' }],
+          dateFrom: '2026-06-15',
+          dateTo: '2026-06-22',
+          flexibility: 0,
+          maxPrice: null,
+          maxStops: null,
+          preferredAirlines: [],
+          timePreference: 'any',
+          cabinClass: 'economy',
+          tripType: 'round_trip',
+          currency: 'USD',
+        },
+      }),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    await parseFlightQuery('JFK to LAX June 15-22');
+
+    expect(mockExtract).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ responseFormat: 'json_object' }),
+    );
+  });
+
+  it('does not set responseFormat outside local providers (issue #84)', async () => {
+    // Default mocked provider is anthropic; LOCAL_PROVIDERS excludes it, so
+    // the OpenAI compat `response_format` flag is not safe to force and must
+    // not appear in the extract call. Same guard protects custom
+    // OPENAI_BASE_URL endpoints from a 400 on unsupported models.
+    mockExtract.mockResolvedValue({
+      content: makeLlmResponse({
+        confidence: 'high',
+        ambiguities: [],
+        parsed: {
+          origins: [{ code: 'JFK', name: 'JFK' }],
+          destinations: [{ code: 'LAX', name: 'LAX' }],
+          dateFrom: '2026-06-15',
+          dateTo: '2026-06-22',
+          flexibility: 0,
+          maxPrice: null,
+          maxStops: null,
+          preferredAirlines: [],
+          timePreference: 'any',
+          cabinClass: 'economy',
+          tripType: 'round_trip',
+          currency: 'USD',
+        },
+      }),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    await parseFlightQuery('JFK to LAX June 15-22');
+
+    const callArgs = mockExtract.mock.calls[0]![4] as Record<string, unknown> | undefined;
+    expect(callArgs).not.toHaveProperty('responseFormat');
   });
 
   it('throws when provider is unknown', async () => {
