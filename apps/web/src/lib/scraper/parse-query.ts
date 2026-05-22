@@ -261,11 +261,13 @@ export async function parseFlightQuery(
     fullPrompt,
     {
       baseUrl: config?.customBaseUrl ?? undefined,
-      // Constrain OpenAI compatible providers (openai, ollama, llamacpp, vllm)
-      // to emit a JSON object. Anthropic, Google, and CLI providers ignore it.
-      // Without it, small Ollama models occasionally return prose or a refusal
-      // and the regex below finds nothing (issue #84).
-      responseFormat: 'json_object',
+      // Constrain local providers to emit a JSON object. Without this, small
+      // Ollama models occasionally return prose or a refusal and the regex
+      // below finds nothing (issue #84). Gated to LOCAL_PROVIDERS only because
+      // custom OpenAI compatible endpoints (OPENAI_BASE_URL, OpenRouter, etc.)
+      // may route to models that reject `response_format` outright; the
+      // default OpenAI model follows the JSON instruction reliably anyway.
+      ...(isLocalProvider ? { responseFormat: 'json_object' as const } : {}),
     }
   );
 
