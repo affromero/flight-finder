@@ -259,15 +259,36 @@ export async function parseFlightQuery(
     model,
     buildSystemPrompt(),
     fullPrompt,
-    { baseUrl: config?.customBaseUrl ?? undefined }
+    {
+      baseUrl: config?.customBaseUrl ?? undefined,
+      // Constrain OpenAI compatible providers (openai, ollama, llamacpp, vllm)
+      // to emit a JSON object. Anthropic, Google, and CLI providers ignore it.
+      // Without it, small Ollama models occasionally return prose or a refusal
+      // and the regex below finds nothing (issue #84).
+      responseFormat: 'json_object',
+    }
   );
 
   const jsonMatch = result.content.match(/\{[\s\S]*\}/);
   if (!jsonMatch) {
+    const preview = result.content.slice(0, 200).replace(/\s+/g, ' ');
+    console.error(
+      `[parse-query] FAIL no_json_in_response provider=${provider} model=${model} length=${result.content.length} preview=${preview}`,
+    );
     throw new Error('Failed to parse LLM response as JSON');
   }
 
-  const raw = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  let raw: Record<string, unknown>;
+  try {
+    raw = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    const preview = jsonMatch[0].slice(0, 200).replace(/\s+/g, ' ');
+    console.error(
+      `[parse-query] FAIL json_parse_error provider=${provider} model=${model} length=${jsonMatch[0].length} err=${msg} preview=${preview}`,
+    );
+    throw new Error('Failed to parse LLM response as JSON');
+  }
 
   // Handle both old format (flat ParsedFlightQuery) and new format (with confidence envelope)
   let parsed: ParsedFlightQuery | null;

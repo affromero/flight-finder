@@ -30,6 +30,14 @@ interface ModelInfo {
 
 export interface ExtractOptions {
   baseUrl?: string;
+  /**
+   * Force the model into a structured output mode. `'json_object'` maps to
+   * OpenAI's `response_format: { type: 'json_object' }`, which Ollama (>= 0.1.34),
+   * llama.cpp, vLLM, and OpenAI all honour via constrained generation. Without
+   * it small models occasionally return prose or a refusal and `/api/parse`
+   * fails with `Failed to parse LLM response as JSON` (issue #84).
+   */
+  responseFormat?: 'json_object';
 }
 
 interface ProviderConfig {
@@ -139,6 +147,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );
@@ -174,6 +185,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );
@@ -206,6 +220,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );
@@ -238,6 +255,9 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             { role: 'user', content: userPrompt },
           ],
           max_tokens: 8192,
+          ...(options?.responseFormat === 'json_object'
+            ? { response_format: { type: 'json_object' as const } }
+            : {}),
         },
         { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
       );

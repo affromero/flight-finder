@@ -361,6 +361,72 @@ describe('parseFlightQuery', () => {
     await expect(parseFlightQuery('asdfghjkl')).rejects.toThrow('Failed to parse LLM response as JSON');
   });
 
+  it('logs a preview of the raw LLM content when no JSON block is found (issue #84)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    mockExtract.mockResolvedValue({
+      content: 'I am sorry, I cannot help with that request.',
+      usage: { inputTokens: 50, outputTokens: 20 },
+    });
+
+    await expect(parseFlightQuery('asdfghjkl')).rejects.toThrow('Failed to parse LLM response as JSON');
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('FAIL no_json_in_response'),
+    );
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('preview=I am sorry'),
+    );
+    spy.mockRestore();
+  });
+
+  it('logs a preview when JSON parse fails on a malformed block (issue #84)', async () => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    // Regex finds { ... } but the contents are not valid JSON (unquoted keys).
+    mockExtract.mockResolvedValue({
+      content: 'Here is the result: { foo: bar } and more',
+      usage: { inputTokens: 50, outputTokens: 20 },
+    });
+
+    await expect(parseFlightQuery('asdfghjkl')).rejects.toThrow('Failed to parse LLM response as JSON');
+    expect(spy).toHaveBeenCalledWith(
+      expect.stringContaining('FAIL json_parse_error'),
+    );
+    spy.mockRestore();
+  });
+
+  it('opts into responseFormat json_object on the extract call (issue #84)', async () => {
+    mockExtract.mockResolvedValue({
+      content: makeLlmResponse({
+        confidence: 'high',
+        ambiguities: [],
+        parsed: {
+          origins: [{ code: 'JFK', name: 'JFK' }],
+          destinations: [{ code: 'LAX', name: 'LAX' }],
+          dateFrom: '2026-06-15',
+          dateTo: '2026-06-22',
+          flexibility: 0,
+          maxPrice: null,
+          maxStops: null,
+          preferredAirlines: [],
+          timePreference: 'any',
+          cabinClass: 'economy',
+          tripType: 'round_trip',
+          currency: 'USD',
+        },
+      }),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    await parseFlightQuery('JFK to LAX June 15-22');
+
+    expect(mockExtract).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ responseFormat: 'json_object' }),
+    );
+  });
+
   it('throws when provider is unknown', async () => {
     const { prisma } = await import('@/lib/prisma');
     vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({

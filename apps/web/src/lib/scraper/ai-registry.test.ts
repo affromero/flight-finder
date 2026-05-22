@@ -468,6 +468,91 @@ describe('ai-registry', () => {
     });
   });
 
+  // Issue #84 follow up: enabling responseFormat must thread through every
+  // OpenAI compatible extract path so small models (Ollama, llama.cpp, vLLM)
+  // get constrained generation. Without it the parser regex would occasionally
+  // find no JSON in the response and bail.
+  describe('responseFormat: json_object plumbing (issue #84)', () => {
+    beforeEach(() => {
+      mockOpenAIConstructor.mockClear();
+      mockChatCompletionsCreate.mockReset();
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: '{}' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      });
+    });
+
+    it('openai: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.openai!.extract(
+        'sk-test',
+        'gpt-4.1-mini',
+        'system',
+        'user',
+        { responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('openai: omits response_format when caller does not opt in', async () => {
+      await EXTRACTION_PROVIDERS.openai!.extract('sk-test', 'gpt-4.1-mini', 'system', 'user');
+      const callArgs = mockChatCompletionsCreate.mock.calls[0]![0] as Record<string, unknown>;
+      expect(callArgs).not.toHaveProperty('response_format');
+    });
+
+    it('ollama: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.ollama!.extract(
+        '',
+        'llama3.1:8b',
+        'system',
+        'user',
+        { baseUrl: 'http://localhost:11434/v1', responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('llamacpp: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.llamacpp!.extract(
+        '',
+        'gguf-model',
+        'system',
+        'user',
+        { responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
+    });
+
+    it('vllm: passes response_format when caller opts in', async () => {
+      await EXTRACTION_PROVIDERS.vllm!.extract(
+        '',
+        'mistral-7b',
+        'system',
+        'user',
+        { responseFormat: 'json_object' },
+      );
+      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
+        expect.objectContaining({
+          response_format: { type: 'json_object' },
+        }),
+        expect.any(Object),
+      );
+    });
+  });
+
   describe('isLocalProviderReachable', () => {
     afterEach(() => {
       vi.unstubAllGlobals();
