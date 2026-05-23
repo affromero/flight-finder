@@ -132,6 +132,7 @@ export interface ExtractionConfigOverride {
   provider: string;
   model: string;
   customBaseUrl: string | null;
+  extractTimeoutSeconds : number;
 }
 
 export async function extractPrices(

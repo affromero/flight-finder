@@ -8,7 +8,7 @@ import Anthropic from '@anthropic-ai/sdk';
  * Configurable via env var EXTRACT_TIMEOUT_MS for ops tuning.
  */
 const PARSED_TIMEOUT = parseInt(process.env.EXTRACT_TIMEOUT_MS ?? '90000', 10);
-export const EXTRACT_TIMEOUT_MS =
+export var EXTRACT_TIMEOUT_MS =
   Number.isFinite(PARSED_TIMEOUT) && PARSED_TIMEOUT > 0 ? PARSED_TIMEOUT : 90_000;
 
 export interface ExtractionUsage {
@@ -505,6 +505,10 @@ export async function detectAvailableProviders(): Promise<string[]> {
   }
 
   return available;
+}
+export function updateTimeout(time:number) {
+  //Function takes time in seconds, so it's multiplied by 1000 here
+  EXTRACT_TIMEOUT_MS = time * 1000;
 }
 
 export function getModelCosts(

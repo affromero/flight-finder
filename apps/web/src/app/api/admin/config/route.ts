@@ -147,7 +147,11 @@ export async function PATCH(request: NextRequest) {
 
   // Immediately reschedule cron if the scrape interval changed
   if (typeof data.scrapeInterval === 'number') {
-    updateCronInterval(data.scrapeInterval);
+    updateCronInfterval(data.scrapeInterval);
+  }
+
+  if (typeof data.extractTimeoutSeconds === 'number') {
+
   }
 
   return apiSuccess(stripHashes(config as unknown as Record<string, unknown>));
