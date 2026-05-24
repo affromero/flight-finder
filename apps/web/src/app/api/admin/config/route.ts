@@ -8,6 +8,7 @@ import { encryptVpnCode } from '@/lib/vpn-crypto';
 import { isThemeId } from '@/lib/theme';
 import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
+import {updateTimeout} from '@/lib/scraper/ai-registry'
 
 function stripHashes(config: Record<string, unknown>) {
   const { adminPasswordHash, vpnActivationCode, ...rest } = config;
@@ -143,15 +144,14 @@ export async function PATCH(request: NextRequest) {
     where: { id: 'singleton' },
     update: data,
     create: { id: 'singleton', ...data },
-  });
+  }
+    updateCronInfterval(data.scrapeInterval)
 
-  // Immediately reschedule cron if the scrape interval changed
-  if (typeof data.scrapeInterval === 'number') {
-    updateCronInfterval(data.scrapeInterval);
   }
 
-  if (typeof data.extractTimeoutSeconds === 'number') {
-
+  if
+   (typeof data.extractTimeoutSeconds === 'number') {
+      updateTimeout(data.extractTimeoutSeconds);
   }
 
   return apiSuccess(stripHashes(config as unknown as Record<string, unknown>));
