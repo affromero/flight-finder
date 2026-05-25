@@ -18,6 +18,7 @@ interface Config {
   defaultCountry: string | null;
   defaultSearchMethod: 'ai' | 'manual';
   customBaseUrl: string | null;
+  extractTimeoutSeconds: number;
   vpnProvider: string | null;
   vpnCountries: string[];
   hasVpnActivationCode: boolean;
@@ -31,6 +32,7 @@ export default function ConfigPage() {
   const [model, setModel] = useState('claude-haiku-4-5-20251001');
   const [customModel, setCustomModel] = useState('');
   const [scrapeInterval, setScrapeInterval] = useState(3);
+  const [extractTimeoutSeconds, setExtractTimeoutSeconds] = useState(90);
   const [theme, setTheme] = useState<ThemeId>('default');
   const [defaultCurrency, setDefaultCurrency] = useState('');
   const [defaultCountry, setDefaultCountry] = useState('');
@@ -83,6 +85,7 @@ export default function ConfigPage() {
           setConfig(d.data);
           setProvider(d.data.provider);
           setScrapeInterval(d.data.scrapeInterval);
+          setExtractTimeoutSeconds(d.data.extractTimeoutSeconds ?? 90);
           setTheme(d.data.theme || 'default');
           applyTheme(d.data.theme || 'default');
           setDefaultCurrency(d.data.defaultCurrency || '');
@@ -139,6 +142,7 @@ export default function ConfigPage() {
         provider,
         model: effectiveModel,
         scrapeIntervalHours: scrapeInterval,
+        extractTimeoutSeconds,
         theme,
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
@@ -283,6 +287,22 @@ export default function ConfigPage() {
               <option key={h} value={h}>Every {h}h</option>
             ))}
           </select>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Extraction Timeout (seconds)</label>
+          <input
+            type="number"
+            className={styles.input}
+            min={30}
+            max={600}
+            step={1}
+            value={extractTimeoutSeconds}
+            onChange={(e) => setExtractTimeoutSeconds(Number(e.target.value))}
+          />
+          <span className={styles.toggleHint}>
+            Default 90. Raise this for slow CPU bound local models that exceed the default and time out.
+          </span>
         </div>
 
         <div className={styles.field}>

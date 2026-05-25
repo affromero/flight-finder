@@ -1,0 +1,95 @@
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+
+const mockUpsert = vi.fn();
+
+vi.mock('@/lib/prisma', () => ({
+  prisma: {
+    extractionConfig: {
+      upsert: (...args: unknown[]) => mockUpsert(...args),
+    },
+  },
+}));
+
+vi.mock('@/lib/admin-guard', () => ({
+  requireAdminApi: vi.fn().mockResolvedValue(null),
+}));
+
+vi.mock('@/lib/cron', () => ({
+  updateCronInterval: vi.fn(),
+}));
+
+vi.mock('@/lib/scraper/ai-registry', () => ({
+  EXTRACTION_PROVIDERS: {
+    anthropic: { displayName: 'Anthropic', models: [] },
+  },
+}));
+
+import { PATCH } from './route';
+import { NextRequest } from 'next/server';
+
+function patchRequest(body: Record<string, unknown>): NextRequest {
+  return new NextRequest('http://localhost:3003/api/admin/config', {
+    method: 'PATCH',
+    body: JSON.stringify(body),
+    headers: { 'Content-Type': 'application/json' },
+  });
+}
+
+describe('PATCH /api/admin/config — extractTimeoutSeconds (issue #86)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpsert.mockResolvedValue({ id: 'singleton', extractTimeoutSeconds: 90 });
+  });
+
+  it('writes a valid number within range', async () => {
+    const res = await PATCH(patchRequest({ extractTimeoutSeconds: 240 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.extractTimeoutSeconds).toBe(240);
+  });
+
+  it('clamps a value below the 30s floor to 30', async () => {
+    const res = await PATCH(patchRequest({ extractTimeoutSeconds: 5 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.extractTimeoutSeconds).toBe(30);
+  });
+
+  it('clamps a value above the 600s ceiling to 600', async () => {
+    const res = await PATCH(patchRequest({ extractTimeoutSeconds: 9999 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.extractTimeoutSeconds).toBe(600);
+  });
+
+  it('rejects NaN from a cleared number input without crashing Prisma', async () => {
+    // The admin UI sends `Number('')` which is NaN. `typeof NaN === 'number'`
+    // is true, so without a Number.isFinite guard the NaN would have been
+    // routed to Prisma which would 500 on the Int column write.
+    const res = await PATCH(patchRequest({ extractTimeoutSeconds: NaN }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update).not.toHaveProperty('extractTimeoutSeconds');
+  });
+
+  it('rejects Infinity without crashing Prisma', async () => {
+    const res = await PATCH(patchRequest({ extractTimeoutSeconds: Infinity }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update).not.toHaveProperty('extractTimeoutSeconds');
+  });
+
+  it('skips the field when it is a string', async () => {
+    const res = await PATCH(patchRequest({ extractTimeoutSeconds: '120' }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update).not.toHaveProperty('extractTimeoutSeconds');
+  });
+
+  it('rounds a fractional value to the nearest integer', async () => {
+    const res = await PATCH(patchRequest({ extractTimeoutSeconds: 47.6 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.extractTimeoutSeconds).toBe(48);
+  });
+});

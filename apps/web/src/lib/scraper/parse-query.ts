@@ -261,6 +261,13 @@ export async function parseFlightQuery(
     fullPrompt,
     {
       baseUrl: config?.customBaseUrl ?? undefined,
+      // Read the admin configured timeout from the DB so slow CPU bound local
+      // models can be granted more than the 90s default (issue #86). Falls
+      // through to the env var driven default inside each extract function
+      // when the column is null.
+      ...(typeof config?.extractTimeoutSeconds === 'number'
+        ? { timeoutMs: config.extractTimeoutSeconds * 1000 }
+        : {}),
       // Constrain local providers to emit a JSON object. Without this, small
       // Ollama models occasionally return prose or a refusal and the regex
       // below finds nothing (issue #84). Gated to LOCAL_PROVIDERS only because

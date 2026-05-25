@@ -38,6 +38,14 @@ export interface ExtractOptions {
    * fails with `Failed to parse LLM response as JSON` (issue #84).
    */
   responseFormat?: 'json_object';
+  /**
+   * Per-call abort timeout in ms. Sourced from `ExtractionConfig.extractTimeoutSeconds`
+   * so admins can extend it from the UI when slow local models on CPU exceed
+   * the 90s default (issue #86). When unset, falls back to `EXTRACT_TIMEOUT_MS`
+   * (90s, env-overridable). Applies to SDK providers only; CLI providers
+   * (claude-code, codex) keep their own spawn timeout.
+   */
+  timeoutMs?: number;
 }
 
 interface ProviderConfig {
@@ -94,7 +102,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
         costPer1kOutput: 0.015,
       },
     ],
-    extract: async (apiKey, model, systemPrompt, userPrompt) => {
+    extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
       const client = new Anthropic({ apiKey });
       const response = await client.messages.create(
         {
@@ -103,7 +111,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
           system: systemPrompt,
           messages: [{ role: 'user', content: userPrompt }],
         },
-        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+        { signal: AbortSignal.timeout(options?.timeoutMs ?? EXTRACT_TIMEOUT_MS) },
       );
 
       const text = response.content
@@ -151,7 +159,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             ? { response_format: { type: 'json_object' as const } }
             : {}),
         },
-        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+        { signal: AbortSignal.timeout(options?.timeoutMs ?? EXTRACT_TIMEOUT_MS) },
       );
 
       return {
@@ -189,7 +197,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             ? { response_format: { type: 'json_object' as const } }
             : {}),
         },
-        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+        { signal: AbortSignal.timeout(options?.timeoutMs ?? EXTRACT_TIMEOUT_MS) },
       );
 
       return {
@@ -224,7 +232,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             ? { response_format: { type: 'json_object' as const } }
             : {}),
         },
-        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+        { signal: AbortSignal.timeout(options?.timeoutMs ?? EXTRACT_TIMEOUT_MS) },
       );
 
       return {
@@ -259,7 +267,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
             ? { response_format: { type: 'json_object' as const } }
             : {}),
         },
-        { signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS) },
+        { signal: AbortSignal.timeout(options?.timeoutMs ?? EXTRACT_TIMEOUT_MS) },
       );
 
       return {
@@ -283,7 +291,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
         costPer1kOutput: 0.0035,
       },
     ],
-    extract: async (apiKey, model, systemPrompt, userPrompt) => {
+    extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
       const genModel = genAI.getGenerativeModel({
@@ -294,9 +302,10 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
       // @google/generative-ai 0.24+ accepts SingleRequestOptions as the second
       // arg with native `signal` and `timeout` fields. Native signal aborts
       // the underlying fetch (better than Promise.race which would leak).
+      const timeoutMs = options?.timeoutMs ?? EXTRACT_TIMEOUT_MS;
       const result = await genModel.generateContent(userPrompt, {
-        signal: AbortSignal.timeout(EXTRACT_TIMEOUT_MS),
-        timeout: EXTRACT_TIMEOUT_MS,
+        signal: AbortSignal.timeout(timeoutMs),
+        timeout: timeoutMs,
       });
       const response = result.response;
 

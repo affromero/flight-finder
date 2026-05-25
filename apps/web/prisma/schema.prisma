@@ -116,6 +116,7 @@ model ExtractionConfig {
   vpnActivationCode    String?   // encrypted VPN activation code
   multiUserMode        Boolean   @default(false) // self-hosted only; admin manages User table for households
   updatedAt            DateTime  @updatedAt
+  extractTimeoutSeconds Int @default(90)
 }
 
 model User {
