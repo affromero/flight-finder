@@ -144,13 +144,14 @@ export async function PATCH(request: NextRequest) {
     where: { id: 'singleton' },
     update: data,
     create: { id: 'singleton', ...data },
-  }
-    updateCronInfterval(data.scrapeInterval)
+  });
 
+  // Immediately reschedule cron if the scrape interval changed
+  if (typeof data.scrapeInterval === 'number') {
+    updateCronInterval(data.scrapeInterval);
   }
 
-  if
-   (typeof data.extractTimeoutSeconds === 'number') {
+  if (typeof data.extractTimeoutSeconds === 'number') {
       updateTimeout(data.extractTimeoutSeconds);
   }
 
