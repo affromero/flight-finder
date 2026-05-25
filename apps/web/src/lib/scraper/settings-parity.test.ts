@@ -69,10 +69,11 @@ describe('settings page parity with admin config', () => {
     const settingsFields = extractConfigFields(SETTINGS_PAGE);
     const adminFields = extractConfigFields(ADMIN_CONFIG_PAGE);
 
-    // Settings page is a subset of admin (admin has extra fields like hasAdminPassword).
-    // But core data fields must exist in both.
+    // Settings page is a subset of admin (admin has extra fields like
+    // hasAdminPassword and the ops-only LLM extract timeout). Core data
+    // fields must exist in both.
     const coreFields = adminFields.filter(
-      (f) => !['hasAdminPassword'].includes(f)
+      (f) => !['hasAdminPassword', 'extractTimeoutSeconds'].includes(f)
     );
 
     for (const field of coreFields) {
@@ -87,10 +88,11 @@ describe('settings page parity with admin config', () => {
     const settingsSaveFields = extractSaveBodyFields(SETTINGS_PAGE);
     const adminSaveFields = extractSaveBodyFields(ADMIN_CONFIG_PAGE);
 
-    // Admin page may send additional fields (e.g., adminPassword) that settings doesn't.
-    // But all extraction-related fields should be in both.
+    // Admin page may send additional fields (adminPassword, the LLM
+    // extract timeout) that settings doesn't surface. All other extraction
+    // related fields should be in both.
     const extractionFields = adminSaveFields.filter(
-      (f) => !['adminPassword'].includes(f)
+      (f) => !['adminPassword', 'extractTimeoutSeconds'].includes(f)
     );
 
     for (const field of extractionFields) {
