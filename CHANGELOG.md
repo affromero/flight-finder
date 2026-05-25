@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.7.4] - 2026-05-25
+
+### Added
+* **Admin UI setting for LLM extraction timeout** (#86): when 90s is too short for slow CPU bound local models (issue #84 follow up, originally surfaced by a Manjaro user on `qwen3:0.6b`), admins can now extend the per call abort from `/admin/config`. New `extractTimeoutSeconds Int @default(90)` column on `ExtractionConfig` (range 30 to 600, enforced server side with `Math.max(30, Math.min(600, Math.round(...)))` plus a `Number.isFinite` guard so a cleared number input does not crash Prisma). `ai-registry.ts` exposes `timeoutMs?: number` on `ExtractOptions`; every SDK provider (anthropic, openai, ollama, llamacpp, vllm, google) now reads `options?.timeoutMs ?? EXTRACT_TIMEOUT_MS` for `AbortSignal.timeout`. parse-query and extract-prices fetch `extractTimeoutSeconds` off the singleton config row per call, so a settings change applies on the next parse with no container restart. The `EXTRACT_TIMEOUT_MS` env var stays as the ops fallback when the column is unset. CLI providers (claude-code, codex) keep their existing spawn timeout, separate scope. Co-authored with [@Darth-Ness](https://github.com/Darth-Ness), who opened PR #87 with the schema column and PATCH handler skeleton.
+
+### Changed
+* `ExtractionConfigOverride.extractTimeoutSeconds` is optional (`?: number | null`) so the existing preview-runner caller compiles without forwarding the field, and is plumbed through `ExtractionContext` in `preview-runner.ts` so a 20 route preview honours the configured timeout for every route.
+* Admin config number input step is `1` rather than `10`, matching the actual server accepted range (any integer 30 to 600).
+
 ## [0.7.3] - 2026-05-22
 
 ### Fixed
