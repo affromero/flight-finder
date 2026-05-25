@@ -506,10 +506,6 @@ export async function detectAvailableProviders(): Promise<string[]> {
 
   return available;
 }
-export function updateTimeout(time:number) {
-  //Function takes time in seconds, so it's multiplied by 1000 here
-  EXTRACT_TIMEOUT_MS = time * 1000;
-}
 
 export function getModelCosts(
   provider: string,

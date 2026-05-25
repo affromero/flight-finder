@@ -68,6 +68,9 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.scrapeIntervalHours === 'number') {
     data.scrapeInterval = Math.max(1, Math.min(24, Math.round(body.scrapeIntervalHours)));
   }
+  if (typeof body.extractTimeoutSeconds === 'number') {
+    data.extractTimeoutSeconds = Math.max(30, Math.min(600, Math.round(body.extractTimeoutSeconds)));
+  }
   if (body.defaultSearchMethod !== undefined) {
     if (body.defaultSearchMethod !== 'ai' && body.defaultSearchMethod !== 'manual') {
       return apiError('defaultSearchMethod must be "ai" or "manual"', 400);
