@@ -474,6 +474,76 @@ describe('parseFlightQuery', () => {
     expect(callArgs).not.toHaveProperty('responseFormat');
   });
 
+  it('passes timeoutMs to extract when config.extractTimeoutSeconds is set (issue #86)', async () => {
+    const { prisma } = await import('@/lib/prisma');
+    vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      extractTimeoutSeconds: 240,
+    } as never);
+
+    mockExtract.mockResolvedValue({
+      content: makeLlmResponse({
+        confidence: 'high',
+        ambiguities: [],
+        parsed: {
+          origins: [{ code: 'JFK', name: 'JFK' }],
+          destinations: [{ code: 'LAX', name: 'LAX' }],
+          dateFrom: '2026-06-15',
+          dateTo: '2026-06-22',
+          flexibility: 0,
+          maxPrice: null,
+          maxStops: null,
+          preferredAirlines: [],
+          timePreference: 'any',
+          cabinClass: 'economy',
+          tripType: 'round_trip',
+          currency: 'USD',
+        },
+      }),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    await parseFlightQuery('JFK to LAX June 15-22');
+
+    expect(mockExtract).toHaveBeenCalledWith(
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.any(String),
+      expect.objectContaining({ timeoutMs: 240_000 }),
+    );
+  });
+
+  it('omits timeoutMs when config.extractTimeoutSeconds is unset (issue #86)', async () => {
+    mockExtract.mockResolvedValue({
+      content: makeLlmResponse({
+        confidence: 'high',
+        ambiguities: [],
+        parsed: {
+          origins: [{ code: 'JFK', name: 'JFK' }],
+          destinations: [{ code: 'LAX', name: 'LAX' }],
+          dateFrom: '2026-06-15',
+          dateTo: '2026-06-22',
+          flexibility: 0,
+          maxPrice: null,
+          maxStops: null,
+          preferredAirlines: [],
+          timePreference: 'any',
+          cabinClass: 'economy',
+          tripType: 'round_trip',
+          currency: 'USD',
+        },
+      }),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    await parseFlightQuery('JFK to LAX June 15-22');
+
+    const callArgs = mockExtract.mock.calls[0]![4] as Record<string, unknown> | undefined;
+    expect(callArgs).not.toHaveProperty('timeoutMs');
+  });
+
   it('throws when provider is unknown', async () => {
     const { prisma } = await import('@/lib/prisma');
     vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({

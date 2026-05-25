@@ -553,6 +553,76 @@ describe('ai-registry', () => {
     });
   });
 
+  // Issue #86: ExtractOptions.timeoutMs lets the admin override the default
+  // 90s abort timeout from the DB. Every SDK provider's extract path must
+  // honour it, with EXTRACT_TIMEOUT_MS as the fallback when unset.
+  describe('timeoutMs plumbing (issue #86)', () => {
+    let timeoutSpy: ReturnType<typeof vi.spyOn>;
+
+    beforeEach(() => {
+      mockOpenAIConstructor.mockClear();
+      mockChatCompletionsCreate.mockReset();
+      mockChatCompletionsCreate.mockResolvedValue({
+        choices: [{ message: { content: '{}' } }],
+        usage: { prompt_tokens: 1, completion_tokens: 1 },
+      });
+      timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
+    });
+
+    afterEach(() => {
+      timeoutSpy.mockRestore();
+    });
+
+    it('ollama: uses options.timeoutMs when supplied', async () => {
+      await EXTRACTION_PROVIDERS.ollama!.extract(
+        '',
+        'qwen3:4b',
+        'system',
+        'user',
+        { baseUrl: 'http://localhost:11434/v1', timeoutMs: 240_000 },
+      );
+      expect(timeoutSpy).toHaveBeenCalledWith(240_000);
+    });
+
+    it('ollama: falls back to EXTRACT_TIMEOUT_MS when timeoutMs is unset', async () => {
+      await EXTRACTION_PROVIDERS.ollama!.extract('', 'qwen3:4b', 'system', 'user');
+      expect(timeoutSpy).toHaveBeenCalledWith(90_000);
+    });
+
+    it('openai: uses options.timeoutMs when supplied', async () => {
+      await EXTRACTION_PROVIDERS.openai!.extract(
+        'sk-test',
+        'gpt-4.1-mini',
+        'system',
+        'user',
+        { timeoutMs: 180_000 },
+      );
+      expect(timeoutSpy).toHaveBeenCalledWith(180_000);
+    });
+
+    it('llamacpp: uses options.timeoutMs when supplied', async () => {
+      await EXTRACTION_PROVIDERS.llamacpp!.extract(
+        '',
+        'gguf-model',
+        'system',
+        'user',
+        { timeoutMs: 300_000 },
+      );
+      expect(timeoutSpy).toHaveBeenCalledWith(300_000);
+    });
+
+    it('vllm: uses options.timeoutMs when supplied', async () => {
+      await EXTRACTION_PROVIDERS.vllm!.extract(
+        '',
+        'mistral-7b',
+        'system',
+        'user',
+        { timeoutMs: 120_000 },
+      );
+      expect(timeoutSpy).toHaveBeenCalledWith(120_000);
+    });
+  });
+
   describe('isLocalProviderReachable', () => {
     afterEach(() => {
       vi.unstubAllGlobals();

@@ -132,7 +132,7 @@ export interface ExtractionConfigOverride {
   provider: string;
   model: string;
   customBaseUrl: string | null;
-  extractTimeoutSeconds : number;
+  extractTimeoutSeconds?: number | null;
 }
 
 export async function extractPrices(
@@ -155,7 +155,12 @@ export async function extractPrices(
   // it once per preview), skip the DB read. Backwards compatible for the
   // /api/test/scrape endpoint and tests that pass minimal args.
   const config = configOverride
-    ? { provider: configOverride.provider, model: configOverride.model, customBaseUrl: configOverride.customBaseUrl }
+    ? {
+        provider: configOverride.provider,
+        model: configOverride.model,
+        customBaseUrl: configOverride.customBaseUrl,
+        extractTimeoutSeconds: configOverride.extractTimeoutSeconds ?? null,
+      }
     : await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
 
   const provider = config?.provider ?? 'anthropic';
@@ -195,6 +200,11 @@ ${html}`;
   try {
     result = await providerConfig.extract(apiKey, model, systemPrompt, userPrompt, {
       baseUrl: config?.customBaseUrl ?? undefined,
+      // Honour the admin configured timeout from the DB when set; otherwise
+      // each extract function falls back to EXTRACT_TIMEOUT_MS (issue #86).
+      ...(typeof config?.extractTimeoutSeconds === 'number'
+        ? { timeoutMs: config.extractTimeoutSeconds * 1000 }
+        : {}),
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

@@ -63,6 +63,7 @@ export interface ExtractionContext {
   provider: string;
   model: string;
   customBaseUrl: string | null;
+  extractTimeoutSeconds: number | null;
   costs: { costPer1kInput: number; costPer1kOutput: number };
 }
 
@@ -221,6 +222,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
         provider: params.context.provider,
         model: params.context.model,
         customBaseUrl: params.context.customBaseUrl,
+        extractTimeoutSeconds: params.context.extractTimeoutSeconds,
       }
     );
 
@@ -316,6 +318,7 @@ export async function runPreview(
     provider,
     model,
     customBaseUrl: config?.customBaseUrl ?? null,
+    extractTimeoutSeconds: config?.extractTimeoutSeconds ?? null,
     costs: getModelCosts(provider, model),
   };
   const outboundDates = payload.outboundDates;
