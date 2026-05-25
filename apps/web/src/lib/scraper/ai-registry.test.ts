@@ -621,6 +621,42 @@ describe('ai-registry', () => {
       );
       expect(timeoutSpy).toHaveBeenCalledWith(120_000);
     });
+
+    // CLI providers (claude-code, codex) rely on the spawn() `timeout` option
+    // for their own subprocess lifetime, not AbortSignal.timeout. Regression
+    // cover so a future refactor that wires AbortSignal.timeout into them
+    // (without removing the spawn timeout) does not double-arm the kill path.
+    it('claude-code: does not call AbortSignal.timeout', async () => {
+      const fakeProc = createFakeProc();
+      mockSpawn.mockReturnValue(fakeProc);
+
+      const extractPromise = EXTRACTION_PROVIDERS['claude-code']!.extract('', 'sonnet', 'system', 'user');
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalled();
+      });
+      const err = new Error('spawn claude ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      fakeProc.emit('error', err);
+      await extractPromise.catch(() => {});
+
+      expect(timeoutSpy).not.toHaveBeenCalled();
+    });
+
+    it('codex: does not call AbortSignal.timeout', async () => {
+      const fakeProc = createFakeProc();
+      mockSpawn.mockReturnValue(fakeProc);
+
+      const extractPromise = EXTRACTION_PROVIDERS.codex!.extract('', 'codex', 'system', 'user');
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalled();
+      });
+      const err = new Error('spawn codex ENOENT') as NodeJS.ErrnoException;
+      err.code = 'ENOENT';
+      fakeProc.emit('error', err);
+      await extractPromise.catch(() => {});
+
+      expect(timeoutSpy).not.toHaveBeenCalled();
+    });
   });
 
   describe('isLocalProviderReachable', () => {

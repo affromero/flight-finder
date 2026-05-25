@@ -67,7 +67,9 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.scrapeIntervalHours === 'number') {
     data.scrapeInterval = Math.max(1, Math.min(24, Math.round(body.scrapeIntervalHours)));
   }
-  if (typeof body.extractTimeoutSeconds === 'number') {
+  // `typeof NaN === 'number'` is true, so check `Number.isFinite` to reject
+  // cleared inputs (NaN) before they hit Prisma and crash with a runtime error.
+  if (typeof body.extractTimeoutSeconds === 'number' && Number.isFinite(body.extractTimeoutSeconds)) {
     data.extractTimeoutSeconds = Math.max(30, Math.min(600, Math.round(body.extractTimeoutSeconds)));
   }
   if (body.defaultSearchMethod !== undefined) {

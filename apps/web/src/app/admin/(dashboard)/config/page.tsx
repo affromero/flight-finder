@@ -296,7 +296,7 @@ export default function ConfigPage() {
             className={styles.input}
             min={30}
             max={600}
-            step={10}
+            step={1}
             value={extractTimeoutSeconds}
             onChange={(e) => setExtractTimeoutSeconds(Number(e.target.value))}
           />
