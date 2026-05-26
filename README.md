@@ -225,6 +225,21 @@ You type: "SFO to Tokyo sometime in July +/- 5 days"
 
 The built-in cron runs on a configurable interval (default: every 3h). Each run captures prices across all active queries and the chart pages update automatically.
 
+## Scraping Constraints
+
+Fairtrail walks an ordered chain of price sources per query. The chain is admin allowlisted and per user orderable. Each source has different reliability:
+
+| Source           | Default | Reliability     | Notes |
+|------------------|---------|-----------------|-------|
+| Google Flights   | on      | High            | Three URL rotation + stealth context. Rate limit kicks in around 30 sustained requests per IP. |
+| Airline direct   | on      | High when supported | URL templates in `airline-urls.ts`. Falls through to the next source when an airline returns a stub page. |
+| Skyscanner       | off     | **Experimental** (40 to 70 percent in burst, drops under sustained load) | Cloudflare interstitials + bot detection. v1 is best effort. |
+| Kayak            | off     | **Experimental** (similar to Skyscanner) | PerimeterX bot detection. v1 is best effort. |
+
+Skyscanner and Kayak are off by default. Admin enables them in `/admin/config`; users then order them in `/account/settings`. When a source returns no flights the next source in the chain runs; an `all_filtered_out` result (real flights existed but query filters excluded them) short circuits the chain because changing sources cannot help.
+
+For Skyscanner and Kayak to be production grade you would need residential proxies or paid CAPTCHA solving, neither of which Fairtrail ships. If those sources fail consistently for your route, leave them off.
+
 ## Managing Fairtrail
 
 ```
