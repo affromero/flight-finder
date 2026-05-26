@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased] Renamed to Flight Finder
+## [0.9.0] - 2026-05-26 Renamed to Flight Finder
 
 ### Renamed
 * **The project is now Flight Finder.** Brand, domain, GitHub repo, npm workspace, Doppler project, install dir, database, binary, and image all carry the new name. The old fairtrail.org domain 301 redirects to flight-finder.org with the path preserved, the GitHub repo auto redirects from affromero/fairtrail, and historical ghcr.io/affromero/fairtrail tags stay pullable.
