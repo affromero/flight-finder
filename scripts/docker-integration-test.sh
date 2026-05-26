@@ -115,10 +115,10 @@ test_landing_page() {
 
   local body
   body=$(curl -sf "http://localhost:${PORT}/")
-  if echo "$body" | grep -qi "fairtrail"; then
-    pass "Landing page contains 'Fairtrail'"
+  if echo "$body" | grep -qi "flight finder"; then
+    pass "Landing page contains 'Flight Finder'"
   else
-    fail "Landing page" "missing 'Fairtrail' in HTML"
+    fail "Landing page" "missing 'Flight Finder' in HTML"
   fi
 }
 

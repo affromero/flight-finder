@@ -129,20 +129,20 @@ test_login_shell_path() {
     eval "$snippet"
   )
 
-  # Create a dummy fairtrail binary
+  # Create a dummy flight-finder binary (canonical post-rename)
   mkdir -p "$HOME/.local/bin"
   echo '#!/bin/bash' > "$HOME/.local/bin/flight-finder"
-  echo 'echo "fairtrail-ok"' >> "$HOME/.local/bin/flight-finder"
+  echo 'echo "flight-finder-ok"' >> "$HOME/.local/bin/flight-finder"
   chmod +x "$HOME/.local/bin/flight-finder"
 
-  # Test: can a login shell find fairtrail?
+  # Test: can a login shell find flight-finder?
   local result
-  result=$(bash -l -c 'command -v fairtrail 2>/dev/null || echo "not-found"')
+  result=$(bash -l -c 'command -v flight-finder 2>/dev/null || echo "not-found"')
 
   if [ "$result" != "not-found" ]; then
-    pass "Login shell (bash -l) finds fairtrail in PATH"
+    pass "Login shell (bash -l) finds flight-finder in PATH"
   else
-    fail "Login shell (bash -l) cannot find fairtrail" "This is the SSH session bug"
+    fail "Login shell (bash -l) cannot find flight-finder" "This is the SSH session bug"
   fi
 
   rm -rf "$HOME/.local"
@@ -198,8 +198,9 @@ test_old_dir_migration() {
 test_cli_update_path() {
   local cli="/home/testuser/flight-finder-cli"
 
-  # Check cmd_update function uses command -v
-  if grep -A5 'cmd_update' "$cli" | grep -q 'command -v fairtrail'; then
+  # Check cmd_update function uses command -v (canonical flight-finder name).
+  # Widened to -A8 to allow a multi-line comment explaining the legacy fallback.
+  if grep -A8 'cmd_update' "$cli" | grep -q 'command -v flight-finder'; then
     pass "CLI update uses 'command -v' for self-path detection"
   else
     fail "CLI update hardcodes path" "should use command -v"
