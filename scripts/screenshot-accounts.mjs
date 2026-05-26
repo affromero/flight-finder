@@ -46,7 +46,7 @@ async function delay(ms) { await new Promise((r) => setTimeout(r, ms)); }
   // 1. Setup wizard self hosted: step 1 (Provider), 2 (Community), 3 (Accounts).
   console.log('Setup wizard ...');
   await page.goto(`${BASE}/setup`);
-  await page.waitForSelector('text=Fairtrail Setup');
+  await page.waitForSelector('text=Flight Finder Setup');
   await shot(page, '01-setup-step1-provider');
 
   // Pick the anthropic provider card if visible, otherwise any provider.
@@ -58,7 +58,7 @@ async function delay(ms) { await new Promise((r) => setTimeout(r, ms)); }
 
   // Self hosted advances to step 3 instead of finalizing.
   await page.locator('button:has-text("Next")').click();
-  await page.waitForSelector('text=Run Fairtrail for a household');
+  await page.waitForSelector('text=Run Flight Finder for a household');
   await shot(page, '03-setup-step3-accounts-skip');
 
   // Toggle on, fill in admin form, screenshot, then complete.
