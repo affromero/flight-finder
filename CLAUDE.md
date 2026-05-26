@@ -114,12 +114,15 @@ Models: `Query` (tracked flights, optional `userId` owner), `PriceSnapshot` (pri
 
 Supports light/dark themes via `data-theme` attribute on `<html>`.
 
-**Dark (default):** bg `#080f1a`, surface `#0f1729`, elevated `#182036`, accent `#06b6d4` (aviation cyan).
-**Light:** bg `#f5f2ec`, surface `#ffffff`, elevated `#ede9e1`, accent `#0891b2` (deep cyan).
+**Dark (default):** bg `#031820`, surface `#072530`, elevated `#0e3640`, border `#1a4a52`, accent `#80a8a5` (mid teal), text `#ecdfc0` (warm cream), secondary `#d4a574` (muted gold).
+**Light (basic-light):** bg `#faf6ed` (cream), surface `#f1ead9`, elevated `#e8dfc8`, border `#d6cbae`, accent `#1a4a52` (deep teal), text `#031820`.
+**Price up alert (shared):** `#c1272d` scarlet. Reserved for emphasis on rising prices, alerts, and editorial callouts.
 
 Fonts: Bricolage Grotesque (display), Outfit (body), IBM Plex Mono (data).
 
-Departure board / atmospheric aviation aesthetic — deep navy, amber glow, precise typography.
+Vintage travel poster aesthetic. Deep teal and cream with a scarlet alert accent. Pan Am and French Line ocean liner heritage. No amber primary, kept out to steer clear of the AI tool palette.
+
+Other themes (cyberpunk, tron, autumn, solar-red) remain as user-selectable alternates in `theme.ts`.
 
 ## Scraping Constraints
 

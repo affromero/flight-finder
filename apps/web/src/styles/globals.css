@@ -34,31 +34,31 @@
   --transition-fast: 150ms ease;
 
   /* Semantic (shared) */
-  --price-up: #ef4444;
+  --price-up: #c1272d;
   --price-down: #10b981;
   --price-stable: #64748b;
-  --warning: #f59e0b;
+  --warning: #d4a574;
 }
 
 :root,
 [data-theme='default'] {
   color-scheme: dark;
 
-  --bg: #080f1a;
-  --surface: #0f1729;
-  --elevated: #182036;
-  --border: #243049;
+  --bg: #031820;
+  --surface: #072530;
+  --elevated: #0e3640;
+  --border: #1a4a52;
 
-  --accent: #06b6d4;
-  --accent-dim: #0e7490;
-  --accent-glow: rgba(6, 182, 212, 0.1);
-  --accent-hover: #22d3ee;
+  --accent: #80a8a5;
+  --accent-dim: #2d5e63;
+  --accent-glow: rgba(128, 168, 165, 0.12);
+  --accent-hover: #bcd2cf;
 
-  --text: #e8edf5;
-  --text-secondary: #8b9ec2;
-  --muted: #5a6f96;
+  --text: #ecdfc0;
+  --text-secondary: #d4a574;
+  --muted: #80a8a5;
 
-  --page-gradient: radial-gradient(circle at top, rgba(6, 182, 212, 0.12), transparent 38%);
+  --page-gradient: radial-gradient(circle at top, rgba(128, 168, 165, 0.10), transparent 38%);
   --page-overlay: repeating-linear-gradient(
     0deg,
     transparent,
@@ -72,23 +72,23 @@
   :root:not([data-theme]) {
     color-scheme: light;
 
-    --bg: #f5f2ec;
-    --surface: #ffffff;
-    --elevated: #ede9e1;
-    --border: #d5cfc4;
+    --bg: #faf6ed;
+    --surface: #f1ead9;
+    --elevated: #e8dfc8;
+    --border: #d6cbae;
 
-    --accent: #0891b2;
-    --accent-dim: #b2e0ea;
-    --accent-glow: rgba(8, 145, 178, 0.08);
-    --accent-hover: #0e7490;
+    --accent: #1a4a52;
+    --accent-dim: #80a8a5;
+    --accent-glow: rgba(26, 74, 82, 0.08);
+    --accent-hover: #003a47;
 
-    --text: #1a1f2e;
-    --text-secondary: #5a6275;
-    --muted: #8e95a5;
+    --text: #031820;
+    --text-secondary: #2d5e63;
+    --muted: #80a8a5;
 
-    --price-up: #dc2626;
+    --price-up: #c1272d;
     --price-down: #059669;
-    --page-gradient: linear-gradient(180deg, rgba(8, 145, 178, 0.08), transparent 32%);
+    --page-gradient: linear-gradient(180deg, rgba(26, 74, 82, 0.06), transparent 32%);
     --page-overlay: none;
   }
 }
@@ -96,23 +96,23 @@
 [data-theme='basic-light'] {
   color-scheme: light;
 
-  --bg: #f5f2ec;
-  --surface: #ffffff;
-  --elevated: #ede9e1;
-  --border: #d5cfc4;
+  --bg: #faf6ed;
+  --surface: #f1ead9;
+  --elevated: #e8dfc8;
+  --border: #d6cbae;
 
-  --accent: #0891b2;
-  --accent-dim: #b2e0ea;
-  --accent-glow: rgba(8, 145, 178, 0.08);
-  --accent-hover: #0e7490;
+  --accent: #1a4a52;
+  --accent-dim: #80a8a5;
+  --accent-glow: rgba(26, 74, 82, 0.08);
+  --accent-hover: #003a47;
 
-  --text: #1a1f2e;
-  --text-secondary: #5a6275;
-  --muted: #8e95a5;
+  --text: #031820;
+  --text-secondary: #2d5e63;
+  --muted: #80a8a5;
 
-  --price-up: #dc2626;
+  --price-up: #c1272d;
   --price-down: #059669;
-  --page-gradient: linear-gradient(180deg, rgba(8, 145, 178, 0.08), transparent 32%);
+  --page-gradient: linear-gradient(180deg, rgba(26, 74, 82, 0.06), transparent 32%);
   --page-overlay: none;
 }
 
