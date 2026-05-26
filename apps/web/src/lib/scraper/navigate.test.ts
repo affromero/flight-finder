@@ -2,7 +2,10 @@ import { describe, it, expect } from 'vitest';
 import {
   buildGoogleFlightsUrl,
   buildGoogleFlightsUrlCandidates,
+  buildSkyscannerUrl,
+  buildKayakUrl,
   hasFlightPriceSignal,
+  isAggregatorSource,
   pageHasRequestedRoute,
   pageRedirectedToHomepage,
 } from './navigate';
@@ -502,5 +505,106 @@ describe('hasFlightPriceSignal (two-criterion airline page heuristic, issue #65)
 
   it('accepts EUR99 (no space between code and digits)', () => {
     expect(hasFlightPriceSignal('EUR99 EUR131 EUR205')).toBe(true);
+  });
+});
+
+describe('buildSkyscannerUrl', () => {
+  const base = {
+    origin: 'JFK',
+    destination: 'LAX',
+    dateFrom: new Date('2026-06-15T00:00:00Z'),
+    dateTo: new Date('2026-06-22T00:00:00Z'),
+  };
+
+  it('builds a round-trip URL with lowercase IATA codes and YYMMDD dates', () => {
+    const url = buildSkyscannerUrl(base);
+    expect(url).toMatch(/\/jfk\/lax\/260615\/260622\//);
+    expect(url).toContain('adultsv2=1');
+    expect(url).toContain('cabinclass=economy');
+  });
+
+  it('builds a one-way URL with a single date segment', () => {
+    const url = buildSkyscannerUrl({ ...base, tripType: 'one_way' });
+    expect(url).toMatch(/\/jfk\/lax\/260615\/\?/);
+    expect(url).not.toMatch(/260622/);
+  });
+
+  it('maps premium_economy cabin to premiumeconomy', () => {
+    const url = buildSkyscannerUrl({ ...base, cabinClass: 'premium_economy' });
+    expect(url).toContain('cabinclass=premiumeconomy');
+  });
+
+  it('defaults to economy when cabinClass is missing', () => {
+    const url = buildSkyscannerUrl(base);
+    expect(url).toContain('cabinclass=economy');
+  });
+
+  it('includes currency and market when set', () => {
+    const url = buildSkyscannerUrl({ ...base, currency: 'EUR', country: 'DE' });
+    expect(url).toContain('currency=EUR');
+    expect(url).toContain('market=DE');
+  });
+
+  it('omits currency and market when null', () => {
+    const url = buildSkyscannerUrl({ ...base, currency: null, country: null });
+    expect(url).not.toContain('currency=');
+    expect(url).not.toContain('market=');
+  });
+
+  it('rejects invalid origin IATA code', () => {
+    expect(() => buildSkyscannerUrl({ ...base, origin: 'jfk' })).toThrow(/Invalid IATA origin/);
+  });
+
+  it('rejects invalid destination IATA code', () => {
+    expect(() => buildSkyscannerUrl({ ...base, destination: 'JFKK' })).toThrow(/Invalid IATA destination/);
+  });
+});
+
+describe('buildKayakUrl', () => {
+  const base = {
+    origin: 'JFK',
+    destination: 'LAX',
+    dateFrom: new Date('2026-06-15T00:00:00Z'),
+    dateTo: new Date('2026-06-22T00:00:00Z'),
+  };
+
+  it('builds a round-trip URL with uppercase IATA codes and ISO dates', () => {
+    const url = buildKayakUrl(base);
+    expect(url).toBe('https://www.kayak.com/flights/JFK-LAX/2026-06-15/2026-06-22?sort=price_a');
+  });
+
+  it('builds a one-way URL with a single date segment', () => {
+    const url = buildKayakUrl({ ...base, tripType: 'one_way' });
+    expect(url).toBe('https://www.kayak.com/flights/JFK-LAX/2026-06-15?sort=price_a');
+  });
+
+  it('rejects invalid origin IATA code', () => {
+    expect(() => buildKayakUrl({ ...base, origin: 'XX' })).toThrow(/Invalid IATA origin/);
+  });
+
+  it('rejects invalid destination IATA code', () => {
+    expect(() => buildKayakUrl({ ...base, destination: 'lax' })).toThrow(/Invalid IATA destination/);
+  });
+});
+
+describe('isAggregatorSource', () => {
+  it('accepts all four known sources', () => {
+    expect(isAggregatorSource('google_flights')).toBe(true);
+    expect(isAggregatorSource('airline_direct')).toBe(true);
+    expect(isAggregatorSource('skyscanner')).toBe(true);
+    expect(isAggregatorSource('kayak')).toBe(true);
+  });
+
+  it('rejects unknown strings', () => {
+    expect(isAggregatorSource('expedia')).toBe(false);
+    expect(isAggregatorSource('')).toBe(false);
+    expect(isAggregatorSource('GOOGLE_FLIGHTS')).toBe(false);
+  });
+
+  it('rejects non-strings', () => {
+    expect(isAggregatorSource(null)).toBe(false);
+    expect(isAggregatorSource(undefined)).toBe(false);
+    expect(isAggregatorSource(42)).toBe(false);
+    expect(isAggregatorSource([])).toBe(false);
   });
 });
