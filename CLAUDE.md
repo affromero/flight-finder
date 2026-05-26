@@ -12,7 +12,7 @@
 | AI | Anthropic Claude, OpenAI GPT, Google Gemini, Claude Code CLI, Ollama, llama.cpp, vLLM |
 | Browser | Playwright (headless Chromium for Google Flights scraping) |
 | Charts | Plotly.js (interactive price evolution) |
-| Hosting | Hetzner VPS (Docker Compose + Caddy) — fairtrail.org |
+| Hosting | Hetzner VPS (Docker Compose + Caddy) — flight-finder.org |
 | CI/CD | GitHub Actions (CI + Deploy on push to main) |
 
 ## Monorepo

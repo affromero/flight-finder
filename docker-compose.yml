@@ -1,14 +1,14 @@
 # Fairtrail — Self-Hosted Flight Price Tracker
 # Quick start: cp .env.example .env → edit API key → docker compose up -d
 #
-# Docs: https://github.com/AFromero/fairtrail
+# Docs: https://github.com/affromero/flight-finder
 
 services:
   db:
     image: docker.io/library/postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: fairtrail
+      POSTGRES_DB: flight_finder
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
@@ -49,7 +49,7 @@ services:
     env_file: .env
     environment:
       # Override with docker-compose internal networking
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/fairtrail
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/flight_finder
       REDIS_URL: ${REDIS_URL:-redis://redis:6379}
       CHROME_PATH: /usr/bin/chromium-browser
       NODE_ENV: production

@@ -16,7 +16,7 @@ on:
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: affromero/fairtrail
+  IMAGE_NAME: affromero/flight-finder
 
 jobs:
   build:

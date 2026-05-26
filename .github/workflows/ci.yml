@@ -29,14 +29,14 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -f scripts/Dockerfile.install-test -t fairtrail-install-test .
-      - run: docker run --rm fairtrail-install-test
+      - run: docker build -f scripts/Dockerfile.install-test -t flight-finder-install-test .
+      - run: docker run --rm flight-finder-install-test
 
   integration:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - run: docker build -t fairtrail-test:latest .
+      - run: docker build -t flight-finder-test:latest .
       - run: bash scripts/docker-integration-test.sh --no-build --keep-alive
       - name: Browser smoke tests
         run: |
@@ -45,7 +45,7 @@ jobs:
           bash scripts/browser-smoke-test.sh http://localhost:3399
       - name: Cleanup containers
         if: always()
-        run: docker compose -p fairtrail-integration-test -f scripts/docker-compose.integration.yml down -v --remove-orphans
+        run: docker compose -p flight-finder-integration-test -f scripts/docker-compose.integration.yml down -v --remove-orphans
 
   staging:
     runs-on: ubuntu-latest

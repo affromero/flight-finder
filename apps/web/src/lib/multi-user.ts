@@ -5,7 +5,7 @@ const CACHE_KEY = 'ft:multi-user';
 const TTL_SECONDS = 60;
 
 /**
- * Self-hosted only feature. When SELF_HOSTED is unset (fairtrail.org or any
+ * Self-hosted only feature. When SELF_HOSTED is unset (flight-finder.org or any
  * hosted deployment), this always returns false regardless of the DB value —
  * this protects against accidental activation if a self-hosted DB dump is
  * restored on top of a hosted instance.

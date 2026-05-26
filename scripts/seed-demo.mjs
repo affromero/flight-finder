@@ -132,7 +132,7 @@ async function seed() {
 
   console.log('\nDemo queries:');
   for (const id of queryIds) {
-    console.log(`  https://fairtrail.org/q/${id}`);
+    console.log(`  https://flight-finder.org/q/${id}`);
   }
   console.log('\nDone! Use --clean to remove seed data.');
 }

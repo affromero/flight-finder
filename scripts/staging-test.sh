@@ -23,7 +23,7 @@ set -euo pipefail
 #   4. Real SSH login shell PATH
 #   5. Real .env generation and container startup
 #   6. Real health check against live DB + Redis
-#   7. Real curl against fairtrail.org (artifact freshness)
+#   7. Real curl against flight-finder.org (artifact freshness)
 #   8. Real CLI commands (status, version)
 #
 # Usage:
@@ -131,31 +131,31 @@ trap cleanup EXIT
 # --- Clone the branch ---
 REPO_DIR=$(mktemp -d /tmp/fairtrail-repo-XXXXXX)
 git clone --depth 1 --branch "$BRANCH" \
-  "https://x-access-token:${REPO_TOKEN}@github.com/affromero/fairtrail.git" \
+  "https://x-access-token:${REPO_TOKEN}@github.com/affromero/flight-finder.git" \
   "$REPO_DIR" 2>&1 | tail -1
 echo "  Checked out $BRANCH"
 
 # === Test 0: Artifact freshness (non-fatal -- deploy may be pending) ===
 echo ""
 echo "  === Artifact freshness ==="
-PROD_INSTALL=$(curl -sf https://fairtrail.org/install.sh 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
+PROD_INSTALL=$(curl -sf https://flight-finder.org/install.sh 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
 LOCAL_INSTALL=$(md5sum < "$REPO_DIR/apps/web/public/install.sh" | cut -d' ' -f1)
 if [ "$PROD_INSTALL" = "unreachable" ]; then
-  echo "  SKIP fairtrail.org unreachable (not fatal)"
+  echo "  SKIP flight-finder.org unreachable (not fatal)"
 elif [ "$PROD_INSTALL" = "$LOCAL_INSTALL" ]; then
-  pass "fairtrail.org/install.sh matches HEAD"
+  pass "flight-finder.org/install.sh matches HEAD"
 else
-  echo "  WARN fairtrail.org/install.sh differs from HEAD (deploy needed after merge)"
+  echo "  WARN flight-finder.org/install.sh differs from HEAD (deploy needed after merge)"
 fi
 
-PROD_CLI=$(curl -sf https://fairtrail.org/flight-finder-cli 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
+PROD_CLI=$(curl -sf https://flight-finder.org/flight-finder-cli 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
 LOCAL_CLI=$(md5sum < "$REPO_DIR/apps/web/public/flight-finder-cli" | cut -d' ' -f1)
 if [ "$PROD_CLI" = "unreachable" ]; then
-  echo "  SKIP fairtrail.org unreachable (not fatal)"
+  echo "  SKIP flight-finder.org unreachable (not fatal)"
 elif [ "$PROD_CLI" = "$LOCAL_CLI" ]; then
-  pass "fairtrail.org/flight-finder-cli matches HEAD"
+  pass "flight-finder.org/flight-finder-cli matches HEAD"
 else
-  echo "  WARN fairtrail.org/flight-finder-cli differs from HEAD (deploy needed after merge)"
+  echo "  WARN flight-finder.org/flight-finder-cli differs from HEAD (deploy needed after merge)"
 fi
 
 # === Test 1: Docker build ===
@@ -163,7 +163,7 @@ echo ""
 echo "  === Docker build ==="
 if [ "$QUICK" = "true" ]; then
   echo "  Skipping build (--quick), tagging existing image"
-  docker tag ghcr.io/affromero/fairtrail:latest fairtrail-staging:latest 2>/dev/null || \
+  docker tag ghcr.io/affromero/flight-finder:latest fairtrail-staging:latest 2>/dev/null || \
     docker build -t fairtrail-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
 else
   docker build -t fairtrail-staging:latest "$REPO_DIR" -q 2>&1 | tail -1

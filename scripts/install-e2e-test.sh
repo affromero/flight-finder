@@ -26,7 +26,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 
 # --- Config ---
-TEST_IMAGE="fairtrail-install-test:latest"
+TEST_IMAGE="flight-finder-install-test:latest"
 LLMOCK_PORT=19877
 HOST_PORT="${SMOKE_TEST_PORT:-3098}"
 TEST_HOME=""
@@ -57,8 +57,8 @@ cleanup() {
 
   # Stop Docker containers from the install
   docker rm -f flight-finder-web-1 flight-finder-db-1 flight-finder-redis-1 2>/dev/null || true
-  docker network rm fairtrail_default 2>/dev/null || true
-  docker volume rm fairtrail_pgdata fairtrail_redisdata fairtrail_app-data fairtrail_cli-cache 2>/dev/null || true
+  docker network rm flight-finder_default 2>/dev/null || true
+  docker volume rm flight-finder_pgdata flight-finder_redisdata flight-finder_app-data flight-finder_cli-cache 2>/dev/null || true
 
   # Remove temp HOME
   if [ -n "$TEST_HOME" ] && [ -d "$TEST_HOME" ]; then
@@ -80,9 +80,9 @@ if [ "$DO_BUILD" = true ]; then
   pass "Image built and tagged as $TEST_IMAGE"
 else
   # Tag the existing smoke test image
-  EXISTING=$(docker images -q "fairtrail-wt-docker-smoke-test-web:latest" 2>/dev/null || true)
+  EXISTING=$(docker images -q "flight-finder-wt-docker-smoke-test-web:latest" 2>/dev/null || true)
   if [ -z "$EXISTING" ]; then
-    EXISTING=$(docker images -q "fairtrail:latest" 2>/dev/null || true)
+    EXISTING=$(docker images -q "flight-finder:latest" 2>/dev/null || true)
   fi
   if [ -z "$EXISTING" ]; then
     fatal "No image found. Run with --build or run docker-smoke-test.sh first."

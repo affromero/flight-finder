@@ -2,8 +2,8 @@
 # Does NOT require Docker-in-Docker -- only tests the shell script logic
 # (PATH patching, old-dir migration, .env generation, CLI download path).
 #
-# Build:  docker build -f scripts/Dockerfile.install-test -t fairtrail-install-test .
-# Run:    docker run --rm fairtrail-install-test
+# Build:  docker build -f scripts/Dockerfile.install-test -t flight-finder-install-test .
+# Run:    docker run --rm flight-finder-install-test
 
 FROM debian:bookworm-slim
 

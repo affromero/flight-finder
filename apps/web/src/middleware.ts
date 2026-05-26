@@ -82,7 +82,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // --- Analytics tracking (fairtrail.org only) ---
+  // --- Analytics tracking (flight-finder.org only) ---
   const userAgent = request.headers.get('user-agent') || '';
 
   // Skip tracking for self-hosted, admin pages, API routes, empty UAs

@@ -2,7 +2,7 @@ services:
   db:
     image: docker.io/library/postgres:16-alpine
     environment:
-      POSTGRES_DB: fairtrail
+      POSTGRES_DB: flight_finder
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
     healthcheck:
@@ -20,7 +20,7 @@ services:
       retries: 10
 
   web:
-    image: fairtrail-test:latest
+    image: flight-finder-test:latest
     init: true
     ipc: host
     depends_on:
@@ -31,7 +31,7 @@ services:
     ports:
       - "${HOST_PORT:-3399}:3003"
     environment:
-      DATABASE_URL: postgresql://postgres:postgres@db:5432/fairtrail
+      DATABASE_URL: postgresql://postgres:postgres@db:5432/flight_finder
       REDIS_URL: redis://redis:6379
       ADMIN_PASSWORD: test-admin
       ADMIN_SESSION_SECRET: test-session-secret-at-least-32-chars

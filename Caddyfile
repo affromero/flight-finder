@@ -1,4 +1,4 @@
-fairtrail.org {
+flight-finder.org {
 	reverse_proxy localhost:3003
 
 	header {

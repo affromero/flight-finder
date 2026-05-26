@@ -251,7 +251,7 @@ setup_sandbox() {
   cat > "$SANDBOX/.flight-finder/docker-compose.yml" <<'YAML'
 services:
   web:
-    image: ghcr.io/affromero/fairtrail:latest
+    image: ghcr.io/affromero/flight-finder:latest
 YAML
   RECORD_FILE="$SANDBOX/record.log"
   : > "$RECORD_FILE"
@@ -557,7 +557,7 @@ test_uninstall_invokes_compose_and_removes_dir_on_y() {
     cat > "$SANDBOX/.flight-finder/docker-compose.yml" <<'YAML'
 services:
   web:
-    image: ghcr.io/affromero/fairtrail:latest
+    image: ghcr.io/affromero/flight-finder:latest
 YAML
   done
 }

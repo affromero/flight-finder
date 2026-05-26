@@ -22,7 +22,7 @@ export async function GET() {
 
   try {
     const res = await fetch(
-      'https://api.github.com/repos/affromero/fairtrail/releases/latest',
+      'https://api.github.com/repos/affromero/flight-finder/releases/latest',
       {
         headers: { Accept: 'application/vnd.github.v3+json' },
         next: { revalidate: 3600 },

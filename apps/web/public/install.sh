@@ -2,13 +2,13 @@
 set -euo pipefail
 
 # Flight Finder — One-command installer
-# Usage: curl -fsSL https://fairtrail.org/install.sh | bash
+# Usage: curl -fsSL https://flight-finder.org/install.sh | bash
 #
 # Installs the flight-finder CLI and Docker services to ~/.flight-finder
 # No git clone, no build — pulls a pre-built image from GHCR.
 #
 # Want to inspect this script before running it?
-#   curl -fsSL https://fairtrail.org/install.sh | less
+#   curl -fsSL https://flight-finder.org/install.sh | less
 
 BOLD='\033[1m'
 DIM='\033[2m'
@@ -27,9 +27,9 @@ fail()  { printf "${RED}${BOLD}✗${RESET} %b\n" "$1"; exit 1; }
 FLIGHT_FINDER_DIR="$HOME/.flight-finder"
 INSTALL_BIN="$HOME/.local/bin"
 HOST_PORT="${HOST_PORT:-${PORT:-3003}}"
-BASE_URL="${FLIGHT_FINDER_URL:-https://fairtrail.org}"
+BASE_URL="${FLIGHT_FINDER_URL:-https://flight-finder.org}"
 # Test overrides (used by scripts/install-flow-test.sh)
-FLIGHT_FINDER_REPO="https://github.com/affromero/fairtrail.git"
+FLIGHT_FINDER_REPO="https://github.com/affromero/flight-finder.git"
 FLIGHT_FINDER_API_KEY="${FLIGHT_FINDER_API_KEY:-}"
 FLIGHT_FINDER_API_PROVIDER="${FLIGHT_FINDER_API_PROVIDER:-}"
 FLIGHT_FINDER_EXTRA_ENV="${FLIGHT_FINDER_EXTRA_ENV:-}"
@@ -63,7 +63,7 @@ echo ""
 printf "  ${DIM}3.${RESET} Generate a local ${BOLD}.env${RESET} config file in ~/.flight-finder/\n"
 echo ""
 printf "  ${DIM}No data leaves your machine. No account required.${RESET}\n"
-printf "  ${DIM}Open source (MIT) — ${BOLD}https://github.com/AFFRomero/fairtrail${RESET}\n"
+printf "  ${DIM}Open source (MIT) — ${BOLD}https://github.com/affromero/flight-finder${RESET}\n"
 echo ""
 
 # Allow non-interactive mode (e.g., CI) by setting FLIGHT_FINDER_YES=1
@@ -72,7 +72,7 @@ if [ "${FLIGHT_FINDER_YES:-}" != "1" ]; then
   if [[ "$CONSENT" =~ ^[Nn]$ ]]; then
     echo ""
     printf "  ${DIM}No changes were made. Inspect the script:${RESET}\n"
-    printf "  ${BOLD}curl -fsSL https://fairtrail.org/install.sh | less${RESET}\n"
+    printf "  ${BOLD}curl -fsSL https://flight-finder.org/install.sh | less${RESET}\n"
     echo ""
     exit 0
   fi
@@ -140,7 +140,7 @@ elif command -v podman &>/dev/null; then
 else
   case "$OS" in
     macos)
-      fail "Docker Desktop or Podman is required.\n\n  Docker: ${BOLD}https://docs.docker.com/desktop/setup/install/mac-install/${RESET}\n  Podman: ${BOLD}https://podman.io/docs/installation${RESET}\n\n  Then re-run: ${BOLD}curl -fsSL https://fairtrail.org/install.sh | bash${RESET}"
+      fail "Docker Desktop or Podman is required.\n\n  Docker: ${BOLD}https://docs.docker.com/desktop/setup/install/mac-install/${RESET}\n  Podman: ${BOLD}https://podman.io/docs/installation${RESET}\n\n  Then re-run: ${BOLD}curl -fsSL https://flight-finder.org/install.sh | bash${RESET}"
       ;;
     linux|wsl)
       warn "Docker is not installed."
@@ -182,7 +182,7 @@ if [ "$CONTAINER_CMD" = "docker" ]; then
       *)
         case "$OS" in
           macos)
-            fail "Docker Desktop is not running.\n\n  Open Docker Desktop from Applications, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://fairtrail.org/install.sh | bash${RESET}"
+            fail "Docker Desktop is not running.\n\n  Open Docker Desktop from Applications, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://flight-finder.org/install.sh | bash${RESET}"
             ;;
           linux|wsl)
             warn "Docker daemon is not running."
@@ -290,7 +290,7 @@ fi
 # Renames the database fairtrail -> flight_finder while the old containers are
 # still wired to it, then moves the install directory. A marker keeps
 # `name: fairtrail` at the top of the regenerated compose so the existing
-# fairtrail_pgdata / redisdata / app-data / cli-cache volumes stay attached
+# flight-finder_pgdata / redisdata / app-data / cli-cache volumes stay attached
 # without a data copy.
 if [ -d "$HOME/.fairtrail" ] && [ ! -d "$FLIGHT_FINDER_DIR" ]; then
   warn "Found pre-rename install at ~/.fairtrail"
@@ -694,7 +694,7 @@ if [ "$SETUP_VPN" = "y" ] || [ "$SETUP_VPN" = "Y" ]; then
 services:
   expressvpn:
     image: docker.io/misioslav/expressvpn:latest
-    container_name: fairtrail-expressvpn
+    container_name: flight-finder-expressvpn
     restart: unless-stopped
     cap_add:
       - NET_ADMIN

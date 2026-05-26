@@ -6,16 +6,16 @@
 
 Track flight prices over time. Self-hosted. Open source. Bring your own LLM.
 
-[![GitHub Release](https://img.shields.io/github/v/release/affromero/fairtrail)](https://github.com/affromero/fairtrail/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/affromero/fairtrail/ci.yml?label=CI)](https://github.com/affromero/fairtrail/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/badge/Docker-deployed-2496ED?logo=docker&logoColor=white)](https://github.com/affromero/fairtrail/pkgs/container/fairtrail)
-[![License: MIT](https://img.shields.io/github/license/affromero/fairtrail)](https://github.com/affromero/fairtrail/blob/main/LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/affromero/flight-finder)](https://github.com/affromero/flight-finder/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/affromero/flight-finder/ci.yml?label=CI)](https://github.com/affromero/flight-finder/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/badge/Docker-deployed-2496ED?logo=docker&logoColor=white)](https://github.com/affromero/flight-finder/pkgs/container/fairtrail)
+[![License: MIT](https://img.shields.io/github/license/affromero/flight-finder)](https://github.com/affromero/flight-finder/blob/main/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
 [![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma)](https://prisma.io)
 [![Socket](https://img.shields.io/badge/Socket-protected-blueviolet?logo=socket.dev)](https://socket.dev)
 [![min-release-age](https://img.shields.io/badge/min--release--age-7%20days-brightgreen)](https://docs.npmjs.com/cli/v10/using-npm/config#min-release-age)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/affromero/fairtrail/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/affromero/flight-finder/pulls)
 
 <br>
 
@@ -42,7 +42,7 @@ Track flight prices over time. Self-hosted. Open source. Bring your own LLM.
 ## Quick Start
 
 ```bash
-curl -fsSL https://fairtrail.org/install.sh | bash
+curl -fsSL https://flight-finder.org/install.sh | bash
 ```
 
 If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed, the setup script detects it automatically. Otherwise, it asks you to paste an API key.
@@ -363,7 +363,7 @@ right person.
 
 #### What it does NOT do
 
-- It is **not** offered on fairtrail.org — the public site is single
+- It is **not** offered on flight-finder.org — the public site is single
   tenant by design and will never have signup
 - It does **not** introduce email, password reset flows, or OAuth —
   admin creates accounts manually and resets passwords from the panel
@@ -458,7 +458,7 @@ mode, with quick links to `/account` and logout.
 </details>
 
 <details>
-<summary>Why self-host instead of using fairtrail.org?</summary>
+<summary>Why self-host instead of using flight-finder.org?</summary>
 
 - **It can't work any other way.** A centralized service scraping Google Flights gets IP-banned within days. Thousands of self-hosted instances, each making a few quiet requests from different IPs, is the only architecture that survives.
 - **Your searches stay private.** No one sees what routes you're watching.
@@ -472,13 +472,13 @@ mode, with quick links to `/account` and logout.
 
 Fairtrail is fully decentralized. You run everything on your own machine.
 
-**fairtrail.org** aggregates anonymized price data that self-hosted instances **opt in** to share.
+**flight-finder.org** aggregates anonymized price data that self-hosted instances **opt in** to share.
 
 **What gets shared (opt-in only):** route, travel date, price, currency, airline, stops, cabin class, scrape timestamp.
 
 **What is never shared:** your queries, search history, preferences, API keys, IP address, or identity.
 
-Enable in Settings or during setup. Explore community data at [fairtrail.org/explore](https://fairtrail.org/explore).
+Enable in Settings or during setup. Explore community data at [flight-finder.org/explore](https://flight-finder.org/explore).
 </details>
 
 <details>

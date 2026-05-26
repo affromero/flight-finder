@@ -30,7 +30,7 @@ for arg in "$@"; do
   esac
 done
 
-PROJECT="fairtrail-integration-test"
+PROJECT="flight-finder-integration-test"
 COMPOSE_FILE="scripts/docker-compose.integration.yml"
 
 cleanup() {
@@ -48,7 +48,7 @@ echo ""
 # ── Build image (unless --no-build) ──────────────────────────────
 if [ "$NO_BUILD" = false ]; then
   printf "${DIM}Building app image...${RESET}\n"
-  docker build -t fairtrail-test:latest . -q
+  docker build -t flight-finder-test:latest . -q
   printf "${DIM}Build complete.${RESET}\n\n"
 fi
 

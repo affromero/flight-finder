@@ -27,7 +27,7 @@ describe('install.sh', () => {
   it('does not reference | sh in user-facing messages', () => {
     // Find all lines that show the install command to users (printf/echo with curl)
     const userFacingLines = INSTALL_SH.split('\n').filter(
-      (l) => l.includes('fairtrail.org/install.sh') && !l.startsWith('#')
+      (l) => l.includes('flight-finder.org/install.sh') && !l.startsWith('#')
     );
     for (const line of userFacingLines) {
       expect(line, `Line references | sh: ${line.trim()}`).not.toMatch(
@@ -290,7 +290,7 @@ describe('flight-finder-cli', () => {
 
   it('does not reference | sh for install command', () => {
     const installLines = CLI_SH.split('\n').filter(
-      (l) => l.includes('fairtrail.org/install.sh') && !l.startsWith('#')
+      (l) => l.includes('flight-finder.org/install.sh') && !l.startsWith('#')
     );
     for (const line of installLines) {
       expect(line, `Line references | sh: ${line.trim()}`).not.toMatch(

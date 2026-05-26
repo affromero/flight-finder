@@ -9,7 +9,7 @@ if [ "$_FF_INVOKED_AS" = "fairtrail" ] && [ -z "${FLIGHT_FINDER_SILENCE_RENAME:-
 fi
 
 # Flight Finder CLI — wraps Docker so you never have to think about it.
-# Installed by: curl -fsSL https://fairtrail.org/install.sh | bash
+# Installed by: curl -fsSL https://flight-finder.org/install.sh | bash
 #
 # Usage:
 #   flight-finder          Start Flight Finder (Ctrl+C to stop)
@@ -33,7 +33,7 @@ RESET='\033[0m'
 
 FLIGHT_FINDER_DIR="$HOME/.flight-finder"
 PORT="${HOST_PORT:-${PORT:-3003}}"
-BASE_URL="${FLIGHT_FINDER_URL:-https://fairtrail.org}"
+BASE_URL="${FLIGHT_FINDER_URL:-https://flight-finder.org}"
 
 # Compose-flavor flag helpers (issue #72). Lives next to this script so
 # `command -v flight-finder` and dev-mode (bin/flight-finder → apps/web/public/) both
@@ -42,7 +42,7 @@ BASE_URL="${FLIGHT_FINDER_URL:-https://fairtrail.org}"
 _FLAGS_LIB="$(dirname "$0")/flight-finder-cli-flags.sh"
 if [ ! -f "$_FLAGS_LIB" ]; then
   printf "\033[0;31m\033[1m✗\033[0m Missing %s — re-run installer:\n  curl -fsSL %s/install.sh | bash\n" \
-    "$_FLAGS_LIB" "${FLIGHT_FINDER_URL:-https://fairtrail.org}" >&2
+    "$_FLAGS_LIB" "${FLIGHT_FINDER_URL:-https://flight-finder.org}" >&2
   exit 1
 fi
 # shellcheck source=flight-finder-cli-flags.sh
@@ -50,7 +50,7 @@ fi
 
 if [ ! -f "$FLIGHT_FINDER_DIR/docker-compose.yml" ]; then
   printf "${RED}${BOLD}✗${RESET} Flight Finder not found. Run the installer first:\n"
-  printf "  curl -fsSL https://fairtrail.org/install.sh | bash\n"
+  printf "  curl -fsSL https://flight-finder.org/install.sh | bash\n"
   exit 1
 fi
 
@@ -286,7 +286,7 @@ cmd_update() {
     if [ -d repo/.git ]; then
       git -C repo pull --ff-only -q 2>/dev/null || true
     else
-      git clone --depth 1 -q https://github.com/affromero/fairtrail.git repo
+      git clone --depth 1 -q https://github.com/affromero/flight-finder.git repo
     fi
     dc build web 2>&1 | while IFS= read -r line; do
       printf "  ${DIM}%s${RESET}\n" "$line"

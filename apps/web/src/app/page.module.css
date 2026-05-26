@@ -215,7 +215,7 @@
   }
 }
 
-/* Demo GIF (fairtrail.org) */
+/* Demo GIF (flight-finder.org) */
 .demo {
   width: 100%;
   max-width: 860px;
@@ -287,7 +287,7 @@
 }
 
 
-/* Install block (fairtrail.org) */
+/* Install block (flight-finder.org) */
 .install {
   display: flex;
   flex-direction: column;
@@ -319,7 +319,7 @@
   line-height: 1.5;
 }
 
-/* How it works (fairtrail.org) */
+/* How it works (flight-finder.org) */
 .how {
   width: 100%;
   max-width: 720px;
@@ -355,7 +355,7 @@
   border-radius: 50%;
 }
 
-/* What Flight Finder is not (fairtrail.org) */
+/* What Flight Finder is not (flight-finder.org) */
 .notSection {
   width: 100%;
   max-width: 720px;
@@ -388,7 +388,7 @@
   border-radius: 50%;
 }
 
-/* Why self-hosted (fairtrail.org) */
+/* Why self-hosted (flight-finder.org) */
 .selfHost {
   width: 100%;
   max-width: 720px;

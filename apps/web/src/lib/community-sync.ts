@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 
-const HUB_URL = process.env.COMMUNITY_HUB_URL || 'https://fairtrail.org';
+const HUB_URL = process.env.COMMUNITY_HUB_URL || 'https://flight-finder.org';
 const MAX_BATCH_SIZE = 500;
 
 interface CommunityPayload {

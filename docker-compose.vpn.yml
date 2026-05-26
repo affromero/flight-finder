@@ -17,7 +17,7 @@
 services:
   expressvpn:
     image: docker.io/misioslav/expressvpn:latest
-    container_name: fairtrail-expressvpn
+    container_name: flight-finder-expressvpn
     restart: unless-stopped
     cap_add:
       - NET_ADMIN

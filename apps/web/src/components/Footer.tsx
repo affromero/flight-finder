@@ -10,7 +10,7 @@ export function Footer() {
         {' '}&middot;{' '}
         <Link href="/explore">Explore community data</Link>
         {' '}&middot;{' '}
-        <a href="https://github.com/affromero/fairtrail" target="_blank" rel="noopener noreferrer">GitHub</a>
+        <a href="https://github.com/affromero/flight-finder" target="_blank" rel="noopener noreferrer">GitHub</a>
       </p>
     </footer>
   );

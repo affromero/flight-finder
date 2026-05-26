@@ -315,14 +315,14 @@ export default async function ChartPage({ params }: Props) {
         '@type': 'WebPage',
         name: `${primary.query.originName} to ${primary.query.destinationName} Flight Prices`,
         description: `Flight price tracker for ${primary.query.origin} → ${primary.query.destination}`,
-        url: `https://fairtrail.org/q/${id}`,
-        isPartOf: { '@type': 'WebSite', name: 'Flight Finder', url: 'https://fairtrail.org' },
+        url: `https://flight-finder.org/q/${id}`,
+        isPartOf: { '@type': 'WebSite', name: 'Flight Finder', url: 'https://flight-finder.org' },
       },
       {
         '@type': 'BreadcrumbList',
         itemListElement: [
-          { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://fairtrail.org' },
-          { '@type': 'ListItem', position: 2, name: `${primary.query.origin} → ${primary.query.destination}`, item: `https://fairtrail.org/q/${id}` },
+          { '@type': 'ListItem', position: 1, name: 'Home', item: 'https://flight-finder.org' },
+          { '@type': 'ListItem', position: 2, name: `${primary.query.origin} → ${primary.query.destination}`, item: `https://flight-finder.org/q/${id}` },
         ],
       },
     ],

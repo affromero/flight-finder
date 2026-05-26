@@ -9,6 +9,6 @@ export default function robots(): MetadataRoute.Robots {
         disallow: ['/admin/', '/api/'],
       },
     ],
-    sitemap: 'https://fairtrail.org/sitemap.xml',
+    sitemap: 'https://flight-finder.org/sitemap.xml',
   };
 }

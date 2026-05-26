@@ -7,7 +7,7 @@ import { getThemeMode, isThemeId } from '@/lib/theme';
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
 export const metadata: Metadata = {
-  metadataBase: new URL('https://fairtrail.org'),
+  metadataBase: new URL('https://flight-finder.org'),
   title: {
     default: 'Flight Finder — The price trail airlines don\'t show you',
     template: '%s | Flight Finder',
