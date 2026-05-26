@@ -285,9 +285,73 @@ if [ -d "$HOME/fairtrail" ] && [ ! -d "$FLIGHT_FINDER_DIR" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. Migrate from pre-rename install (~/.fairtrail -> ~/.flight-finder)
+# ---------------------------------------------------------------------------
+# Renames the database fairtrail -> flight_finder while the old containers are
+# still wired to it, then moves the install directory. A marker keeps
+# `name: fairtrail` at the top of the regenerated compose so the existing
+# fairtrail_pgdata / redisdata / app-data / cli-cache volumes stay attached
+# without a data copy.
+if [ -d "$HOME/.fairtrail" ] && [ ! -d "$FLIGHT_FINDER_DIR" ]; then
+  warn "Found pre-rename install at ~/.fairtrail"
+  printf "  ${DIM}Migrating to ~/.flight-finder (Flight Finder rename).${RESET}\n"
+  printf "  ${DIM}Your tracked queries, prices, and settings are preserved.${RESET}\n"
+  echo ""
+
+  if [ -f "$HOME/.fairtrail/docker-compose.yml" ]; then
+    info "Renaming database fairtrail -> flight_finder..."
+
+    $DC -f "$HOME/.fairtrail/docker-compose.yml" up -d db >/dev/null 2>&1 || true
+
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      if $DC -f "$HOME/.fairtrail/docker-compose.yml" exec -T db pg_isready -U postgres >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+
+    EXISTS=$($DC -f "$HOME/.fairtrail/docker-compose.yml" exec -T db psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='fairtrail'" 2>/dev/null | tr -d '[:space:]' || true)
+    if [ "$EXISTS" = "1" ]; then
+      $DC -f "$HOME/.fairtrail/docker-compose.yml" stop web >/dev/null 2>&1 || true
+      if $DC -f "$HOME/.fairtrail/docker-compose.yml" exec -T db psql -U postgres -d postgres -c "ALTER DATABASE fairtrail RENAME TO flight_finder;" >/dev/null 2>&1; then
+        ok "Database renamed to flight_finder"
+      else
+        fail "Failed to rename database fairtrail -> flight_finder. Old install at ~/.fairtrail is untouched."
+      fi
+    else
+      info "Database already renamed (skipping)"
+    fi
+
+    info "Stopping old containers..."
+    $DC -f "$HOME/.fairtrail/docker-compose.yml" down >/dev/null 2>&1 || true
+  fi
+
+  mv "$HOME/.fairtrail" "$FLIGHT_FINDER_DIR"
+  ok "Moved ~/.fairtrail to $FLIGHT_FINDER_DIR"
+
+  touch "$FLIGHT_FINDER_DIR/.migrated-from-fairtrail"
+  echo ""
+elif [ -d "$HOME/.fairtrail" ] && [ -d "$FLIGHT_FINDER_DIR" ]; then
+  warn "Both ~/.fairtrail and ~/.flight-finder exist (interrupted migration?)"
+  printf "  ${DIM}Refusing to auto resolve. If ~/.flight-finder is canonical, remove the old dir:${RESET}\n"
+  printf "  ${BOLD}rm -rf ~/.fairtrail${RESET}\n"
+  printf "  ${DIM}Or retry the migration from scratch:${RESET}\n"
+  printf "  ${BOLD}rm -rf ~/.flight-finder && curl -fsSL ${BASE_URL}/install.sh | bash${RESET}\n"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # 3. Create install directory + write docker-compose.yml
 # ---------------------------------------------------------------------------
 mkdir -p "$FLIGHT_FINDER_DIR"
+
+# When this install was migrated from ~/.fairtrail, keep `name: fairtrail` at
+# the top of the generated compose. That maps the project name back to the
+# legacy `fairtrail_*` named volumes so existing data stays attached.
+COMPOSE_NAME_LINE=""
+if [ -f "$FLIGHT_FINDER_DIR/.migrated-from-fairtrail" ]; then
+  COMPOSE_NAME_LINE="name: fairtrail"
+fi
 
 
 EXTRA_HOSTS_BLOCK=""
@@ -297,12 +361,13 @@ if [ "$CONTAINER_CMD" != "podman" ]; then
 fi
 
 cat > "$FLIGHT_FINDER_DIR/docker-compose.yml" << COMPOSE
+${COMPOSE_NAME_LINE}
 services:
   db:
     image: docker.io/library/postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: fairtrail
+      POSTGRES_DB: flight_finder
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-postgres}
     volumes:
@@ -329,7 +394,7 @@ services:
       retries: 5
 
   web:
-    image: ghcr.io/affromero/fairtrail:latest
+    image: ghcr.io/affromero/flight-finder:latest
     build: ./repo
     restart: unless-stopped
     depends_on:
@@ -339,7 +404,7 @@ services:
       - "\${HOST_PORT:-3003}:3003"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://postgres:\${POSTGRES_PASSWORD:-postgres}@db:5432/fairtrail
+      DATABASE_URL: postgresql://postgres:\${POSTGRES_PASSWORD:-postgres}@db:5432/flight_finder
       REDIS_URL: \${REDIS_URL:-redis://redis:6379}
       CHROME_PATH: /usr/bin/chromium-browser
       NODE_ENV: production
@@ -395,6 +460,11 @@ fi
 
 # Install the flightfinder alias as a sibling symlink (single word, faster to type).
 ln -sf flight-finder "$INSTALL_BIN/flightfinder"
+
+# Keep the legacy fairtrail command working as a deprecated alias.
+# The wrapper prints a one line deprecation notice when invoked under this name.
+# Sunset target: v1.0.
+ln -sf flight-finder "$INSTALL_BIN/fairtrail"
 
 # Ensure ~/.local/bin is in PATH
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_BIN"; then

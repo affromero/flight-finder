@@ -21,9 +21,13 @@ export default defineConfig({
       '@': path.resolve(__dirname, 'src'),
     },
   },
-  // tsconfig uses jsx: 'preserve' for Next.js. Vitest's esbuild needs the
-  // automatic transform so React doesn't have to be imported explicitly.
+  // tsconfig uses jsx: 'preserve' for Next.js. Vitest 4 transforms with oxc
+  // (rolldown) instead of esbuild and silently ignores the esbuild option,
+  // so configure both for forward and backward compatibility.
   esbuild: {
     jsx: 'automatic',
+  },
+  oxc: {
+    jsx: { runtime: 'automatic' },
   },
 });

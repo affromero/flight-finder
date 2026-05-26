@@ -1,6 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+# Detect deprecated `fairtrail` invocation and print a one line notice.
+# Set FLIGHT_FINDER_SILENCE_RENAME=1 to suppress. Sunset target: v1.0.
+_FF_INVOKED_AS="$(basename "$0")"
+if [ "$_FF_INVOKED_AS" = "fairtrail" ] && [ -z "${FLIGHT_FINDER_SILENCE_RENAME:-}" ]; then
+  printf >&2 '\033[33mNote:\033[0m the `fairtrail` command has been renamed to `flight-finder` (or `flightfinder`). The old name still works but will be removed in v1.0. Set FLIGHT_FINDER_SILENCE_RENAME=1 to hide this notice.\n'
+fi
+
 # Flight Finder CLI — wraps Docker so you never have to think about it.
 # Installed by: curl -fsSL https://fairtrail.org/install.sh | bash
 #
@@ -482,7 +489,7 @@ cmd_help() {
   echo ""
   printf "${BOLD}  Flight Finder${RESET}\n"
   echo ""
-  echo "  Usage: fairtrail [command]"
+  echo "  Usage: flight-finder [command]    (aliases: flightfinder, fairtrail)"
   echo ""
   echo "  Commands:"
   echo "    (none)       Start Flight Finder (Ctrl+C to stop)"
@@ -492,6 +499,7 @@ cmd_help() {
   echo "    logs         View live logs"
   echo "    status       Check if running"
   echo "    update       Pull latest version and restart"
+  echo "    migrate      Migrate a pre-rename ~/.fairtrail install to ~/.flight-finder"
   echo "    version      Show version and commit"
   echo "    uninstall    Remove Flight Finder and all data"
   echo "    help         Show this help"
@@ -527,6 +535,17 @@ cmd_tui() {
   exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui "$@"
 }
 
+cmd_migrate() {
+  printf "${CYAN}${BOLD}▸${RESET} Running Flight Finder migration...\n"
+  if [ -d "$HOME/.fairtrail" ]; then
+    printf "  ${DIM}Re-running the installer which auto-detects ~/.fairtrail and migrates.${RESET}\n"
+    curl -fsSL "$BASE_URL/install.sh" | bash
+  else
+    ok "Nothing to migrate (no ~/.fairtrail directory found)"
+    printf "  ${DIM}If you are already on Flight Finder, run \`flight-finder update\` instead.${RESET}\n"
+  fi
+}
+
 case "${1:-}" in
   --headless|--list|--view|--backend|--model)
     cmd_tui "$@" ;;
@@ -539,6 +558,7 @@ case "${1:-}" in
   logs)      cmd_logs ;;
   status)    cmd_status ;;
   update)    cmd_update ;;
+  migrate)   cmd_migrate ;;
   version|-v|--version) cmd_version ;;
   uninstall) cmd_uninstall ;;
   help|-h|--help) cmd_help ;;
