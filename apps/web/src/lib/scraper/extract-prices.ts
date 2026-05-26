@@ -59,13 +59,35 @@ function buildSystemPrompt(filters: QueryFilters, maxResults: number, source: Na
     ? `\nFiltering rules (STRICT — do not include flights that violate these):\n${filterRules.join('\n')}\n`
     : '';
 
-  const sourceDesc = source === 'airline_direct'
-    ? "an airline's booking/search results page"
-    : 'a Google Flights search results page';
+  let sourceDesc: string;
+  switch (source) {
+    case 'airline_direct':
+      sourceDesc = "an airline's booking/search results page";
+      break;
+    case 'skyscanner':
+      sourceDesc = 'a Skyscanner search results page';
+      break;
+    case 'kayak':
+      sourceDesc = 'a Kayak search results page';
+      break;
+    case 'google_flights':
+    default:
+      sourceDesc = 'a Google Flights search results page';
+      break;
+  }
 
-  const bookingUrlRule = source === 'airline_direct'
-    ? '- For bookingUrl, use the search URL provided (the airline website URL)'
-    : "- If you can't find a direct booking URL, construct one from the Google Flights URL";
+  let bookingUrlRule: string;
+  switch (source) {
+    case 'airline_direct':
+    case 'skyscanner':
+    case 'kayak':
+      bookingUrlRule = '- For bookingUrl, use the search URL provided (the search page URL)';
+      break;
+    case 'google_flights':
+    default:
+      bookingUrlRule = "- If you can't find a direct booking URL, construct one from the Google Flights URL";
+      break;
+  }
 
   const currencyInstruction = currency
     ? `- Use "${currency}" as the currency code for all results`
