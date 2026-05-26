@@ -164,8 +164,8 @@ test_old_dir_migration() {
 
   (
     export HOME="$HOME"
-    export FAIRTRAIL_DIR="$HOME/.fairtrail"
-    export FAIRTRAIL_YES=1  # non-interactive
+    export FLIGHT_FINDER_DIR="$HOME/.fairtrail"
+    export FLIGHT_FINDER_YES=1  # non-interactive
     # Mock docker compose (not available in this container)
     DC="echo"
     info() { true; }
@@ -231,7 +231,7 @@ test_env_host_port() {
 
 # ──────────────────────────────────────────────────────────────────
 # Test 7: End-to-end installer run (non-interactive, no Docker)
-#   Simulates: FAIRTRAIL_YES=1 bash install.sh
+#   Simulates: FLIGHT_FINDER_YES=1 bash install.sh
 #   Can't actually run Docker inside this container, but we can
 #   test every step up to "docker compose pull" by stubbing Docker.
 # ──────────────────────────────────────────────────────────────────
@@ -265,13 +265,13 @@ STUB
   cp /home/testuser/fairtrail-cli-flags.sh "$HOME/fake-server/fairtrail-cli-flags.sh"
 
   # Run installer in non-interactive mode with stubbed Docker and local CLI.
-  # Pipe empty stdin so the API key prompt gets "" (skip), and FAIRTRAIL_YES=1
+  # Pipe empty stdin so the API key prompt gets "" (skip), and FLIGHT_FINDER_YES=1
   # skips the consent prompt. The installer may fail at docker pull/up since
   # our stub is minimal, but everything up to that point should work.
   (
     export PATH="$HOME/bin:$PATH"
-    export FAIRTRAIL_YES=1
-    export FAIRTRAIL_URL="file://$HOME/fake-server"
+    export FLIGHT_FINDER_YES=1
+    export FLIGHT_FINDER_URL="file://$HOME/fake-server"
     export HOST_PORT=3003
 
     echo "" | bash /home/testuser/install.sh 2>&1 || true
@@ -279,9 +279,9 @@ STUB
 
   # Verify: .fairtrail directory created
   if [ -d "$HOME/.fairtrail" ]; then
-    pass "E2E: ~/.fairtrail directory created"
+    pass "E2E: ~/.flight-finder directory created"
   else
-    fail "E2E: ~/.fairtrail not created" "installer didn't create directory"
+    fail "E2E: ~/.flight-finder not created" "installer didn't create directory"
   fi
 
   # Verify: docker-compose.yml exists
@@ -325,7 +325,7 @@ STUB
   # The CLI needs docker compose, so put our stub docker in ~/.local/bin/ too.
   if [ -f "$HOME/.local/bin/fairtrail" ]; then
     cp "$HOME/bin/docker" "$HOME/.local/bin/docker"
-    # CLI also checks for ~/.fairtrail/docker-compose.yml
+    # CLI also checks for ~/.flight-finder/docker-compose.yml
     mkdir -p "$HOME/.fairtrail"
     echo "services:" > "$HOME/.fairtrail/docker-compose.yml"
 

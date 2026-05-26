@@ -5,7 +5,7 @@
 #
 # Requirements:
 #   - ExpressVPN subscription + activation code
-#   - Set EXPRESSVPN_CODE in ~/.fairtrail/.env
+#   - Set EXPRESSVPN_CODE in ~/.flight-finder/.env
 #
 # The sidecar exposes:
 #   - SOCKS5 proxy on port 1080 (internal only, used by Playwright)

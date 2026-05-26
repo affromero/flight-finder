@@ -21,9 +21,9 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 RESET='\033[0m'
 
-FAIRTRAIL_DIR="$HOME/.fairtrail"
+FLIGHT_FINDER_DIR="$HOME/.fairtrail"
 PORT="${HOST_PORT:-${PORT:-3003}}"
-BASE_URL="${FAIRTRAIL_URL:-https://fairtrail.org}"
+BASE_URL="${FLIGHT_FINDER_URL:-https://fairtrail.org}"
 
 # Compose-flavor flag helpers (issue #72). Lives next to this script so
 # `command -v fairtrail` and dev-mode (bin/fairtrail → apps/web/public/) both
@@ -32,19 +32,19 @@ BASE_URL="${FAIRTRAIL_URL:-https://fairtrail.org}"
 _FLAGS_LIB="$(dirname "$0")/fairtrail-cli-flags.sh"
 if [ ! -f "$_FLAGS_LIB" ]; then
   printf "\033[0;31m\033[1m✗\033[0m Missing %s — re-run installer:\n  curl -fsSL %s/install.sh | bash\n" \
-    "$_FLAGS_LIB" "${FAIRTRAIL_URL:-https://fairtrail.org}" >&2
+    "$_FLAGS_LIB" "${FLIGHT_FINDER_URL:-https://fairtrail.org}" >&2
   exit 1
 fi
 # shellcheck source=fairtrail-cli-flags.sh
 . "$_FLAGS_LIB"
 
-if [ ! -f "$FAIRTRAIL_DIR/docker-compose.yml" ]; then
+if [ ! -f "$FLIGHT_FINDER_DIR/docker-compose.yml" ]; then
   printf "${RED}${BOLD}✗${RESET} Fairtrail not found. Run the installer first:\n"
   printf "  curl -fsSL https://fairtrail.org/install.sh | bash\n"
   exit 1
 fi
 
-cd "$FAIRTRAIL_DIR"
+cd "$FLIGHT_FINDER_DIR"
 
 # Detect container runtime (prefer docker, fall back to podman)
 if command -v docker &>/dev/null; then
@@ -270,7 +270,7 @@ cmd_update() {
     printf "  ${DIM}%s${RESET}\n" "$line"
   done; then
     printf "${YELLOW}${BOLD}!${RESET} No pre-built image for this architecture, building locally...\n"
-    cd "$FAIRTRAIL_DIR"
+    cd "$FLIGHT_FINDER_DIR"
     if [ -d repo/.git ]; then
       git -C repo pull --ff-only -q 2>/dev/null || true
     else
@@ -455,7 +455,7 @@ cmd_uninstall() {
 
   printf "${CYAN}${BOLD}▸${RESET} Removing Fairtrail...\n"
   dc down -v 2>/dev/null || true
-  rm -rf "$FAIRTRAIL_DIR"
+  rm -rf "$FLIGHT_FINDER_DIR"
   rm -f "$HOME/.local/bin/fairtrail"
   printf "${GREEN}${BOLD}✓${RESET} Uninstalled\n"
 }

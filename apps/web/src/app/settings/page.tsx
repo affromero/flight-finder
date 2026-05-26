@@ -282,7 +282,7 @@ export default function SettingsPage() {
                                   // TODO: save Claude Code setup token to container
                                   // For now, show instructions
                                   setProviderKeySaving(false);
-                                  setMessage('Add CLAUDE_CODE_OAUTH_TOKEN to ~/.fairtrail/.env and restart');
+                                  setMessage('Add CLAUDE_CODE_OAUTH_TOKEN to ~/.flight-finder/.env and restart');
                                   setConfiguringProvider(null);
                                 }}
                               >
@@ -315,7 +315,7 @@ export default function SettingsPage() {
                                 disabled={providerKeySaving || !providerKeyInput}
                                 onClick={async () => {
                                   setProviderKeySaving(true);
-                                  setMessage(`Add ${p.envKey}=${providerKeyInput.slice(0, 8)}... to ~/.fairtrail/.env and restart`);
+                                  setMessage(`Add ${p.envKey}=${providerKeyInput.slice(0, 8)}... to ~/.flight-finder/.env and restart`);
                                   setProviderKeySaving(false);
                                   setConfiguringProvider(null);
                                   setProviderKeyInput('');

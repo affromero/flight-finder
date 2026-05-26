@@ -22,12 +22,12 @@ program
 
 const opts = program.opts() as { headless?: boolean; list?: boolean; view?: string; tmux?: boolean; backend?: string; model?: string };
 
-const baseUrl = process.env.FAIRTRAIL_URL
+const baseUrl = process.env.FLIGHT_FINDER_URL
   ?? `http://localhost:${process.env.HOST_PORT ?? process.env.PORT ?? '3003'}`;
 
 // Set backend/model override — update DB config so parse-query.ts and extract-prices.ts pick it up
 if (opts.backend) {
-  process.env.FAIRTRAIL_BACKEND = opts.backend;
+  process.env.FLIGHT_FINDER_BACKEND = opts.backend;
 
   const defaultModels: Record<string, string> = {
     'claude-code': 'sonnet',

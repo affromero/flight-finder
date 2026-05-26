@@ -31,8 +31,8 @@ ARG COMMIT_SHA=unknown
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_COMMIT_SHA=${COMMIT_SHA}
-RUN npm run build --workspace=@fairtrail/web
-RUN npm run build --workspace=@fairtrail/cli
+RUN npm run build --workspace=@flight-finder/web
+RUN npm run build --workspace=@flight-finder/cli
 
 FROM docker.io/library/node:22-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl chromium

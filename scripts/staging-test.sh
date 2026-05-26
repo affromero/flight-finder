@@ -54,7 +54,7 @@ echo ""
 
 # Secrets from env (GitHub Actions) or Doppler (local)
 if [ -z "${REPO_TOKEN:-}" ]; then
-  REPO_TOKEN=$(doppler secrets get REPO_TOKEN --plain --project fairtrail --config prd 2>/dev/null || echo "")
+  REPO_TOKEN=$(doppler secrets get REPO_TOKEN --plain --project flight-finder --config prd 2>/dev/null || echo "")
 fi
 if [ -z "${REPO_TOKEN:-}" ]; then
   printf "${RED}REPO_TOKEN not set. Set via env or Doppler.${RESET}\n"
@@ -180,11 +180,11 @@ echo "# default" > "$TEST_HOME/.profile"
 
 env \
   HOME="$TEST_HOME" \
-  FAIRTRAIL_YES=1 \
-  FAIRTRAIL_REPO="$REPO_DIR" \
-  FAIRTRAIL_CLI_SOURCE="$REPO_DIR/apps/web/public/fairtrail-cli" \
-  FAIRTRAIL_SKIP_BUILD=1 \
-  FAIRTRAIL_SKIP_START=1 \
+  FLIGHT_FINDER_YES=1 \
+  FLIGHT_FINDER_REPO="$REPO_DIR" \
+  FLIGHT_FINDER_CLI_SOURCE="$REPO_DIR/apps/web/public/fairtrail-cli" \
+  FLIGHT_FINDER_SKIP_BUILD=1 \
+  FLIGHT_FINDER_SKIP_START=1 \
   HOST_PORT="$STAGING_PORT" \
   bash "$REPO_DIR/apps/web/public/install.sh" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | while IFS= read -r line; do
     echo "    $line"

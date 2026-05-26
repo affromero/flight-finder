@@ -270,7 +270,7 @@ The built-in cron (default: every 3 hours) handles step 3 automatically. You onl
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `FAIRTRAIL_URL` | `http://localhost:3003` | Base URL of the Fairtrail instance |
+| `FLIGHT_FINDER_URL` | `http://localhost:3003` | Base URL of the Fairtrail instance |
 | `CRON_SECRET` | Auto-generated | Required for triggering scrapes |
 
 ---

@@ -244,10 +244,10 @@ test_static_assets() {
 # ── Test 9: Volume migration safety ──────────────────────────────
 test_volume_migration() {
   # Verify docker compose project name is "fairtrail" regardless of
-  # whether the directory is ~/fairtrail or ~/.fairtrail
+  # whether the directory is ~/fairtrail or ~/.flight-finder
   local installer="apps/web/public/install.sh"
 
-  # Both old (~/fairtrail) and new (~/.fairtrail) must produce the same
+  # Both old (~/fairtrail) and new (~/.flight-finder) must produce the same
   # Docker Compose project name so volumes are preserved across migration.
   # Compose strips leading dots from directory names for the project name.
   local old_name new_name

@@ -17,8 +17,8 @@
 
 ## Monorepo
 
-npm workspaces: `@fairtrail/web` (`apps/web/`).
-Root `package.json` proxies to `@fairtrail/web`.
+npm workspaces: `@flight-finder/web` (`apps/web/`).
+Root `package.json` proxies to `@flight-finder/web`.
 
 ## Environment Variables
 

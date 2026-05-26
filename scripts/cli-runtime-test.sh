@@ -319,7 +319,7 @@ run_cli() {
     | HOME="$SANDBOX" \
       PATH="$SANDBOX/bin:$SANDBOX/sysbin" \
       RECORD_FILE="$RECORD_FILE" \
-      FAIRTRAIL_URL="http://test.invalid" \
+      FLIGHT_FINDER_URL="http://test.invalid" \
       HOST_PORT=3003 \
       bash "$CLI" "$LAST_CMD" "$@" >/dev/null 2>&1
   LAST_EXIT=$?
@@ -341,7 +341,7 @@ run_cli_with_input() {
     | HOME="$SANDBOX" \
       PATH="$SANDBOX/bin:$SANDBOX/sysbin" \
       RECORD_FILE="$RECORD_FILE" \
-      FAIRTRAIL_URL="http://test.invalid" \
+      FLIGHT_FINDER_URL="http://test.invalid" \
       HOST_PORT=3003 \
       bash "$CLI" "$LAST_CMD" "$@" >/dev/null 2>&1
   LAST_EXIT=$?
@@ -531,8 +531,8 @@ test_uninstall_aborts_without_confirmation() {
     assert_not_recorded "uninstall respects empty answer (no dc down on cancel)" \
       ' down -v( |$)'
     [ -d "$SANDBOX/.fairtrail" ] \
-      && pass "uninstall did not remove ~/.fairtrail on cancel" \
-      || fail "uninstall removed ~/.fairtrail despite cancel"
+      && pass "uninstall did not remove ~/.flight-finder on cancel" \
+      || fail "uninstall removed ~/.flight-finder despite cancel"
   done
 }
 
@@ -548,9 +548,9 @@ test_uninstall_invokes_compose_and_removes_dir_on_y() {
       podman_pc)     assert_recorded "uninstall -> podman-compose down -v"   '^podman-compose -f docker-compose.yml down -v$' ;;
     esac
     if [ ! -d "$SANDBOX/.fairtrail" ]; then
-      pass "uninstall removed ~/.fairtrail on confirm=y"
+      pass "uninstall removed ~/.flight-finder on confirm=y"
     else
-      fail "uninstall did not remove ~/.fairtrail on confirm=y"
+      fail "uninstall did not remove ~/.flight-finder on confirm=y"
     fi
     # Recreate sandbox state so subsequent tests still find docker-compose.yml.
     mkdir -p "$SANDBOX/.fairtrail"

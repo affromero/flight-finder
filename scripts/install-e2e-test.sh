@@ -114,13 +114,13 @@ mkdir -p "$TEST_HOME/.local/bin"
 info "Running install.sh..."
 env \
   HOME="$TEST_HOME" \
-  FAIRTRAIL_YES=1 \
-  FAIRTRAIL_REPO="$REPO_ROOT" \
-  FAIRTRAIL_CLI_SOURCE="$REPO_ROOT/apps/web/public/fairtrail-cli" \
-  FAIRTRAIL_API_KEY="test-smoke-key" \
-  FAIRTRAIL_API_PROVIDER="ANTHROPIC_API_KEY" \
-  FAIRTRAIL_EXTRA_ENV="ANTHROPIC_BASE_URL=http://host.docker.internal:${LLMOCK_PORT}" \
-  FAIRTRAIL_SKIP_BUILD=1 \
+  FLIGHT_FINDER_YES=1 \
+  FLIGHT_FINDER_REPO="$REPO_ROOT" \
+  FLIGHT_FINDER_CLI_SOURCE="$REPO_ROOT/apps/web/public/fairtrail-cli" \
+  FLIGHT_FINDER_API_KEY="test-smoke-key" \
+  FLIGHT_FINDER_API_PROVIDER="ANTHROPIC_API_KEY" \
+  FLIGHT_FINDER_EXTRA_ENV="ANTHROPIC_BASE_URL=http://host.docker.internal:${LLMOCK_PORT}" \
+  FLIGHT_FINDER_SKIP_BUILD=1 \
   HOST_PORT="$HOST_PORT" \
   bash "$REPO_ROOT/apps/web/public/install.sh" 2>&1 | while IFS= read -r line; do
     # Strip ANSI color codes for cleaner output

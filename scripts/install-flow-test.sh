@@ -116,10 +116,10 @@ test_entrypoint_port_warning() {
 # ---------------------------------------------------------------------------
 test_install_overrides() {
   local installer="apps/web/public/install.sh"
-  if grep -q 'FAIRTRAIL_REPO' "$installer" && grep -q 'FAIRTRAIL_CLI_SOURCE' "$installer"; then
-    pass "install.sh supports test overrides (FAIRTRAIL_REPO, FAIRTRAIL_CLI_SOURCE)"
+  if grep -q 'FLIGHT_FINDER_REPO' "$installer" && grep -q 'FLIGHT_FINDER_CLI_SOURCE' "$installer"; then
+    pass "install.sh supports test overrides (FLIGHT_FINDER_REPO, FLIGHT_FINDER_CLI_SOURCE)"
   else
-    fail "install.sh should support FAIRTRAIL_REPO and FAIRTRAIL_CLI_SOURCE overrides"
+    fail "install.sh should support FLIGHT_FINDER_REPO and FLIGHT_FINDER_CLI_SOURCE overrides"
   fi
 }
 
@@ -186,7 +186,7 @@ test_cli_has_cmd_tui() {
 # ---------------------------------------------------------------------------
 test_install_supports_no_browser() {
   local installer="apps/web/public/install.sh"
-  if grep -q '\-\-no-browser' "$installer" && grep -q 'FAIRTRAIL_OPEN_BROWSER' "$installer"; then
+  if grep -q '\-\-no-browser' "$installer" && grep -q 'FLIGHT_FINDER_OPEN_BROWSER' "$installer"; then
     pass "install.sh supports --no-browser flag"
   else
     fail "install.sh should support --no-browser flag"
@@ -198,10 +198,10 @@ test_install_supports_no_browser() {
 # ---------------------------------------------------------------------------
 test_dockerfile_ships_cli() {
   local dockerfile="Dockerfile"
-  if grep -q 'workspace=@fairtrail/cli' "$dockerfile" && grep -q 'fairtrail-tui --help' "$dockerfile"; then
-    pass "Dockerfile builds @fairtrail/cli and smoke tests fairtrail-tui"
+  if grep -q 'workspace=@flight-finder/cli' "$dockerfile" && grep -q 'fairtrail-tui --help' "$dockerfile"; then
+    pass "Dockerfile builds @flight-finder/cli and smoke tests fairtrail-tui"
   else
-    fail "Dockerfile should build @fairtrail/cli and run fairtrail-tui --help smoke check"
+    fail "Dockerfile should build @flight-finder/cli and run fairtrail-tui --help smoke check"
   fi
 }
 

@@ -34,7 +34,7 @@ const DIVERSIFIABLE_FAILURES: ExtractionFailureReason[] = [
   'llm_error',
 ];
 const MAX_EXTRACT_ATTEMPTS = 2;
-const DEBUG_DIR = '/tmp/fairtrail-debug';
+const DEBUG_DIR = '/tmp/flight-finder-debug';
 const VPN_INTER_COUNTRY_DELAY_MS = 12000;
 const DEFAULT_AGGREGATORS_ENABLED: NavigationSource[] = ['google_flights', 'airline_direct'];
 

@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Seed realistic demo data for screenshots.
-// Run: doppler run --project fairtrail --config prd -- node scripts/seed-demo.mjs
-// Clean: doppler run --project fairtrail --config prd -- node scripts/seed-demo.mjs --clean
+// Run: doppler run --project flight-finder --config prd -- node scripts/seed-demo.mjs
+// Clean: doppler run --project flight-finder --config prd -- node scripts/seed-demo.mjs --clean
 
 import { PrismaClient } from '@prisma/client';
 
