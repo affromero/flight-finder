@@ -6,6 +6,7 @@ const mockQueryDelete = vi.fn();
 const mockQueryDeleteMany = vi.fn();
 const mockQueryFindMany = vi.fn();
 const mockQueryUpdateMany = vi.fn();
+const mockQueryUpdate = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -15,6 +16,7 @@ vi.mock('@/lib/prisma', () => ({
       deleteMany: (...args: unknown[]) => mockQueryDeleteMany(...args),
       findMany: (...args: unknown[]) => mockQueryFindMany(...args),
       updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args),
+      update: (...args: unknown[]) => mockQueryUpdate(...args),
     },
   },
 }));
@@ -381,6 +383,70 @@ describe('PATCH /api/queries/[id]', () => {
       const res = await PATCH(...makePatchRequest('q1', { active: false }));
       expect(res.status).toBe(401);
       expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('preferredAggregators', () => {
+    beforeEach(() => {
+      mockQueryUpdate.mockResolvedValue({});
+    });
+
+    it('updates preferredAggregators on the single id only (no group cascade)', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: ['skyscanner', 'google_flights'] }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toMatchObject({ preferredAggregators: ['skyscanner', 'google_flights'] });
+      expect(mockQueryUpdate).toHaveBeenCalledWith({
+        where: { id: 'q1' },
+        data: { preferredAggregators: ['skyscanner', 'google_flights'] },
+      });
+      // No cascade for aggregator prefs even with a groupId
+      expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+      expect(mockQueryFindMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects unknown aggregator with 422', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: ['google_flights', 'expedia'] }));
+      expect(res.status).toBe(422);
+      expect(mockQueryUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-array preferredAggregators with 422', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: 'google_flights' }));
+      expect(res.status).toBe(422);
+    });
+
+    it('accepts an empty array as clear', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: [] }));
+      expect(res.status).toBe(200);
+      expect(mockQueryUpdate).toHaveBeenCalledWith({
+        where: { id: 'q1' },
+        data: { preferredAggregators: [] },
+      });
+    });
+
+    it('combines with cascaded fields: scrapeInterval cascades, preferredAggregators does not', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
+      mockQueryFindMany.mockResolvedValue([{ id: 'q2' }]);
+      const res = await PATCH(...makePatchRequest('q1', { scrapeInterval: 6, preferredAggregators: ['kayak'] }));
+      expect(res.status).toBe(200);
+      expect(mockQueryUpdateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['q1', 'q2'] } },
+        data: { scrapeInterval: 6 },
+      });
+      expect(mockQueryUpdate).toHaveBeenCalledWith({
+        where: { id: 'q1' },
+        data: { preferredAggregators: ['kayak'] },
+      });
     });
   });
 });

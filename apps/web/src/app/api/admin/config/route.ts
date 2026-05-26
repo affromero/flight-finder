@@ -8,6 +8,7 @@ import { encryptVpnCode } from '@/lib/vpn-crypto';
 import { isThemeId } from '@/lib/theme';
 import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
+import { isAggregatorSource } from '@/lib/scraper/navigate';
 
 function stripHashes(config: Record<string, unknown>) {
   const { adminPasswordHash, vpnActivationCode, ...rest } = config;
@@ -142,6 +143,18 @@ export async function PATCH(request: NextRequest) {
       }
     }
     data.customBaseUrl = body.customBaseUrl || null;
+  }
+
+  if (body.aggregatorsEnabled !== undefined) {
+    if (!Array.isArray(body.aggregatorsEnabled)) {
+      return apiError('aggregatorsEnabled must be an array of strings', 422);
+    }
+    for (const a of body.aggregatorsEnabled) {
+      if (!isAggregatorSource(a)) {
+        return apiError(`aggregatorsEnabled contains invalid value: ${JSON.stringify(a)}`, 422);
+      }
+    }
+    data.aggregatorsEnabled = body.aggregatorsEnabled;
   }
 
   const config = await prisma.extractionConfig.upsert({

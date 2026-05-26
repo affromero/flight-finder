@@ -51,12 +51,14 @@ describe('GET /api/account/settings', () => {
     mockGetCurrentUser.mockResolvedValue({
       id: 'u1', username: 'alice', displayName: 'Alice',
       defaultCurrency: 'USD', defaultCountry: 'US',
-      preferredAirlines: ['Delta'], cabinClass: 'economy',
+      preferredAirlines: ['Delta'], preferredAggregators: ['google_flights', 'skyscanner'],
+      cabinClass: 'economy',
     });
     const res = await GET();
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.defaultCurrency).toBe('USD');
+    expect(body.data.preferredAggregators).toEqual(['google_flights', 'skyscanner']);
   });
 });
 
@@ -99,5 +101,37 @@ describe('PATCH /api/account/settings', () => {
     expect(res.status).toBe(200);
     const args = mockUpdate.mock.calls[0]![0] as { data: Record<string, unknown> };
     expect(args.data.defaultCurrency).toBeNull();
+  });
+
+  it('accepts a valid preferredAggregators array', async () => {
+    const res = await PATCH(makePatch({ preferredAggregators: ['google_flights', 'skyscanner'] }));
+    expect(res.status).toBe(200);
+    const args = mockUpdate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.preferredAggregators).toEqual(['google_flights', 'skyscanner']);
+  });
+
+  it('accepts an empty preferredAggregators array as clear', async () => {
+    const res = await PATCH(makePatch({ preferredAggregators: [] }));
+    expect(res.status).toBe(200);
+    const args = mockUpdate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.preferredAggregators).toEqual([]);
+  });
+
+  it('rejects unknown aggregator value with 422', async () => {
+    const res = await PATCH(makePatch({ preferredAggregators: ['google_flights', 'expedia'] }));
+    expect(res.status).toBe(422);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('rejects non-string aggregator entry with 422', async () => {
+    const res = await PATCH(makePatch({ preferredAggregators: ['google_flights', 42] }));
+    expect(res.status).toBe(422);
+  });
+
+  it('preferredAggregators field omitted does not touch the column', async () => {
+    const res = await PATCH(makePatch({ defaultCurrency: 'EUR' }));
+    expect(res.status).toBe(200);
+    const args = mockUpdate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data).not.toHaveProperty('preferredAggregators');
   });
 });
