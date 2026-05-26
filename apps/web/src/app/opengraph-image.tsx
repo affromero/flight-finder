@@ -1,6 +1,6 @@
 import { ImageResponse } from 'next/og';
 
-export const alt = 'Fairtrail — The price trail airlines don\'t show you';
+export const alt = 'Flight Finder — The price trail airlines don\'t show you';
 export const size = { width: 1200, height: 630 };
 export const contentType = 'image/png';
 
@@ -51,7 +51,7 @@ export default function OgImage() {
               letterSpacing: '-2px',
             }}
           >
-            Fairtrail
+            Flight Finder
           </span>
         </div>
         <span

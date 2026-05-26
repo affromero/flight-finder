@@ -30,7 +30,7 @@ const STALE_LOCK_AFTER_MS = 15 * 60 * 1000;
  *
  * Cross-group serialization (a manual click on Group A while cron or
  * another manual click on Group B is mid-VPN-connect) is NOT enforced
- * here. Both Fairtrail's cron and this endpoint share one ExpressVPN
+ * here. Both Flight Finder's cron and this endpoint share one ExpressVPN
  * sidecar; a global serializer would coordinate them. Accepted v1
  * tradeoff. See "Race with active cron" in the plan.
  */

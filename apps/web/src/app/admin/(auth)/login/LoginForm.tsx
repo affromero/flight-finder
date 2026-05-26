@@ -30,7 +30,7 @@ export function LoginForm() {
   return (
     <main className={styles.root}>
       <form className={styles.form} onSubmit={handleSubmit}>
-        <h1 className={styles.title}>Fairtrail Admin</h1>
+        <h1 className={styles.title}>Flight Finder Admin</h1>
         <input
           type="password"
           className={styles.input}

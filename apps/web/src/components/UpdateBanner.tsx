@@ -22,9 +22,9 @@ export function UpdateBanner() {
   return (
     <div className={styles.root}>
       <span className={styles.text}>
-        Fairtrail <strong>v{latest}</strong> is available.
+        Flight Finder <strong>v{latest}</strong> is available.
       </span>
-      <code className={styles.cmd}>fairtrail update</code>
+      <code className={styles.cmd}>flight-finder update</code>
     </div>
   );
 }

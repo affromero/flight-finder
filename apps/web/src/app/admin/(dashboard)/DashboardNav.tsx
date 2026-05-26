@@ -44,7 +44,7 @@ export function DashboardNav({
   return (
     <div className={styles.root}>
       <nav className={styles.nav}>
-        <Link href="/" className={styles.brand}>Fairtrail</Link>
+        <Link href="/" className={styles.brand}>Flight Finder</Link>
         <div className={styles.links}>
           {navItems.map((item) => (
             <Link

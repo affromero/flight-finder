@@ -9,16 +9,16 @@ const isSelfHosted = process.env.SELF_HOSTED === 'true';
 export const metadata: Metadata = {
   metadataBase: new URL('https://fairtrail.org'),
   title: {
-    default: 'Fairtrail — The price trail airlines don\'t show you',
-    template: '%s | Fairtrail',
+    default: 'Flight Finder — The price trail airlines don\'t show you',
+    template: '%s | Flight Finder',
   },
   description:
     'Track flight prices over time with shareable charts. See how fares evolve, compare airlines, and book at the right moment.',
   openGraph: {
-    title: 'Fairtrail — The price trail airlines don\'t show you',
+    title: 'Flight Finder — The price trail airlines don\'t show you',
     description:
       'Track flight prices over time with shareable charts. See how fares evolve, compare airlines, and book at the right moment.',
-    siteName: 'Fairtrail',
+    siteName: 'Flight Finder',
     type: 'website',
     locale: 'en_US',
   },
@@ -29,7 +29,7 @@ export const metadata: Metadata = {
   appleWebApp: {
     capable: true,
     statusBarStyle: 'black-translucent',
-    title: 'Fairtrail',
+    title: 'Flight Finder',
   },
 };
 

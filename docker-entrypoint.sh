@@ -2,7 +2,7 @@
 set -e
 
 echo "============================================"
-echo "  Fairtrail — Flight Price Tracker"
+echo "  Flight Finder — Flight Price Tracker"
 echo "============================================"
 
 # --- Auto-generate secrets if not set ---
@@ -115,5 +115,5 @@ if [ -n "${PORT:-}" ] && [ "$PORT" != "3003" ]; then
   echo "[setup]   Use HOST_PORT in .env to change the external port instead."
 fi
 export PORT=3003
-echo "[setup] Starting Fairtrail on port ${PORT}..."
+echo "[setup] Starting Flight Finder on port ${PORT}..."
 exec node apps/web/server.js

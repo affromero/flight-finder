@@ -1,13 +1,13 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fairtrail CLI — wraps Docker so you never have to think about it.
+# Flight Finder CLI — wraps Docker so you never have to think about it.
 # Installed by: curl -fsSL https://fairtrail.org/install.sh | bash
 #
 # Usage:
-#   fairtrail          Start Fairtrail (Ctrl+C to stop)
+#   fairtrail          Start Flight Finder (Ctrl+C to stop)
 #   fairtrail start    Start in background
-#   fairtrail stop     Stop Fairtrail
+#   fairtrail stop     Stop Flight Finder
 #   fairtrail logs     View live logs
 #   fairtrail status   Check if running
 #   fairtrail update   Pull latest version and restart
@@ -39,7 +39,7 @@ fi
 . "$_FLAGS_LIB"
 
 if [ ! -f "$FLIGHT_FINDER_DIR/docker-compose.yml" ]; then
-  printf "${RED}${BOLD}✗${RESET} Fairtrail not found. Run the installer first:\n"
+  printf "${RED}${BOLD}✗${RESET} Flight Finder not found. Run the installer first:\n"
   printf "  curl -fsSL https://fairtrail.org/install.sh | bash\n"
   exit 1
 fi
@@ -132,7 +132,7 @@ cmd_start_foreground() {
 
 
   echo ""
-  printf "${BOLD}  Fairtrail${RESET}\n"
+  printf "${BOLD}  Flight Finder${RESET}\n"
   printf "  ${DIM}The price trail airlines don't show you${RESET}\n"
   echo ""
 
@@ -179,7 +179,7 @@ cmd_start_background() {
     printf "  ${DIM}%s${RESET}\n" "$line"
   done
 
-  printf "${GREEN}${BOLD}✓${RESET} Fairtrail running at ${BOLD}http://localhost:${PORT}${RESET}\n"
+  printf "${GREEN}${BOLD}✓${RESET} Flight Finder running at ${BOLD}http://localhost:${PORT}${RESET}\n"
   printf "  ${DIM}Stop with: fairtrail stop${RESET}\n"
 
   # Open browser
@@ -207,13 +207,13 @@ cmd_stop() {
     fi
   fi
 
-  read -rp "  Stop Fairtrail? [y/N] " confirm
+  read -rp "  Stop Flight Finder? [y/N] " confirm
   if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     printf "  ${DIM}Cancelled${RESET}\n"
     return
   fi
 
-  printf "${CYAN}${BOLD}▸${RESET} Stopping Fairtrail...\n"
+  printf "${CYAN}${BOLD}▸${RESET} Stopping Flight Finder...\n"
   dc stop 2>/dev/null
   printf "${GREEN}${BOLD}✓${RESET} Stopped\n"
   printf "  ${YELLOW}Price tracking is paused — no scrapes will run until you start again.${RESET}\n"
@@ -228,15 +228,15 @@ cmd_status() {
   local health
   health=$(fetch_health)
   if [ -n "$health" ]; then
-    printf "${GREEN}${BOLD}✓${RESET} Fairtrail is running at ${BOLD}http://localhost:${PORT}${RESET}\n"
+    printf "${GREEN}${BOLD}✓${RESET} Flight Finder is running at ${BOLD}http://localhost:${PORT}${RESET}\n"
     show_tracking_info
   else
-    printf "${DIM}Fairtrail is not running. Start with: fairtrail${RESET}\n"
+    printf "${DIM}Flight Finder is not running. Start with: fairtrail${RESET}\n"
   fi
 }
 
 cmd_update() {
-  printf "${CYAN}${BOLD}▸${RESET} Updating Fairtrail...\n"
+  printf "${CYAN}${BOLD}▸${RESET} Updating Flight Finder...\n"
 
   # Detect where the running binary lives (don't hardcode ~/.local/bin)
   CLI_PATH=$(command -v fairtrail 2>/dev/null || echo "$HOME/.local/bin/fairtrail")
@@ -308,7 +308,7 @@ cmd_search() {
   local health
   health=$(fetch_health)
   if [ -z "$health" ]; then
-    printf "${RED}${BOLD}✗${RESET} Fairtrail is not running. Start with: fairtrail\n"
+    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: fairtrail\n"
     exit 1
   fi
 
@@ -321,7 +321,7 @@ cmd_search() {
     -d "{\"query\": $(printf '%s' "$input" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" 2>/dev/null)
 
   if [ -z "$parse_res" ]; then
-    printf "${RED}${BOLD}✗${RESET} Failed to reach Fairtrail API\n"
+    printf "${RED}${BOLD}✗${RESET} Failed to reach Flight Finder API\n"
     exit 1
   fi
 
@@ -446,14 +446,14 @@ print(json.dumps(body))
 
 cmd_uninstall() {
   echo ""
-  printf "${YELLOW}${BOLD}!${RESET} This will stop Fairtrail and remove all data.\n"
+  printf "${YELLOW}${BOLD}!${RESET} This will stop Flight Finder and remove all data.\n"
   read -rp "  Are you sure? [y/N] " confirm
   if [[ ! "$confirm" =~ ^[Yy]$ ]]; then
     printf "  ${DIM}Cancelled${RESET}\n"
     return
   fi
 
-  printf "${CYAN}${BOLD}▸${RESET} Removing Fairtrail...\n"
+  printf "${CYAN}${BOLD}▸${RESET} Removing Flight Finder...\n"
   dc down -v 2>/dev/null || true
   rm -rf "$FLIGHT_FINDER_DIR"
   rm -f "$HOME/.local/bin/fairtrail"
@@ -475,12 +475,12 @@ cmd_version() {
 
 cmd_help() {
   echo ""
-  printf "${BOLD}  Fairtrail${RESET}\n"
+  printf "${BOLD}  Flight Finder${RESET}\n"
   echo ""
   echo "  Usage: fairtrail [command]"
   echo ""
   echo "  Commands:"
-  echo "    (none)       Start Fairtrail (Ctrl+C to stop)"
+  echo "    (none)       Start Flight Finder (Ctrl+C to stop)"
   echo "    search \"..\"  Search and track a flight from the terminal"
   echo "    start        Start in background"
   echo "    stop         Stop. Pauses all price tracking until you start again."
@@ -488,7 +488,7 @@ cmd_help() {
   echo "    status       Check if running"
   echo "    update       Pull latest version and restart"
   echo "    version      Show version and commit"
-  echo "    uninstall    Remove Fairtrail and all data"
+  echo "    uninstall    Remove Flight Finder and all data"
   echo "    help         Show this help"
   echo ""
   echo "  Terminal UI flags (forwarded to fairtrail-tui inside the container):"
@@ -505,7 +505,7 @@ cmd_tui() {
   local health
   health=$(fetch_health)
   if [ -z "$health" ]; then
-    printf "${RED}${BOLD}✗${RESET} Fairtrail is not running. Start with: fairtrail\n"
+    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: fairtrail\n"
     exit 1
   fi
 

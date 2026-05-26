@@ -201,7 +201,7 @@ export default function SetupPage() {
   return (
     <main className={styles.root}>
       <div className={styles.card}>
-        <h1 className={styles.title}>Fairtrail Setup</h1>
+        <h1 className={styles.title}>Flight Finder Setup</h1>
         <p className={styles.subtitle}>{subtitles[step]}</p>
 
         <div className={styles.steps}>
@@ -352,7 +352,7 @@ export default function SetupPage() {
               </h3>
               <p className={styles.communityText}>
                 Share anonymized price data (route, price, airline, date) with the
-                Fairtrail community. No personal info is ever sent.
+                Flight Finder community. No personal info is ever sent.
               </p>
               <button
                 className={`${styles.communityToggle} ${communitySharing ? styles.communityActive : ''}`}
@@ -371,7 +371,7 @@ export default function SetupPage() {
           <div className={styles.fields}>
             <div className={styles.communityCard}>
               <h3 className={styles.communityTitle}>
-                Run Fairtrail for a household?
+                Run Flight Finder for a household?
               </h3>
               <p className={styles.communityText}>
                 Multi user mode lets each member of your household have their own

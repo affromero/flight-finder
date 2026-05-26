@@ -316,7 +316,7 @@ export default async function ChartPage({ params }: Props) {
         name: `${primary.query.originName} to ${primary.query.destinationName} Flight Prices`,
         description: `Flight price tracker for ${primary.query.origin} → ${primary.query.destination}`,
         url: `https://fairtrail.org/q/${id}`,
-        isPartOf: { '@type': 'WebSite', name: 'Fairtrail', url: 'https://fairtrail.org' },
+        isPartOf: { '@type': 'WebSite', name: 'Flight Finder', url: 'https://fairtrail.org' },
       },
       {
         '@type': 'BreadcrumbList',
@@ -335,7 +335,7 @@ export default async function ChartPage({ params }: Props) {
         dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
       />
       <nav className={styles.topBar}>
-        <Link href="/" className={styles.brand}>Fairtrail</Link>
+        <Link href="/" className={styles.brand}>Flight Finder</Link>
         <ThemeToggle />
       </nav>
 

@@ -5,7 +5,7 @@ export function Footer() {
   return (
     <footer className={styles.root}>
       <p className={styles.links}>
-        <Link href="/">Fairtrail</Link>
+        <Link href="/">Flight Finder</Link>
         {' '}&mdash; your data, not theirs
         {' '}&middot;{' '}
         <Link href="/explore">Explore community data</Link>

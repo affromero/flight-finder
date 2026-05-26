@@ -14,6 +14,7 @@ import { FlightPicker, type RouteFlights } from './FlightPicker';
 import { LinkBanner, type CreatedTracker } from './LinkBanner';
 import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
 
+// "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const PREVIEW_STORAGE_KEY_BASE = 'ft-preview-run';
 const PREVIEW_POLL_TIMEOUT_MS = 30 * 60 * 1000;
 

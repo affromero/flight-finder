@@ -42,7 +42,7 @@ export default async function HomePage() {
   const jsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebApplication',
-    name: 'Fairtrail',
+    name: 'Flight Finder',
     url: 'https://fairtrail.org',
     description:
       'Track flight prices over time with shareable charts. See how fares evolve, compare airlines, and book at the right moment.',
@@ -87,7 +87,7 @@ export default async function HomePage() {
         <ThemeToggle />
       </div>
       <div className={styles.hero}>
-        <h1 className={styles.title}><Link href="/">Fairtrail</Link></h1>
+        <h1 className={styles.title}><Link href="/">Flight Finder</Link></h1>
         <p className={styles.tagline}>
           The price trail airlines don&apos;t show you
         </p>
@@ -185,7 +185,7 @@ export default async function HomePage() {
                 Test the myth: do flight prices change when you browse from different countries?
               </p>
               <details className={styles.stealthDetails}>
-                <summary className={styles.stealthSummary}>What Fairtrail does beyond switching your IP</summary>
+                <summary className={styles.stealthSummary}>What Flight Finder does beyond switching your IP</summary>
                 <ul className={styles.stealthList}>
                   <li>Timezone, locale, and Accept-Language aligned to the target country</li>
                   <li>Geolocation API returns matching coordinates</li>
@@ -263,7 +263,7 @@ export default async function HomePage() {
               <div>
                 <h3 className={styles.reasonTitle}>Search in plain English</h3>
                 <p className={styles.reasonText}>
-                  Type &ldquo;NYC to Tokyo next month under $800&rdquo; and Fairtrail
+                  Type &ldquo;NYC to Tokyo next month under $800&rdquo; and Flight Finder
                   starts tracking prices across airlines every 3 hours.
                 </p>
               </div>
@@ -284,7 +284,7 @@ export default async function HomePage() {
 
       {!isSelfHosted && (
         <section className={styles.notSection}>
-          <h2 className={styles.whyTitle}>What Fairtrail is not</h2>
+          <h2 className={styles.whyTitle}>What Flight Finder is not</h2>
           <div className={styles.notItems}>
             <div className={styles.notItem}>
               <span className={styles.notIcon} aria-hidden="true">
@@ -294,7 +294,7 @@ export default async function HomePage() {
                 <h3 className={styles.reasonTitle}>Not an aggregator</h3>
                 <p className={styles.reasonText}>
                   No ads, no affiliate links, no sponsored rankings.
-                  Fairtrail doesn&apos;t make money when you book &mdash; it just shows you the data.
+                  Flight Finder doesn&apos;t make money when you book &mdash; it just shows you the data.
                 </p>
               </div>
             </div>
@@ -317,7 +317,7 @@ export default async function HomePage() {
               <div>
                 <h3 className={styles.reasonTitle}>Not a price predictor</h3>
                 <p className={styles.reasonText}>
-                  No black-box &ldquo;buy now&rdquo; advice. Fairtrail shows you real price
+                  No black-box &ldquo;buy now&rdquo; advice. Flight Finder shows you real price
                   history and lets you decide when the moment is right.
                 </p>
               </div>

@@ -285,7 +285,7 @@ export function ConfirmationCard({
                   </>
                 ) : (
                   <>
-                    <p>ExpressVPN sidecar is not running. Start Fairtrail with VPN support:</p>
+                    <p>ExpressVPN sidecar is not running. Start Flight Finder with VPN support:</p>
                     <code className={styles.vpnCommand}>docker compose -f docker-compose.prod.yml -f docker-compose.vpn.yml up -d</code>
                   </>
                 )}

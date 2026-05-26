@@ -1,6 +1,6 @@
 {
-  "name": "Fairtrail",
-  "short_name": "Fairtrail",
+  "name": "Flight Finder",
+  "short_name": "Flight Finder",
   "description": "The price trail airlines don't show you",
   "start_url": "/",
   "display": "standalone",

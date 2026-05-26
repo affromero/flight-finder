@@ -15,6 +15,7 @@ export function getDeleteToken(id: string): string | null {
   return tracker?.deleteToken ?? null;
 }
 
+// "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const STORAGE_KEY = 'ft-trackers';
 const MAX_ENTRIES = 15;
 
