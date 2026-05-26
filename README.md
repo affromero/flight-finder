@@ -24,7 +24,7 @@ Track flight prices over time. Self-hosted. Open source. Bring your own LLM.
 <details>
 <summary>CLI Demo -- headless mode with Claude Code & Codex</summary>
 <br>
-<img src="packages/cli/demo/fairtrail-demo.gif" alt="Fairtrail CLI -- search with Claude Code and Codex side by side, then live price charts" width="100%">
+<img src="packages/cli/demo/flight-finder-demo.gif" alt="Fairtrail CLI -- search with Claude Code and Codex side by side, then live price charts" width="100%">
 </details>
 
 <details>
@@ -50,7 +50,7 @@ If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Co
 Once it finishes:
 
 1. Open [localhost:3003](http://localhost:3003)
-2. Or run `fairtrail search "NYC to Tokyo in July under $800"`
+2. Or run `flight-finder search "NYC to Tokyo in July under $800"`
 3. Fairtrail starts tracking prices immediately
 
 ## Why Fairtrail?
@@ -282,7 +282,7 @@ Without `--headless`, `--view` opens the chart in your browser and `--list` open
 - tmux integration for grouped routes
 - Backend selection: `--backend claude-code|codex|anthropic|openai|google|ollama|llamacpp|vllm`
 
-<img src="packages/cli/demo/fairtrail-demo.gif" alt="Fairtrail CLI" width="100%">
+<img src="packages/cli/demo/flight-finder-demo.gif" alt="Fairtrail CLI" width="100%">
 </details>
 
 <details>

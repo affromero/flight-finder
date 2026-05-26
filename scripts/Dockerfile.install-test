@@ -1,4 +1,4 @@
-# Simulates a fresh Debian SSH environment to test install.sh and fairtrail-cli.
+# Simulates a fresh Debian SSH environment to test install.sh and flight-finder-cli.
 # Does NOT require Docker-in-Docker -- only tests the shell script logic
 # (PATH patching, old-dir migration, .env generation, CLI download path).
 #
@@ -18,10 +18,10 @@ WORKDIR /home/testuser
 
 # Copy only the scripts we're testing
 COPY --chown=testuser:testuser apps/web/public/install.sh /home/testuser/install.sh
-COPY --chown=testuser:testuser apps/web/public/fairtrail-cli /home/testuser/fairtrail-cli
-COPY --chown=testuser:testuser apps/web/public/fairtrail-cli-flags.sh /home/testuser/fairtrail-cli-flags.sh
+COPY --chown=testuser:testuser apps/web/public/flight-finder-cli /home/testuser/flight-finder-cli
+COPY --chown=testuser:testuser apps/web/public/flight-finder-cli-flags.sh /home/testuser/flight-finder-cli-flags.sh
 COPY --chown=testuser:testuser scripts/debian-install-smoke.sh /home/testuser/run-tests.sh
 
-RUN chmod +x /home/testuser/install.sh /home/testuser/fairtrail-cli /home/testuser/run-tests.sh
+RUN chmod +x /home/testuser/install.sh /home/testuser/flight-finder-cli /home/testuser/run-tests.sh
 
 CMD ["bash", "/home/testuser/run-tests.sh"]

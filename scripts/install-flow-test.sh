@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Regression tests for the install.sh and fairtrail-cli scripts.
+# Regression tests for the install.sh and flight-finder-cli scripts.
 # Runs locally — does NOT execute Docker or hit the network.
 
 BOLD='\033[1m'
@@ -16,49 +16,49 @@ pass() { PASS=$((PASS + 1)); printf "${GREEN}PASS${RESET} %s\n" "$1"; }
 fail() { FAIL=$((FAIL + 1)); printf "${RED}FAIL${RESET} %s\n" "$1"; }
 
 # ---------------------------------------------------------------------------
-# Test: fairtrail update uses `command -v` for self-path detection
+# Test: flight-finder update uses `command -v` for self-path detection
 # ---------------------------------------------------------------------------
 test_update_self_path() {
-  local cli="apps/web/public/fairtrail-cli"
+  local cli="apps/web/public/flight-finder-cli"
   if grep -q 'command -v fairtrail' "$cli" && grep -q 'mkdir -p "\$CLI_DIR"' "$cli"; then
-    pass "fairtrail update uses dynamic self-path detection"
+    pass "flight-finder update uses dynamic self-path detection"
   else
-    fail "fairtrail update should use 'command -v fairtrail' and mkdir"
+    fail "flight-finder update should use 'command -v fairtrail' and mkdir"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Test: fairtrail update shows curl errors (no 2>/dev/null on curl)
+# Test: flight-finder update shows curl errors (no 2>/dev/null on curl)
 # ---------------------------------------------------------------------------
 test_update_shows_curl_errors() {
-  local cli="apps/web/public/fairtrail-cli"
+  local cli="apps/web/public/flight-finder-cli"
   # The curl line inside cmd_update should NOT end with 2>/dev/null
   local update_curl
-  update_curl=$(sed -n '/^cmd_update/,/^cmd_/p' "$cli" | grep 'curl.*fairtrail-cli' | head -1)
+  update_curl=$(sed -n '/^cmd_update/,/^cmd_/p' "$cli" | grep 'curl.*flight-finder-cli' | head -1)
   if echo "$update_curl" | grep -q '2>/dev/null'; then
-    fail "fairtrail update swallows curl errors with 2>/dev/null"
+    fail "flight-finder update swallows curl errors with 2>/dev/null"
   else
-    pass "fairtrail update shows curl errors"
+    pass "flight-finder update shows curl errors"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Test: fairtrail update force-recreates the web container after pull (#72)
+# Test: flight-finder update force-recreates the web container after pull (#72)
 # ---------------------------------------------------------------------------
 # Without --force-recreate, podman-compose does not always detect a digest
 # change on :latest after `dc pull web` and skips the recreate, leaving the
 # user running the old image even though the pull succeeded.
 test_update_force_recreates_web() {
-  local cli="apps/web/public/fairtrail-cli"
+  local cli="apps/web/public/flight-finder-cli"
   local block
   block=$(sed -n '/^cmd_update/,/^cmd_/p' "$cli")
 
   # The cmd_update block must contain a `dc up -d` line that includes both
   # --force-recreate and --no-deps targeting the `web` service.
   if echo "$block" | grep -E 'dc up -d.*--force-recreate.*--no-deps.*web|dc up -d.*--no-deps.*--force-recreate.*web' >/dev/null; then
-    pass "fairtrail update force-recreates web after pull (#72)"
+    pass "flight-finder update force-recreates web after pull (#72)"
   else
-    fail "fairtrail update should run 'dc up -d --force-recreate --no-deps web' after pull/build (#72)"
+    fail "flight-finder update should run 'dc up -d --force-recreate --no-deps web' after pull/build (#72)"
   fi
 }
 
@@ -158,26 +158,26 @@ test_ansi_variables_defined() {
 }
 
 # ---------------------------------------------------------------------------
-# Test: fairtrail-cli dispatches Ink TUI flags to docker exec
+# Test: flight-finder-cli dispatches Ink TUI flags to docker exec
 # ---------------------------------------------------------------------------
 test_cli_dispatches_tui_flags() {
-  local cli="apps/web/public/fairtrail-cli"
+  local cli="apps/web/public/flight-finder-cli"
   if grep -q '\-\-headless|\-\-list|\-\-view|\-\-backend|\-\-model' "$cli"; then
-    pass "fairtrail-cli dispatches Ink TUI flags"
+    pass "flight-finder-cli dispatches Ink TUI flags"
   else
-    fail "fairtrail-cli should dispatch --headless/--list/--view/--backend/--model"
+    fail "flight-finder-cli should dispatch --headless/--list/--view/--backend/--model"
   fi
 }
 
 # ---------------------------------------------------------------------------
-# Test: fairtrail-cli defines cmd_tui with TTY detection
+# Test: flight-finder-cli defines cmd_tui with TTY detection
 # ---------------------------------------------------------------------------
 test_cli_has_cmd_tui() {
-  local cli="apps/web/public/fairtrail-cli"
-  if grep -q 'cmd_tui()' "$cli" && grep -q 'fairtrail-tui' "$cli"; then
-    pass "fairtrail-cli defines cmd_tui that invokes fairtrail-tui"
+  local cli="apps/web/public/flight-finder-cli"
+  if grep -q 'cmd_tui()' "$cli" && grep -q 'flight-finder-tui' "$cli"; then
+    pass "flight-finder-cli defines cmd_tui that invokes flight-finder-tui"
   else
-    fail "fairtrail-cli should define cmd_tui invoking fairtrail-tui"
+    fail "flight-finder-cli should define cmd_tui invoking flight-finder-tui"
   fi
 }
 
@@ -194,14 +194,14 @@ test_install_supports_no_browser() {
 }
 
 # ---------------------------------------------------------------------------
-# Test: Dockerfile ships fairtrail-tui binary
+# Test: Dockerfile ships flight-finder-tui binary
 # ---------------------------------------------------------------------------
 test_dockerfile_ships_cli() {
   local dockerfile="Dockerfile"
-  if grep -q 'workspace=@flight-finder/cli' "$dockerfile" && grep -q 'fairtrail-tui --help' "$dockerfile"; then
-    pass "Dockerfile builds @flight-finder/cli and smoke tests fairtrail-tui"
+  if grep -q 'workspace=@flight-finder/cli' "$dockerfile" && grep -q 'flight-finder-tui --help' "$dockerfile"; then
+    pass "Dockerfile builds @flight-finder/cli and smoke tests flight-finder-tui"
   else
-    fail "Dockerfile should build @flight-finder/cli and run fairtrail-tui --help smoke check"
+    fail "Dockerfile should build @flight-finder/cli and run flight-finder-tui --help smoke check"
   fi
 }
 
@@ -256,7 +256,7 @@ test_entrypoint_pins_prisma_major() {
 # them and uses -T to disable TTY.
 # ---------------------------------------------------------------------------
 test_compose_exec_flags_matrix() {
-  local helper="apps/web/public/fairtrail-cli-flags.sh"
+  local helper="apps/web/public/flight-finder-cli-flags.sh"
   if [ ! -f "$helper" ]; then
     fail "missing helper file $helper"
     return
@@ -312,7 +312,7 @@ EXPECTED
 # (so future rewrites can't bypass the helper and re-introduce hardcoded -it)
 # ---------------------------------------------------------------------------
 test_cmd_tui_uses_helper() {
-  local cli="apps/web/public/fairtrail-cli"
+  local cli="apps/web/public/flight-finder-cli"
   local code_only
   # Strip comment lines (leading-whitespace-then-#) so a "see _compose_exec_flags"
   # comment can't satisfy the assertion on its own.
@@ -329,7 +329,7 @@ test_cmd_tui_uses_helper() {
 # (catches future commands that bypass the helper)
 # ---------------------------------------------------------------------------
 test_no_raw_it_flags_in_dc_exec() {
-  local cli="apps/web/public/fairtrail-cli"
+  local cli="apps/web/public/flight-finder-cli"
   # Strip comment-only lines first, then look for any literal -it / -i  flag
   # passed to `$_DC ... exec` on the same line. The bug we're guarding against
   # is hardcoded -it that survives the helper indirection — so also flag
@@ -354,20 +354,20 @@ test_no_raw_it_flags_in_dc_exec() {
 # ---------------------------------------------------------------------------
 test_helper_shipped_by_install_and_update() {
   local installer="apps/web/public/install.sh"
-  local cli="apps/web/public/fairtrail-cli"
+  local cli="apps/web/public/flight-finder-cli"
 
-  if grep -q 'fairtrail-cli-flags.sh' "$installer"; then
-    pass "install.sh ships fairtrail-cli-flags.sh"
+  if grep -q 'flight-finder-cli-flags.sh' "$installer"; then
+    pass "install.sh ships flight-finder-cli-flags.sh"
   else
-    fail "install.sh must download/copy fairtrail-cli-flags.sh next to fairtrail (#72)"
+    fail "install.sh must download/copy flight-finder-cli-flags.sh next to flight-finder (#72)"
   fi
 
   local update_block
   update_block=$(sed -n '/^cmd_update/,/^cmd_/p' "$cli")
-  if echo "$update_block" | grep -q 'fairtrail-cli-flags.sh'; then
-    pass "cmd_update refreshes fairtrail-cli-flags.sh"
+  if echo "$update_block" | grep -q 'flight-finder-cli-flags.sh'; then
+    pass "cmd_update refreshes flight-finder-cli-flags.sh"
   else
-    fail "cmd_update must refresh fairtrail-cli-flags.sh alongside the CLI (#72)"
+    fail "cmd_update must refresh flight-finder-cli-flags.sh alongside the CLI (#72)"
   fi
 }
 

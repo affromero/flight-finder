@@ -142,16 +142,16 @@ try {
   {
     const apiCtx = context.request;
 
-    const cliRes = await apiCtx.get(BASE + '/fairtrail-cli');
+    const cliRes = await apiCtx.get(BASE + '/flight-finder-cli');
     if (cliRes.ok()) {
       const body = await cliRes.text();
       if (body.includes('#!/usr/bin/env bash')) {
-        ok('GET /fairtrail-cli returns a bash script');
+        ok('GET /flight-finder-cli returns a bash script');
       } else {
-        bad('GET /fairtrail-cli', 'not a bash script');
+        bad('GET /flight-finder-cli', 'not a bash script');
       }
     } else {
-      bad('GET /fairtrail-cli', 'status ' + cliRes.status());
+      bad('GET /flight-finder-cli', 'status ' + cliRes.status());
     }
 
     const installRes = await apiCtx.get(BASE + '/install.sh');

@@ -150,7 +150,7 @@ All three tests must pass before tagging a release:
 
 ```bash
 ./scripts/docker-smoke-test.sh    # Docker infra: build, health, chromium, extraction, DB
-./scripts/install-flow-test.sh    # Static + grep regression checks on install.sh / fairtrail-cli
+./scripts/install-flow-test.sh    # Static + grep regression checks on install.sh / flight-finder-cli
 ./scripts/cli-runtime-test.sh     # Behavioral CLI runtime matrix (docker v1/v2, podman compose, podman-compose)
 ```
 

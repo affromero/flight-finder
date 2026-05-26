@@ -5,13 +5,16 @@ set -euo pipefail
 # Installed by: curl -fsSL https://fairtrail.org/install.sh | bash
 #
 # Usage:
-#   fairtrail          Start Flight Finder (Ctrl+C to stop)
-#   fairtrail start    Start in background
-#   fairtrail stop     Stop Flight Finder
-#   fairtrail logs     View live logs
-#   fairtrail status   Check if running
-#   fairtrail update   Pull latest version and restart
-#   fairtrail search   Search and track a flight
+#   flight-finder          Start Flight Finder (Ctrl+C to stop)
+#   flight-finder start    Start in background
+#   flight-finder stop     Stop Flight Finder
+#   flight-finder logs     View live logs
+#   flight-finder status   Check if running
+#   flight-finder update   Pull latest version and restart
+#   flight-finder search   Search and track a flight
+#
+# Aliases: flightfinder is a symlink. fairtrail kept working as a
+# deprecated alias through v1.0 for existing installs.
 
 BOLD='\033[1m'
 DIM='\033[2m'
@@ -21,21 +24,21 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 RESET='\033[0m'
 
-FLIGHT_FINDER_DIR="$HOME/.fairtrail"
+FLIGHT_FINDER_DIR="$HOME/.flight-finder"
 PORT="${HOST_PORT:-${PORT:-3003}}"
 BASE_URL="${FLIGHT_FINDER_URL:-https://fairtrail.org}"
 
 # Compose-flavor flag helpers (issue #72). Lives next to this script so
-# `command -v fairtrail` and dev-mode (bin/fairtrail → apps/web/public/) both
+# `command -v flight-finder` and dev-mode (bin/flight-finder → apps/web/public/) both
 # resolve it via dirname "$0". Required, not optional — a missing helper on
-# podman would silently break `fairtrail --headless` again.
-_FLAGS_LIB="$(dirname "$0")/fairtrail-cli-flags.sh"
+# podman would silently break `flight-finder --headless` again.
+_FLAGS_LIB="$(dirname "$0")/flight-finder-cli-flags.sh"
 if [ ! -f "$_FLAGS_LIB" ]; then
   printf "\033[0;31m\033[1m✗\033[0m Missing %s — re-run installer:\n  curl -fsSL %s/install.sh | bash\n" \
     "$_FLAGS_LIB" "${FLIGHT_FINDER_URL:-https://fairtrail.org}" >&2
   exit 1
 fi
-# shellcheck source=fairtrail-cli-flags.sh
+# shellcheck source=flight-finder-cli-flags.sh
 . "$_FLAGS_LIB"
 
 if [ ! -f "$FLIGHT_FINDER_DIR/docker-compose.yml" ]; then
@@ -145,7 +148,7 @@ cmd_start_foreground() {
   until curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; do
     RETRIES=$((RETRIES - 1))
     if [ "$RETRIES" -le 0 ]; then
-      printf "${YELLOW}${BOLD}!${RESET} Took too long — check: fairtrail logs\n"
+      printf "${YELLOW}${BOLD}!${RESET} Took too long — check: flight-finder logs\n"
       break
     fi
     sleep 1
@@ -180,7 +183,7 @@ cmd_start_background() {
   done
 
   printf "${GREEN}${BOLD}✓${RESET} Flight Finder running at ${BOLD}http://localhost:${PORT}${RESET}\n"
-  printf "  ${DIM}Stop with: fairtrail stop${RESET}\n"
+  printf "  ${DIM}Stop with: flight-finder stop${RESET}\n"
 
   # Open browser
   if [ "$(uname)" = "Darwin" ] && command -v open &>/dev/null; then
@@ -238,13 +241,15 @@ cmd_status() {
 cmd_update() {
   printf "${CYAN}${BOLD}▸${RESET} Updating Flight Finder...\n"
 
-  # Detect where the running binary lives (don't hardcode ~/.local/bin)
-  CLI_PATH=$(command -v fairtrail 2>/dev/null || echo "$HOME/.local/bin/fairtrail")
+  # Detect where the running binary lives (don't hardcode ~/.local/bin).
+  # Try canonical first, then the legacy `fairtrail` install path so users on
+  # the pre-rename binary update in place without reinstalling.
+  CLI_PATH=$(command -v flight-finder 2>/dev/null || command -v fairtrail 2>/dev/null || echo "$HOME/.local/bin/flight-finder")
   CLI_DIR=$(dirname "$CLI_PATH")
   mkdir -p "$CLI_DIR"
 
   # Update CLI (download to temp, atomic move)
-  if curl -fsSL "$BASE_URL/fairtrail-cli" -o "${CLI_PATH}.tmp"; then
+  if curl -fsSL "$BASE_URL/flight-finder-cli" -o "${CLI_PATH}.tmp"; then
     mv -f "${CLI_PATH}.tmp" "$CLI_PATH"
     chmod +x "$CLI_PATH"
     printf "${GREEN}${BOLD}✓${RESET} CLI updated\n"
@@ -257,8 +262,8 @@ cmd_update() {
   # If the CLI updated but the helper didn't, podman-compose users would
   # fall through to undefined `_compose_exec_flags`. Treat as best-effort:
   # the source guard at the top of the CLI errors out clearly if missing.
-  FLAGS_PATH="${CLI_DIR}/fairtrail-cli-flags.sh"
-  if curl -fsSL "$BASE_URL/fairtrail-cli-flags.sh" -o "${FLAGS_PATH}.tmp"; then
+  FLAGS_PATH="${CLI_DIR}/flight-finder-cli-flags.sh"
+  if curl -fsSL "$BASE_URL/flight-finder-cli-flags.sh" -o "${FLAGS_PATH}.tmp"; then
     mv -f "${FLAGS_PATH}.tmp" "$FLAGS_PATH"
   else
     rm -f "${FLAGS_PATH}.tmp"
@@ -301,7 +306,7 @@ cmd_update() {
 cmd_search() {
   local input="$*"
   if [ -z "$input" ]; then
-    printf "${RED}${BOLD}✗${RESET} Usage: fairtrail search \"NYC to Tokyo next month\"\n"
+    printf "${RED}${BOLD}✗${RESET} Usage: flight-finder search \"NYC to Tokyo next month\"\n"
     exit 1
   fi
 
@@ -456,7 +461,7 @@ cmd_uninstall() {
   printf "${CYAN}${BOLD}▸${RESET} Removing Flight Finder...\n"
   dc down -v 2>/dev/null || true
   rm -rf "$FLIGHT_FINDER_DIR"
-  rm -f "$HOME/.local/bin/fairtrail"
+  rm -f "$HOME/.local/bin/flight-finder"
   printf "${GREEN}${BOLD}✓${RESET} Uninstalled\n"
 }
 
@@ -491,7 +496,7 @@ cmd_help() {
   echo "    uninstall    Remove Flight Finder and all data"
   echo "    help         Show this help"
   echo ""
-  echo "  Terminal UI flags (forwarded to fairtrail-tui inside the container):"
+  echo "  Terminal UI flags (forwarded to flight-finder-tui inside the container):"
   echo "    --headless              Render the Ink terminal UI"
   echo "    --list                  List tracked queries (with --headless)"
   echo "    --view <id>             View a tracker (with --headless)"
@@ -500,7 +505,7 @@ cmd_help() {
   echo ""
 }
 
-# Dispatch terminal UI flags to fairtrail-tui inside the running container.
+# Dispatch terminal UI flags to flight-finder-tui inside the running container.
 cmd_tui() {
   local health
   health=$(fetch_health)
@@ -519,7 +524,7 @@ cmd_tui() {
   # `exec` cannot run shell functions, so call $_DC directly instead of dc().
   # $exec_flags is intentionally unquoted: empty string must word-split to
   # nothing, otherwise podman-compose receives an empty arg and rejects it.
-  exec $_DC $COMPOSE_FILES exec $exec_flags web fairtrail-tui "$@"
+  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui "$@"
 }
 
 case "${1:-}" in

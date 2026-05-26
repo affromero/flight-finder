@@ -226,11 +226,11 @@ test_config_validation() {
 # ── Test 8: Static assets served ─────────────────────────────────
 test_static_assets() {
   local status_code
-  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/fairtrail-cli")
+  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/flight-finder-cli")
   if [ "$status_code" = "200" ]; then
-    pass "GET /fairtrail-cli serves the CLI script"
+    pass "GET /flight-finder-cli serves the CLI script"
   else
-    fail "GET /fairtrail-cli" "status=$status_code"
+    fail "GET /flight-finder-cli" "status=$status_code"
   fi
 
   status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/install.sh")

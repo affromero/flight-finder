@@ -7,7 +7,7 @@ const INSTALL_SH = readFileSync(
   'utf-8'
 );
 const CLI_SH = readFileSync(
-  resolve(__dirname, '../../../public/fairtrail-cli'),
+  resolve(__dirname, '../../../public/flight-finder-cli'),
   'utf-8'
 );
 
@@ -245,7 +245,7 @@ describe('install.sh', () => {
   });
 });
 
-describe('fairtrail-cli', () => {
+describe('flight-finder-cli', () => {
   it('uses bash shebang', () => {
     expect(CLI_SH).toMatch(/^#!\/usr\/bin\/env bash/);
   });

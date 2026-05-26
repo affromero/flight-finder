@@ -4,7 +4,7 @@ set -euo pipefail
 # Flight Finder — One-command installer
 # Usage: curl -fsSL https://fairtrail.org/install.sh | bash
 #
-# Installs the fairtrail CLI and Docker services to ~/.flight-finder
+# Installs the flight-finder CLI and Docker services to ~/.flight-finder
 # No git clone, no build — pulls a pre-built image from GHCR.
 #
 # Want to inspect this script before running it?
@@ -24,7 +24,7 @@ ok()    { printf "${GREEN}${BOLD}✓${RESET} %b\n" "$1"; }
 warn()  { printf "${YELLOW}${BOLD}!${RESET} %b\n" "$1"; }
 fail()  { printf "${RED}${BOLD}✗${RESET} %b\n" "$1"; exit 1; }
 
-FLIGHT_FINDER_DIR="$HOME/.fairtrail"
+FLIGHT_FINDER_DIR="$HOME/.flight-finder"
 INSTALL_BIN="$HOME/.local/bin"
 HOST_PORT="${HOST_PORT:-${PORT:-3003}}"
 BASE_URL="${FLIGHT_FINDER_URL:-https://fairtrail.org}"
@@ -58,7 +58,7 @@ printf "     ${DIM}• PostgreSQL 16 (your local database — nothing leaves you
 printf "     ${DIM}• Redis 7 (local cache)${RESET}\n"
 printf "     ${DIM}• Flight Finder web app (built locally from source)${RESET}\n"
 echo ""
-printf "  ${DIM}2.${RESET} Download the ${BOLD}fairtrail${RESET} CLI to ${BOLD}~/.local/bin/${RESET}\n"
+printf "  ${DIM}2.${RESET} Download the ${BOLD}flight-finder${RESET} CLI to ${BOLD}~/.local/bin/${RESET}\n"
 echo ""
 printf "  ${DIM}3.${RESET} Generate a local ${BOLD}.env${RESET} config file in ~/.flight-finder/\n"
 echo ""
@@ -359,39 +359,42 @@ COMPOSE
 ok "Created ~/.flight-finder"
 
 # ---------------------------------------------------------------------------
-# 4. Install the fairtrail CLI
+# 4. Install the flight-finder CLI
 # ---------------------------------------------------------------------------
 mkdir -p "$INSTALL_BIN"
 
 if [ -n "${FLIGHT_FINDER_CLI_SOURCE:-}" ] && [ -f "$FLIGHT_FINDER_CLI_SOURCE" ]; then
-  cp "$FLIGHT_FINDER_CLI_SOURCE" "$INSTALL_BIN/fairtrail"
-  chmod +x "$INSTALL_BIN/fairtrail"
+  cp "$FLIGHT_FINDER_CLI_SOURCE" "$INSTALL_BIN/flight-finder"
+  chmod +x "$INSTALL_BIN/flight-finder"
   # Helper sits next to the CLI source; copy it too (issue #72).
-  _flags_src="$(dirname "$FLIGHT_FINDER_CLI_SOURCE")/fairtrail-cli-flags.sh"
+  _flags_src="$(dirname "$FLIGHT_FINDER_CLI_SOURCE")/flight-finder-cli-flags.sh"
   if [ -f "$_flags_src" ]; then
-    cp "$_flags_src" "$INSTALL_BIN/fairtrail-cli-flags.sh"
+    cp "$_flags_src" "$INSTALL_BIN/flight-finder-cli-flags.sh"
   else
     fail "Missing $_flags_src — required helper for compose-flavor flag handling"
   fi
-  ok "Installed fairtrail CLI from local source"
+  ok "Installed flight-finder CLI from local source"
 else
   info "Downloading CLI..."
-  if curl -fsSL "$BASE_URL/fairtrail-cli" -o "$INSTALL_BIN/fairtrail.tmp" 2>/dev/null; then
-    mv -f "$INSTALL_BIN/fairtrail.tmp" "$INSTALL_BIN/fairtrail"
-    chmod +x "$INSTALL_BIN/fairtrail"
-    ok "Installed fairtrail to $INSTALL_BIN/fairtrail"
+  if curl -fsSL "$BASE_URL/flight-finder-cli" -o "$INSTALL_BIN/flight-finder.tmp" 2>/dev/null; then
+    mv -f "$INSTALL_BIN/flight-finder.tmp" "$INSTALL_BIN/flight-finder"
+    chmod +x "$INSTALL_BIN/flight-finder"
+    ok "Installed flight-finder to $INSTALL_BIN/flight-finder"
   else
-    rm -f "$INSTALL_BIN/fairtrail.tmp"
-    fail "Failed to download CLI from $BASE_URL/fairtrail-cli"
+    rm -f "$INSTALL_BIN/flight-finder.tmp"
+    fail "Failed to download CLI from $BASE_URL/flight-finder-cli"
   fi
   # Compose-flavor flag helper (issue #72). Hard requirement on podman.
-  if curl -fsSL "$BASE_URL/fairtrail-cli-flags.sh" -o "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp" 2>/dev/null; then
-    mv -f "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp" "$INSTALL_BIN/fairtrail-cli-flags.sh"
+  if curl -fsSL "$BASE_URL/flight-finder-cli-flags.sh" -o "$INSTALL_BIN/flight-finder-cli-flags.sh.tmp" 2>/dev/null; then
+    mv -f "$INSTALL_BIN/flight-finder-cli-flags.sh.tmp" "$INSTALL_BIN/flight-finder-cli-flags.sh"
   else
-    rm -f "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp"
-    fail "Failed to download flag helper from $BASE_URL/fairtrail-cli-flags.sh"
+    rm -f "$INSTALL_BIN/flight-finder-cli-flags.sh.tmp"
+    fail "Failed to download flag helper from $BASE_URL/flight-finder-cli-flags.sh"
   fi
 fi
+
+# Install the flightfinder alias as a sibling symlink (single word, faster to type).
+ln -sf flight-finder "$INSTALL_BIN/flightfinder"
 
 # Ensure ~/.local/bin is in PATH
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_BIN"; then
@@ -769,7 +772,7 @@ else
   until curl -sf "http://localhost:${HOST_PORT}/api/health" >/dev/null 2>&1; do
     RETRIES=$((RETRIES - 1))
     if [ "$RETRIES" -le 0 ]; then
-      warn "App didn't respond in 60s — run 'fairtrail logs' to debug"
+      warn "App didn't respond in 60s — run 'flight-finder logs' to debug"
       break
     fi
     sleep 1
@@ -804,8 +807,8 @@ fi
 printf "${BOLD}  │${RESET}                                                  ${BOLD}│${RESET}\n"
 printf "${BOLD}  └──────────────────────────────────────────────────┘${RESET}\n"
 echo ""
-printf "  Next time, just run: ${BOLD}fairtrail${RESET}\n"
-printf "  ${DIM}Ctrl+C to stop  |  fairtrail stop  |  fairtrail help${RESET}\n"
+printf "  Next time, just run: ${BOLD}flight-finder${RESET}\n"
+printf "  ${DIM}Ctrl+C to stop  |  flight-finder stop  |  flight-finder help${RESET}\n"
 echo ""
 
 # Open browser automatically (skip on headless systems or with --no-browser)
