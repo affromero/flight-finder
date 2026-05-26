@@ -44,7 +44,13 @@ export interface FlightSearchParams {
   country?: string | null; // ISO 3166-1 alpha-2. null = omit (Google auto-detects)
 }
 
-export type NavigationSource = 'google_flights' | 'airline_direct';
+export type NavigationSource = 'google_flights' | 'airline_direct' | 'skyscanner' | 'kayak';
+
+export const AGGREGATOR_SOURCES = ['google_flights', 'airline_direct', 'skyscanner', 'kayak'] as const;
+
+export function isAggregatorSource(value: unknown): value is NavigationSource {
+  return typeof value === 'string' && (AGGREGATOR_SOURCES as readonly string[]).includes(value);
+}
 
 export interface NavigationResult {
   html: string;
