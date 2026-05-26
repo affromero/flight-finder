@@ -21,6 +21,9 @@ export const metadata: Metadata = {
     siteName: 'Flight Finder',
     type: 'website',
     locale: 'en_US',
+    images: [
+      { url: '/og-hero.png?v=3', width: 1200, height: 630, alt: 'Flight Finder — paper plane over price evolution chart' },
+    ],
   },
   twitter: {
     card: 'summary_large_image',
@@ -33,19 +36,19 @@ export const metadata: Metadata = {
   },
   icons: {
     icon: [
-      { url: '/icon.svg?v=2', type: 'image/svg+xml' },
-      { url: '/icon-192.png?v=2', sizes: '192x192', type: 'image/png' },
-      { url: '/icon-512.png?v=2', sizes: '512x512', type: 'image/png' },
+      { url: '/icon.svg?v=3', type: 'image/svg+xml' },
+      { url: '/icon-192.png?v=3', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png?v=3', sizes: '512x512', type: 'image/png' },
     ],
-    apple: '/apple-icon.png?v=2',
-    shortcut: '/favicon.ico?v=2',
+    apple: '/apple-icon.png?v=3',
+    shortcut: '/favicon.ico?v=3',
   },
 };
 
 export const viewport: Viewport = {
   themeColor: [
-    { media: '(prefers-color-scheme: dark)', color: '#080f1a' },
-    { media: '(prefers-color-scheme: light)', color: '#f5f2ec' },
+    { media: '(prefers-color-scheme: dark)', color: '#031820' },
+    { media: '(prefers-color-scheme: light)', color: '#faf6ed' },
   ],
 };
 
