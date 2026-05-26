@@ -2,7 +2,24 @@
 
 import { useEffect, useState } from 'react';
 import styles from './ThemeToggle.module.css';
-import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isLightTheme, type ThemeId } from '@/lib/theme';
+import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isLightTheme, isThemeId, type ThemeId } from '@/lib/theme';
+
+const LOCAL_THEME_KEY = 'ft-theme';
+
+function readLocalTheme(): ThemeId | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const v = window.localStorage?.getItem?.(LOCAL_THEME_KEY);
+    return isThemeId(v) ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+function writeLocalTheme(theme: ThemeId) {
+  if (typeof window === 'undefined') return;
+  try { window.localStorage?.setItem?.(LOCAL_THEME_KEY, theme); } catch {}
+}
 
 export function ThemeToggle() {
   const [theme, setTheme] = useState<ThemeId>('default');
@@ -10,7 +27,10 @@ export function ThemeToggle() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    const resolved = getThemeFromDom();
+    // Prefer per-browser preference over server-side default so a visitor's
+    // toggle sticks across reloads even in hosted mode where /api/admin/config
+    // requires admin auth and the server-side save is rejected.
+    const resolved = readLocalTheme() ?? getThemeFromDom();
     setTheme(resolved);
     setLastDarkTheme(isLightTheme(resolved) ? 'default' : resolved);
     applyTheme(resolved);
@@ -23,6 +43,7 @@ export function ThemeToggle() {
     setTheme(next);
     setLastDarkTheme(nextDarkTheme);
     applyTheme(next);
+    writeLocalTheme(next);
     setSaving(true);
 
     try {
@@ -31,16 +52,20 @@ export function ThemeToggle() {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ theme: next }),
       });
+      if (res.status === 401 || res.status === 403) {
+        // Visitor isn't admin (hosted mode). Local theme already applied
+        // and saved to localStorage. Nothing to roll back.
+        return;
+      }
       const data = await res.json();
       if (!data.ok) {
         setTheme(theme);
         setLastDarkTheme(lastDarkTheme);
         applyTheme(theme);
+        writeLocalTheme(theme);
       }
     } catch {
-      setTheme(theme);
-      setLastDarkTheme(lastDarkTheme);
-      applyTheme(theme);
+      // Network error: keep the locally applied theme.
     } finally {
       setSaving(false);
     }
