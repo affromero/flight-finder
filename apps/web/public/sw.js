@@ -1,4 +1,4 @@
-const CACHE_NAME = 'fairtrail-v1';
+const CACHE_NAME = 'flight-finder-v1';
 const SHELL_URLS = ['/', '/icon.svg'];
 
 self.addEventListener('install', (event) => {

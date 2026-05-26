@@ -31,7 +31,7 @@ cd "$REPO_ROOT"
 # EXIT-trap cleanup masks the failure (the trap returns 0 because of the
 # `|| true` in `down`, and bash uses that as the exit code). The release
 # gate then reports "passed" even though no checks ran. See
-# https://github.com/affromero/fairtrail/pull/...
+# https://github.com/affromero/flight-finder/pull/...
 if ! docker info >/dev/null 2>&1; then
   cat >&2 <<EOF
   [smoke] FATAL Docker daemon is not reachable.

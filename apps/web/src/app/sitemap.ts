@@ -20,7 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   });
 
   const queryEntries: MetadataRoute.Sitemap = queries.map((q) => ({
-    url: `https://fairtrail.org/q/${q.id}`,
+    url: `https://flight-finder.org/q/${q.id}`,
     lastModified: q.updatedAt,
     changeFrequency: 'daily',
     priority: 0.8,
@@ -28,13 +28,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
 
   return [
     {
-      url: 'https://fairtrail.org',
+      url: 'https://flight-finder.org',
       lastModified: new Date(),
       changeFrequency: 'weekly',
       priority: 1,
     },
     {
-      url: 'https://fairtrail.org/explore',
+      url: 'https://flight-finder.org/explore',
       lastModified: new Date(),
       changeFrequency: 'daily',
       priority: 0.9,

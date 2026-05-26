@@ -32,7 +32,7 @@ function hasGhostty(): boolean {
 
 function buildViewCommand(queryId: string): string {
   const cwd = process.cwd();
-  const backend = process.env.FAIRTRAIL_BACKEND;
+  const backend = process.env.FLIGHT_FINDER_BACKEND;
   const backendFlag = backend ? ` --backend ${backend}` : '';
   // Use the fairtrail wrapper if on PATH, otherwise fall back to raw command
   try {

@@ -212,7 +212,7 @@ function escapeRegex(s: string): string {
 /**
  * Currencies allowed inside the route-validation gap. The first 21 entries
  * mirror the dropdown in apps/web/src/app/settings/page.tsx; TRY is added
- * because Fairtrail's #64 example was IST/AYT (Turkish market) and TRY
+ * because Flight Finder's #64 example was IST/AYT (Turkish market) and TRY
  * labels appear in those headers even though TRY is not in the settings
  * dropdown today.
  *

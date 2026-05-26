@@ -30,7 +30,7 @@ const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
   'json_parse_error',
 ];
 const MAX_ATTEMPTS = 2;
-const DEBUG_DIR = '/tmp/fairtrail-debug';
+const DEBUG_DIR = '/tmp/flight-finder-debug';
 const PREVIEW_MAX_RESULTS = 20;
 
 /**

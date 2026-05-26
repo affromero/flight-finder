@@ -3,6 +3,7 @@ import { createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { verifyHashedPassword } from '@/lib/password';
 
+// "ft-" prefix kept across the Flight Finder rename so existing sessions survive.
 export const SESSION_COOKIE = 'ft-session';
 const SESSION_MAX_AGE = 60 * 60 * 24 * 7; // 7 days
 

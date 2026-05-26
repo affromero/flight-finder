@@ -16,6 +16,7 @@ interface Props {
   initialUsers: UserRow[];
 }
 
+// "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const BACKFILL_BANNER_KEY = 'ft-backfill-banner-dismissed';
 const BACKFILL_COUNT_KEY = 'ft-backfill-count';
 

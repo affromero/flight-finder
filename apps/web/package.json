@@ -1,5 +1,5 @@
 {
-  "name": "@fairtrail/web",
+  "name": "@flight-finder/web",
   "version": "0.8.0",
   "private": true,
   "scripts": {

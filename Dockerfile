@@ -31,8 +31,8 @@ ARG COMMIT_SHA=unknown
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
 ENV NEXT_PUBLIC_COMMIT_SHA=${COMMIT_SHA}
-RUN npm run build --workspace=@fairtrail/web
-RUN npm run build --workspace=@fairtrail/cli
+RUN npm run build --workspace=@flight-finder/web
+RUN npm run build --workspace=@flight-finder/cli
 
 FROM docker.io/library/node:22-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl chromium
@@ -87,7 +87,7 @@ COPY --from=proddeps --chown=node:node /app/node_modules/ts-algebra ./node_modul
 COPY --from=proddeps --chown=node:node /app/node_modules/openai ./node_modules/openai
 COPY --from=proddeps --chown=node:node /app/node_modules/@google ./node_modules/@google
 
-# Ink terminal UI (fairtrail-tui). The CLI's runtime deps (ink, react,
+# Ink terminal UI (flight-finder-tui). The CLI's runtime deps (ink, react,
 # chalk, commander, ink-*, plus their transitives) are not in the lean
 # Next standalone trace, so we ship the full proddeps node_modules under
 # /app/packages/cli/node_modules. Two layers:
@@ -98,15 +98,15 @@ COPY --from=proddeps --chown=node:node /app/node_modules/@google ./node_modules/
 COPY --from=builder --chown=node:node /app/packages/cli/dist /app/packages/cli/dist
 COPY --from=proddeps --chown=node:node /app/node_modules /app/packages/cli/node_modules
 COPY --from=proddeps --chown=node:node /app/packages/cli/node_modules /app/packages/cli/node_modules
-RUN printf '#!/bin/sh\nexec node /app/packages/cli/dist/index.js "$@"\n' > /home/node/.npm-global/bin/fairtrail-tui \
-    && chmod +x /home/node/.npm-global/bin/fairtrail-tui \
-    && chown node:node /home/node/.npm-global/bin/fairtrail-tui
+RUN printf '#!/bin/sh\nexec node /app/packages/cli/dist/index.js "$@"\n' > /home/node/.npm-global/bin/flight-finder-tui \
+    && chmod +x /home/node/.npm-global/bin/flight-finder-tui \
+    && chown node:node /home/node/.npm-global/bin/flight-finder-tui
 
 RUN mkdir -p /app/data && chown node:node /app/data
 
 COPY --chown=node:node docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 USER node
-RUN fairtrail-tui --help >/dev/null
+RUN flight-finder-tui --help >/dev/null
 EXPOSE 3003
 ENTRYPOINT ["./docker-entrypoint.sh"]

@@ -52,7 +52,7 @@ export function LoginForm({ next }: Props) {
   return (
     <main className={styles.root}>
       <form className={styles.form} onSubmit={handleSubmit}>
-        <h1 className={styles.title}>Fairtrail</h1>
+        <h1 className={styles.title}>Flight Finder</h1>
         <input
           type="text"
           className={styles.input}

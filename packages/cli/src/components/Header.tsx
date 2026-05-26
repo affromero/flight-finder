@@ -10,7 +10,7 @@ const BACKEND_LABELS: Record<string, string> = {
 };
 
 export function Header() {
-  const backend = process.env.FAIRTRAIL_BACKEND;
+  const backend = process.env.FLIGHT_FINDER_BACKEND;
   const label = backend ? BACKEND_LABELS[backend] ?? backend : null;
 
   return (

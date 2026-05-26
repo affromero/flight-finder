@@ -30,7 +30,7 @@ for arg in "$@"; do
   esac
 done
 
-PROJECT="fairtrail-integration-test"
+PROJECT="flight-finder-integration-test"
 COMPOSE_FILE="scripts/docker-compose.integration.yml"
 
 cleanup() {
@@ -48,7 +48,7 @@ echo ""
 # ── Build image (unless --no-build) ──────────────────────────────
 if [ "$NO_BUILD" = false ]; then
   printf "${DIM}Building app image...${RESET}\n"
-  docker build -t fairtrail-test:latest . -q
+  docker build -t flight-finder-test:latest . -q
   printf "${DIM}Build complete.${RESET}\n\n"
 fi
 
@@ -115,10 +115,10 @@ test_landing_page() {
 
   local body
   body=$(curl -sf "http://localhost:${PORT}/")
-  if echo "$body" | grep -qi "fairtrail"; then
-    pass "Landing page contains 'Fairtrail'"
+  if echo "$body" | grep -qi "flight finder"; then
+    pass "Landing page contains 'Flight Finder'"
   else
-    fail "Landing page" "missing 'Fairtrail' in HTML"
+    fail "Landing page" "missing 'Flight Finder' in HTML"
   fi
 }
 
@@ -226,11 +226,11 @@ test_config_validation() {
 # ── Test 8: Static assets served ─────────────────────────────────
 test_static_assets() {
   local status_code
-  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/fairtrail-cli")
+  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/flight-finder-cli")
   if [ "$status_code" = "200" ]; then
-    pass "GET /fairtrail-cli serves the CLI script"
+    pass "GET /flight-finder-cli serves the CLI script"
   else
-    fail "GET /fairtrail-cli" "status=$status_code"
+    fail "GET /flight-finder-cli" "status=$status_code"
   fi
 
   status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/install.sh")
@@ -244,10 +244,10 @@ test_static_assets() {
 # ── Test 9: Volume migration safety ──────────────────────────────
 test_volume_migration() {
   # Verify docker compose project name is "fairtrail" regardless of
-  # whether the directory is ~/fairtrail or ~/.fairtrail
+  # whether the directory is ~/fairtrail or ~/.flight-finder
   local installer="apps/web/public/install.sh"
 
-  # Both old (~/fairtrail) and new (~/.fairtrail) must produce the same
+  # Both old (~/fairtrail) and new (~/.flight-finder) must produce the same
   # Docker Compose project name so volumes are preserved across migration.
   # Compose strips leading dots from directory names for the project name.
   local old_name new_name

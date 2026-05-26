@@ -23,7 +23,7 @@ set -euo pipefail
 #   4. Real SSH login shell PATH
 #   5. Real .env generation and container startup
 #   6. Real health check against live DB + Redis
-#   7. Real curl against fairtrail.org (artifact freshness)
+#   7. Real curl against flight-finder.org (artifact freshness)
 #   8. Real CLI commands (status, version)
 #
 # Usage:
@@ -54,7 +54,7 @@ echo ""
 
 # Secrets from env (GitHub Actions) or Doppler (local)
 if [ -z "${REPO_TOKEN:-}" ]; then
-  REPO_TOKEN=$(doppler secrets get REPO_TOKEN --plain --project fairtrail --config prd 2>/dev/null || echo "")
+  REPO_TOKEN=$(doppler secrets get REPO_TOKEN --plain --project flight-finder --config prd 2>/dev/null || echo "")
 fi
 if [ -z "${REPO_TOKEN:-}" ]; then
   printf "${RED}REPO_TOKEN not set. Set via env or Doppler.${RESET}\n"
@@ -113,8 +113,8 @@ cleanup() {
   echo ""
   echo "  Cleaning up staging..."
   # Stop staging containers
-  if [ -n "$TEST_HOME" ] && [ -d "$TEST_HOME/.fairtrail" ]; then
-    cd "$TEST_HOME/.fairtrail"
+  if [ -n "$TEST_HOME" ] && [ -d "$TEST_HOME/.flight-finder" ]; then
+    cd "$TEST_HOME/.flight-finder"
     docker compose -p "$PROJECT" down -v 2>/dev/null || true
   fi
   # Remove temp HOME and repo clone
@@ -131,31 +131,31 @@ trap cleanup EXIT
 # --- Clone the branch ---
 REPO_DIR=$(mktemp -d /tmp/fairtrail-repo-XXXXXX)
 git clone --depth 1 --branch "$BRANCH" \
-  "https://x-access-token:${REPO_TOKEN}@github.com/affromero/fairtrail.git" \
+  "https://x-access-token:${REPO_TOKEN}@github.com/affromero/flight-finder.git" \
   "$REPO_DIR" 2>&1 | tail -1
 echo "  Checked out $BRANCH"
 
 # === Test 0: Artifact freshness (non-fatal -- deploy may be pending) ===
 echo ""
 echo "  === Artifact freshness ==="
-PROD_INSTALL=$(curl -sf https://fairtrail.org/install.sh 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
+PROD_INSTALL=$(curl -sf https://flight-finder.org/install.sh 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
 LOCAL_INSTALL=$(md5sum < "$REPO_DIR/apps/web/public/install.sh" | cut -d' ' -f1)
 if [ "$PROD_INSTALL" = "unreachable" ]; then
-  echo "  SKIP fairtrail.org unreachable (not fatal)"
+  echo "  SKIP flight-finder.org unreachable (not fatal)"
 elif [ "$PROD_INSTALL" = "$LOCAL_INSTALL" ]; then
-  pass "fairtrail.org/install.sh matches HEAD"
+  pass "flight-finder.org/install.sh matches HEAD"
 else
-  echo "  WARN fairtrail.org/install.sh differs from HEAD (deploy needed after merge)"
+  echo "  WARN flight-finder.org/install.sh differs from HEAD (deploy needed after merge)"
 fi
 
-PROD_CLI=$(curl -sf https://fairtrail.org/fairtrail-cli 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
-LOCAL_CLI=$(md5sum < "$REPO_DIR/apps/web/public/fairtrail-cli" | cut -d' ' -f1)
+PROD_CLI=$(curl -sf https://flight-finder.org/flight-finder-cli 2>/dev/null | md5sum | cut -d' ' -f1 || echo "unreachable")
+LOCAL_CLI=$(md5sum < "$REPO_DIR/apps/web/public/flight-finder-cli" | cut -d' ' -f1)
 if [ "$PROD_CLI" = "unreachable" ]; then
-  echo "  SKIP fairtrail.org unreachable (not fatal)"
+  echo "  SKIP flight-finder.org unreachable (not fatal)"
 elif [ "$PROD_CLI" = "$LOCAL_CLI" ]; then
-  pass "fairtrail.org/fairtrail-cli matches HEAD"
+  pass "flight-finder.org/flight-finder-cli matches HEAD"
 else
-  echo "  WARN fairtrail.org/fairtrail-cli differs from HEAD (deploy needed after merge)"
+  echo "  WARN flight-finder.org/flight-finder-cli differs from HEAD (deploy needed after merge)"
 fi
 
 # === Test 1: Docker build ===
@@ -163,7 +163,7 @@ echo ""
 echo "  === Docker build ==="
 if [ "$QUICK" = "true" ]; then
   echo "  Skipping build (--quick), tagging existing image"
-  docker tag ghcr.io/affromero/fairtrail:latest fairtrail-staging:latest 2>/dev/null || \
+  docker tag ghcr.io/affromero/flight-finder:latest fairtrail-staging:latest 2>/dev/null || \
     docker build -t fairtrail-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
 else
   docker build -t fairtrail-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
@@ -180,22 +180,22 @@ echo "# default" > "$TEST_HOME/.profile"
 
 env \
   HOME="$TEST_HOME" \
-  FAIRTRAIL_YES=1 \
-  FAIRTRAIL_REPO="$REPO_DIR" \
-  FAIRTRAIL_CLI_SOURCE="$REPO_DIR/apps/web/public/fairtrail-cli" \
-  FAIRTRAIL_SKIP_BUILD=1 \
-  FAIRTRAIL_SKIP_START=1 \
+  FLIGHT_FINDER_YES=1 \
+  FLIGHT_FINDER_REPO="$REPO_DIR" \
+  FLIGHT_FINDER_CLI_SOURCE="$REPO_DIR/apps/web/public/flight-finder-cli" \
+  FLIGHT_FINDER_SKIP_BUILD=1 \
+  FLIGHT_FINDER_SKIP_START=1 \
   HOST_PORT="$STAGING_PORT" \
   bash "$REPO_DIR/apps/web/public/install.sh" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | while IFS= read -r line; do
     echo "    $line"
   done
 
-[ -f "$TEST_HOME/.local/bin/fairtrail" ] && pass "CLI binary installed" || fail "CLI binary missing"
-[ -f "$TEST_HOME/.fairtrail/docker-compose.yml" ] && pass "docker-compose.yml generated" || fail "docker-compose.yml missing"
-[ -f "$TEST_HOME/.fairtrail/.env" ] && pass ".env generated" || fail ".env missing"
+[ -f "$TEST_HOME/.local/bin/flight-finder" ] && pass "CLI binary installed" || fail "CLI binary missing"
+[ -f "$TEST_HOME/.flight-finder/docker-compose.yml" ] && pass "docker-compose.yml generated" || fail "docker-compose.yml missing"
+[ -f "$TEST_HOME/.flight-finder/.env" ] && pass ".env generated" || fail ".env missing"
 grep -qF '.local/bin' "$TEST_HOME/.bashrc" && pass "PATH in .bashrc" || fail "PATH not in .bashrc"
 grep -qF '.local/bin' "$TEST_HOME/.profile" && pass "PATH in .profile (SSH fix)" || fail "PATH not in .profile"
-grep -q 'HOST_PORT=' "$TEST_HOME/.fairtrail/.env" && pass ".env has HOST_PORT" || fail ".env missing HOST_PORT"
+grep -q 'HOST_PORT=' "$TEST_HOME/.flight-finder/.env" && pass ".env has HOST_PORT" || fail ".env missing HOST_PORT"
 
 # === Test 3: Login shell ===
 FOUND=$(HOME="$TEST_HOME" bash -l -c 'command -v fairtrail 2>/dev/null || echo "not-found"')
@@ -208,7 +208,7 @@ echo "  === App startup ==="
 # The install.sh-generated compose hardcodes DB/Redis ports that may
 # conflict with production. Write an override that removes host ports
 # for DB/Redis (only the web port needs to be reachable from localhost).
-cat > "$TEST_HOME/.fairtrail/docker-compose.override.yml" << OVERRIDE
+cat > "$TEST_HOME/.flight-finder/docker-compose.override.yml" << OVERRIDE
 services:
   db:
     ports: !override []
@@ -219,7 +219,7 @@ services:
       - "127.0.0.1:${STAGING_PORT}:3003"
 OVERRIDE
 
-cd "$TEST_HOME/.fairtrail"
+cd "$TEST_HOME/.flight-finder"
 docker compose -p "$PROJECT" up -d 2>&1 | tail -5
 
 RETRIES=120
@@ -269,7 +269,7 @@ if [ "$RETRIES" -gt 0 ]; then
     fail "Ollama status: $OLLAMA (expected ready or unreachable)"
   fi
 
-  curl -sf "http://localhost:${STAGING_PORT}/fairtrail-cli" | grep -q '#!/usr/bin/env bash' && pass "GET /fairtrail-cli ok" || fail "fairtrail-cli broken"
+  curl -sf "http://localhost:${STAGING_PORT}/flight-finder-cli" | grep -q '#!/usr/bin/env bash' && pass "GET /flight-finder-cli ok" || fail "flight-finder-cli broken"
   curl -sf "http://localhost:${STAGING_PORT}/install.sh" | grep -q 'HOST_PORT' && pass "GET /install.sh ok" || fail "install.sh broken"
 
   # === Test 6: CLI commands ===
@@ -279,11 +279,11 @@ if [ "$RETRIES" -gt 0 ]; then
   export PATH="$TEST_HOME/.local/bin:$PATH"
   export HOST_PORT="$STAGING_PORT"
 
-  STATUS_OUT=$(fairtrail status 2>&1 | sed 's/\x1b\[[0-9;]*m//g') || true
-  echo "$STATUS_OUT" | grep -qi "running" && pass "fairtrail status: running" || fail "fairtrail status: $STATUS_OUT"
+  STATUS_OUT=$(flight-finder status 2>&1 | sed 's/\x1b\[[0-9;]*m//g') || true
+  echo "$STATUS_OUT" | grep -qi "running" && pass "flight-finder status: running" || fail "flight-finder status: $STATUS_OUT"
 
-  VERSION_OUT=$(fairtrail version 2>&1 | sed 's/\x1b\[[0-9;]*m//g') || true
-  echo "$VERSION_OUT" | grep -qi "fairtrail" && pass "fairtrail version: $(echo "$VERSION_OUT" | head -1)" || fail "fairtrail version failed"
+  VERSION_OUT=$(flight-finder version 2>&1 | sed 's/\x1b\[[0-9;]*m//g') || true
+  echo "$VERSION_OUT" | grep -qi "fairtrail" && pass "flight-finder version: $(echo "$VERSION_OUT" | head -1)" || fail "flight-finder version failed"
 fi
 
 # === Report ===

@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased] Renamed to Flight Finder
+
+### Renamed
+* **The project is now Flight Finder.** Brand, domain, GitHub repo, npm workspace, Doppler project, install dir, database, binary, and image all carry the new name. The old fairtrail.org domain 301 redirects to flight-finder.org with the path preserved, the GitHub repo auto redirects from affromero/fairtrail, and historical ghcr.io/affromero/fairtrail tags stay pullable.
+
+### Added
+* **Automatic migration for self hosted installs.** `fairtrail update` (or the new `flight-finder migrate` subcommand) detects `~/.fairtrail`, runs `ALTER DATABASE fairtrail RENAME TO flight_finder` against the existing postgres container, moves the directory to `~/.flight-finder`, and writes a marker file so the regenerated compose keeps `name: fairtrail` at the top. That preserves the existing fairtrail_pgdata, redisdata, app-data, and cli-cache named volumes without a data copy. Idempotent and safe to re-run. See [MIGRATION.md](MIGRATION.md) for the full story.
+* **Deprecated fairtrail binary alias.** The installer keeps `~/.local/bin/fairtrail` working as a symlink to the new wrapper through v1.0. Invocations under the old name print a one line deprecation notice (silenceable via `FLIGHT_FINDER_SILENCE_RENAME=1`).
+* **In app rename banner.** The version endpoint returns a `renameAnnouncement` object for clients on a version below 0.9.0; the dashboard renders a distinct cyan accented banner with the upgrade command and a dismiss button that persists per latest version in localStorage.
+* **Pinned README migration section and MIGRATION.md** linked from CHANGELOG and the in app banner.
+
+### Changed
+* Env var prefix `FAIRTRAIL_*` becomes `FLIGHT_FINDER_*` everywhere (install.sh, the CLI wrapper, dev scripts, AGENTS docs). No backward compat aliases.
+* npm workspace slugs `@fairtrail/web` and `@fairtrail/cli` become `@flight-finder/web` and `@flight-finder/cli`. Internal only; nothing publishes to the registry.
+* CLI binary canonical name is `flight-finder` with `flightfinder` as a single word alias symlink and `fairtrail` as the deprecated alias.
+* Postgres database renamed from `fairtrail` to `flight_finder` in every compose template plus the production deploy.
+* Container image `ghcr.io/affromero/fairtrail` becomes `ghcr.io/affromero/flight-finder` going forward.
+* localStorage and cookie keys keep the `ft-` prefix (`ft-trackers`, `ft-session`, `ft-backfill-*`, `ft-preview-run`) so existing browsers preserve their state. The `ft` initials happen to fit both old and new names.
+* Service worker cache key bumped from `fairtrail-v1` to `flight-finder-v1` so existing browsers purge the old shell on first load post cutover.
+
+### Infrastructure
+* `scripts/migration-test.sh` joins the pre-release gate as the fourth required check. Static grep assertions over install.sh and the wrapper cover the migration block, marker handling, deprecated alias, deprecation notice, and migrate subcommand dispatch.
+* `vitest.config.ts` adds an `oxc.jsx` setting alongside the existing esbuild option since vitest 4 transforms with oxc and silently ignored the esbuild config.
+
 ## [0.8.0] - 2026-05-26
 
 ### Added

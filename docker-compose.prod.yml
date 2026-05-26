@@ -3,7 +3,7 @@ services:
     image: docker.io/library/postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: fairtrail
+      POSTGRES_DB: flight_finder
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
     volumes:
@@ -20,7 +20,7 @@ services:
       - "127.0.0.1:6380:6379"
 
   web:
-    image: ghcr.io/affromero/fairtrail:latest
+    image: ghcr.io/affromero/flight-finder:latest
     restart: unless-stopped
     init: true
     ipc: host
@@ -34,7 +34,7 @@ services:
       - analytics-data:/app/data
       - cli-cache:/home/node/.npm-global
     environment:
-      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/fairtrail
+      DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/flight_finder
       REDIS_URL: redis://redis:6379
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       OPENAI_API_KEY: ${OPENAI_API_KEY}

@@ -1,0 +1,4 @@
+#!/usr/bin/env bash
+# Development convenience — runs the canonical CLI from apps/web/public/
+# For production installs, the CLI lives at ~/.local/bin/flight-finder
+exec bash "$(dirname "$0")/../apps/web/public/flight-finder-cli" "$@"

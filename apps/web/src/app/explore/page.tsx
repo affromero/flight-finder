@@ -65,7 +65,7 @@ export default async function ExplorePage() {
 
       <div className={styles.hero}>
         <h1 className={styles.title}>
-          <Link href="/">Fairtrail</Link>
+          <Link href="/">Flight Finder</Link>
           {' '}
           <span className={styles.titleAccent}>Explore</span>
         </h1>
@@ -81,7 +81,7 @@ export default async function ExplorePage() {
         <div className={styles.empty}>
           <p className={styles.emptyTitle}>No community data yet</p>
           <p className={styles.emptyText}>
-            Self-host Fairtrail and opt in to community sharing to help build the
+            Self-host Flight Finder and opt in to community sharing to help build the
             world&apos;s first open flight price database.
           </p>
           <Link href="/" className={styles.emptyLink}>

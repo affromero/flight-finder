@@ -1,10 +1,11 @@
 {
-  "name": "@fairtrail/cli",
+  "name": "@flight-finder/cli",
   "version": "0.3.1",
   "private": true,
   "type": "module",
   "bin": {
-    "fairtrail-tui": "./dist/index.js"
+    "flight-finder-tui": "./dist/index.js",
+    "flightfinder-tui": "./dist/index.js"
   },
   "scripts": {
     "dev": "doppler run -- node --import tsx/esm --import ./register.mjs src/index.tsx",

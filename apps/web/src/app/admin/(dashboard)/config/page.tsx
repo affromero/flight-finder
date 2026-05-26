@@ -467,7 +467,7 @@ export default function ConfigPage() {
               {config.communitySharing ? 'Sharing enabled' : 'Sharing disabled'}
             </span>
             <p className={styles.toggleHint}>
-              Share anonymized price data (route, price, airline, date) with the Fairtrail community.
+              Share anonymized price data (route, price, airline, date) with the Flight Finder community.
             </p>
           </div>
         </div>

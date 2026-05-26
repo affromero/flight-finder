@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import styles from './InstallCommand.module.css';
 
-const COMMAND = 'curl -fsSL https://fairtrail.org/install.sh | bash';
+const COMMAND = 'curl -fsSL https://flight-finder.org/install.sh | bash';
 
 export function InstallCommand() {
   const [copied, setCopied] = useState(false);

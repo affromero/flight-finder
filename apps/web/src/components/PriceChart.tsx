@@ -43,7 +43,7 @@ const AIRLINE_COLORS: Record<string, string> = {
   KLM: '#00a1de',
 };
 
-const COUNTRY_COLORS = ['#06b6d4', '#f97316', '#8b5cf6', '#ec4899', '#14b8a6', '#eab308', '#3b82f6', '#ef4444'];
+const COUNTRY_COLORS = ['#80a8a5', '#c1272d', '#d4a574', '#8b5cf6', '#ec4899', '#14b8a6', '#3b82f6', '#f97316'];
 
 function countryFlag(code: string): string {
   return String.fromCodePoint(...code.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65));
@@ -53,7 +53,7 @@ function getAirlineColor(airline: string, index: number): string {
   for (const [key, color] of Object.entries(AIRLINE_COLORS)) {
     if (airline.toLowerCase().includes(key.toLowerCase())) return color;
   }
-  const fallback = ['#06b6d4', '#3b82f6', '#ef4444', '#8b5cf6', '#ec4899', '#14b8a6', '#f97316', '#f0a500'];
+  const fallback = ['#80a8a5', '#c1272d', '#d4a574', '#8b5cf6', '#ec4899', '#14b8a6', '#3b82f6', '#f97316'];
   return fallback[index % fallback.length]!;
 }
 

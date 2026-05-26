@@ -10,7 +10,7 @@ export type { PriceData, Airport };
 
 const RETRYABLE_FAILURES: ExtractionFailureReason[] = ['empty_extraction', 'page_not_loaded', 'no_json_in_response'];
 const MAX_ATTEMPTS = 2;
-const DEBUG_DIR = '/tmp/fairtrail-debug';
+const DEBUG_DIR = '/tmp/flight-finder-debug';
 const PREVIEW_MAX_RESULTS = 20;
 
 export interface RouteResult {

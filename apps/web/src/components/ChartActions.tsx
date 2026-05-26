@@ -53,7 +53,7 @@ export function ChartActions({ queryId, origin, destination, snapshots }: Props)
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `fairtrail-${origin}-${destination}.csv`;
+    a.download = `flight-finder-${origin}-${destination}.csv`;
     a.click();
     URL.revokeObjectURL(url);
   };

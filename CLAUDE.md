@@ -1,6 +1,6 @@
-# CLAUDE.md — Fairtrail
+# CLAUDE.md — Flight Finder
 
-> **Fairtrail** — The price trail airlines don't show you. Flight price evolution tracker with natural language search and shareable charts.
+> **Flight Finder** — The price trail airlines don't show you. Flight price evolution tracker with natural language search and shareable charts.
 
 ## Tech Stack
 
@@ -12,17 +12,17 @@
 | AI | Anthropic Claude, OpenAI GPT, Google Gemini, Claude Code CLI, Ollama, llama.cpp, vLLM |
 | Browser | Playwright (headless Chromium for Google Flights scraping) |
 | Charts | Plotly.js (interactive price evolution) |
-| Hosting | Hetzner VPS (Docker Compose + Caddy) — fairtrail.org |
+| Hosting | Hetzner VPS (Docker Compose + Caddy) — flight-finder.org |
 | CI/CD | GitHub Actions (CI + Deploy on push to main) |
 
 ## Monorepo
 
-npm workspaces: `@fairtrail/web` (`apps/web/`).
-Root `package.json` proxies to `@fairtrail/web`.
+npm workspaces: `@flight-finder/web` (`apps/web/`).
+Root `package.json` proxies to `@flight-finder/web`.
 
 ## Environment Variables
 
-All secrets via **Doppler** — NEVER use `.env` files. Project: `fairtrail`, config: `dev`.
+All secrets via **Doppler** — NEVER use `.env` files. Project: `flight-finder`, config: `dev`.
 Scripts wrap with `doppler run --`. Shared LLM keys from `pricetoken` Doppler project.
 
 Critical: `DATABASE_URL`, `REDIS_URL`, `ANTHROPIC_API_KEY`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `CRON_SECRET`.
@@ -114,12 +114,15 @@ Models: `Query` (tracked flights, optional `userId` owner), `PriceSnapshot` (pri
 
 Supports light/dark themes via `data-theme` attribute on `<html>`.
 
-**Dark (default):** bg `#080f1a`, surface `#0f1729`, elevated `#182036`, accent `#06b6d4` (aviation cyan).
-**Light:** bg `#f5f2ec`, surface `#ffffff`, elevated `#ede9e1`, accent `#0891b2` (deep cyan).
+**Dark (default):** bg `#031820`, surface `#072530`, elevated `#0e3640`, border `#1a4a52`, accent `#80a8a5` (mid teal), text `#ecdfc0` (warm cream), secondary `#d4a574` (muted gold).
+**Light (basic-light):** bg `#faf6ed` (cream), surface `#f1ead9`, elevated `#e8dfc8`, border `#d6cbae`, accent `#1a4a52` (deep teal), text `#031820`.
+**Price up alert (shared):** `#c1272d` scarlet. Reserved for emphasis on rising prices, alerts, and editorial callouts.
 
 Fonts: Bricolage Grotesque (display), Outfit (body), IBM Plex Mono (data).
 
-Departure board / atmospheric aviation aesthetic — deep navy, amber glow, precise typography.
+Vintage travel poster aesthetic. Deep teal and cream with a scarlet alert accent. Pan Am and French Line ocean liner heritage. No amber primary, kept out to steer clear of the AI tool palette.
+
+Other themes (cyberpunk, tron, autumn, solar-red) remain as user-selectable alternates in `theme.ts`.
 
 ## Scraping Constraints
 
@@ -146,15 +149,16 @@ Departure board / atmospheric aviation aesthetic — deep navy, amber glow, prec
 
 ## Pre-Release Gate (MANDATORY before `/create-release`)
 
-All three tests must pass before tagging a release:
+All four tests must pass before tagging a release:
 
 ```bash
 ./scripts/docker-smoke-test.sh    # Docker infra: build, health, chromium, extraction, DB
-./scripts/install-flow-test.sh    # Static + grep regression checks on install.sh / fairtrail-cli
+./scripts/install-flow-test.sh    # Static + grep regression checks on install.sh / flight-finder-cli
 ./scripts/cli-runtime-test.sh     # Behavioral CLI runtime matrix (docker v1/v2, podman compose, podman-compose)
+./scripts/migration-test.sh       # Static checks on ~/.flight-finder to ~/.flight-finder migration + deprecated alias
 ```
 
-If any fails, fix the issue and re-run. Do NOT tag without all three passing.
+If any fails, fix the issue and re-run. Do NOT tag without all four passing.
 
 The runtime-matrix harness (`cli-runtime-test.sh`) is what catches the
 "works on docker, broken on podman" class of bug (issues #62, #72). It

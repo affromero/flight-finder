@@ -1,7 +1,7 @@
 # shellcheck shell=bash
-# Compose-flavor flag helpers, sourced by fairtrail-cli and the test suite.
+# Compose-flavor flag helpers, sourced by flight-finder-cli and the test suite.
 #
-# Why this file is separate: the four compose flavors fairtrail-cli detects
+# Why this file is separate: the four compose flavors flight-finder-cli detects
 # (`docker compose`, `docker-compose`, `podman compose`, `podman-compose`)
 # do NOT share a flag surface for `exec`. Specifically, `podman-compose`
 # (the standalone Python tool from containers/podman-compose) accepts only
@@ -59,7 +59,7 @@ _compose_exec_flags() {
       # would silently assume the new tool accepts -i/-it — exactly the
       # mistake that produced issue #72. Anyone wiring up a new flavor
       # MUST add an explicit case here and a test in cli-runtime-test.sh.
-      printf '_compose_exec_flags: unsupported compose flavor "%s" — add explicit support in fairtrail-cli-flags.sh\n' "$dc" >&2
+      printf '_compose_exec_flags: unsupported compose flavor "%s" — add explicit support in flight-finder-cli-flags.sh\n' "$dc" >&2
       return 2
       ;;
   esac

@@ -196,7 +196,7 @@ export default function SettingsPage() {
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>Appearance</h2>
           <p className={styles.toggleHint}>
-            Pick the interface theme Fairtrail should use across this instance for all users and browsers.
+            Pick the interface theme Flight Finder should use across this instance for all users and browsers.
           </p>
 
           <div className={styles.themeGrid}>
@@ -282,7 +282,7 @@ export default function SettingsPage() {
                                   // TODO: save Claude Code setup token to container
                                   // For now, show instructions
                                   setProviderKeySaving(false);
-                                  setMessage('Add CLAUDE_CODE_OAUTH_TOKEN to ~/.fairtrail/.env and restart');
+                                  setMessage('Add CLAUDE_CODE_OAUTH_TOKEN to ~/.flight-finder/.env and restart');
                                   setConfiguringProvider(null);
                                 }}
                               >
@@ -315,7 +315,7 @@ export default function SettingsPage() {
                                 disabled={providerKeySaving || !providerKeyInput}
                                 onClick={async () => {
                                   setProviderKeySaving(true);
-                                  setMessage(`Add ${p.envKey}=${providerKeyInput.slice(0, 8)}... to ~/.fairtrail/.env and restart`);
+                                  setMessage(`Add ${p.envKey}=${providerKeyInput.slice(0, 8)}... to ~/.flight-finder/.env and restart`);
                                   setProviderKeySaving(false);
                                   setConfiguringProvider(null);
                                   setProviderKeyInput('');
@@ -466,7 +466,7 @@ export default function SettingsPage() {
               <option value="manual">Manual input form</option>
             </select>
             <span className={styles.toggleHint}>
-              Controls which search flow opens first on the home page for this Fairtrail instance.
+              Controls which search flow opens first on the home page for this Flight Finder instance.
             </span>
           </div>
 
@@ -617,10 +617,10 @@ export default function SettingsPage() {
           </div>
 
           <div className={styles.vpnStealthInfo}>
-            <h3 className={styles.vpnStealthTitle}>What happens when Fairtrail switches country</h3>
+            <h3 className={styles.vpnStealthTitle}>What happens when Flight Finder switches country</h3>
             <p className={styles.toggleHint}>
               Changing your IP is not enough. Websites detect mismatches between your IP and browser signals.
-              Fairtrail aligns everything to match the target country:
+              Flight Finder aligns everything to match the target country:
             </p>
             <ul className={styles.vpnStealthList}>
               <li>IP address routed through VPN exit node</li>
@@ -663,7 +663,7 @@ export default function SettingsPage() {
                 {config.communitySharing ? 'Sharing enabled' : 'Sharing disabled'}
               </span>
               <p className={styles.toggleHint}>
-                Share anonymized price data (route, price, airline, date) with the Fairtrail community.
+                Share anonymized price data (route, price, airline, date) with the Flight Finder community.
               </p>
             </div>
           </div>

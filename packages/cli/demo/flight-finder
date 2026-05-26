@@ -1,4 +1,4 @@
 #!/usr/bin/env bash
 # Local dev wrapper — looks like the real `fairtrail` command in recordings
-cd /Users/afromero/Code/fairtrail
+cd /Users/afromero/Code/flight-finder
 exec doppler run -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/index.tsx "$@"

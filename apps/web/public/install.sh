@@ -1,14 +1,14 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Fairtrail — One-command installer
-# Usage: curl -fsSL https://fairtrail.org/install.sh | bash
+# Flight Finder — One-command installer
+# Usage: curl -fsSL https://flight-finder.org/install.sh | bash
 #
-# Installs the fairtrail CLI and Docker services to ~/.fairtrail
+# Installs the flight-finder CLI and Docker services to ~/.flight-finder
 # No git clone, no build — pulls a pre-built image from GHCR.
 #
 # Want to inspect this script before running it?
-#   curl -fsSL https://fairtrail.org/install.sh | less
+#   curl -fsSL https://flight-finder.org/install.sh | less
 
 BOLD='\033[1m'
 DIM='\033[2m'
@@ -24,27 +24,27 @@ ok()    { printf "${GREEN}${BOLD}✓${RESET} %b\n" "$1"; }
 warn()  { printf "${YELLOW}${BOLD}!${RESET} %b\n" "$1"; }
 fail()  { printf "${RED}${BOLD}✗${RESET} %b\n" "$1"; exit 1; }
 
-FAIRTRAIL_DIR="$HOME/.fairtrail"
+FLIGHT_FINDER_DIR="$HOME/.flight-finder"
 INSTALL_BIN="$HOME/.local/bin"
 HOST_PORT="${HOST_PORT:-${PORT:-3003}}"
-BASE_URL="${FAIRTRAIL_URL:-https://fairtrail.org}"
+BASE_URL="${FLIGHT_FINDER_URL:-https://flight-finder.org}"
 # Test overrides (used by scripts/install-flow-test.sh)
-FAIRTRAIL_REPO="https://github.com/affromero/fairtrail.git"
-FAIRTRAIL_API_KEY="${FAIRTRAIL_API_KEY:-}"
-FAIRTRAIL_API_PROVIDER="${FAIRTRAIL_API_PROVIDER:-}"
-FAIRTRAIL_EXTRA_ENV="${FAIRTRAIL_EXTRA_ENV:-}"
+FLIGHT_FINDER_REPO="https://github.com/affromero/flight-finder.git"
+FLIGHT_FINDER_API_KEY="${FLIGHT_FINDER_API_KEY:-}"
+FLIGHT_FINDER_API_PROVIDER="${FLIGHT_FINDER_API_PROVIDER:-}"
+FLIGHT_FINDER_EXTRA_ENV="${FLIGHT_FINDER_EXTRA_ENV:-}"
 
 # Parse install-time flags. --no-browser suppresses the auto-open at the end
 # (use for SSH, CI, or server installs that have no display).
-FAIRTRAIL_OPEN_BROWSER="${FAIRTRAIL_OPEN_BROWSER:-1}"
+FLIGHT_FINDER_OPEN_BROWSER="${FLIGHT_FINDER_OPEN_BROWSER:-1}"
 for arg in "$@"; do
   case "$arg" in
-    --no-browser) FAIRTRAIL_OPEN_BROWSER=0 ;;
+    --no-browser) FLIGHT_FINDER_OPEN_BROWSER=0 ;;
   esac
 done
 
 echo ""
-printf "${BOLD}  Fairtrail — Flight Price Tracker${RESET}\n"
+printf "${BOLD}  Flight Finder — Flight Price Tracker${RESET}\n"
 printf "  ${DIM}The price trail airlines don't show you${RESET}\n"
 echo ""
 
@@ -53,26 +53,26 @@ echo ""
 # ---------------------------------------------------------------------------
 printf "  ${BOLD}This installer will:${RESET}\n"
 echo ""
-printf "  ${DIM}1.${RESET} Install 3 Docker containers to ${BOLD}~/.fairtrail/${RESET}\n"
+printf "  ${DIM}1.${RESET} Install 3 Docker containers to ${BOLD}~/.flight-finder/${RESET}\n"
 printf "     ${DIM}• PostgreSQL 16 (your local database — nothing leaves your machine)${RESET}\n"
 printf "     ${DIM}• Redis 7 (local cache)${RESET}\n"
-printf "     ${DIM}• Fairtrail web app (built locally from source)${RESET}\n"
+printf "     ${DIM}• Flight Finder web app (built locally from source)${RESET}\n"
 echo ""
-printf "  ${DIM}2.${RESET} Download the ${BOLD}fairtrail${RESET} CLI to ${BOLD}~/.local/bin/${RESET}\n"
+printf "  ${DIM}2.${RESET} Download the ${BOLD}flight-finder${RESET} CLI to ${BOLD}~/.local/bin/${RESET}\n"
 echo ""
-printf "  ${DIM}3.${RESET} Generate a local ${BOLD}.env${RESET} config file in ~/.fairtrail/\n"
+printf "  ${DIM}3.${RESET} Generate a local ${BOLD}.env${RESET} config file in ~/.flight-finder/\n"
 echo ""
 printf "  ${DIM}No data leaves your machine. No account required.${RESET}\n"
-printf "  ${DIM}Open source (MIT) — ${BOLD}https://github.com/AFFRomero/fairtrail${RESET}\n"
+printf "  ${DIM}Open source (MIT) — ${BOLD}https://github.com/affromero/flight-finder${RESET}\n"
 echo ""
 
-# Allow non-interactive mode (e.g., CI) by setting FAIRTRAIL_YES=1
-if [ "${FAIRTRAIL_YES:-}" != "1" ]; then
+# Allow non-interactive mode (e.g., CI) by setting FLIGHT_FINDER_YES=1
+if [ "${FLIGHT_FINDER_YES:-}" != "1" ]; then
   read -rp "  Continue? [Y/n] " CONSENT < /dev/tty
   if [[ "$CONSENT" =~ ^[Nn]$ ]]; then
     echo ""
     printf "  ${DIM}No changes were made. Inspect the script:${RESET}\n"
-    printf "  ${BOLD}curl -fsSL https://fairtrail.org/install.sh | less${RESET}\n"
+    printf "  ${BOLD}curl -fsSL https://flight-finder.org/install.sh | less${RESET}\n"
     echo ""
     exit 0
   fi
@@ -130,7 +130,7 @@ install_docker_linux() {
 }
 
 if ! command -v git &>/dev/null; then
-  fail "git is required to install Fairtrail.\n\n  Install: ${BOLD}sudo apt install git${RESET} (Debian/Ubuntu), ${BOLD}sudo dnf install git${RESET} (Fedora), or ${BOLD}sudo pacman -S git${RESET} (Arch/Manjaro)"
+  fail "git is required to install Flight Finder.\n\n  Install: ${BOLD}sudo apt install git${RESET} (Debian/Ubuntu), ${BOLD}sudo dnf install git${RESET} (Fedora), or ${BOLD}sudo pacman -S git${RESET} (Arch/Manjaro)"
 fi
 
 if command -v docker &>/dev/null; then
@@ -140,7 +140,7 @@ elif command -v podman &>/dev/null; then
 else
   case "$OS" in
     macos)
-      fail "Docker Desktop or Podman is required.\n\n  Docker: ${BOLD}https://docs.docker.com/desktop/setup/install/mac-install/${RESET}\n  Podman: ${BOLD}https://podman.io/docs/installation${RESET}\n\n  Then re-run: ${BOLD}curl -fsSL https://fairtrail.org/install.sh | bash${RESET}"
+      fail "Docker Desktop or Podman is required.\n\n  Docker: ${BOLD}https://docs.docker.com/desktop/setup/install/mac-install/${RESET}\n  Podman: ${BOLD}https://podman.io/docs/installation${RESET}\n\n  Then re-run: ${BOLD}curl -fsSL https://flight-finder.org/install.sh | bash${RESET}"
       ;;
     linux|wsl)
       warn "Docker is not installed."
@@ -182,7 +182,7 @@ if [ "$CONTAINER_CMD" = "docker" ]; then
       *)
         case "$OS" in
           macos)
-            fail "Docker Desktop is not running.\n\n  Open Docker Desktop from Applications, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://fairtrail.org/install.sh | bash${RESET}"
+            fail "Docker Desktop is not running.\n\n  Open Docker Desktop from Applications, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://flight-finder.org/install.sh | bash${RESET}"
             ;;
           linux|wsl)
             warn "Docker daemon is not running."
@@ -242,7 +242,7 @@ port_in_use() {
 
 while port_in_use "$HOST_PORT"; do
   warn "Port ${HOST_PORT} is already in use."
-  if [ "${FAIRTRAIL_YES:-}" = "1" ]; then
+  if [ "${FLIGHT_FINDER_YES:-}" = "1" ]; then
     HOST_PORT=$((HOST_PORT + 1))
   else
     echo ""
@@ -256,9 +256,9 @@ ok "Port ${HOST_PORT} is available"
 # ---------------------------------------------------------------------------
 # 2. Migrate from old install location
 # ---------------------------------------------------------------------------
-if [ -d "$HOME/fairtrail" ] && [ ! -d "$FAIRTRAIL_DIR" ]; then
+if [ -d "$HOME/fairtrail" ] && [ ! -d "$FLIGHT_FINDER_DIR" ]; then
   warn "Found old install at ~/fairtrail"
-  printf "  ${DIM}The new install location is ~/.fairtrail${RESET}\n"
+  printf "  ${DIM}The new install location is ~/.flight-finder${RESET}\n"
   printf "  ${DIM}Your Docker volumes (tracked queries, price data) are preserved.${RESET}\n"
   echo ""
 
@@ -269,7 +269,7 @@ if [ -d "$HOME/fairtrail" ] && [ ! -d "$FAIRTRAIL_DIR" ]; then
   fi
 
   # Clean up old directory
-  if [ "${FAIRTRAIL_YES:-}" = "1" ]; then
+  if [ "${FLIGHT_FINDER_YES:-}" = "1" ]; then
     mv "$HOME/fairtrail" "$HOME/fairtrail.old-backup"
     ok "Moved ~/fairtrail to ~/fairtrail.old-backup"
   else
@@ -285,9 +285,73 @@ if [ -d "$HOME/fairtrail" ] && [ ! -d "$FAIRTRAIL_DIR" ]; then
 fi
 
 # ---------------------------------------------------------------------------
+# 2b. Migrate from pre-rename install (~/.fairtrail -> ~/.flight-finder)
+# ---------------------------------------------------------------------------
+# Renames the database fairtrail -> flight_finder while the old containers are
+# still wired to it, then moves the install directory. A marker keeps
+# `name: fairtrail` at the top of the regenerated compose so the existing
+# flight-finder_pgdata / redisdata / app-data / cli-cache volumes stay attached
+# without a data copy.
+if [ -d "$HOME/.fairtrail" ] && [ ! -d "$FLIGHT_FINDER_DIR" ]; then
+  warn "Found pre-rename install at ~/.fairtrail"
+  printf "  ${DIM}Migrating to ~/.flight-finder (Flight Finder rename).${RESET}\n"
+  printf "  ${DIM}Your tracked queries, prices, and settings are preserved.${RESET}\n"
+  echo ""
+
+  if [ -f "$HOME/.fairtrail/docker-compose.yml" ]; then
+    info "Renaming database fairtrail -> flight_finder..."
+
+    $DC -f "$HOME/.fairtrail/docker-compose.yml" up -d db >/dev/null 2>&1 || true
+
+    for _ in 1 2 3 4 5 6 7 8 9 10; do
+      if $DC -f "$HOME/.fairtrail/docker-compose.yml" exec -T db pg_isready -U postgres >/dev/null 2>&1; then
+        break
+      fi
+      sleep 1
+    done
+
+    EXISTS=$($DC -f "$HOME/.fairtrail/docker-compose.yml" exec -T db psql -U postgres -d postgres -tAc "SELECT 1 FROM pg_database WHERE datname='fairtrail'" 2>/dev/null | tr -d '[:space:]' || true)
+    if [ "$EXISTS" = "1" ]; then
+      $DC -f "$HOME/.fairtrail/docker-compose.yml" stop web >/dev/null 2>&1 || true
+      if $DC -f "$HOME/.fairtrail/docker-compose.yml" exec -T db psql -U postgres -d postgres -c "ALTER DATABASE fairtrail RENAME TO flight_finder;" >/dev/null 2>&1; then
+        ok "Database renamed to flight_finder"
+      else
+        fail "Failed to rename database fairtrail -> flight_finder. Old install at ~/.fairtrail is untouched."
+      fi
+    else
+      info "Database already renamed (skipping)"
+    fi
+
+    info "Stopping old containers..."
+    $DC -f "$HOME/.fairtrail/docker-compose.yml" down >/dev/null 2>&1 || true
+  fi
+
+  mv "$HOME/.fairtrail" "$FLIGHT_FINDER_DIR"
+  ok "Moved ~/.fairtrail to $FLIGHT_FINDER_DIR"
+
+  touch "$FLIGHT_FINDER_DIR/.migrated-from-fairtrail"
+  echo ""
+elif [ -d "$HOME/.fairtrail" ] && [ -d "$FLIGHT_FINDER_DIR" ]; then
+  warn "Both ~/.fairtrail and ~/.flight-finder exist (interrupted migration?)"
+  printf "  ${DIM}Refusing to auto resolve. If ~/.flight-finder is canonical, remove the old dir:${RESET}\n"
+  printf "  ${BOLD}rm -rf ~/.fairtrail${RESET}\n"
+  printf "  ${DIM}Or retry the migration from scratch:${RESET}\n"
+  printf "  ${BOLD}rm -rf ~/.flight-finder && curl -fsSL ${BASE_URL}/install.sh | bash${RESET}\n"
+  exit 1
+fi
+
+# ---------------------------------------------------------------------------
 # 3. Create install directory + write docker-compose.yml
 # ---------------------------------------------------------------------------
-mkdir -p "$FAIRTRAIL_DIR"
+mkdir -p "$FLIGHT_FINDER_DIR"
+
+# When this install was migrated from ~/.fairtrail, keep `name: fairtrail` at
+# the top of the generated compose. That maps the project name back to the
+# legacy `fairtrail_*` named volumes so existing data stays attached.
+COMPOSE_NAME_LINE=""
+if [ -f "$FLIGHT_FINDER_DIR/.migrated-from-fairtrail" ]; then
+  COMPOSE_NAME_LINE="name: fairtrail"
+fi
 
 
 EXTRA_HOSTS_BLOCK=""
@@ -296,13 +360,14 @@ if [ "$CONTAINER_CMD" != "podman" ]; then
       - "host.docker.internal:host-gateway"'
 fi
 
-cat > "$FAIRTRAIL_DIR/docker-compose.yml" << COMPOSE
+cat > "$FLIGHT_FINDER_DIR/docker-compose.yml" << COMPOSE
+${COMPOSE_NAME_LINE}
 services:
   db:
     image: docker.io/library/postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: fairtrail
+      POSTGRES_DB: flight_finder
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: \${POSTGRES_PASSWORD:-postgres}
     volumes:
@@ -329,7 +394,7 @@ services:
       retries: 5
 
   web:
-    image: ghcr.io/affromero/fairtrail:latest
+    image: ghcr.io/affromero/flight-finder:latest
     build: ./repo
     restart: unless-stopped
     depends_on:
@@ -339,7 +404,7 @@ services:
       - "\${HOST_PORT:-3003}:3003"
     env_file: .env
     environment:
-      DATABASE_URL: postgresql://postgres:\${POSTGRES_PASSWORD:-postgres}@db:5432/fairtrail
+      DATABASE_URL: postgresql://postgres:\${POSTGRES_PASSWORD:-postgres}@db:5432/flight_finder
       REDIS_URL: \${REDIS_URL:-redis://redis:6379}
       CHROME_PATH: /usr/bin/chromium-browser
       NODE_ENV: production
@@ -356,42 +421,50 @@ volumes:
   cli-cache:
 COMPOSE
 
-ok "Created ~/.fairtrail"
+ok "Created ~/.flight-finder"
 
 # ---------------------------------------------------------------------------
-# 4. Install the fairtrail CLI
+# 4. Install the flight-finder CLI
 # ---------------------------------------------------------------------------
 mkdir -p "$INSTALL_BIN"
 
-if [ -n "${FAIRTRAIL_CLI_SOURCE:-}" ] && [ -f "$FAIRTRAIL_CLI_SOURCE" ]; then
-  cp "$FAIRTRAIL_CLI_SOURCE" "$INSTALL_BIN/fairtrail"
-  chmod +x "$INSTALL_BIN/fairtrail"
+if [ -n "${FLIGHT_FINDER_CLI_SOURCE:-}" ] && [ -f "$FLIGHT_FINDER_CLI_SOURCE" ]; then
+  cp "$FLIGHT_FINDER_CLI_SOURCE" "$INSTALL_BIN/flight-finder"
+  chmod +x "$INSTALL_BIN/flight-finder"
   # Helper sits next to the CLI source; copy it too (issue #72).
-  _flags_src="$(dirname "$FAIRTRAIL_CLI_SOURCE")/fairtrail-cli-flags.sh"
+  _flags_src="$(dirname "$FLIGHT_FINDER_CLI_SOURCE")/flight-finder-cli-flags.sh"
   if [ -f "$_flags_src" ]; then
-    cp "$_flags_src" "$INSTALL_BIN/fairtrail-cli-flags.sh"
+    cp "$_flags_src" "$INSTALL_BIN/flight-finder-cli-flags.sh"
   else
     fail "Missing $_flags_src — required helper for compose-flavor flag handling"
   fi
-  ok "Installed fairtrail CLI from local source"
+  ok "Installed flight-finder CLI from local source"
 else
   info "Downloading CLI..."
-  if curl -fsSL "$BASE_URL/fairtrail-cli" -o "$INSTALL_BIN/fairtrail.tmp" 2>/dev/null; then
-    mv -f "$INSTALL_BIN/fairtrail.tmp" "$INSTALL_BIN/fairtrail"
-    chmod +x "$INSTALL_BIN/fairtrail"
-    ok "Installed fairtrail to $INSTALL_BIN/fairtrail"
+  if curl -fsSL "$BASE_URL/flight-finder-cli" -o "$INSTALL_BIN/flight-finder.tmp" 2>/dev/null; then
+    mv -f "$INSTALL_BIN/flight-finder.tmp" "$INSTALL_BIN/flight-finder"
+    chmod +x "$INSTALL_BIN/flight-finder"
+    ok "Installed flight-finder to $INSTALL_BIN/flight-finder"
   else
-    rm -f "$INSTALL_BIN/fairtrail.tmp"
-    fail "Failed to download CLI from $BASE_URL/fairtrail-cli"
+    rm -f "$INSTALL_BIN/flight-finder.tmp"
+    fail "Failed to download CLI from $BASE_URL/flight-finder-cli"
   fi
   # Compose-flavor flag helper (issue #72). Hard requirement on podman.
-  if curl -fsSL "$BASE_URL/fairtrail-cli-flags.sh" -o "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp" 2>/dev/null; then
-    mv -f "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp" "$INSTALL_BIN/fairtrail-cli-flags.sh"
+  if curl -fsSL "$BASE_URL/flight-finder-cli-flags.sh" -o "$INSTALL_BIN/flight-finder-cli-flags.sh.tmp" 2>/dev/null; then
+    mv -f "$INSTALL_BIN/flight-finder-cli-flags.sh.tmp" "$INSTALL_BIN/flight-finder-cli-flags.sh"
   else
-    rm -f "$INSTALL_BIN/fairtrail-cli-flags.sh.tmp"
-    fail "Failed to download flag helper from $BASE_URL/fairtrail-cli-flags.sh"
+    rm -f "$INSTALL_BIN/flight-finder-cli-flags.sh.tmp"
+    fail "Failed to download flag helper from $BASE_URL/flight-finder-cli-flags.sh"
   fi
 fi
+
+# Install the flightfinder alias as a sibling symlink (single word, faster to type).
+ln -sf flight-finder "$INSTALL_BIN/flightfinder"
+
+# Keep the legacy fairtrail command working as a deprecated alias.
+# The wrapper prints a one line deprecation notice when invoked under this name.
+# Sunset target: v1.0.
+ln -sf flight-finder "$INSTALL_BIN/fairtrail"
 
 # Ensure ~/.local/bin is in PATH
 if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_BIN"; then
@@ -401,7 +474,7 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_BIN"; then
   patch_profile() {
     local file="$1"
     if [ -f "$file" ] && ! grep -qF '.local/bin' "$file" 2>/dev/null; then
-      printf '\n# Added by Fairtrail installer\n%s\n' "$EXPORT_LINE" >> "$file"
+      printf '\n# Added by Flight Finder installer\n%s\n' "$EXPORT_LINE" >> "$file"
       ok "Added $INSTALL_BIN to PATH in $file"
       PATCHED=true
     fi
@@ -462,7 +535,7 @@ if [ "$CLAUDE_CODE_DETECTED" = true ] && [ "$OS" = "macos" ]; then
   printf "  ${BOLD}3.${RESET} Paste the token here (starts with sk-ant-)\n"
   echo ""
 
-  if [ "${FAIRTRAIL_YES:-}" = "1" ]; then
+  if [ "${FLIGHT_FINDER_YES:-}" = "1" ]; then
     warn "Non-interactive mode — skipping setup-token prompt"
   else
     read -rsp "  Token (or Enter to skip): " CLAUDE_SETUP_TOKEN < /dev/tty
@@ -471,7 +544,7 @@ if [ "$CLAUDE_CODE_DETECTED" = true ] && [ "$OS" = "macos" ]; then
       ok "Claude Code setup token saved"
     else
       warn "Skipped — Claude Code will not work until you configure a token"
-      printf "  ${DIM}You can add it later: edit ~/.fairtrail/.env and add CLAUDE_CODE_OAUTH_TOKEN=sk-ant-...${RESET}\n"
+      printf "  ${DIM}You can add it later: edit ~/.flight-finder/.env and add CLAUDE_CODE_OAUTH_TOKEN=sk-ant-...${RESET}\n"
     fi
   fi
 fi
@@ -503,17 +576,17 @@ if [ "$CLAUDE_CODE_DETECTED" = true ] || [ "$CODEX_DETECTED" = true ] || [ "$OLL
 fi
 
 # Pre-set API key from env (for testing)
-if [ -n "$FAIRTRAIL_API_KEY" ] && [ -n "$FAIRTRAIL_API_PROVIDER" ]; then
-  API_KEY_VAR="$FAIRTRAIL_API_PROVIDER"
-  API_KEY_VAL="$FAIRTRAIL_API_KEY"
+if [ -n "$FLIGHT_FINDER_API_KEY" ] && [ -n "$FLIGHT_FINDER_API_PROVIDER" ]; then
+  API_KEY_VAR="$FLIGHT_FINDER_API_PROVIDER"
+  API_KEY_VAL="$FLIGHT_FINDER_API_KEY"
   HAS_CLI_OR_LOCAL=true
-  ok "Using pre-configured $FAIRTRAIL_API_PROVIDER"
+  ok "Using pre-configured $FLIGHT_FINDER_API_PROVIDER"
 fi
 
 if [ "$HAS_CLI_OR_LOCAL" = false ]; then
   warn "No Claude Code, Codex CLI, or Ollama found"
 
-  if [ "${FAIRTRAIL_YES:-}" = "1" ]; then
+  if [ "${FLIGHT_FINDER_YES:-}" = "1" ]; then
     warn "Non-interactive mode — skipping API key prompt"
   else
     echo ""
@@ -558,11 +631,11 @@ fi
 # ---------------------------------------------------------------------------
 # 6. Generate .env
 # ---------------------------------------------------------------------------
-if [ -f "$FAIRTRAIL_DIR/.env" ]; then
+if [ -f "$FLIGHT_FINDER_DIR/.env" ]; then
   warn "Existing .env found — keeping it"
 else
   {
-    echo "# Generated by Fairtrail installer — $(date -u '+%Y-%m-%d %H:%M UTC')"
+    echo "# Generated by Flight Finder installer — $(date -u '+%Y-%m-%d %H:%M UTC')"
     echo "POSTGRES_PASSWORD=postgres"
     echo ""
     echo "# Host port — the port YOU access in the browser."
@@ -582,12 +655,12 @@ else
       echo "# Claude Code setup token (long-lived, from 'claude setup-token')"
       echo "CLAUDE_CODE_OAUTH_TOKEN=${CLAUDE_SETUP_TOKEN}"
     fi
-    if [ -n "$FAIRTRAIL_EXTRA_ENV" ]; then
+    if [ -n "$FLIGHT_FINDER_EXTRA_ENV" ]; then
       echo ""
       echo "# Extra env (test overrides)"
-      echo "$FAIRTRAIL_EXTRA_ENV"
+      echo "$FLIGHT_FINDER_EXTRA_ENV"
     fi
-  } > "$FAIRTRAIL_DIR/.env"
+  } > "$FLIGHT_FINDER_DIR/.env"
   ok "Generated .env"
 fi
 
@@ -599,7 +672,7 @@ printf "  ${BOLD}VPN Price Comparison (optional)${RESET}\n"
 printf "  ${DIM}Compare flight prices from different countries using ExpressVPN.${RESET}\n"
 printf "  ${DIM}Requires an ExpressVPN subscription.${RESET}\n"
 printf "\n"
-if [ "${FAIRTRAIL_YES:-}" = "1" ]; then
+if [ "${FLIGHT_FINDER_YES:-}" = "1" ]; then
   SETUP_VPN="n"
 else
   printf "  Set up ExpressVPN? [y/N] "
@@ -614,14 +687,14 @@ if [ "$SETUP_VPN" = "y" ] || [ "$SETUP_VPN" = "Y" ]; then
       echo ""
       echo "# ExpressVPN (VPN price comparison)"
       echo "EXPRESSVPN_CODE=${EXPRESSVPN_CODE}"
-    } >> "$FAIRTRAIL_DIR/.env"
+    } >> "$FLIGHT_FINDER_DIR/.env"
 
     # Generate docker-compose.vpn.yml
-    cat > "$FAIRTRAIL_DIR/docker-compose.vpn.yml" << 'VPNYAML'
+    cat > "$FLIGHT_FINDER_DIR/docker-compose.vpn.yml" << 'VPNYAML'
 services:
   expressvpn:
     image: docker.io/misioslav/expressvpn:latest
-    container_name: fairtrail-expressvpn
+    container_name: flight-finder-expressvpn
     restart: unless-stopped
     cap_add:
       - NET_ADMIN
@@ -675,7 +748,7 @@ if [ "$CLAUDE_CODE_DETECTED" = true ] || [ "$CODEX_DETECTED" = true ]; then
   info "Mounting CLI credentials (read-only)"
   echo ""
   printf "  ${DIM}To use your existing CLI subscription instead of a separate API key,${RESET}\n"
-  printf "  ${DIM}Fairtrail needs read-only access to your CLI auth tokens:${RESET}\n"
+  printf "  ${DIM}Flight Finder needs read-only access to your CLI auth tokens:${RESET}\n"
   echo ""
   if [ "$CLAUDE_CODE_DETECTED" = true ]; then
     printf "    ${DIM}~/.claude.json + ~/.claude  →  mounted as read-only (:ro)${RESET}\n"
@@ -687,7 +760,7 @@ if [ "$CLAUDE_CODE_DETECTED" = true ] || [ "$CODEX_DETECTED" = true ]; then
   printf "  ${DIM}The container cannot modify these files. Your tokens are never copied or sent anywhere.${RESET}\n"
   echo ""
 
-  if [ "${FAIRTRAIL_YES:-}" != "1" ]; then
+  if [ "${FLIGHT_FINDER_YES:-}" != "1" ]; then
     read -rp "  Allow read-only credential mount? [Y/n] " MOUNT_CHOICE < /dev/tty
     if [[ "$MOUNT_CHOICE" =~ ^[Nn]$ ]]; then
       MOUNT_CONSENT=false
@@ -715,7 +788,7 @@ if [ "$MOUNT_CONSENT" = true ]; then
 fi
 
 if [ "$NEED_OVERRIDE" = true ]; then
-  cat > "$FAIRTRAIL_DIR/docker-compose.override.yml" << YAML
+  cat > "$FLIGHT_FINDER_DIR/docker-compose.override.yml" << YAML
 # Auto-generated — mounts CLI auth into the container (read-only)
 services:
   web:
@@ -723,15 +796,15 @@ services:
 YAML
   ok "Mounted CLI credentials (read-only)"
 else
-  rm -f "$FAIRTRAIL_DIR/docker-compose.override.yml"
+  rm -f "$FLIGHT_FINDER_DIR/docker-compose.override.yml"
 fi
 
 # ---------------------------------------------------------------------------
 # 8. Pull image and start
 # ---------------------------------------------------------------------------
-cd "$FAIRTRAIL_DIR"
+cd "$FLIGHT_FINDER_DIR"
 
-if [ "${FAIRTRAIL_SKIP_BUILD:-}" = "1" ]; then
+if [ "${FLIGHT_FINDER_SKIP_BUILD:-}" = "1" ]; then
   ok "Using existing image (build skipped)"
 elif $DC pull web 2>/dev/null; then
   ok "Pulled pre-built image"
@@ -741,8 +814,8 @@ else
   echo ""
 
   # Ensure repo is cloned for local builds
-  if [ ! -d "$FAIRTRAIL_DIR/repo/.git" ]; then
-    git clone --depth 1 -q "$FAIRTRAIL_REPO" "$FAIRTRAIL_DIR/repo"
+  if [ ! -d "$FLIGHT_FINDER_DIR/repo/.git" ]; then
+    git clone --depth 1 -q "$FLIGHT_FINDER_REPO" "$FLIGHT_FINDER_DIR/repo"
   fi
 
   $DC build 2>&1 | while IFS= read -r line; do
@@ -751,7 +824,7 @@ else
 fi
 
 
-if [ "${FAIRTRAIL_SKIP_START:-}" = "1" ]; then
+if [ "${FLIGHT_FINDER_SKIP_START:-}" = "1" ]; then
   ok "Skipping container start (test mode)"
 else
   $DC up -d 2>&1 | while IFS= read -r line; do
@@ -769,14 +842,14 @@ else
   until curl -sf "http://localhost:${HOST_PORT}/api/health" >/dev/null 2>&1; do
     RETRIES=$((RETRIES - 1))
     if [ "$RETRIES" -le 0 ]; then
-      warn "App didn't respond in 60s — run 'fairtrail logs' to debug"
+      warn "App didn't respond in 60s — run 'flight-finder logs' to debug"
       break
     fi
     sleep 1
   done
 
   if [ "$RETRIES" -gt 0 ]; then
-    ok "Fairtrail is running"
+    ok "Flight Finder is running"
   fi
 fi
 
@@ -786,7 +859,7 @@ fi
 echo ""
 printf "${BOLD}  ┌──────────────────────────────────────────────────┐${RESET}\n"
 printf "${BOLD}  │                                                  │${RESET}\n"
-printf "${BOLD}  │${RESET}   ${CYAN}Fairtrail is ready${RESET}                            ${BOLD}│${RESET}\n"
+printf "${BOLD}  │${RESET}   ${CYAN}Flight Finder is ready${RESET}                            ${BOLD}│${RESET}\n"
 printf "${BOLD}  │${RESET}                                                  ${BOLD}│${RESET}\n"
 printf "${BOLD}  │${RESET}   Open:  ${BOLD}http://localhost:${HOST_PORT}${RESET}                  ${BOLD}│${RESET}\n"
 printf "${BOLD}  │${RESET}                                                  ${BOLD}│${RESET}\n"
@@ -804,12 +877,12 @@ fi
 printf "${BOLD}  │${RESET}                                                  ${BOLD}│${RESET}\n"
 printf "${BOLD}  └──────────────────────────────────────────────────┘${RESET}\n"
 echo ""
-printf "  Next time, just run: ${BOLD}fairtrail${RESET}\n"
-printf "  ${DIM}Ctrl+C to stop  |  fairtrail stop  |  fairtrail help${RESET}\n"
+printf "  Next time, just run: ${BOLD}flight-finder${RESET}\n"
+printf "  ${DIM}Ctrl+C to stop  |  flight-finder stop  |  flight-finder help${RESET}\n"
 echo ""
 
 # Open browser automatically (skip on headless systems or with --no-browser)
-if [ "$FAIRTRAIL_OPEN_BROWSER" = "1" ]; then
+if [ "$FLIGHT_FINDER_OPEN_BROWSER" = "1" ]; then
   if [ "$(uname)" = "Darwin" ] && command -v open &>/dev/null; then
     open "http://localhost:${HOST_PORT}"
   elif [ -n "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ] && command -v xdg-open &>/dev/null; then

@@ -19,13 +19,13 @@
 }
 
 .partial {
-  background: var(--warning, #f59e0b);
-  box-shadow: 0 0 0 1px rgba(245, 158, 11, 0.25);
+  background: var(--warning, #d4a574);
+  box-shadow: 0 0 0 1px rgba(212, 165, 116, 0.25);
 }
 
 .in_progress {
-  background: var(--accent, #06b6d4);
-  box-shadow: 0 0 0 1px rgba(6, 182, 212, 0.25);
+  background: var(--accent, #80a8a5);
+  box-shadow: 0 0 0 1px rgba(128, 168, 165, 0.25);
   animation: scrapePulse 1.4s ease-in-out infinite;
 }
 

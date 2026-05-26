@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Seed realistic demo data for screenshots.
-// Run: doppler run --project fairtrail --config prd -- node scripts/seed-demo.mjs
-// Clean: doppler run --project fairtrail --config prd -- node scripts/seed-demo.mjs --clean
+// Run: doppler run --project flight-finder --config prd -- node scripts/seed-demo.mjs
+// Clean: doppler run --project flight-finder --config prd -- node scripts/seed-demo.mjs --clean
 
 import { PrismaClient } from '@prisma/client';
 
@@ -132,7 +132,7 @@ async function seed() {
 
   console.log('\nDemo queries:');
   for (const id of queryIds) {
-    console.log(`  https://fairtrail.org/q/${id}`);
+    console.log(`  https://flight-finder.org/q/${id}`);
   }
   console.log('\nDone! Use --clean to remove seed data.');
 }

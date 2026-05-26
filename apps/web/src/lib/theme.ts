@@ -1,6 +1,6 @@
 export const THEME_OPTIONS = [
-  { id: 'default', label: 'Default', description: 'Current Fairtrail look', mode: 'dark', accent: '#06b6d4' },
-  { id: 'basic-light', label: 'Basic Light', description: 'Clean high-contrast light mode', mode: 'light', accent: '#0891b2' },
+  { id: 'default', label: 'Default', description: 'Altitude · deep teal and warm cream', mode: 'dark', accent: '#80a8a5' },
+  { id: 'basic-light', label: 'Basic Light', description: 'Altitude cream with deep teal accents', mode: 'light', accent: '#1a4a52' },
   { id: 'basic-dark', label: 'Basic Dark', description: 'Neutral dark mode without the default glow', mode: 'dark', accent: '#60a5fa' },
   { id: 'cyberpunk', label: 'Cyberpunk', description: 'Hot pink neon and electric shadows', mode: 'dark', accent: '#ff4fd8' },
   { id: 'tron', label: 'Tron', description: 'Grid-lit cyan on deep blue', mode: 'dark', accent: '#00d9ff' },

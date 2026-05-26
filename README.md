@@ -1,30 +1,30 @@
 <div align="center">
 
-# Fairtrail
+# Flight Finder
 
 **The price trail airlines don't show you.**
 
 Track flight prices over time. Self-hosted. Open source. Bring your own LLM.
 
-[![GitHub Release](https://img.shields.io/github/v/release/affromero/fairtrail)](https://github.com/affromero/fairtrail/releases/latest)
-[![CI](https://img.shields.io/github/actions/workflow/status/affromero/fairtrail/ci.yml?label=CI)](https://github.com/affromero/fairtrail/actions/workflows/ci.yml)
-[![Docker](https://img.shields.io/badge/Docker-deployed-2496ED?logo=docker&logoColor=white)](https://github.com/affromero/fairtrail/pkgs/container/fairtrail)
-[![License: MIT](https://img.shields.io/github/license/affromero/fairtrail)](https://github.com/affromero/fairtrail/blob/main/LICENSE)
+[![GitHub Release](https://img.shields.io/github/v/release/affromero/flight-finder)](https://github.com/affromero/flight-finder/releases/latest)
+[![CI](https://img.shields.io/github/actions/workflow/status/affromero/flight-finder/ci.yml?label=CI)](https://github.com/affromero/flight-finder/actions/workflows/ci.yml)
+[![Docker](https://img.shields.io/badge/Docker-deployed-2496ED?logo=docker&logoColor=white)](https://github.com/affromero/flight-finder/pkgs/container/flight-finder)
+[![License: MIT](https://img.shields.io/github/license/affromero/flight-finder)](https://github.com/affromero/flight-finder/blob/main/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org/)
 [![Next.js](https://img.shields.io/badge/Next.js-15-black?logo=next.js)](https://nextjs.org)
 [![Prisma](https://img.shields.io/badge/Prisma-6-2D3748?logo=prisma)](https://prisma.io)
 [![Socket](https://img.shields.io/badge/Socket-protected-blueviolet?logo=socket.dev)](https://socket.dev)
 [![min-release-age](https://img.shields.io/badge/min--release--age-7%20days-brightgreen)](https://docs.npmjs.com/cli/v10/using-npm/config#min-release-age)
-[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/affromero/fairtrail/pulls)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](https://github.com/affromero/flight-finder/pulls)
 
 <br>
 
-<img src="assets/demo.gif" alt="Fairtrail -- price evolution charts cycling through JFK->CDG, LAX->NRT, ORD->FCO" width="100%">
+<img src="assets/demo.gif" alt="Flight Finder -- price evolution charts cycling through JFK->CDG, LAX->NRT, ORD->FCO" width="100%">
 
 <details>
 <summary>CLI Demo -- headless mode with Claude Code & Codex</summary>
 <br>
-<img src="packages/cli/demo/fairtrail-demo.gif" alt="Fairtrail CLI -- search with Claude Code and Codex side by side, then live price charts" width="100%">
+<img src="packages/cli/demo/flight-finder-demo.gif" alt="Flight Finder CLI -- search with Claude Code and Codex side by side, then live price charts" width="100%">
 </details>
 
 <details>
@@ -39,10 +39,14 @@ Track flight prices over time. Self-hosted. Open source. Bring your own LLM.
 
 ---
 
+## Migrating from Fairtrail?
+
+Already running an install from before the rename? `fairtrail update` does everything for you: renames the database from `fairtrail` to `flight_finder`, moves `~/.fairtrail` to `~/.flight-finder`, pulls the new image, and keeps your tracked queries, prices, and settings intact. The `fairtrail` command itself keeps working as a deprecated alias through v1.0. Details and a manual fallback live in [MIGRATION.md](MIGRATION.md).
+
 ## Quick Start
 
 ```bash
-curl -fsSL https://fairtrail.org/install.sh | bash
+curl -fsSL https://flight-finder.org/install.sh | bash
 ```
 
 If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Codex](https://github.com/openai/codex) installed, the setup script detects it automatically. Otherwise, it asks you to paste an API key.
@@ -50,10 +54,10 @@ If you have [Claude Code](https://docs.anthropic.com/en/docs/claude-code) or [Co
 Once it finishes:
 
 1. Open [localhost:3003](http://localhost:3003)
-2. Or run `fairtrail search "NYC to Tokyo in July under $800"`
-3. Fairtrail starts tracking prices immediately
+2. Or run `flight-finder search "NYC to Tokyo in July under $800"`
+3. Flight Finder starts tracking prices immediately
 
-## Why Fairtrail?
+## Why Flight Finder?
 
 Airlines change flight prices hundreds of times a day. They use dynamic pricing to maximize what you pay. **No one shows you the price trend because the companies with the data profit from hiding it.**
 
@@ -64,7 +68,7 @@ Airlines change flight prices hundreds of times a day. They use dynamic pricing 
 2. **"Buy or Wait" is more profitable than transparency.** A black-box prediction keeps you dependent on their platform.
 3. **Airlines don't want price transparency.** If you can see that a route dips 3 weeks before departure, that undermines dynamic pricing.
 
-Fairtrail exists because the data is useful to *you* -- just not to the companies that have it.
+Flight Finder exists because the data is useful to *you* -- just not to the companies that have it.
 </details>
 
 ### What you get
@@ -80,21 +84,21 @@ Fairtrail exists because the data is useful to *you* -- just not to the companie
 
 ## VPN Price Comparison
 
-Test the myth that VPN location affects flight prices. Fairtrail can scrape the same query from multiple countries and show the results side by side.
+Test the myth that VPN location affects flight prices. Flight Finder can scrape the same query from multiple countries and show the results side by side.
 
 ### How it works
 
-1. An [ExpressVPN](https://www.expressvpn.com) sidecar container runs alongside Fairtrail
-2. For each scrape run, Fairtrail routes Playwright through the VPN's SOCKS5 proxy
+1. An [ExpressVPN](https://www.expressvpn.com) sidecar container runs alongside Flight Finder
+2. For each scrape run, Flight Finder routes Playwright through the VPN's SOCKS5 proxy
 3. All browser signals align to the target country (see full list below)
 4. Your local (no VPN) price is always captured as a baseline
 5. The chart shows a per-country comparison view
 
-### Anti-detection: what Fairtrail does beyond switching your IP
+### Anti-detection: what Flight Finder does beyond switching your IP
 
-Changing your IP is not enough. Websites detect mismatches between your IP and browser signals. Fairtrail aligns everything to match the target country:
+Changing your IP is not enough. Websites detect mismatches between your IP and browser signals. Flight Finder aligns everything to match the target country:
 
-| Signal | What Fairtrail does |
+| Signal | What Flight Finder does |
 |--------|-------------------|
 | **IP address** | Routed through VPN exit node via SOCKS5 proxy |
 | **Timezone** | `timezoneId` set to match the country (e.g. `Europe/Berlin` for DE) |
@@ -112,7 +116,7 @@ Changing your IP is not enough. Websites detect mismatches between your IP and b
 ### Setup
 
 1. During install, say **yes** to "Set up ExpressVPN?" and paste your [activation code](https://www.expressvpn.com/setup) -- or paste it later in **Settings**
-2. The VPN sidecar starts automatically with Fairtrail (no extra commands needed)
+2. The VPN sidecar starts automatically with Flight Finder (no extra commands needed)
 3. When creating a new tracker, toggle **"Compare prices from different countries"** and pick which countries to compare
 4. Each scrape run: local baseline first, then each VPN country sequentially
 5. On the chart page, use the **view filter** to switch between:
@@ -125,10 +129,10 @@ Changing your IP is not enough. Websites detect mismatches between your IP and b
 
 The VPN sidecar uses [`misioslav/expressvpn`](https://hub.docker.com/r/misioslav/expressvpn) and exposes:
 - SOCKS5 proxy on port 1080 (internal, used by Playwright)
-- REST API on port 8000 (internal, used by Fairtrail to switch countries)
+- REST API on port 8000 (internal, used by Flight Finder to switch countries)
 
 Requirements:
-- `EXPRESSVPN_CODE` in `~/.fairtrail/.env`
+- `EXPRESSVPN_CODE` in `~/.flight-finder/.env`
 - Docker host must have `/dev/net/tun` (kernel TUN module)
 - The sidecar needs `NET_ADMIN` capability
 
@@ -155,7 +159,7 @@ Each country profile aligns: locale, timezone, Accept-Language header, and geolo
 <details>
 <summary>LLM Providers</summary>
 
-Fairtrail needs an LLM for two things: parsing natural language queries and extracting price data from Google Flights pages.
+Flight Finder needs an LLM for two things: parsing natural language queries and extracting price data from Google Flights pages.
 
 | Provider | Auth | Cost | Notes |
 |----------|------|------|-------|
@@ -169,7 +173,7 @@ Fairtrail needs an LLM for two things: parsing natural language queries and extr
 | **vLLM** | None (local) | Free | GPU-accelerated (port 8000) |
 | **OpenAI + custom URL** | `OPENAI_BASE_URL` | Varies | OpenRouter or any OpenAI-compatible endpoint |
 
-**Three ways to use Fairtrail:**
+**Three ways to use Flight Finder:**
 
 - **Subscription users** (Claude Pro/Max, ChatGPT Pro) -- auto-detected, auth tokens mounted read-only.
 - **API key users** -- paste a key, passed via env var, never written to disk.
@@ -227,7 +231,7 @@ The built-in cron runs on a configurable interval (default: every 3h). Each run 
 
 ## Scraping Constraints
 
-Fairtrail walks an ordered chain of price sources per query. The chain is admin allowlisted and per user orderable. Each source has different reliability:
+Flight Finder walks an ordered chain of price sources per query. The chain is admin allowlisted and per user orderable. Each source has different reliability:
 
 | Source           | Default | Reliability     | Notes |
 |------------------|---------|-----------------|-------|
@@ -238,15 +242,15 @@ Fairtrail walks an ordered chain of price sources per query. The chain is admin 
 
 Skyscanner and Kayak are off by default. Admin enables them in `/admin/config`; users then order them in `/account/settings`. When a source returns no flights the next source in the chain runs; an `all_filtered_out` result (real flights existed but query filters excluded them) short circuits the chain because changing sources cannot help.
 
-For Skyscanner and Kayak to be production grade you would need residential proxies or paid CAPTCHA solving, neither of which Fairtrail ships. If those sources fail consistently for your route, leave them off.
+For Skyscanner and Kayak to be production grade you would need residential proxies or paid CAPTCHA solving, neither of which Flight Finder ships. If those sources fail consistently for your route, leave them off.
 
-## Managing Fairtrail
+## Managing Flight Finder
 
 ```
-Usage: fairtrail [command]
+Usage: flight-finder [command]
 
 Commands:
-  (none)       Start Fairtrail (Ctrl+C to stop)
+  (none)       Start Flight Finder (Ctrl+C to stop)
   search ".."  Search and track a flight from the terminal
   start        Start in background
   stop         Stop -- pauses all price tracking until you start again
@@ -254,22 +258,22 @@ Commands:
   status       Check if running
   update       Pull latest version and restart
   version      Show version and commit
-  uninstall    Remove Fairtrail and all data
+  uninstall    Remove Flight Finder and all data
   help         Show this help
 ```
 
 <details>
 <summary>Headless CLI</summary>
 
-Run Fairtrail entirely in the terminal:
+Run Flight Finder entirely in the terminal:
 
 ```bash
-fairtrail --headless                              # Interactive search wizard
-fairtrail --headless --backend claude-code        # Use Claude Code as AI backend
-fairtrail --headless --backend codex              # Use Codex as AI backend
-fairtrail --headless --list                       # Show all tracked queries
-fairtrail --headless --view <id>                  # Live price chart (auto-refreshes every 30s)
-fairtrail --headless --view <id> --tmux           # Split grouped routes into tmux panes
+flight-finder --headless                              # Interactive search wizard
+flight-finder --headless --backend claude-code        # Use Claude Code as AI backend
+flight-finder --headless --backend codex              # Use Codex as AI backend
+flight-finder --headless --list                       # Show all tracked queries
+flight-finder --headless --view <id>                  # Live price chart (auto-refreshes every 30s)
+flight-finder --headless --view <id> --tmux           # Split grouped routes into tmux panes
 ```
 
 Without `--headless`, `--view` opens the chart in your browser and `--list` opens the admin dashboard.
@@ -282,13 +286,13 @@ Without `--headless`, `--view` opens the chart in your browser and `--list` open
 - tmux integration for grouped routes
 - Backend selection: `--backend claude-code|codex|anthropic|openai|google|ollama|llamacpp|vllm`
 
-<img src="packages/cli/demo/fairtrail-demo.gif" alt="Fairtrail CLI" width="100%">
+<img src="packages/cli/demo/flight-finder-demo.gif" alt="Flight Finder CLI" width="100%">
 </details>
 
 <details>
 <summary>Configuration</summary>
 
-All settings are in `~/.fairtrail/.env` (generated by the installer):
+All settings are in `~/.flight-finder/.env` (generated by the installer):
 
 | Variable | Default | Description |
 |----------|---------|-------------|
@@ -301,14 +305,14 @@ All settings are in `~/.fairtrail/.env` (generated by the installer):
 | `ADMIN_PASSWORD` | Auto-generated | Admin panel password |
 | `CRON_ENABLED` | `true` | Enable built-in scrape scheduler |
 | `CRON_INTERVAL_HOURS` | `3` | Hours between scrape runs |
-| `HOST_PORT` | `3003` | Host port for Fairtrail |
+| `HOST_PORT` | `3003` | Host port for Flight Finder |
 | `EXPRESSVPN_CODE` | -- | ExpressVPN activation code (for VPN comparison) |
 </details>
 
 <details>
 <summary>Multi user mode (households)</summary>
 
-Self-hosting Fairtrail with your spouse, your roommates, or your whole
+Self-hosting Flight Finder with your spouse, your roommates, or your whole
 family? Multi user mode gives each person their own login, their own
 trackers, and their own preferences. Everyone watches their own flights
 without seeing each other's dashboards. You stay admin.
@@ -327,7 +331,7 @@ If you're the only user, leave it off — solo mode is simpler.
 You can enable multi user mode two ways:
 
 1. **During setup**: the last (optional) step of the setup wizard asks
-   "Run Fairtrail for a household?". Flip it on, pick a username and
+   "Run Flight Finder for a household?". Flip it on, pick a username and
    password, and you're done.
 2. **Later from Settings**: open `/settings` -> Multi user mode and
    toggle it on. Same form, no restart needed.
@@ -341,7 +345,7 @@ When you enable, three things happen atomically:
 
 #### Day to day
 
-Once enabled, Fairtrail behaves like a normal multi-account app:
+Once enabled, Flight Finder behaves like a normal multi-account app:
 
 - `/login` replaces the password-only admin form — same page for admins
   and non-admins (post-login redirect picks `/admin` vs `/account` based
@@ -363,7 +367,7 @@ right person.
 
 #### What it does NOT do
 
-- It is **not** offered on fairtrail.org — the public site is single
+- It is **not** offered on flight-finder.org — the public site is single
   tenant by design and will never have signup
 - It does **not** introduce email, password reset flows, or OAuth —
   admin creates accounts manually and resets passwords from the panel
@@ -458,7 +462,7 @@ mode, with quick links to `/account` and logout.
 </details>
 
 <details>
-<summary>Why self-host instead of using fairtrail.org?</summary>
+<summary>Why self-host instead of using flight-finder.org?</summary>
 
 - **It can't work any other way.** A centralized service scraping Google Flights gets IP-banned within days. Thousands of self-hosted instances, each making a few quiet requests from different IPs, is the only architecture that survives.
 - **Your searches stay private.** No one sees what routes you're watching.
@@ -470,15 +474,15 @@ mode, with quick links to `/account` and logout.
 <details>
 <summary>Community Data</summary>
 
-Fairtrail is fully decentralized. You run everything on your own machine.
+Flight Finder is fully decentralized. You run everything on your own machine.
 
-**fairtrail.org** aggregates anonymized price data that self-hosted instances **opt in** to share.
+**flight-finder.org** aggregates anonymized price data that self-hosted instances **opt in** to share.
 
 **What gets shared (opt-in only):** route, travel date, price, currency, airline, stops, cabin class, scrape timestamp.
 
 **What is never shared:** your queries, search history, preferences, API keys, IP address, or identity.
 
-Enable in Settings or during setup. Explore community data at [fairtrail.org/explore](https://fairtrail.org/explore).
+Enable in Settings or during setup. Explore community data at [flight-finder.org/explore](https://flight-finder.org/explore).
 </details>
 
 <details>
@@ -556,7 +560,7 @@ Google Flights has an undocumented internal API that returns structured JSON wit
 
 **What it costs you:**
 
-|  | Fairtrail | [fli](https://github.com/punitarani/fli) |
+|  | Flight Finder | [fli](https://github.com/punitarani/fli) |
 |---|---|---|
 | Approach | Playwright + LLM extraction | Reverse-engineered internal API |
 | Speed | 3-10s per search | Sub-second |
@@ -570,7 +574,7 @@ Google Flights has an undocumented internal API that returns structured JSON wit
 
 Both approaches share the same risk: Google can break either one at any time. We'd rather depend on the stable, public-facing UI than on undocumented internal array positions.
 
-**Use Fairtrail if** you want to track prices over time, see trends, get booking links, and share charts.
+**Use Flight Finder if** you want to track prices over time, see trends, get booking links, and share charts.
 
 **Use [fli](https://github.com/punitarani/fli) if** you want instant programmatic lookups from scripts.
 </details>
@@ -588,11 +592,11 @@ Both approaches share the same risk: Google can break either one at any time. We
 <details>
 <summary>Disclaimer & Legal</summary>
 
-**Fairtrail is an informational tool only.** Flight prices shown are scraped from third-party sources and may be inaccurate, outdated, or incomplete. Airlines change prices based on demand, search history, seat availability, and other factors. **Do not make purchasing decisions based solely on Fairtrail data.** Always verify prices directly with the airline before buying.
+**Flight Finder is an informational tool only.** Flight prices shown are scraped from third-party sources and may be inaccurate, outdated, or incomplete. Airlines change prices based on demand, search history, seat availability, and other factors. **Do not make purchasing decisions based solely on Flight Finder data.** Always verify prices directly with the airline before buying.
 
-Fairtrail is a personal tool that scrapes publicly available flight pricing data. In the US, scraping publicly accessible websites does not violate the [Computer Fraud and Abuse Act](https://en.wikipedia.org/wiki/Computer_Fraud_and_Abuse_Act) ([*hiQ Labs v. LinkedIn*, 9th Cir. 2022](https://en.wikipedia.org/wiki/HiQ_Labs_v._LinkedIn)). Fairtrail does not circumvent any login, paywall, or technical access control.
+Flight Finder is a personal tool that scrapes publicly available flight pricing data. In the US, scraping publicly accessible websites does not violate the [Computer Fraud and Abuse Act](https://en.wikipedia.org/wiki/Computer_Fraud_and_Abuse_Act) ([*hiQ Labs v. LinkedIn*, 9th Cir. 2022](https://en.wikipedia.org/wiki/HiQ_Labs_v._LinkedIn)). Flight Finder does not circumvent any login, paywall, or technical access control.
 
-**Users are solely responsible for complying with the terms of service of any website they interact with through Fairtrail.** This project is not affiliated with Google, any airline, or any travel booking platform.
+**Users are solely responsible for complying with the terms of service of any website they interact with through Flight Finder.** This project is not affiliated with Google, any airline, or any travel booking platform.
 
 This software is provided as-is for personal and educational use.
 </details>

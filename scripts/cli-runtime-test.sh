@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Behavioral test harness for apps/web/public/fairtrail-cli.
+# Behavioral test harness for apps/web/public/flight-finder-cli.
 #
 # Why this exists: every previous CLI bug in this repo (issue #72 v1 — silent
 # `up -d` on podman; #72 v2 — -it rejected by podman-compose; #62 — Arch
@@ -43,8 +43,8 @@ fail() {
 }
 
 REPO_ROOT=$(cd "$(dirname "$0")/.." && pwd)
-CLI="$REPO_ROOT/apps/web/public/fairtrail-cli"
-HELPER="$REPO_ROOT/apps/web/public/fairtrail-cli-flags.sh"
+CLI="$REPO_ROOT/apps/web/public/flight-finder-cli"
+HELPER="$REPO_ROOT/apps/web/public/flight-finder-cli-flags.sh"
 
 [ -x "$CLI" ] || { printf "${RED}missing $CLI${RESET}\n"; exit 1; }
 [ -f "$HELPER" ] || { printf "${RED}missing $HELPER${RESET}\n"; exit 1; }
@@ -205,9 +205,9 @@ case "$url" in
     printf '{"data":{"flights":[],"routes":[]}}' ;;
   *"/api/queries"*)
     printf '{"ok":true,"data":{"queries":[{"id":"abc123"}]}}' ;;
-  *"/fairtrail-cli-flags.sh"*)
+  *"/flight-finder-cli-flags.sh"*)
     [ -n "$out" ] && printf '# stub helper\n_compose_exec_flags(){ printf %%s ""; }\n' > "$out" ;;
-  *"/fairtrail-cli"*)
+  *"/flight-finder-cli"*)
     [ -n "$out" ] && {
       printf '#!/usr/bin/env bash\necho stub-cli\n' > "$out"
       chmod +x "$out" 2>/dev/null || true
@@ -246,12 +246,12 @@ SHIM
 # ---------------------------------------------------------------------------
 
 setup_sandbox() {
-  SANDBOX=$(mktemp -d -t fairtrail-cli-test-XXXXXX)
-  mkdir -p "$SANDBOX/bin" "$SANDBOX/sysbin" "$SANDBOX/.fairtrail"
-  cat > "$SANDBOX/.fairtrail/docker-compose.yml" <<'YAML'
+  SANDBOX=$(mktemp -d -t flight-finder-cli-test-XXXXXX)
+  mkdir -p "$SANDBOX/bin" "$SANDBOX/sysbin" "$SANDBOX/.flight-finder"
+  cat > "$SANDBOX/.flight-finder/docker-compose.yml" <<'YAML'
 services:
   web:
-    image: ghcr.io/affromero/fairtrail:latest
+    image: ghcr.io/affromero/flight-finder:latest
 YAML
   RECORD_FILE="$SANDBOX/record.log"
   : > "$RECORD_FILE"
@@ -319,7 +319,7 @@ run_cli() {
     | HOME="$SANDBOX" \
       PATH="$SANDBOX/bin:$SANDBOX/sysbin" \
       RECORD_FILE="$RECORD_FILE" \
-      FAIRTRAIL_URL="http://test.invalid" \
+      FLIGHT_FINDER_URL="http://test.invalid" \
       HOST_PORT=3003 \
       bash "$CLI" "$LAST_CMD" "$@" >/dev/null 2>&1
   LAST_EXIT=$?
@@ -341,7 +341,7 @@ run_cli_with_input() {
     | HOME="$SANDBOX" \
       PATH="$SANDBOX/bin:$SANDBOX/sysbin" \
       RECORD_FILE="$RECORD_FILE" \
-      FAIRTRAIL_URL="http://test.invalid" \
+      FLIGHT_FINDER_URL="http://test.invalid" \
       HOST_PORT=3003 \
       bash "$CLI" "$LAST_CMD" "$@" >/dev/null 2>&1
   LAST_EXIT=$?
@@ -378,22 +378,22 @@ assert_not_recorded() {
 test_tui_headless_docker_v2() {
   setup_runtime docker_v2
   run_cli --headless
-  assert_recorded "tui sends docker compose exec -i web fairtrail-tui --headless" \
-    'docker compose -f docker-compose.yml exec -i web fairtrail-tui --headless'
+  assert_recorded "tui sends docker compose exec -i web flight-finder-tui --headless" \
+    'docker compose -f docker-compose.yml exec -i web flight-finder-tui --headless'
 }
 
 test_tui_headless_docker_v1() {
   setup_runtime docker_v1
   run_cli --headless
-  assert_recorded "tui sends docker-compose exec -i web fairtrail-tui --headless" \
-    'docker-compose -f docker-compose.yml exec -i web fairtrail-tui --headless'
+  assert_recorded "tui sends docker-compose exec -i web flight-finder-tui --headless" \
+    'docker-compose -f docker-compose.yml exec -i web flight-finder-tui --headless'
 }
 
 test_tui_headless_podman_native() {
   setup_runtime podman_native
   run_cli --headless
-  assert_recorded "tui sends podman compose exec -i web fairtrail-tui --headless" \
-    'podman compose -f docker-compose.yml exec -i web fairtrail-tui --headless'
+  assert_recorded "tui sends podman compose exec -i web flight-finder-tui --headless" \
+    'podman compose -f docker-compose.yml exec -i web flight-finder-tui --headless'
 }
 
 test_tui_headless_podman_pc() {
@@ -401,8 +401,8 @@ test_tui_headless_podman_pc() {
   # accepts -T to disable TTY.
   setup_runtime podman_pc
   run_cli --headless
-  assert_recorded "tui sends podman-compose exec -T web fairtrail-tui --headless (#72)" \
-    'podman-compose -f docker-compose.yml exec -T web fairtrail-tui --headless'
+  assert_recorded "tui sends podman-compose exec -T web flight-finder-tui --headless (#72)" \
+    'podman-compose -f docker-compose.yml exec -T web flight-finder-tui --headless'
   assert_not_recorded "tui never sends -it/-i to podman-compose (#72)" \
     'podman-compose .* exec [^ ]*(-it|-i ) '
 }
@@ -410,8 +410,8 @@ test_tui_headless_podman_pc() {
 test_tui_list_podman_pc() {
   setup_runtime podman_pc
   run_cli --list
-  assert_recorded "tui --list sends podman-compose exec -T web fairtrail-tui --list" \
-    'podman-compose -f docker-compose.yml exec -T web fairtrail-tui --list'
+  assert_recorded "tui --list sends podman-compose exec -T web flight-finder-tui --list" \
+    'podman-compose -f docker-compose.yml exec -T web flight-finder-tui --list'
 }
 
 # Codex audit gap 10: argv boundaries must survive recording so a
@@ -423,14 +423,14 @@ test_tui_preserves_multi_word_arg_boundaries() {
   run_cli --headless --model "gpt 5 turbo"
   LAST_RUNTIME="podman_pc"; LAST_CMD="--headless"
   # The %q quoting renders 'gpt 5 turbo' as gpt\ 5\ turbo. The pattern
-  # below matches the escaped form on the same line as fairtrail-tui.
+  # below matches the escaped form on the same line as flight-finder-tui.
   assert_recorded "multi-word --model arg recorded with boundaries intact (#72)" \
-    'fairtrail-tui --headless --model gpt\\ 5\\ turbo'
+    'flight-finder-tui --headless --model gpt\\ 5\\ turbo'
   # Negative control: the unsplit form 'gpt 5 turbo' (three plain tokens)
   # must NOT appear, otherwise we would not be able to tell argv-3 from
   # argv-1-with-spaces.
   assert_not_recorded "multi-word arg is not recorded as three plain tokens" \
-    'fairtrail-tui --headless --model gpt 5 turbo$'
+    'flight-finder-tui --headless --model gpt 5 turbo$'
 }
 
 # ---------------------------------------------------------------------------
@@ -530,9 +530,9 @@ test_uninstall_aborts_without_confirmation() {
     LAST_RUNTIME="$rt"; LAST_CMD="uninstall"
     assert_not_recorded "uninstall respects empty answer (no dc down on cancel)" \
       ' down -v( |$)'
-    [ -d "$SANDBOX/.fairtrail" ] \
-      && pass "uninstall did not remove ~/.fairtrail on cancel" \
-      || fail "uninstall removed ~/.fairtrail despite cancel"
+    [ -d "$SANDBOX/.flight-finder" ] \
+      && pass "uninstall did not remove ~/.flight-finder on cancel" \
+      || fail "uninstall removed ~/.flight-finder despite cancel"
   done
 }
 
@@ -547,17 +547,17 @@ test_uninstall_invokes_compose_and_removes_dir_on_y() {
       podman_native) assert_recorded "uninstall -> podman compose down -v"   '^podman compose -f docker-compose.yml down -v$' ;;
       podman_pc)     assert_recorded "uninstall -> podman-compose down -v"   '^podman-compose -f docker-compose.yml down -v$' ;;
     esac
-    if [ ! -d "$SANDBOX/.fairtrail" ]; then
-      pass "uninstall removed ~/.fairtrail on confirm=y"
+    if [ ! -d "$SANDBOX/.flight-finder" ]; then
+      pass "uninstall removed ~/.flight-finder on confirm=y"
     else
-      fail "uninstall did not remove ~/.fairtrail on confirm=y"
+      fail "uninstall did not remove ~/.flight-finder on confirm=y"
     fi
     # Recreate sandbox state so subsequent tests still find docker-compose.yml.
-    mkdir -p "$SANDBOX/.fairtrail"
-    cat > "$SANDBOX/.fairtrail/docker-compose.yml" <<'YAML'
+    mkdir -p "$SANDBOX/.flight-finder"
+    cat > "$SANDBOX/.flight-finder/docker-compose.yml" <<'YAML'
 services:
   web:
-    image: ghcr.io/affromero/fairtrail:latest
+    image: ghcr.io/affromero/flight-finder:latest
 YAML
   done
 }
@@ -633,23 +633,23 @@ test_version_only_calls_curl() {
 test_compose_files_includes_override_when_present() {
   setup_runtime docker_v2
   echo "services: { web: { environment: { FOO: bar } } }" \
-    > "$SANDBOX/.fairtrail/docker-compose.override.yml"
+    > "$SANDBOX/.flight-finder/docker-compose.override.yml"
   run_cli start
   LAST_RUNTIME="docker_v2"; LAST_CMD="start"
   assert_recorded "override file appended to -f chain" \
     '^docker compose -f docker-compose.yml -f docker-compose.override.yml up -d'
-  rm -f "$SANDBOX/.fairtrail/docker-compose.override.yml"
+  rm -f "$SANDBOX/.flight-finder/docker-compose.override.yml"
 }
 
 test_vpn_compose_excluded_without_env() {
   # No .env file at all → VPN sidecar must NOT be included.
   setup_runtime docker_v2
-  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
-  rm -f "$SANDBOX/.fairtrail/.env"
+  echo "services: { vpn: {} }" > "$SANDBOX/.flight-finder/docker-compose.vpn.yml"
+  rm -f "$SANDBOX/.flight-finder/.env"
   run_cli start
   LAST_RUNTIME="docker_v2"; LAST_CMD="start"
   assert_not_recorded "no .env -> VPN sidecar omitted" 'docker-compose.vpn.yml'
-  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
+  rm -f "$SANDBOX/.flight-finder/docker-compose.vpn.yml"
 }
 
 test_vpn_compose_excluded_when_commented() {
@@ -657,37 +657,37 @@ test_vpn_compose_excluded_when_commented() {
   # This is the actual bug Codex audit found: `grep -q "EXPRESSVPN_CODE"`
   # used to match commented lines and enable the VPN sidecar.
   setup_runtime docker_v2
-  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
+  echo "services: { vpn: {} }" > "$SANDBOX/.flight-finder/docker-compose.vpn.yml"
   printf '# EXPRESSVPN_CODE=placeholder\nDB_URL=postgres://x\n' \
-    > "$SANDBOX/.fairtrail/.env"
+    > "$SANDBOX/.flight-finder/.env"
   run_cli start
   LAST_RUNTIME="docker_v2"; LAST_CMD="start"
   assert_not_recorded "commented EXPRESSVPN_CODE -> VPN sidecar omitted" \
     'docker-compose.vpn.yml'
-  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml" "$SANDBOX/.fairtrail/.env"
+  rm -f "$SANDBOX/.flight-finder/docker-compose.vpn.yml" "$SANDBOX/.flight-finder/.env"
 }
 
 test_vpn_compose_excluded_when_empty_value() {
   # EXPRESSVPN_CODE= (no value) is also disabled.
   setup_runtime docker_v2
-  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
-  printf 'EXPRESSVPN_CODE=\n' > "$SANDBOX/.fairtrail/.env"
+  echo "services: { vpn: {} }" > "$SANDBOX/.flight-finder/docker-compose.vpn.yml"
+  printf 'EXPRESSVPN_CODE=\n' > "$SANDBOX/.flight-finder/.env"
   run_cli start
   LAST_RUNTIME="docker_v2"; LAST_CMD="start"
   assert_not_recorded "empty EXPRESSVPN_CODE -> VPN sidecar omitted" \
     'docker-compose.vpn.yml'
-  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml" "$SANDBOX/.fairtrail/.env"
+  rm -f "$SANDBOX/.flight-finder/docker-compose.vpn.yml" "$SANDBOX/.flight-finder/.env"
 }
 
 test_vpn_compose_included_when_enabled() {
   setup_runtime docker_v2
-  echo "services: { vpn: {} }" > "$SANDBOX/.fairtrail/docker-compose.vpn.yml"
-  printf 'EXPRESSVPN_CODE=ABC123XYZ\n' > "$SANDBOX/.fairtrail/.env"
+  echo "services: { vpn: {} }" > "$SANDBOX/.flight-finder/docker-compose.vpn.yml"
+  printf 'EXPRESSVPN_CODE=ABC123XYZ\n' > "$SANDBOX/.flight-finder/.env"
   run_cli start
   LAST_RUNTIME="docker_v2"; LAST_CMD="start"
   assert_recorded "EXPRESSVPN_CODE=value -> VPN sidecar appended" \
     '^docker compose -f docker-compose.yml -f docker-compose.vpn.yml up -d'
-  rm -f "$SANDBOX/.fairtrail/docker-compose.vpn.yml" "$SANDBOX/.fairtrail/.env"
+  rm -f "$SANDBOX/.flight-finder/docker-compose.vpn.yml" "$SANDBOX/.flight-finder/.env"
 }
 
 # ---------------------------------------------------------------------------
@@ -698,7 +698,7 @@ test_missing_helper_fails_loudly() {
   setup_runtime docker_v2
   LAST_RUNTIME="missing-helper"; LAST_CMD="--headless"
   # Run a copy of the CLI without the helper next to it.
-  local cli_copy="$SANDBOX/bin/fairtrail-orphan"
+  local cli_copy="$SANDBOX/bin/flight-finder-orphan"
   cp "$CLI" "$cli_copy"
   # No helper sibling — should fail with non-zero and print to stderr.
   local exit_code stderr_out
@@ -707,10 +707,10 @@ test_missing_helper_fails_loudly() {
     bash "$cli_copy" --headless </dev/null 2>&1 >/dev/null)
   exit_code=$?
   set -e
-  if [ "$exit_code" -ne 0 ] && echo "$stderr_out" | grep -q "fairtrail-cli-flags.sh"; then
+  if [ "$exit_code" -ne 0 ] && echo "$stderr_out" | grep -q "flight-finder-cli-flags.sh"; then
     pass "CLI exits non-zero with helpful message when helper is missing"
   else
-    fail "CLI must exit non-zero and mention fairtrail-cli-flags.sh — got exit=$exit_code, stderr=$stderr_out"
+    fail "CLI must exit non-zero and mention flight-finder-cli-flags.sh — got exit=$exit_code, stderr=$stderr_out"
   fi
 }
 
@@ -721,11 +721,11 @@ test_missing_helper_fails_loudly() {
 test_run_cli_captures_exit() {
   setup_runtime docker_v2
   LAST_RUNTIME="harness"; LAST_CMD="self-check"
-  local crashy_cli="$SANDBOX/bin/fairtrail-crashy"
+  local crashy_cli="$SANDBOX/bin/flight-finder-crashy"
   sed 's#status)    cmd_status ;;#status)    exit 7 ;;#' "$CLI" > "$crashy_cli"
   chmod +x "$crashy_cli"
   # The helper must sit next to the CLI for the source guard to pass.
-  cp "$HELPER" "$SANDBOX/bin/fairtrail-cli-flags.sh"
+  cp "$HELPER" "$SANDBOX/bin/flight-finder-cli-flags.sh"
   local prev_cli="$CLI"
   CLI="$crashy_cli"
   EXPECT_NONZERO=1 run_cli status

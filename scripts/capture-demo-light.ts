@@ -2,7 +2,7 @@
  * Capture demo-light.gif — seeds mock data, screenshots query page in light mode,
  * converts to GIF with ffmpeg, then cleans up.
  *
- * Usage: doppler run --project fairtrail --config dev -- npx tsx scripts/capture-demo-light.ts
+ * Usage: doppler run --project flight-finder --config dev -- npx tsx scripts/capture-demo-light.ts
  */
 
 import { PrismaClient } from '@prisma/client';

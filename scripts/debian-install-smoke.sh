@@ -129,20 +129,20 @@ test_login_shell_path() {
     eval "$snippet"
   )
 
-  # Create a dummy fairtrail binary
+  # Create a dummy flight-finder binary (canonical post-rename)
   mkdir -p "$HOME/.local/bin"
-  echo '#!/bin/bash' > "$HOME/.local/bin/fairtrail"
-  echo 'echo "fairtrail-ok"' >> "$HOME/.local/bin/fairtrail"
-  chmod +x "$HOME/.local/bin/fairtrail"
+  echo '#!/bin/bash' > "$HOME/.local/bin/flight-finder"
+  echo 'echo "flight-finder-ok"' >> "$HOME/.local/bin/flight-finder"
+  chmod +x "$HOME/.local/bin/flight-finder"
 
-  # Test: can a login shell find fairtrail?
+  # Test: can a login shell find flight-finder?
   local result
-  result=$(bash -l -c 'command -v fairtrail 2>/dev/null || echo "not-found"')
+  result=$(bash -l -c 'command -v flight-finder 2>/dev/null || echo "not-found"')
 
   if [ "$result" != "not-found" ]; then
-    pass "Login shell (bash -l) finds fairtrail in PATH"
+    pass "Login shell (bash -l) finds flight-finder in PATH"
   else
-    fail "Login shell (bash -l) cannot find fairtrail" "This is the SSH session bug"
+    fail "Login shell (bash -l) cannot find flight-finder" "This is the SSH session bug"
   fi
 
   rm -rf "$HOME/.local"
@@ -155,7 +155,7 @@ test_old_dir_migration() {
   # Create fake old install dir
   mkdir -p "$HOME/fairtrail"
   echo "version: '3'" > "$HOME/fairtrail/docker-compose.yml"
-  rm -rf "$HOME/.fairtrail"
+  rm -rf "$HOME/.flight-finder"
 
   # The migration section of install.sh:
   # - Should rename ~/fairtrail to ~/fairtrail.old-backup in non-interactive mode
@@ -164,8 +164,8 @@ test_old_dir_migration() {
 
   (
     export HOME="$HOME"
-    export FAIRTRAIL_DIR="$HOME/.fairtrail"
-    export FAIRTRAIL_YES=1  # non-interactive
+    export FLIGHT_FINDER_DIR="$HOME/.flight-finder"
+    export FLIGHT_FINDER_YES=1  # non-interactive
     # Mock docker compose (not available in this container)
     DC="echo"
     info() { true; }
@@ -189,17 +189,18 @@ test_old_dir_migration() {
   fi
 
   # Cleanup
-  rm -rf "$HOME/fairtrail" "$HOME/fairtrail.old-backup" "$HOME/.fairtrail"
+  rm -rf "$HOME/fairtrail" "$HOME/fairtrail.old-backup" "$HOME/.flight-finder"
 }
 
 # ──────────────────────────────────────────────────────────────────
-# Test 5: fairtrail-cli update uses command -v, not hardcoded path
+# Test 5: flight-finder-cli update uses command -v, not hardcoded path
 # ──────────────────────────────────────────────────────────────────
 test_cli_update_path() {
-  local cli="/home/testuser/fairtrail-cli"
+  local cli="/home/testuser/flight-finder-cli"
 
-  # Check cmd_update function uses command -v
-  if grep -A5 'cmd_update' "$cli" | grep -q 'command -v fairtrail'; then
+  # Check cmd_update function uses command -v (canonical flight-finder name).
+  # Widened to -A8 to allow a multi-line comment explaining the legacy fallback.
+  if grep -A8 'cmd_update' "$cli" | grep -q 'command -v flight-finder'; then
     pass "CLI update uses 'command -v' for self-path detection"
   else
     fail "CLI update hardcodes path" "should use command -v"
@@ -209,7 +210,7 @@ test_cli_update_path() {
   local update_section
   update_section=$(sed -n '/^cmd_update/,/^cmd_/p' "$cli")
   local curl_line
-  curl_line=$(echo "$update_section" | grep 'curl.*fairtrail-cli' | head -1)
+  curl_line=$(echo "$update_section" | grep 'curl.*flight-finder-cli' | head -1)
   if echo "$curl_line" | grep -q '2>/dev/null'; then
     fail "CLI update swallows curl errors" "2>/dev/null found on download line"
   else
@@ -231,13 +232,13 @@ test_env_host_port() {
 
 # ──────────────────────────────────────────────────────────────────
 # Test 7: End-to-end installer run (non-interactive, no Docker)
-#   Simulates: FAIRTRAIL_YES=1 bash install.sh
+#   Simulates: FLIGHT_FINDER_YES=1 bash install.sh
 #   Can't actually run Docker inside this container, but we can
 #   test every step up to "docker compose pull" by stubbing Docker.
 # ──────────────────────────────────────────────────────────────────
 test_e2e_install() {
   # Clean slate
-  rm -rf "$HOME/.fairtrail" "$HOME/.local/bin/fairtrail" "$HOME/fairtrail"
+  rm -rf "$HOME/.flight-finder" "$HOME/.local/bin/flight-finder" "$HOME/fairtrail"
   rm -f "$HOME/.bashrc" "$HOME/.profile" "$HOME/.bash_profile"
   echo "# default" > "$HOME/.bashrc"
   echo "# default" > "$HOME/.profile"
@@ -257,48 +258,48 @@ esac
 STUB
   chmod +x "$HOME/bin/docker"
 
-  # Create a fake "fairtrail-cli" download server using a local file
+  # Create a fake "flight-finder-cli" download server using a local file
   mkdir -p "$HOME/fake-server"
-  cp /home/testuser/fairtrail-cli "$HOME/fake-server/fairtrail-cli"
-  # The CLI requires fairtrail-cli-flags.sh next to it (issue #72); ship it
+  cp /home/testuser/flight-finder-cli "$HOME/fake-server/flight-finder-cli"
+  # The CLI requires flight-finder-cli-flags.sh next to it (issue #72); ship it
   # in the fake-server so install.sh's parallel curl succeeds.
-  cp /home/testuser/fairtrail-cli-flags.sh "$HOME/fake-server/fairtrail-cli-flags.sh"
+  cp /home/testuser/flight-finder-cli-flags.sh "$HOME/fake-server/flight-finder-cli-flags.sh"
 
   # Run installer in non-interactive mode with stubbed Docker and local CLI.
-  # Pipe empty stdin so the API key prompt gets "" (skip), and FAIRTRAIL_YES=1
+  # Pipe empty stdin so the API key prompt gets "" (skip), and FLIGHT_FINDER_YES=1
   # skips the consent prompt. The installer may fail at docker pull/up since
   # our stub is minimal, but everything up to that point should work.
   (
     export PATH="$HOME/bin:$PATH"
-    export FAIRTRAIL_YES=1
-    export FAIRTRAIL_URL="file://$HOME/fake-server"
+    export FLIGHT_FINDER_YES=1
+    export FLIGHT_FINDER_URL="file://$HOME/fake-server"
     export HOST_PORT=3003
 
     echo "" | bash /home/testuser/install.sh 2>&1 || true
   )
 
   # Verify: .fairtrail directory created
-  if [ -d "$HOME/.fairtrail" ]; then
-    pass "E2E: ~/.fairtrail directory created"
+  if [ -d "$HOME/.flight-finder" ]; then
+    pass "E2E: ~/.flight-finder directory created"
   else
-    fail "E2E: ~/.fairtrail not created" "installer didn't create directory"
+    fail "E2E: ~/.flight-finder not created" "installer didn't create directory"
   fi
 
   # Verify: docker-compose.yml exists
-  if [ -f "$HOME/.fairtrail/docker-compose.yml" ]; then
+  if [ -f "$HOME/.flight-finder/docker-compose.yml" ]; then
     pass "E2E: docker-compose.yml generated"
   else
     fail "E2E: docker-compose.yml missing" "installer didn't write compose file"
   fi
 
   # Verify: .env generated with HOST_PORT
-  if [ -f "$HOME/.fairtrail/.env" ]; then
-    if grep -q 'HOST_PORT=' "$HOME/.fairtrail/.env"; then
+  if [ -f "$HOME/.flight-finder/.env" ]; then
+    if grep -q 'HOST_PORT=' "$HOME/.flight-finder/.env"; then
       pass "E2E: .env contains HOST_PORT"
     else
-      fail "E2E: .env missing HOST_PORT" "$(cat "$HOME/.fairtrail/.env")"
+      fail "E2E: .env missing HOST_PORT" "$(cat "$HOME/.flight-finder/.env")"
     fi
-    if grep -q 'CRON_SECRET=' "$HOME/.fairtrail/.env"; then
+    if grep -q 'CRON_SECRET=' "$HOME/.flight-finder/.env"; then
       fail "E2E: .env should NOT contain CRON_SECRET" "entrypoint generates it at runtime"
     else
       pass "E2E: .env omits CRON_SECRET (generated at runtime by entrypoint)"
@@ -315,31 +316,31 @@ STUB
   fi
 
   # Verify: CLI binary at expected location
-  if [ -f "$HOME/.local/bin/fairtrail" ] && [ -x "$HOME/.local/bin/fairtrail" ]; then
-    pass "E2E: fairtrail CLI installed and executable"
+  if [ -f "$HOME/.local/bin/flight-finder" ] && [ -x "$HOME/.local/bin/flight-finder" ]; then
+    pass "E2E: flight-finder CLI installed and executable"
   else
-    fail "E2E: fairtrail CLI not found" "expected at ~/.local/bin/fairtrail"
+    fail "E2E: flight-finder CLI not found" "expected at ~/.local/bin/flight-finder"
   fi
 
   # Verify: fairtrail --help works via login shell.
   # The CLI needs docker compose, so put our stub docker in ~/.local/bin/ too.
-  if [ -f "$HOME/.local/bin/fairtrail" ]; then
+  if [ -f "$HOME/.local/bin/flight-finder" ]; then
     cp "$HOME/bin/docker" "$HOME/.local/bin/docker"
-    # CLI also checks for ~/.fairtrail/docker-compose.yml
-    mkdir -p "$HOME/.fairtrail"
-    echo "services:" > "$HOME/.fairtrail/docker-compose.yml"
+    # CLI also checks for ~/.flight-finder/docker-compose.yml
+    mkdir -p "$HOME/.flight-finder"
+    echo "services:" > "$HOME/.flight-finder/docker-compose.yml"
 
     local help_output
-    help_output=$(bash -l -c 'fairtrail help' 2>&1 || true)
+    help_output=$(bash -l -c 'flight-finder help' 2>&1 || true)
     if echo "$help_output" | grep -q "fairtrail"; then
-      pass "E2E: 'fairtrail help' works in login shell"
+      pass "E2E: 'flight-finder help' works in login shell"
     else
-      fail "E2E: 'fairtrail help' failed in login shell" "$help_output"
+      fail "E2E: 'flight-finder help' failed in login shell" "$help_output"
     fi
   fi
 
   # Cleanup
-  rm -rf "$HOME/bin" "$HOME/fake-server" "$HOME/.fairtrail" "$HOME/.local"
+  rm -rf "$HOME/bin" "$HOME/fake-server" "$HOME/.flight-finder" "$HOME/.local"
 }
 
 # ──────────────────────────────────────────────────────────────────

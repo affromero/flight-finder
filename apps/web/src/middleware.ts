@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { classifyBot, classifyByHeaders, isMaliciousPath } from '@/lib/analytics/bots';
 
+// "ft-" prefix kept across the Flight Finder rename so existing sessions survive.
 const SESSION_COOKIE = 'ft-session';
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
@@ -81,7 +82,7 @@ export async function middleware(request: NextRequest) {
     }
   }
 
-  // --- Analytics tracking (fairtrail.org only) ---
+  // --- Analytics tracking (flight-finder.org only) ---
   const userAgent = request.headers.get('user-agent') || '';
 
   // Skip tracking for self-hosted, admin pages, API routes, empty UAs
