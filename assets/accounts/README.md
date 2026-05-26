@@ -11,7 +11,7 @@ hosters actually see.
 |---|------|-------|
 | 01 | `01-setup-step1-provider.png` | Setup wizard step 1 — pick an LLM provider (pre-existing step, kept for context) |
 | 02 | `02-setup-step2-community.png` | Setup wizard step 2 — community data sharing toggle (pre-existing) |
-| 03 | `03-setup-step3-accounts-skip.png` | **New** wizard step 3 — "Run Fairtrail for a household?" with Skip toggle |
+| 03 | `03-setup-step3-accounts-skip.png` | **New** wizard step 3 — "Run Flight Finder for a household?" with Skip toggle |
 | 04 | `04-setup-step3-accounts-fill.png` | Same step with the toggle flipped on and the admin form expanded |
 | 05 | `05-login-empty.png` | Unified `/login` form (username + password) for admins and non-admins |
 | 06 | `06-admin-dashboard-with-users-link.png` | Admin dashboard nav showing the new Users link and Logout button |
@@ -30,12 +30,12 @@ flow via Playwright (Chromium). To rebuild the set:
 
 ```bash
 # 1. Bring up the production Docker stack
-cd /path/to/fairtrail
+cd /path/to/flight-finder
 docker compose up -d --build
 
 # 2. Optionally seed pre-existing trackers so the backfill banner in #07
 #    shows a realistic count
-DATABASE_URL='postgresql://postgres:postgres@localhost:5433/fairtrail' \
+DATABASE_URL='postgresql://postgres:postgres@localhost:5433/flight-finder' \
   npx tsx --eval "..."  # see commit 636b7d5 for the snippet
 
 # 3. Run the harness against the running stack

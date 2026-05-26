@@ -1,6 +1,6 @@
-# Fairtrail API Reference
+# Flight Finder API Reference
 
-> For agents, scripts, and CLI tools interacting with a local Fairtrail instance.
+> For agents, scripts, and CLI tools interacting with a local Flight Finder instance.
 
 Base URL: `http://localhost:3003` (or whatever `HOST_PORT` is set to in `.env`)
 
@@ -123,7 +123,7 @@ Save the `id` to check prices later. Save the `deleteToken` if you want to delet
 (`ExtractionConfig.multiUserMode = true`), unauthenticated POSTs return
 `401 Sign in to create a tracker`. Authenticate first via
 `POST /api/auth/login` and reuse the `ft-session` cookie. The bundled
-headless CLI (`fairtrail --headless`) talks directly to Postgres and
+headless CLI (`flight-finder --headless`) talks directly to Postgres and
 auto-attaches new trackers to the first admin user in multi user mode,
 so it keeps working without auth. Solo and hosted deployments are
 unaffected.
@@ -270,7 +270,7 @@ The built-in cron (default: every 3 hours) handles step 3 automatically. You onl
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
-| `FLIGHT_FINDER_URL` | `http://localhost:3003` | Base URL of the Fairtrail instance |
+| `FLIGHT_FINDER_URL` | `http://localhost:3003` | Base URL of the Flight Finder instance |
 | `CRON_SECRET` | Auto-generated | Required for triggering scrapes |
 
 ---

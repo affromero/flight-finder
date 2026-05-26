@@ -4,7 +4,7 @@ import pkg from '../../../../package.json';
 export const dynamic = 'force-dynamic';
 export const revalidate = 3600;
 
-const RENAME_RELEASE = '0.8.0';
+const RENAME_RELEASE = '0.9.0';
 
 function compareSemver(a: string, b: string): number {
   const pa = a.split('.').map(Number);

@@ -1,6 +1,6 @@
-# CLAUDE.md — Fairtrail
+# CLAUDE.md — Flight Finder
 
-> **Fairtrail** — The price trail airlines don't show you. Flight price evolution tracker with natural language search and shareable charts.
+> **Flight Finder** — The price trail airlines don't show you. Flight price evolution tracker with natural language search and shareable charts.
 
 ## Tech Stack
 
@@ -22,7 +22,7 @@ Root `package.json` proxies to `@flight-finder/web`.
 
 ## Environment Variables
 
-All secrets via **Doppler** — NEVER use `.env` files. Project: `fairtrail`, config: `dev`.
+All secrets via **Doppler** — NEVER use `.env` files. Project: `flight-finder`, config: `dev`.
 Scripts wrap with `doppler run --`. Shared LLM keys from `pricetoken` Doppler project.
 
 Critical: `DATABASE_URL`, `REDIS_URL`, `ANTHROPIC_API_KEY`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `CRON_SECRET`.
@@ -152,7 +152,7 @@ All four tests must pass before tagging a release:
 ./scripts/docker-smoke-test.sh    # Docker infra: build, health, chromium, extraction, DB
 ./scripts/install-flow-test.sh    # Static + grep regression checks on install.sh / flight-finder-cli
 ./scripts/cli-runtime-test.sh     # Behavioral CLI runtime matrix (docker v1/v2, podman compose, podman-compose)
-./scripts/migration-test.sh       # Static checks on ~/.fairtrail to ~/.flight-finder migration + deprecated alias
+./scripts/migration-test.sh       # Static checks on ~/.flight-finder to ~/.flight-finder migration + deprecated alias
 ```
 
 If any fails, fix the issue and re-run. Do NOT tag without all four passing.

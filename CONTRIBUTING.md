@@ -1,12 +1,12 @@
-# Contributing to Fairtrail
+# Contributing to Flight Finder
 
-Thanks for your interest in contributing! Fairtrail is a self-hosted flight price tracker and we welcome contributions of all kinds.
+Thanks for your interest in contributing! Flight Finder is a self-hosted flight price tracker and we welcome contributions of all kinds.
 
 ## Development Setup
 
 ```bash
 git clone git@github.com:affromero/flight-finder.git
-cd fairtrail
+cd flight-finder
 npm install
 docker compose up -d db redis
 npm run db:push
