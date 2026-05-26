@@ -332,4 +332,56 @@ describe('POST /api/queries/[id]/scrape', () => {
       expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
     });
   });
+
+  describe('completion summary log', () => {
+    it('logs a success/failure summary line when the manual run completes', async () => {
+      const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockQueryFindUnique.mockResolvedValue(rowDefaults({ groupId: 'g1' }));
+      mockQueryFindMany.mockResolvedValue([{ id: 'q1' }, { id: 'q2' }]);
+      mockRunFullScrapeForQuery
+        .mockResolvedValueOnce([{ queryId: 'q1', status: 'success', snapshotsCount: 3, extractionCost: 0.01 }])
+        .mockResolvedValueOnce([{ queryId: 'q2', status: 'failed', snapshotsCount: 0, extractionCost: 0, error: 'oh' }]);
+
+      const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+      expect(res.status).toBe(200);
+      for (let i = 0; i < 6; i++) await flushIifeMicrotasks();
+
+      expect(consoleLog).toHaveBeenCalledWith(
+        expect.stringMatching(/manual run complete \(group=g1\): 1 successes, 1 failures/),
+      );
+      consoleLog.mockRestore();
+    });
+
+    it('counts a thrown target as failure in the summary', async () => {
+      const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+      const consoleErr = vi.spyOn(console, 'error').mockImplementation(() => {});
+      mockQueryFindUnique.mockResolvedValue(rowDefaults());
+      mockRunFullScrapeForQuery.mockRejectedValueOnce(new Error('boom'));
+
+      const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+      expect(res.status).toBe(200);
+      for (let i = 0; i < 6; i++) await flushIifeMicrotasks();
+
+      expect(consoleLog).toHaveBeenCalledWith(
+        expect.stringMatching(/manual run complete \(group=q1\): 0 successes, 1 failures/),
+      );
+      consoleLog.mockRestore();
+      consoleErr.mockRestore();
+    });
+
+    it('counts an empty results array as failure (no country passes ran)', async () => {
+      const consoleLog = vi.spyOn(console, 'log').mockImplementation(() => {});
+      mockQueryFindUnique.mockResolvedValue(rowDefaults());
+      mockRunFullScrapeForQuery.mockResolvedValueOnce([]);
+
+      const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+      expect(res.status).toBe(200);
+      for (let i = 0; i < 6; i++) await flushIifeMicrotasks();
+
+      expect(consoleLog).toHaveBeenCalledWith(
+        expect.stringMatching(/manual run complete \(group=q1\): 0 successes, 1 failures/),
+      );
+      consoleLog.mockRestore();
+    });
+  });
 });

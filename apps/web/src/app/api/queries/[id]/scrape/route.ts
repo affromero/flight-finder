@@ -150,13 +150,27 @@ export async function POST(
   // just-in-time inside runScrapeForQuery; any sibling we never reach
   // simply has no row, instead of an orphan stuck at in_progress.
   const orderedTargets = [id, ...targetIds.filter((qid) => qid !== id)];
+  const groupLabel = query.groupId ?? id;
   void (async () => {
+    let successCount = 0;
+    let failureCount = 0;
     for (let i = 0; i < orderedTargets.length; i++) {
       const qid = orderedTargets[i]!;
       const passOpts = i === 0 ? { fetchRunId: primaryFetchRun.id } : undefined;
       try {
-        await runFullScrapeForQuery(qid, passOpts);
+        const results = await runFullScrapeForQuery(qid, passOpts);
+        // A target counts as a success only when every country pass for
+        // that target landed prices. Empty results (no country passes
+        // executed) count as failure too — a manual click is the user
+        // asking for fresh data, and zero passes is not what they asked
+        // for.
+        if (results.length > 0 && results.every((r) => r.status === 'success')) {
+          successCount += 1;
+        } else {
+          failureCount += 1;
+        }
       } catch (err) {
+        failureCount += 1;
         const errorMsg = err instanceof Error ? err.message : String(err);
         console.error(`[scrape] manual run failed query=${qid}: ${errorMsg}`);
         // If runFullScrapeForQuery throws before runScrapeForQuery has a
@@ -173,6 +187,7 @@ export async function POST(
         }
       }
     }
+    console.log(`[scrape] manual run complete (group=${groupLabel}): ${successCount} successes, ${failureCount} failures`);
   })();
 
   return apiSuccess({
