@@ -31,6 +31,15 @@ export const metadata: Metadata = {
     statusBarStyle: 'black-translucent',
     title: 'Flight Finder',
   },
+  icons: {
+    icon: [
+      { url: '/icon.svg?v=2', type: 'image/svg+xml' },
+      { url: '/icon-192.png?v=2', sizes: '192x192', type: 'image/png' },
+      { url: '/icon-512.png?v=2', sizes: '512x512', type: 'image/png' },
+    ],
+    apple: '/apple-icon.png?v=2',
+    shortcut: '/favicon.ico?v=2',
+  },
 };
 
 export const viewport: Viewport = {
