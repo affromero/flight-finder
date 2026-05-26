@@ -18,7 +18,11 @@ function readLocalTheme(): ThemeId | null {
 
 function writeLocalTheme(theme: ThemeId) {
   if (typeof window === 'undefined') return;
-  try { window.localStorage?.setItem?.(LOCAL_THEME_KEY, theme); } catch {}
+  try {
+    window.localStorage?.setItem?.(LOCAL_THEME_KEY, theme);
+  } catch {
+    // Privacy mode or quota: theme stays in memory only for this session.
+  }
 }
 
 export function ThemeToggle() {
