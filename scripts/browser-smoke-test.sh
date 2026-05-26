@@ -41,8 +41,8 @@ try {
     await page.goto(BASE + '/', { waitUntil: 'networkidle', timeout: 30000 });
 
     const title = await page.title();
-    if (title.toLowerCase().includes('fairtrail')) {
-      ok('Landing page title contains "Fairtrail"');
+    if (title.toLowerCase().includes('flight finder')) {
+      ok('Landing page title contains "Flight Finder"');
     } else {
       bad('Landing page title', 'got: ' + title);
     }
