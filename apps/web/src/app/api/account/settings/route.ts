@@ -3,6 +3,7 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
+import { isAggregatorSource } from '@/lib/scraper/navigate';
 
 async function requireUser() {
   if (!(await isMultiUserEnabled())) return { ok: false as const, status: 404 };
@@ -22,6 +23,7 @@ export async function GET() {
     defaultCurrency: user.defaultCurrency,
     defaultCountry: user.defaultCountry,
     preferredAirlines: user.preferredAirlines,
+    preferredAggregators: user.preferredAggregators,
     cabinClass: user.cabinClass,
   });
 }
@@ -68,6 +70,15 @@ export async function PATCH(request: NextRequest) {
     data.preferredAirlines = body.preferredAirlines;
   }
 
+  if (Array.isArray(body.preferredAggregators)) {
+    for (const a of body.preferredAggregators) {
+      if (!isAggregatorSource(a)) {
+        return apiError(`preferredAggregators contains invalid value: ${JSON.stringify(a)}`, 422);
+      }
+    }
+    data.preferredAggregators = body.preferredAggregators;
+  }
+
   if (body.cabinClass === null) {
     data.cabinClass = null;
   } else if (typeof body.cabinClass === 'string') {
@@ -91,6 +102,7 @@ export async function PATCH(request: NextRequest) {
       defaultCurrency: true,
       defaultCountry: true,
       preferredAirlines: true,
+      preferredAggregators: true,
       cabinClass: true,
     },
   });

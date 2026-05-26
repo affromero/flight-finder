@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { authorizeMutation } from '@/lib/query-auth';
+import { isAggregatorSource } from '@/lib/scraper/navigate';
 
 const ALLOWED_INTERVALS = [1, 3, 6, 12, 24];
 
@@ -24,7 +25,12 @@ export async function PATCH(
   const auth = await authorizeMutation(query, token);
   if (!auth.ok) return apiError(auth.error ?? 'Forbidden', auth.status ?? 403);
 
-  const updateData: { scrapeInterval?: number | null; active?: boolean } = {};
+  // Group-cascading fields: applied to every sibling in the group via updateMany.
+  const cascadeData: { scrapeInterval?: number | null; active?: boolean } = {};
+  // Per-row fields: applied only to the single id. preferredAggregators is
+  // intentionally NOT cascaded — different siblings in a flex group can sit on
+  // different aggregators (e.g. one experimental, one default).
+  const singleRowData: { preferredAggregators?: string[] } = {};
 
   if (body && Object.prototype.hasOwnProperty.call(body, 'scrapeInterval')) {
     let interval: number | null;
@@ -36,23 +42,34 @@ export async function PATCH(
         return apiError(`scrapeInterval must be null or one of: ${ALLOWED_INTERVALS.join(', ')}`, 400);
       }
     }
-    updateData.scrapeInterval = interval;
+    cascadeData.scrapeInterval = interval;
   }
 
   if (body && Object.prototype.hasOwnProperty.call(body, 'active')) {
     if (typeof body.active !== 'boolean') {
       return apiError('active must be a boolean', 400);
     }
-    updateData.active = body.active;
+    cascadeData.active = body.active;
   }
 
-  if (Object.keys(updateData).length === 0) {
+  if (body && Object.prototype.hasOwnProperty.call(body, 'preferredAggregators')) {
+    if (!Array.isArray(body.preferredAggregators)) {
+      return apiError('preferredAggregators must be an array of strings', 422);
+    }
+    for (const a of body.preferredAggregators) {
+      if (!isAggregatorSource(a)) {
+        return apiError(`preferredAggregators contains invalid value: ${JSON.stringify(a)}`, 422);
+      }
+    }
+    singleRowData.preferredAggregators = body.preferredAggregators;
+  }
+
+  if (Object.keys(cascadeData).length === 0 && Object.keys(singleRowData).length === 0) {
     return apiError('No updatable fields supplied', 400);
   }
 
-  // Update this query and all siblings in the group
   const idsToUpdate = [id];
-  if (query.groupId) {
+  if (query.groupId && Object.keys(cascadeData).length > 0) {
     const siblings = await prisma.query.findMany({
       where: { groupId: query.groupId, id: { not: id } },
       select: { id: true },
@@ -60,12 +77,21 @@ export async function PATCH(
     idsToUpdate.push(...siblings.map((s) => s.id));
   }
 
-  await prisma.query.updateMany({
-    where: { id: { in: idsToUpdate } },
-    data: updateData,
-  });
+  if (Object.keys(cascadeData).length > 0) {
+    await prisma.query.updateMany({
+      where: { id: { in: idsToUpdate } },
+      data: cascadeData,
+    });
+  }
 
-  return apiSuccess({ ...updateData, updated: idsToUpdate.length });
+  if (Object.keys(singleRowData).length > 0) {
+    await prisma.query.update({
+      where: { id },
+      data: singleRowData,
+    });
+  }
+
+  return apiSuccess({ ...cascadeData, ...singleRowData, updated: idsToUpdate.length });
 }
 
 export async function DELETE(

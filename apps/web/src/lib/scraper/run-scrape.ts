@@ -1,6 +1,13 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { prisma } from '@/lib/prisma';
-import { navigateGoogleFlights, navigateAirlineDirect, type NavigationResult } from './navigate';
+import {
+  navigateGoogleFlights,
+  navigateAirlineDirect,
+  navigateSkyscanner,
+  navigateKayak,
+  type NavigationResult,
+  type NavigationSource,
+} from './navigate';
 import { extractPrices, type ExtractionFailureReason } from './extract-prices';
 import { getModelCosts } from './ai-registry';
 import { isKnownAirline } from './airline-urls';
@@ -15,9 +22,68 @@ const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
   'llm_error',
   'json_parse_error',
 ];
+// Diversifiable failures move on to the next aggregator in the chain. The
+// existing issue-65 invariant: all_filtered_out is NOT diversifiable (real
+// flights existed; user filters excluded them) and json_parse_error is
+// retryable but not diversifiable (same LLM is likely to error on the next
+// source too).
+const DIVERSIFIABLE_FAILURES: ExtractionFailureReason[] = [
+  'empty_extraction',
+  'no_json_in_response',
+  'page_not_loaded',
+  'llm_error',
+];
 const MAX_EXTRACT_ATTEMPTS = 2;
 const DEBUG_DIR = '/tmp/fairtrail-debug';
 const VPN_INTER_COUNTRY_DELAY_MS = 12000;
+const DEFAULT_AGGREGATORS_ENABLED: NavigationSource[] = ['google_flights', 'airline_direct'];
+
+/**
+ * Resolve the ordered aggregator fallback chain for a single query.
+ *
+ * Precedence: per-query override > per-user preference > admin allowlist
+ * order. The chain always excludes 'airline_direct' (handled separately
+ * before the chain walk) and is filtered against the admin allowlist so a
+ * disabled aggregator is never invoked regardless of user preference. The
+ * terminal element is always 'google_flights' when admin allows it, with a
+ * final safety net forcing google_flights even if the admin misconfigured
+ * everything away.
+ */
+export function resolveAggregatorChain(
+  queryPrefs: readonly string[],
+  userPrefs: readonly string[],
+  adminEnabled: readonly string[],
+): NavigationSource[] {
+  const enabled = adminEnabled.length > 0 ? adminEnabled : DEFAULT_AGGREGATORS_ENABLED;
+  const requested: readonly string[] =
+    queryPrefs.length > 0 ? queryPrefs :
+    userPrefs.length > 0 ? userPrefs :
+    enabled;
+
+  const chain = requested
+    .filter((s): s is NavigationSource =>
+      s === 'google_flights' || s === 'skyscanner' || s === 'kayak'
+    )
+    .filter((s) => enabled.includes(s));
+
+  // Dedupe while preserving order
+  const seen = new Set<NavigationSource>();
+  const deduped: NavigationSource[] = [];
+  for (const s of chain) {
+    if (!seen.has(s)) {
+      seen.add(s);
+      deduped.push(s);
+    }
+  }
+
+  if (!deduped.includes('google_flights') && enabled.includes('google_flights')) {
+    deduped.push('google_flights');
+  }
+  if (deduped.length === 0) {
+    deduped.push('google_flights');
+  }
+  return deduped;
+}
 
 async function saveDebugHtml(queryId: string, html: string, attempt: number): Promise<void> {
   try {
@@ -47,13 +113,33 @@ interface PairScrapeResult {
   lastFailureReason: string | undefined;
 }
 
-/** Scrape a single (outbound, return) date pair, with extract retries. */
+/**
+ * Scrape a single (outbound, return) date pair, with extract retries.
+ *
+ * Flow per attempt:
+ *   1. If `useAirlineDirect`, fan out across `directAirlines` in parallel. Any
+ *      airline page that passes the price-signal gate yields a NavigationResult
+ *      we extract from. Failures here surface a `lastFailureReason`.
+ *   2. If step 1 produced no prices AND the failure reason is diversifiable
+ *      (or step 1 was skipped entirely), walk the `aggregatorChain` in order
+ *      (google_flights / skyscanner / kayak). Stop the walk as soon as prices
+ *      land or `all_filtered_out` is seen (filters, not the source, are the
+ *      cause — moving on cannot help).
+ *   3. If still no prices and the failure is retryable, sleep + retry the
+ *      whole attempt.
+ *
+ * Preserves the issue-65 invariant: an airline page that returns stub HTML
+ * (passes hasFlightPriceSignal but extracts to 0 flights) falls through to
+ * google_flights inside the same attempt rather than retrying the same broken
+ * page.
+ */
 async function scrapeOneDatePair(
   queryId: string,
   pairParams: import('./navigate').FlightSearchParams,
   filters: import('./extract-prices').QueryFilters,
   directAirlines: string[],
   useAirlineDirect: boolean,
+  aggregatorChain: NavigationSource[],
   countryProfile: ReturnType<typeof getCountryProfile> | undefined,
   proxyUrl: string | undefined,
   vpnCountry: string | null,
@@ -66,86 +152,88 @@ async function scrapeOneDatePair(
   let inputTokens = 0;
   let outputTokens = 0;
   let lastFailureReason: string | undefined;
-  // Hoisted so the diversification block (issue 65) can flip airline-direct off
-  // for the retry: once we know a route returns a stub on the airline site, the
-  // attempt-2 retry must skip the broken Playwright launch and go straight to
-  // Google Flights.
-  let attemptUseAirlineDirect = useAirlineDirect;
 
-  async function navigateAll(): Promise<NavigationResult[]> {
-    if (attemptUseAirlineDirect) {
-      const results = await Promise.all(
-        directAirlines.map(async (airline) => {
-          try {
-            const result = await navigateAirlineDirect(pairParams, airline, countryProfile, proxyUrl);
-            if (!result.resultsFound) return null;
-            return result;
-          } catch {
-            return null;
-          }
-        })
-      );
-      const valid = results.filter((r): r is NavigationResult => r !== null);
-      if (valid.length === 0) {
-        return [await navigateGoogleFlights(pairParams, countryProfile, proxyUrl)];
-      }
-      return valid;
+  async function extractFromNav(nav: NavigationResult, attempt: number): Promise<void> {
+    sources.add(nav.source);
+    const result = await extractPrices(
+      nav.html, nav.url, travelDateFallback, filters, undefined, nav.resultsFound, nav.source, effectiveCurrency,
+    );
+    prices = prices.concat(result.prices);
+    inputTokens += result.usage.inputTokens;
+    outputTokens += result.usage.outputTokens;
+    if (result.failureReason) {
+      lastFailureReason = result.failureReason;
+      await saveDebugHtml(queryId, nav.html, attempt);
+    } else {
+      lastFailureReason = undefined;
     }
-    return [await navigateGoogleFlights(pairParams, countryProfile, proxyUrl)];
   }
 
   for (let attempt = 1; attempt <= MAX_EXTRACT_ATTEMPTS; attempt++) {
     const vpnLabel = vpnCountry ? ` vpn=${vpnCountry}` : '';
     console.log(`[scrape] query=${queryId}${vpnLabel} pair=${travelDateFallback} extract attempt ${attempt}/${MAX_EXTRACT_ATTEMPTS}`);
 
-    const navResults = await navigateAll();
-
-    for (const nav of navResults) {
-      sources.add(nav.source);
-      const result = await extractPrices(
-        nav.html, nav.url, travelDateFallback, filters, undefined, nav.resultsFound, nav.source, effectiveCurrency,
+    // Step 1 — airline_direct fan-out (when applicable).
+    let triedAirlineDirect = false;
+    if (useAirlineDirect) {
+      triedAirlineDirect = true;
+      const results = await Promise.all(
+        directAirlines.map(async (airline) => {
+          try {
+            const result = await navigateAirlineDirect(pairParams, airline, countryProfile, proxyUrl);
+            return result.resultsFound ? result : null;
+          } catch {
+            return null;
+          }
+        })
       );
-      prices = prices.concat(result.prices);
-      inputTokens += result.usage.inputTokens;
-      outputTokens += result.usage.outputTokens;
-      if (result.failureReason) {
-        lastFailureReason = result.failureReason;
-        await saveDebugHtml(queryId, nav.html, attempt);
+      const valid = results.filter((r): r is NavigationResult => r !== null);
+      for (const nav of valid) {
+        await extractFromNav(nav, attempt);
       }
     }
 
-    // Issue 65: when airline-direct navigation succeeds (stub page passes
-    // hasFlightPriceSignal) but extraction yields zero prices, fall back to
-    // Google Flights in the same attempt rather than retrying the same broken
-    // airline page. all_filtered_out is not diversifiable: that means real
-    // flights existed and the user filters excluded them.
-    const usedAirlineDirect = navResults.some((n) => n.source === 'airline_direct');
-    const usedGoogleFlights = navResults.some((n) => n.source === 'google_flights');
-    const diversifiableReasons: ExtractionFailureReason[] = ['empty_extraction', 'no_json_in_response', 'page_not_loaded', 'llm_error'];
-    const shouldDiversify =
-      usedAirlineDirect && !usedGoogleFlights && prices.length === 0 &&
-      lastFailureReason !== undefined &&
-      diversifiableReasons.includes(lastFailureReason as ExtractionFailureReason);
-    if (shouldDiversify) {
-      console.log(`[scrape] query=${queryId} pair=${travelDateFallback} diversifying airline_direct -> google_flights (reason: ${lastFailureReason})`);
-      try {
-        const gNav = await navigateGoogleFlights(pairParams, countryProfile, proxyUrl);
-        sources.add(gNav.source);
-        const gResult = await extractPrices(
-          gNav.html, gNav.url, travelDateFallback, filters, undefined, gNav.resultsFound, gNav.source, effectiveCurrency,
-        );
-        prices = prices.concat(gResult.prices);
-        inputTokens += gResult.usage.inputTokens;
-        outputTokens += gResult.usage.outputTokens;
-        if (gResult.failureReason) {
-          lastFailureReason = gResult.failureReason;
-          await saveDebugHtml(queryId, gNav.html, attempt);
-        } else {
-          lastFailureReason = undefined;
+    // Step 2 — walk the aggregator chain when step 1 produced nothing AND the
+    // failure is diversifiable (or step 1 was skipped). all_filtered_out
+    // short-circuits the entire chain — same invariant as the pre-refactor
+    // diversification block: real flights existed, filters excluded them, so
+    // changing sources cannot help.
+    const shouldWalkChain =
+      prices.length === 0 &&
+      (
+        !triedAirlineDirect ||
+        lastFailureReason === undefined ||
+        DIVERSIFIABLE_FAILURES.includes(lastFailureReason as ExtractionFailureReason)
+      );
+
+    if (shouldWalkChain) {
+      if (triedAirlineDirect) {
+        console.log(`[scrape] query=${queryId} pair=${travelDateFallback} diversifying airline_direct -> chain=${aggregatorChain.join(',')} (reason: ${lastFailureReason ?? 'no-extraction'})`);
+      }
+      for (const source of aggregatorChain) {
+        if (prices.length > 0) break;
+        let nav: NavigationResult;
+        try {
+          switch (source) {
+            case 'google_flights':
+              nav = await navigateGoogleFlights(pairParams, countryProfile, proxyUrl);
+              break;
+            case 'skyscanner':
+              nav = await navigateSkyscanner(pairParams, countryProfile, proxyUrl);
+              break;
+            case 'kayak':
+              nav = await navigateKayak(pairParams, countryProfile, proxyUrl);
+              break;
+            default:
+              continue;
+          }
+        } catch (err) {
+          console.error(`[scrape] query=${queryId} pair=${travelDateFallback} aggregator=${source} threw err=${err instanceof Error ? err.message : err}`);
+          continue;
         }
-        attemptUseAirlineDirect = false;
-      } catch (err) {
-        console.error(`[scrape] query=${queryId} pair=${travelDateFallback} google_flights diversification threw err=${err instanceof Error ? err.message : err}`);
+        await extractFromNav(nav, attempt);
+        // all_filtered_out short-circuits — real flights existed, filters excluded them
+        if (lastFailureReason === 'all_filtered_out') break;
       }
     }
 
@@ -164,9 +252,21 @@ async function scrapeOneDatePair(
 /** Scrape a single query for a single country pass (local or VPN). */
 async function scrapeQueryForCountry(
   queryId: string,
-  query: { origin: string; destination: string; preferredAirlines: string[]; maxPrice: number | null; maxStops: number | null; maxDurationHours: number | null; timePreference: string; cabinClass: string; flexibility: number },
+  query: {
+    origin: string;
+    destination: string;
+    preferredAirlines: string[];
+    preferredAggregators: string[];
+    maxPrice: number | null;
+    maxStops: number | null;
+    maxDurationHours: number | null;
+    timePreference: string;
+    cabinClass: string;
+    flexibility: number;
+    user: { preferredAggregators: string[] } | null;
+  },
   searchParams: import('./navigate').FlightSearchParams,
-  config: { provider?: string; model?: string } | null,
+  config: { provider?: string; model?: string; aggregatorsEnabled?: string[] } | null,
   vpnCountry: string | null,
   proxyUrl: string | undefined,
   fetchRunId: string,
@@ -175,6 +275,14 @@ async function scrapeQueryForCountry(
 
   const directAirlines = query.preferredAirlines.filter(isKnownAirline);
   const useAirlineDirect = directAirlines.length > 0;
+
+  const adminEnabled = config?.aggregatorsEnabled ?? DEFAULT_AGGREGATORS_ENABLED;
+  const aggregatorChain = resolveAggregatorChain(
+    query.preferredAggregators ?? [],
+    query.user?.preferredAggregators ?? [],
+    adminEnabled,
+  );
+  console.log(`[scrape] query=${queryId} aggregator chain=${aggregatorChain.join(',')} (admin enabled=${adminEnabled.join(',')})`);
 
   const filters = {
     maxPrice: query.maxPrice,
@@ -224,7 +332,7 @@ async function scrapeQueryForCountry(
     let pairResult: PairScrapeResult;
     try {
       pairResult = await scrapeOneDatePair(
-        queryId, pairParams, filters, directAirlines, useAirlineDirect, countryProfile, proxyUrl, vpnCountry,
+        queryId, pairParams, filters, directAirlines, useAirlineDirect, aggregatorChain, countryProfile, proxyUrl, vpnCountry,
       );
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -410,7 +518,10 @@ export async function runScrapeForQuery(
   proxyUrl?: string,
   opts?: { fetchRunId?: string },
 ): Promise<ScrapeResult> {
-  const query = await prisma.query.findUnique({ where: { id: queryId } });
+  const query = await prisma.query.findUnique({
+    where: { id: queryId },
+    include: { user: { select: { preferredAggregators: true } } },
+  });
   if (!query || !query.active) {
     const errorMsg = 'Query not found or inactive';
     // If the caller pre-created an in_progress row, finalize it here so

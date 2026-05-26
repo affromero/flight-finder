@@ -4,6 +4,7 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
+import { isAggregatorSource } from '@/lib/scraper/navigate';
 
 interface RouteInput {
   origin: string;
@@ -110,6 +111,18 @@ export async function POST(request: NextRequest) {
   expiresAt.setDate(expiresAt.getDate() + flex);
 
   const airlines: string[] = Array.isArray(preferredAirlines) ? preferredAirlines : [];
+
+  // preferredAggregators is optional on creation; empty means inherit user/admin defaults.
+  let aggregators: string[] = [];
+  if (Array.isArray(body.preferredAggregators)) {
+    for (const a of body.preferredAggregators) {
+      if (!isAggregatorSource(a)) {
+        return apiError(`preferredAggregators contains invalid value: ${JSON.stringify(a)}`, 422);
+      }
+    }
+    aggregators = body.preferredAggregators;
+  }
+
   const groupId = crypto.randomUUID();
 
   const results: Array<{
@@ -149,6 +162,7 @@ export async function POST(request: NextRequest) {
         maxStops: maxStops !== undefined && maxStops !== null ? Number(maxStops) : null,
         maxDurationHours: maxDurationHoursValidated,
         preferredAirlines: airlines,
+        preferredAggregators: aggregators,
         timePreference: timePreference || 'any',
         cabinClass: cabinClass || 'economy',
         tripType: tripType === 'one_way' ? 'one_way' : 'round_trip',

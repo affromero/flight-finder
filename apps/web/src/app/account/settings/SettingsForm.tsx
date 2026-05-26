@@ -9,12 +9,43 @@ interface Preferences {
   defaultCurrency: string | null;
   defaultCountry: string | null;
   preferredAirlines: string[];
+  preferredAggregators: string[];
   cabinClass: string | null;
 }
 
 const CABIN_CLASSES = ['economy', 'premium_economy', 'business', 'first'] as const;
 
-export function SettingsForm({ initial }: { initial: Preferences }) {
+// All four aggregators, in the visual order shown when the user has no
+// explicit preference. Skyscanner and Kayak are flagged experimental at the
+// component level so users know what they're enabling.
+const ALL_AGGREGATORS = ['google_flights', 'airline_direct', 'skyscanner', 'kayak'] as const;
+type Aggregator = (typeof ALL_AGGREGATORS)[number];
+
+const AGGREGATOR_LABEL: Record<Aggregator, string> = {
+  google_flights: 'Google Flights',
+  airline_direct: 'Airline direct',
+  skyscanner: 'Skyscanner',
+  kayak: 'Kayak',
+};
+
+const EXPERIMENTAL_AGGREGATORS = new Set<Aggregator>(['skyscanner', 'kayak']);
+
+// Build the initial render order: the user's saved order first, then any
+// aggregators they have not explicitly placed (in the canonical order).
+function buildInitialOrder(saved: string[]): Aggregator[] {
+  const valid = saved.filter((s): s is Aggregator => (ALL_AGGREGATORS as readonly string[]).includes(s));
+  const seen = new Set<Aggregator>(valid);
+  const rest = ALL_AGGREGATORS.filter((a) => !seen.has(a));
+  return [...valid, ...rest];
+}
+
+export function SettingsForm({
+  initial,
+  adminEnabledAggregators,
+}: {
+  initial: Preferences;
+  adminEnabledAggregators: string[];
+}) {
   const [displayName, setDisplayName] = useState(initial.displayName ?? '');
   const [defaultCurrency, setDefaultCurrency] = useState(initial.defaultCurrency ?? '');
   const [defaultCountry, setDefaultCountry] = useState(initial.defaultCountry ?? '');
@@ -22,9 +53,36 @@ export function SettingsForm({ initial }: { initial: Preferences }) {
     initial.preferredAirlines.join(', '),
   );
   const [cabinClass, setCabinClass] = useState(initial.cabinClass ?? '');
+  const [aggregatorOrder, setAggregatorOrder] = useState<Aggregator[]>(
+    () => buildInitialOrder(initial.preferredAggregators),
+  );
+  // Selection: which aggregators the user has explicitly chosen. Empty means
+  // "inherit defaults" (server-side fallback to admin allowlist order).
+  const [aggregatorSelection, setAggregatorSelection] = useState<Set<Aggregator>>(
+    () => new Set(
+      initial.preferredAggregators.filter((s): s is Aggregator => (ALL_AGGREGATORS as readonly string[]).includes(s))
+    ),
+  );
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [error, setError] = useState('');
+
+  const adminAllowed = new Set(adminEnabledAggregators);
+
+  const moveAggregator = (index: number, delta: -1 | 1) => {
+    const target = index + delta;
+    if (target < 0 || target >= aggregatorOrder.length) return;
+    const next = [...aggregatorOrder];
+    [next[index], next[target]] = [next[target]!, next[index]!];
+    setAggregatorOrder(next);
+  };
+
+  const toggleAggregator = (source: Aggregator) => {
+    const next = new Set(aggregatorSelection);
+    if (next.has(source)) next.delete(source);
+    else next.add(source);
+    setAggregatorSelection(next);
+  };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -37,6 +95,11 @@ export function SettingsForm({ initial }: { initial: Preferences }) {
       .map((s) => s.trim())
       .filter(Boolean);
 
+    // Send the explicitly selected aggregators in the user's chosen order.
+    // Empty selection persists as [] which the server reads as
+    // "inherit admin defaults".
+    const selectedAggregators = aggregatorOrder.filter((s) => aggregatorSelection.has(s));
+
     const res = await fetch('/api/account/settings', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -45,6 +108,7 @@ export function SettingsForm({ initial }: { initial: Preferences }) {
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
         preferredAirlines: airlines,
+        preferredAggregators: selectedAggregators,
         cabinClass: cabinClass || null,
       }),
     });
@@ -121,6 +185,61 @@ export function SettingsForm({ initial }: { initial: Preferences }) {
             <option key={c} value={c}>{c.replace('_', ' ')}</option>
           ))}
         </select>
+      </div>
+
+      <div className={styles.field}>
+        <label className={styles.label}>Aggregator preference</label>
+        <div className={styles.aggregatorList}>
+          {aggregatorOrder.map((source, index) => {
+            const allowedByAdmin = adminAllowed.has(source);
+            const experimental = EXPERIMENTAL_AGGREGATORS.has(source);
+            const checked = aggregatorSelection.has(source);
+            const disabled = !allowedByAdmin;
+            return (
+              <div
+                key={source}
+                className={styles.aggregatorRow}
+                data-disabled={disabled ? 'true' : 'false'}
+              >
+                <span className={styles.aggregatorIndex}>{index + 1}.</span>
+                <label className={styles.aggregatorToggle}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    disabled={disabled}
+                    onChange={() => toggleAggregator(source)}
+                  />
+                </label>
+                <span className={styles.aggregatorLabel}>{AGGREGATOR_LABEL[source]}</span>
+                {experimental && <span className={styles.aggregatorTag}>experimental</span>}
+                <div className={styles.aggregatorButtons}>
+                  <button
+                    type="button"
+                    className={styles.aggregatorButton}
+                    onClick={() => moveAggregator(index, -1)}
+                    disabled={index === 0}
+                    aria-label={`Move ${AGGREGATOR_LABEL[source]} up`}
+                  >
+                    ↑
+                  </button>
+                  <button
+                    type="button"
+                    className={styles.aggregatorButton}
+                    onClick={() => moveAggregator(index, 1)}
+                    disabled={index === aggregatorOrder.length - 1}
+                    aria-label={`Move ${AGGREGATOR_LABEL[source]} down`}
+                  >
+                    ↓
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+        <p className={styles.aggregatorHint}>
+          Order matters: when one source returns no flights, the next is tried.
+          Leave everything unchecked to inherit instance defaults.
+        </p>
       </div>
 
       {error && <p className={styles.error}>{error}</p>}

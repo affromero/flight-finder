@@ -1,5 +1,24 @@
 # Changelog
 
+## [0.8.0] - 2026-05-26
+
+### Added
+* **Skyscanner and Kayak as fallback aggregators** (#89): the price scrape now walks an ordered chain of sources per query instead of falling back to Google Flights as a single hardcoded branch. New `navigateSkyscanner` and `navigateKayak` follow the same `NavigationResult` shape as `navigateAirlineDirect`, gate the result via `hasFlightPriceSignal`, and dismiss the usual Cloudflare and consent dialogs. Both ship behind feature flags and are off by default: admin enables them in `/admin/config` via the new `ExtractionConfig.aggregatorsEnabled` allowlist, users then order them in `/account/settings`. Skyscanner and Kayak both deploy aggressive anti-bot (Cloudflare, PerimeterX), so v1 reliability is best effort -- 40 to 70 percent in burst, dropping under sustained load. Residential proxies or paid CAPTCHA solving would unlock production grade reliability and are out of scope.
+* **Per user and per query aggregator preference** (#89): `User.preferredAggregators` carries the user default; `Query.preferredAggregators` overrides per tracker. The chain resolver precedence is per query > per user > admin allowlist order. The new `SettingsForm` aggregator section renders an ordered checklist with up and down buttons; Skyscanner and Kayak rows visibly tag `experimental` and are disabled when admin has not enabled them. `/api/queries/[id]` PATCH accepts `preferredAggregators` with single id scope (no group cascade, unlike `scrapeInterval` and `active`); `/api/admin/queries/[id]` PATCH has parity. `/api/account/settings` returns the new field on GET and validates it with HTTP 422 on PATCH.
+* **Manual scrape completion summary log** (#89): the background IIFE in `/api/queries/[id]/scrape` now emits `[scrape] manual run complete (group=<id>): N successes, M failures` once every target finishes, matching the cron summary format. A target counts as success only when every country pass landed prices; thrown targets and empty results both count as failure.
+
+### Schema
+* New columns auto-applied via `prisma db push` on deploy. Defaults mean existing rows are unaffected.
+  * `User.preferredAggregators String[] @default([])`
+  * `Query.preferredAggregators String[] @default([])`
+  * `ExtractionConfig.aggregatorsEnabled String[] @default(["google_flights", "airline_direct"])`
+* `FetchRun.source` doc comment widened to document joined source labels (e.g. `google_flights+skyscanner`).
+
+### Changed
+* `scrapeOneDatePair` now drives the aggregator chain at the top of the attempt loop instead of only inside the airline_direct diversification branch. Skyscanner and Kayak are now reachable for every query, not just queries with airline preferences. The issue-65 invariant is preserved: `all_filtered_out` short circuits the chain (real flights existed; filters excluded them); per-aggregator throws are caught so the next source can still be tried; airline_direct stub pages still divert to the next chain entry inside the same attempt.
+* `extract-prices.ts buildSystemPrompt` source labels and bookingUrl rules converted from ternaries to switches with explicit cases for `skyscanner` and `kayak`.
+* `runScrapeForQuery` query lookup now includes the owning user via `include: { user: { select: { preferredAggregators: true } } }` so per user prefs are available in the resolver. Anonymous and seed queries (where `userId` is null) fall through to admin allowlist order.
+
 ## [0.7.4] - 2026-05-25
 
 ### Added

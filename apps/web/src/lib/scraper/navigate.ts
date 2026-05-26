@@ -44,7 +44,13 @@ export interface FlightSearchParams {
   country?: string | null; // ISO 3166-1 alpha-2. null = omit (Google auto-detects)
 }
 
-export type NavigationSource = 'google_flights' | 'airline_direct';
+export type NavigationSource = 'google_flights' | 'airline_direct' | 'skyscanner' | 'kayak';
+
+export const AGGREGATOR_SOURCES = ['google_flights', 'airline_direct', 'skyscanner', 'kayak'] as const;
+
+export function isAggregatorSource(value: unknown): value is NavigationSource {
+  return typeof value === 'string' && (AGGREGATOR_SOURCES as readonly string[]).includes(value);
+}
 
 export interface NavigationResult {
   html: string;
@@ -630,4 +636,151 @@ export async function navigateAirlineDirect(
   } finally {
     await browser.close().catch(() => {});
   }
+}
+
+// Skyscanner uses lowercase 3-letter IATA codes in the path. The site accepts
+// uppercase via redirect, but the canonical form is lowercase.
+function isoDateShort(d: Date): string {
+  const iso = isoDate(d); // YYYY-MM-DD
+  return iso.slice(2, 4) + iso.slice(5, 7) + iso.slice(8, 10); // YYMMDD
+}
+
+// Skyscanner cabin slugs — mapping is the same set our app uses elsewhere.
+const SKYSCANNER_CABIN: Record<string, string> = {
+  economy: 'economy',
+  premium_economy: 'premiumeconomy',
+  business: 'business',
+  first: 'first',
+};
+
+export function buildSkyscannerUrl(params: FlightSearchParams): string {
+  assertValidIataCode(params.origin, 'origin');
+  assertValidIataCode(params.destination, 'destination');
+
+  const ori = params.origin.toLowerCase();
+  const dst = params.destination.toLowerCase();
+  const oneWay = params.tripType === 'one_way';
+  const datePath = oneWay
+    ? `${isoDateShort(params.dateFrom)}/`
+    : `${isoDateShort(params.dateFrom)}/${isoDateShort(params.dateTo)}/`;
+
+  const cabin = SKYSCANNER_CABIN[params.cabinClass ?? 'economy'] ?? 'economy';
+  const qs = new URLSearchParams();
+  qs.set('adultsv2', '1');
+  qs.set('cabinclass', cabin);
+  if (params.currency) qs.set('currency', params.currency);
+  if (params.country) qs.set('market', params.country);
+
+  return `https://www.skyscanner.com/transport/flights/${ori}/${dst}/${datePath}?${qs.toString()}`;
+}
+
+export function buildKayakUrl(params: FlightSearchParams): string {
+  assertValidIataCode(params.origin, 'origin');
+  assertValidIataCode(params.destination, 'destination');
+
+  const ori = params.origin;
+  const dst = params.destination;
+  const oneWay = params.tripType === 'one_way';
+  const datePath = oneWay
+    ? isoDate(params.dateFrom)
+    : `${isoDate(params.dateFrom)}/${isoDate(params.dateTo)}`;
+
+  return `https://www.kayak.com/flights/${ori}-${dst}/${datePath}?sort=price_a`;
+}
+
+/**
+ * Shared navigation helper for Skyscanner and Kayak. Both deploy aggressive
+ * anti-bot (Cloudflare, PerimeterX) so reliability is best-effort, not
+ * production grade. The 45s goto timeout matches navigateAirlineDirect because
+ * Cloudflare interstitials regularly take 20-40s to clear.
+ *
+ * Caller passes a stable `source` label and a `tag` for log lines. Returns the
+ * standard NavigationResult; resultsFound is gated by hasFlightPriceSignal so a
+ * blocked or interstitial page returns resultsFound=false and the caller can
+ * walk to the next aggregator in the chain.
+ */
+async function navigateAggregatorPage(
+  url: string,
+  source: NavigationSource,
+  tag: string,
+  countryProfile?: CountryProfile,
+  proxyUrl?: string,
+): Promise<NavigationResult> {
+  const browser = await launchBrowser({ proxyUrl });
+  const start = Date.now();
+
+  try {
+    const context = await createStealthContext(browser, { countryProfile, proxyUrl });
+    const page = await context.newPage();
+    console.log(`[navigate:${tag}] → ${url}`);
+
+    const gotoStart = Date.now();
+    await page.goto(url, { waitUntil: 'load', timeout: 45_000 });
+    console.log(`[navigate:${tag}] goto resolved in ${Date.now() - gotoStart}ms`);
+
+    // Heavier post-goto wait than airline_direct — Cloudflare interstitials on
+    // Skyscanner and Kayak commonly delay real content by 4-8 seconds.
+    await randomDelay(4000, 8000);
+    await simulateHumanBehavior(page);
+
+    try {
+      for (const label of ['Accept all', 'I agree', 'OK, got it', 'Got it', 'Allow all', 'Accept cookies']) {
+        const btn = page.locator(`button:has-text("${label}")`).first();
+        if (await btn.isVisible({ timeout: 1000 })) {
+          await btn.click();
+          await randomDelay(1500, 3000);
+          break;
+        }
+      }
+    } catch {
+      // No consent dialog visible.
+    }
+
+    let resultsFound = false;
+    try {
+      await page.waitForFunction(
+        (p: { mention: string; token: string; min: number }) => {
+          const text = document.body?.innerText ?? '';
+          const mentions = (text.match(new RegExp(p.mention, 'g')) || []).length;
+          if (mentions < p.min) return false;
+          return new RegExp(p.token).test(text);
+        },
+        { mention: CURRENCY_MENTION_PATTERN, token: PRICE_TOKEN_PATTERN, min: MIN_CURRENCY_MENTIONS },
+        { timeout: 15_000 },
+      );
+      resultsFound = true;
+    } catch {
+      // No price signal — most likely Cloudflare challenge, PerimeterX, or empty results.
+    }
+
+    const html = await page.evaluate(() => document.body.innerText);
+    console.log(`[navigate:${tag}] resultsFound=${resultsFound}, textLength=${html.length}, elapsed=${Date.now() - start}ms`);
+
+    await context.close();
+    return { html, url, resultsFound, source };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    console.error(`[navigate:${tag}] failed (elapsed=${Date.now() - start}ms): ${message}`);
+    throw error;
+  } finally {
+    await browser.close().catch(() => {});
+  }
+}
+
+export async function navigateSkyscanner(
+  params: FlightSearchParams,
+  countryProfile?: CountryProfile,
+  proxyUrl?: string,
+): Promise<NavigationResult> {
+  const url = buildSkyscannerUrl(params);
+  return navigateAggregatorPage(url, 'skyscanner', 'skyscanner', countryProfile, proxyUrl);
+}
+
+export async function navigateKayak(
+  params: FlightSearchParams,
+  countryProfile?: CountryProfile,
+  proxyUrl?: string,
+): Promise<NavigationResult> {
+  const url = buildKayakUrl(params);
+  return navigateAggregatorPage(url, 'kayak', 'kayak', countryProfile, proxyUrl);
 }

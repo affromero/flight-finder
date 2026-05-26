@@ -22,7 +22,15 @@ interface Config {
   vpnProvider: string | null;
   vpnCountries: string[];
   hasVpnActivationCode: boolean;
+  aggregatorsEnabled: string[];
 }
+
+const AGGREGATOR_OPTIONS = [
+  { id: 'google_flights', label: 'Google Flights', experimental: false },
+  { id: 'airline_direct', label: 'Airline direct', experimental: false },
+  { id: 'skyscanner', label: 'Skyscanner', experimental: true },
+  { id: 'kayak', label: 'Kayak', experimental: true },
+] as const;
 
 
 
@@ -40,6 +48,7 @@ export default function ConfigPage() {
   const [customBaseUrl, setCustomBaseUrl] = useState('');
   const [vpnProvider, setVpnProvider] = useState('none');
   const [vpnCountries, setVpnCountries] = useState<string[]>([]);
+  const [aggregatorsEnabled, setAggregatorsEnabled] = useState<string[]>(['google_flights', 'airline_direct']);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -94,6 +103,7 @@ export default function ConfigPage() {
           setCustomBaseUrl(d.data.customBaseUrl || '');
           setVpnProvider(d.data.vpnProvider || 'none');
           setVpnCountries(d.data.vpnCountries || []);
+          setAggregatorsEnabled(d.data.aggregatorsEnabled ?? ['google_flights', 'airline_direct']);
           const pc = EXTRACTION_PROVIDERS[d.data.provider];
           const knownModel = pc?.models.find((m) => m.id === d.data.model);
           if (knownModel) {
@@ -150,6 +160,7 @@ export default function ConfigPage() {
         customBaseUrl: newBaseUrl,
         vpnProvider: vpnProvider === 'none' ? null : vpnProvider,
         vpnCountries,
+        aggregatorsEnabled,
       }),
     });
 
@@ -356,6 +367,39 @@ export default function ConfigPage() {
             <option value="ai">AI natural language search</option>
             <option value="manual">Manual input form</option>
           </select>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Aggregator Sources</label>
+          <div>
+            {AGGREGATOR_OPTIONS.map((opt) => {
+              const checked = aggregatorsEnabled.includes(opt.id);
+              return (
+                <label key={opt.id} style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', padding: '0.25rem 0' }}>
+                  <input
+                    type="checkbox"
+                    checked={checked}
+                    onChange={(e) => {
+                      if (e.target.checked) {
+                        setAggregatorsEnabled([...aggregatorsEnabled, opt.id]);
+                      } else {
+                        setAggregatorsEnabled(aggregatorsEnabled.filter((s) => s !== opt.id));
+                      }
+                    }}
+                  />
+                  <span>{opt.label}</span>
+                  {opt.experimental && (
+                    <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.05em' }}>
+                      experimental
+                    </span>
+                  )}
+                </label>
+              );
+            })}
+          </div>
+          <span className={styles.toggleHint}>
+            Sources allowed in the per-query aggregator chain. Skyscanner and Kayak are best-effort, gated by aggressive anti-bot protection on those sites.
+          </span>
         </div>
 
         <div className={styles.field}>

@@ -2,6 +2,7 @@ import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
+import { prisma } from '@/lib/prisma';
 import { SettingsForm } from './SettingsForm';
 import styles from './page.module.css';
 
@@ -12,6 +13,15 @@ export default async function AccountSettingsPage() {
 
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/account/settings');
+
+  // Read admin's aggregator allowlist server-side. This page is a Server
+  // Component with 'force-dynamic' so DB reads are cheap and avoid exposing
+  // /api/admin/config (admin-only) to the non-admin user viewing this page.
+  const config = await prisma.extractionConfig.findFirst({
+    where: { id: 'singleton' },
+    select: { aggregatorsEnabled: true },
+  });
+  const adminEnabledAggregators = config?.aggregatorsEnabled ?? ['google_flights', 'airline_direct'];
 
   return (
     <main className={styles.root}>
@@ -31,8 +41,10 @@ export default async function AccountSettingsPage() {
           defaultCurrency: user.defaultCurrency,
           defaultCountry: user.defaultCountry,
           preferredAirlines: user.preferredAirlines,
+          preferredAggregators: user.preferredAggregators,
           cabinClass: user.cabinClass,
         }}
+        adminEnabledAggregators={adminEnabledAggregators}
       />
     </main>
   );

@@ -2,10 +2,11 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { requireAdminApi } from '@/lib/admin-guard';
+import { isAggregatorSource } from '@/lib/scraper/navigate';
 
-// Fields that cascade across a query's group when groupId is set. userId
-// reassignment stays single-row because it would not make sense to move an
-// entire group to a different owner via a UI nudge.
+// Fields that cascade across a query's group when groupId is set. userId and
+// preferredAggregators stay single-row because they should be settable per
+// sibling without affecting the rest of a flex group.
 const GROUP_CASCADING_FIELDS = new Set(['active', 'scrapeInterval', 'maxDurationHours']);
 
 export async function PATCH(
@@ -41,6 +42,15 @@ export async function PATCH(
     const target = await prisma.user.findUnique({ where: { id: body.userId }, select: { id: true } });
     if (!target) return apiError(`User not found: ${body.userId}`, 400);
     data.userId = body.userId;
+  }
+
+  if (Array.isArray(body.preferredAggregators)) {
+    for (const a of body.preferredAggregators) {
+      if (!isAggregatorSource(a)) {
+        return apiError(`preferredAggregators contains invalid value: ${JSON.stringify(a)}`, 422);
+      }
+    }
+    data.preferredAggregators = body.preferredAggregators;
   }
 
   // Cascade group-safe fields to every sibling when this query is part of a

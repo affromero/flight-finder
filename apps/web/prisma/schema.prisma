@@ -21,6 +21,7 @@ model Query {
   maxStops        Int?
   maxDurationHours Int?     // optional cap on total trip duration in hours
   preferredAirlines String[] @default([])
+  preferredAggregators String[] @default([]) // per-query override of User.preferredAggregators; empty = inherit
   timePreference  String   @default("any")
   cabinClass      String   @default("economy")
   tripType        String   @default("round_trip") // 'one_way' | 'round_trip'
@@ -82,7 +83,7 @@ model FetchRun {
   id             String    @id @default(cuid())
   queryId        String
   status         String // 'success' | 'partial' | 'failed'
-  source         String    @default("google_flights") // 'google_flights' | 'airline_direct'
+  source         String    @default("google_flights") // 'google_flights' | 'airline_direct' | 'skyscanner' | 'kayak' | 'manual' | joined labels e.g. 'google_flights+skyscanner'
   snapshotsCount Int       @default(0)
   extractionCost Float?
   vpnCountry     String?   // ISO 3166-1 alpha-2 — VPN exit country during this run
@@ -117,6 +118,7 @@ model ExtractionConfig {
   multiUserMode        Boolean   @default(false) // self-hosted only; admin manages User table for households
   updatedAt            DateTime  @updatedAt
   extractTimeoutSeconds Int @default(90)
+  aggregatorsEnabled    String[] @default(["google_flights", "airline_direct"]) // sources allowed in the fallback chain; skyscanner/kayak opt-in
 }
 
 model User {
@@ -127,7 +129,8 @@ model User {
   isAdmin           Boolean  @default(false)
   defaultCurrency   String?  // override; null falls back to ExtractionConfig.defaultCurrency
   defaultCountry    String?  // override; null falls back to ExtractionConfig.defaultCountry
-  preferredAirlines String[] @default([])
+  preferredAirlines    String[] @default([])
+  preferredAggregators String[] @default([]) // ordered fallback chain after airline_direct; empty = inherit admin default
   cabinClass        String?  // override; null falls back to "economy"
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
