@@ -8,6 +8,7 @@ import Link from 'next/link';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { DeleteTracker } from '@/components/DeleteTracker';
 import { ScrapeInterval } from '@/components/ScrapeInterval';
+import { AggregatorPicker } from '@/components/AggregatorPicker';
 import { ChartActions } from '@/components/ChartActions';
 import { PriceCalendar } from '@/components/PriceCalendar';
 import { Footer } from '@/components/Footer';
@@ -85,6 +86,8 @@ interface QueryWithSnapshots {
     currency: string | null;
     scrapeInterval: number | null;
     vpnCountries: string[];
+    preferredAggregators: string[];
+    label: string | null;
   };
   snapshots: Array<{
     id: string;
@@ -247,8 +250,16 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
 export default async function ChartPage({ params }: Props) {
   const { id } = await params;
 
-  const primary = await loadQueryWithSnapshots(id);
+  const [primary, adminConfig] = await Promise.all([
+    loadQueryWithSnapshots(id),
+    prisma.extractionConfig.findFirst({
+      where: { id: 'singleton' },
+      select: { aggregatorsEnabled: true },
+    }),
+  ]);
   if (!primary) notFound();
+
+  const adminEnabledAggregators = adminConfig?.aggregatorsEnabled ?? ['google_flights', 'airline_direct'];
 
   // Mark first view for 24h auto-cleanup
   if (!primary.query.firstViewedAt) {
@@ -424,6 +435,11 @@ export default async function ChartPage({ params }: Props) {
                 <ForceScrapeButton queryId={id} ariaLabel="Refresh prices now" />
               )}
               <ScrapeInterval queryId={id} currentInterval={primary.query.scrapeInterval} />
+              <AggregatorPicker
+                queryId={id}
+                currentAggregators={primary.query.preferredAggregators}
+                adminEnabledAggregators={adminEnabledAggregators}
+              />
               <DeleteTracker queryId={id} />
             </>
           )}

@@ -1,0 +1,77 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.label {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.options {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: 100px;
+  overflow: hidden;
+}
+
+.option {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.25rem 0.5rem;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+  background: transparent;
+  border: none;
+  border-right: 1px solid var(--border);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.option:last-child {
+  border-right: none;
+}
+
+.option:hover:not(.disabled) {
+  color: var(--text-primary);
+  background: var(--surface);
+}
+
+.option.active {
+  color: var(--accent);
+  background: var(--surface);
+}
+
+.option.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.check {
+  width: 0.625rem;
+  height: 0.625rem;
+  border: 1px solid var(--muted);
+  border-radius: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.check.checked {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--bg);
+}
+
+.experimental {
+  font-size: 0.5625rem;
+  color: var(--muted);
+  opacity: 0.7;
+}
