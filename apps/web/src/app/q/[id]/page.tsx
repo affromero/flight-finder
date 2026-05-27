@@ -9,6 +9,7 @@ import { ThemeToggle } from '@/components/ThemeToggle';
 import { DeleteTracker } from '@/components/DeleteTracker';
 import { ScrapeInterval } from '@/components/ScrapeInterval';
 import { AggregatorPicker } from '@/components/AggregatorPicker';
+import { TrackerLabel } from '@/components/TrackerLabel';
 import { ChartActions } from '@/components/ChartActions';
 import { PriceCalendar } from '@/components/PriceCalendar';
 import { Footer } from '@/components/Footer';
@@ -386,6 +387,7 @@ export default async function ChartPage({ params }: Props) {
             </div>
           </>
         )}
+        <TrackerLabel queryId={id} currentLabel={primary.query.label} />
         <div className={styles.headerActions}>
           <div className={styles.expiry}>
             {expired ? (
