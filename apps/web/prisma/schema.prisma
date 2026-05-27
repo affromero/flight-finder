@@ -34,6 +34,7 @@ model Query {
   expiresAt       DateTime
   firstViewedAt   DateTime?
   vpnCountries    String[] @default([]) // ISO 3166-1 codes for VPN comparison
+  label           String?
   scrapeInterval  Int?     // hours, null = follow extractionConfig.scrapeInterval (global)
   userId          String?  // owner when self-hosted multi-user is enabled; null = anonymous or seed
   createdAt       DateTime @default(now())

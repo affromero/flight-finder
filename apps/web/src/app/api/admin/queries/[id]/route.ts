@@ -44,6 +44,20 @@ export async function PATCH(
     data.userId = body.userId;
   }
 
+  if (Object.prototype.hasOwnProperty.call(body, 'label')) {
+    if (body.label === null) {
+      data.label = null;
+    } else if (typeof body.label === 'string') {
+      const trimmed = body.label.trim();
+      if (trimmed.length > 60) {
+        return apiError('label must be 60 characters or fewer', 400);
+      }
+      data.label = trimmed || null;
+    } else {
+      return apiError('label must be a string or null', 400);
+    }
+  }
+
   if (Array.isArray(body.preferredAggregators)) {
     for (const a of body.preferredAggregators) {
       if (!isAggregatorSource(a)) {

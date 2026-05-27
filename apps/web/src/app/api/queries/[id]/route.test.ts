@@ -386,6 +386,64 @@ describe('PATCH /api/queries/[id]', () => {
     });
   });
 
+  describe('label', () => {
+    beforeEach(() => {
+      mockQueryUpdate.mockResolvedValue({});
+    });
+
+    it('updates label on the single id only (no group cascade)', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { label: 'Paris via Google' }));
+      const data = await res.json();
+      expect(res.status).toBe(200);
+      expect(data.data).toMatchObject({ label: 'Paris via Google' });
+      expect(mockQueryUpdate).toHaveBeenCalledWith({
+        where: { id: 'q1' },
+        data: { label: 'Paris via Google' },
+      });
+      expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+    });
+
+    it('clears label when set to null', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { label: null }));
+      expect(res.status).toBe(200);
+      expect(mockQueryUpdate).toHaveBeenCalledWith({
+        where: { id: 'q1' },
+        data: { label: null },
+      });
+    });
+
+    it('rejects label longer than 60 characters', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { label: 'a'.repeat(61) }));
+      expect(res.status).toBe(400);
+      expect(mockQueryUpdate).not.toHaveBeenCalled();
+    });
+
+    it('rejects non-string non-null label', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { label: 123 }));
+      expect(res.status).toBe(400);
+      expect(mockQueryUpdate).not.toHaveBeenCalled();
+    });
+
+    it('trims whitespace and stores null for empty string', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
+      const res = await PATCH(...makePatchRequest('q1', { label: '   ' }));
+      expect(res.status).toBe(200);
+      expect(mockQueryUpdate).toHaveBeenCalledWith({
+        where: { id: 'q1' },
+        data: { label: null },
+      });
+    });
+  });
+
   describe('preferredAggregators', () => {
     beforeEach(() => {
       mockQueryUpdate.mockResolvedValue({});

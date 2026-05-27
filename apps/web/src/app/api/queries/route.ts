@@ -123,6 +123,15 @@ export async function POST(request: NextRequest) {
     aggregators = body.preferredAggregators;
   }
 
+  let label: string | null = null;
+  if (typeof body.label === 'string') {
+    const trimmed = body.label.trim();
+    if (trimmed.length > 60) {
+      return apiError('label must be 60 characters or fewer', 400);
+    }
+    label = trimmed || null;
+  }
+
   const groupId = crypto.randomUUID();
 
   const results: Array<{
@@ -134,6 +143,7 @@ export async function POST(request: NextRequest) {
     date?: string;
     returnDate?: string;
     deleteToken: string;
+    label: string | null;
   }> = [];
 
   for (const route of routeInputs) {
@@ -163,6 +173,7 @@ export async function POST(request: NextRequest) {
         maxDurationHours: maxDurationHoursValidated,
         preferredAirlines: airlines,
         preferredAggregators: aggregators,
+        label,
         timePreference: timePreference || 'any',
         cabinClass: cabinClass || 'economy',
         tripType: tripType === 'one_way' ? 'one_way' : 'round_trip',
@@ -201,6 +212,7 @@ export async function POST(request: NextRequest) {
       date: route.date,
       returnDate: route.returnDate,
       deleteToken,
+      label,
     });
   }
 
