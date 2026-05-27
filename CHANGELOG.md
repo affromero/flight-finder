@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.9.1] - 2026-05-27
+
+### Added
+* **Per-tracker aggregator override** (#89): new AggregatorPicker component on each tracker detail page lets users toggle which scrape sources to use per tracker. Shared aggregator constants extracted to `lib/aggregators.ts`.
+* **Custom tracker label** (#89): optional free-text label (max 60 chars) on trackers, editable inline on the detail page. Labels surface in the dashboard card list and admin queries page so duplicate trackers for the same route are distinguishable.
+* **Configurable max flights per date** (#92): new `maxFlightsPerDate` setting in `/admin/config` (default 10, range 5-50). Busy routes with 30+ daily flights can raise the cap to capture afternoon and budget options the LLM was previously cutting off.
+
+### Fixed
+* Dynamic route detail page no longer 404s on card navigation.
+* Theme toggle persists locally when `/api/admin/config` requires auth.
+
 ## [0.9.0] - 2026-05-26 Renamed to Flight Finder
 
 ### Renamed
