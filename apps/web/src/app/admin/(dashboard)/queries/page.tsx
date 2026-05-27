@@ -30,6 +30,8 @@ export default async function QueriesPage() {
     active: q.active,
     expiresAt: q.expiresAt.toISOString(),
     scrapeInterval: q.scrapeInterval,
+    label: q.label,
+    preferredAggregators: q.preferredAggregators,
     snapshotCount: q._count.snapshots,
     runCount: q._count.fetchRuns,
     createdAt: q.createdAt.toISOString(),

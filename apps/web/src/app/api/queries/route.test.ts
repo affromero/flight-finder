@@ -280,4 +280,24 @@ describe('POST /api/queries', () => {
     const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { userId: string | null } };
     expect(createCall.data.userId).toBeNull();
   });
+
+  it('stores label when provided', async () => {
+    const res = await POST(makeRequest({ ...validBody, label: 'Paris via Google' }));
+    expect(res.status).toBe(201);
+    const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { label: string | null } };
+    expect(createCall.data.label).toBe('Paris via Google');
+  });
+
+  it('stores label as null when omitted', async () => {
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(201);
+    const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { label: string | null } };
+    expect(createCall.data.label).toBeNull();
+  });
+
+  it('rejects label longer than 60 characters', async () => {
+    const res = await POST(makeRequest({ ...validBody, label: 'a'.repeat(61) }));
+    expect(res.status).toBe(400);
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
 });

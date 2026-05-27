@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { ALL_AGGREGATORS, AGGREGATOR_LABEL, EXPERIMENTAL_AGGREGATORS, type Aggregator } from '@/lib/aggregators';
 import styles from './page.module.css';
 
 interface Preferences {
@@ -14,21 +15,6 @@ interface Preferences {
 }
 
 const CABIN_CLASSES = ['economy', 'premium_economy', 'business', 'first'] as const;
-
-// All four aggregators, in the visual order shown when the user has no
-// explicit preference. Skyscanner and Kayak are flagged experimental at the
-// component level so users know what they're enabling.
-const ALL_AGGREGATORS = ['google_flights', 'airline_direct', 'skyscanner', 'kayak'] as const;
-type Aggregator = (typeof ALL_AGGREGATORS)[number];
-
-const AGGREGATOR_LABEL: Record<Aggregator, string> = {
-  google_flights: 'Google Flights',
-  airline_direct: 'Airline direct',
-  skyscanner: 'Skyscanner',
-  kayak: 'Kayak',
-};
-
-const EXPERIMENTAL_AGGREGATORS = new Set<Aggregator>(['skyscanner', 'kayak']);
 
 // Build the initial render order: the user's saved order first, then any
 // aggregators they have not explicitly placed (in the canonical order).

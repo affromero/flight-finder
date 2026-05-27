@@ -24,6 +24,8 @@ interface ActiveQuery {
   lastScrapeStatus: string | null;
   lastScrapeError: string | null;
   groupId: string | null;
+  label: string | null;
+  preferredAggregators: string[];
   createdAt: string;
 }
 
@@ -32,6 +34,7 @@ interface DisplayQuery extends GroupableQuery {
   hasDeleteToken: boolean;
   scrapeStatus: string | null;
   scrapeError: string | null;
+  label?: string | null;
 }
 
 interface DisplayGroup {
@@ -126,6 +129,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
             createdAt: q.createdAt,
             snapshotCount: q.snapshotCount,
             lastScrapedAt: q.lastScrapedAt,
+            label: q.label,
             status: q.active ? 'active' : 'paused',
             hasDeleteToken: deleteTokenSet.has(q.id),
             scrapeStatus: q.lastScrapeStatus,
@@ -310,6 +314,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
           const { group, status, aggregate } = entry;
           const extraDestinations = group.destinations.length - 1;
           const primaryToken = getDeleteToken(group.primaryId);
+          const primaryLabel = group.queries.find((q) => q.id === group.primaryId)?.label;
           return (
             <div key={group.primaryId} className={styles.card}>
               <button
@@ -336,6 +341,9 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
               ) : (
                 <Link href={`/q/${group.primaryId}`} className={styles.link}>
                   <div className={styles.content}>
+                    {primaryLabel && (
+                      <span className={styles.label}>{primaryLabel}</span>
+                    )}
                     <div className={styles.route}>
                       <span className={styles.code}>{group.origin}</span>
                       <span className={styles.arrow}>&rarr;</span>

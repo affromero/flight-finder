@@ -30,7 +30,7 @@ export async function PATCH(
   // Per-row fields: applied only to the single id. preferredAggregators is
   // intentionally NOT cascaded — different siblings in a flex group can sit on
   // different aggregators (e.g. one experimental, one default).
-  const singleRowData: { preferredAggregators?: string[] } = {};
+  const singleRowData: { preferredAggregators?: string[]; label?: string | null } = {};
 
   if (body && Object.prototype.hasOwnProperty.call(body, 'scrapeInterval')) {
     let interval: number | null;
@@ -50,6 +50,20 @@ export async function PATCH(
       return apiError('active must be a boolean', 400);
     }
     cascadeData.active = body.active;
+  }
+
+  if (body && Object.prototype.hasOwnProperty.call(body, 'label')) {
+    if (body.label === null) {
+      singleRowData.label = null;
+    } else if (typeof body.label === 'string') {
+      const trimmed = body.label.trim();
+      if (trimmed.length > 60) {
+        return apiError('label must be 60 characters or fewer', 400);
+      }
+      singleRowData.label = trimmed || null;
+    } else {
+      return apiError('label must be a string or null', 400);
+    }
   }
 
   if (body && Object.prototype.hasOwnProperty.call(body, 'preferredAggregators')) {

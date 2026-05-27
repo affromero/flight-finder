@@ -26,6 +26,8 @@ function shapedRow(overrides: Record<string, unknown> = {}) {
     createdAt: new Date('2026-05-01T00:00:00Z'),
     expiresAt: new Date('2026-08-01T00:00:00Z'),
     groupId: null,
+    label: null,
+    preferredAggregators: [],
     fetchRuns: [],
     _count: { snapshots: 0 },
     ...overrides,

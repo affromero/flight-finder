@@ -42,6 +42,8 @@ export async function GET() {
       createdAt: true,
       expiresAt: true,
       groupId: true,
+      label: true,
+      preferredAggregators: true,
       fetchRuns: {
         orderBy: { startedAt: 'desc' },
         take: 1,
@@ -68,6 +70,8 @@ export async function GET() {
     lastScrapeStatus: q.fetchRuns[0]?.status ?? null,
     lastScrapeError: q.fetchRuns[0]?.error ?? null,
     groupId: q.groupId,
+    label: q.label,
+    preferredAggregators: q.preferredAggregators,
     createdAt: q.createdAt.toISOString(),
   }));
 

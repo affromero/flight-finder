@@ -94,6 +94,24 @@ describe('admin PATCH /api/admin/queries/[id]', () => {
     expect(mockQueryUpdateMany).not.toHaveBeenCalled();
   });
 
+  it('updates label as single-row (no cascade)', async () => {
+    mockQueryFindUnique.mockResolvedValue({ groupId: 'g1' });
+    const res = await PATCH(...patchRequest('q1', { label: 'My tracker' }));
+    expect(res.status).toBe(200);
+    expect(mockQueryUpdate).toHaveBeenCalledWith({
+      where: { id: 'q1' },
+      data: { label: 'My tracker' },
+    });
+    expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('rejects label longer than 60 characters', async () => {
+    mockQueryFindUnique.mockResolvedValue({ groupId: null });
+    const res = await PATCH(...patchRequest('q1', { label: 'x'.repeat(61) }));
+    expect(res.status).toBe(400);
+    expect(mockQueryUpdate).not.toHaveBeenCalled();
+  });
+
   it('keeps userId reassignment single-row even on a grouped query', async () => {
     mockQueryFindUnique.mockResolvedValue({ groupId: 'g1' });
     mockUserFindUnique.mockResolvedValue({ id: 'user_42' });

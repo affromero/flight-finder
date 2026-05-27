@@ -8,6 +8,7 @@ export interface SavedTracker {
   dateTo: string;
   createdAt: string;
   deleteToken?: string;
+  label?: string;
 }
 
 export function getDeleteToken(id: string): string | null {
