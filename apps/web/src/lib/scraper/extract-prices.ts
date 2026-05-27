@@ -155,6 +155,7 @@ export interface ExtractionConfigOverride {
   model: string;
   customBaseUrl: string | null;
   extractTimeoutSeconds?: number | null;
+  maxFlightsPerDate?: number | null;
 }
 
 export async function extractPrices(
@@ -182,8 +183,11 @@ export async function extractPrices(
         model: configOverride.model,
         customBaseUrl: configOverride.customBaseUrl,
         extractTimeoutSeconds: configOverride.extractTimeoutSeconds ?? null,
+        maxFlightsPerDate: configOverride.maxFlightsPerDate ?? null,
       }
     : await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
+
+  const effectiveMaxResults = config?.maxFlightsPerDate ?? maxResults;
 
   const provider = config?.provider ?? 'anthropic';
   const model = config?.model ?? 'claude-haiku-4-5-20251001';
@@ -211,7 +215,7 @@ Default travel date (if not visible per result): ${travelDateFallback}
 Page content:
 ${html}`;
 
-  const systemPrompt = buildSystemPrompt(filters, maxResults, source, currency);
+  const systemPrompt = buildSystemPrompt(filters, effectiveMaxResults, source, currency);
   // Block briefly when the rolling per minute window for this provider
   // is full. Audit finding D3: PREVIEW_CONCURRENCY=3 plus llm_error
   // retries can otherwise burst past free tier RPM caps and trip

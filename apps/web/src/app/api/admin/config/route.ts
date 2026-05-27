@@ -73,6 +73,9 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.extractTimeoutSeconds === 'number' && Number.isFinite(body.extractTimeoutSeconds)) {
     data.extractTimeoutSeconds = Math.max(30, Math.min(600, Math.round(body.extractTimeoutSeconds)));
   }
+  if (typeof body.maxFlightsPerDate === 'number' && Number.isFinite(body.maxFlightsPerDate)) {
+    data.maxFlightsPerDate = Math.max(5, Math.min(50, Math.round(body.maxFlightsPerDate)));
+  }
   if (body.defaultSearchMethod !== undefined) {
     if (body.defaultSearchMethod !== 'ai' && body.defaultSearchMethod !== 'manual') {
       return apiError('defaultSearchMethod must be "ai" or "manual"', 400);

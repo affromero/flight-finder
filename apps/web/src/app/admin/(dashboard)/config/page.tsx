@@ -41,6 +41,7 @@ export default function ConfigPage() {
   const [customModel, setCustomModel] = useState('');
   const [scrapeInterval, setScrapeInterval] = useState(3);
   const [extractTimeoutSeconds, setExtractTimeoutSeconds] = useState(90);
+  const [maxFlightsPerDate, setMaxFlightsPerDate] = useState(10);
   const [theme, setTheme] = useState<ThemeId>('default');
   const [defaultCurrency, setDefaultCurrency] = useState('');
   const [defaultCountry, setDefaultCountry] = useState('');
@@ -95,6 +96,7 @@ export default function ConfigPage() {
           setProvider(d.data.provider);
           setScrapeInterval(d.data.scrapeInterval);
           setExtractTimeoutSeconds(d.data.extractTimeoutSeconds ?? 90);
+          setMaxFlightsPerDate(d.data.maxFlightsPerDate ?? 10);
           setTheme(d.data.theme || 'default');
           applyTheme(d.data.theme || 'default');
           setDefaultCurrency(d.data.defaultCurrency || '');
@@ -153,6 +155,7 @@ export default function ConfigPage() {
         model: effectiveModel,
         scrapeIntervalHours: scrapeInterval,
         extractTimeoutSeconds,
+        maxFlightsPerDate,
         theme,
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
@@ -313,6 +316,22 @@ export default function ConfigPage() {
           />
           <span className={styles.toggleHint}>
             Default 90. Raise this for slow CPU bound local models that exceed the default and time out.
+          </span>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Max flights per date</label>
+          <input
+            type="number"
+            className={styles.input}
+            min={5}
+            max={50}
+            step={1}
+            value={maxFlightsPerDate}
+            onChange={(e) => setMaxFlightsPerDate(Number(e.target.value))}
+          />
+          <span className={styles.toggleHint}>
+            Default 10. Raise to 20-30 for busy routes (JFK-LAX, LHR-CDG) where 10 flights may miss afternoon or budget options. Higher values use more LLM output tokens per scrape.
           </span>
         </div>
 

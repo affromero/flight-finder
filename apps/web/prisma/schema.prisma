@@ -119,6 +119,7 @@ model ExtractionConfig {
   multiUserMode        Boolean   @default(false) // self-hosted only; admin manages User table for households
   updatedAt            DateTime  @updatedAt
   extractTimeoutSeconds Int @default(90)
+  maxFlightsPerDate     Int @default(10) // max flights the LLM extracts per date pair; raise for busy routes
   aggregatorsEnabled    String[] @default(["google_flights", "airline_direct"]) // sources allowed in the fallback chain; skyscanner/kayak opt-in
 }
 
