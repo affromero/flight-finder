@@ -404,6 +404,7 @@ export function SearchBar({
         date?: string;
         returnDate?: string;
         deleteToken: string;
+        label: string | null;
       }> = data.data.queries;
 
       for (const trackedQuery of queries) {
@@ -417,6 +418,7 @@ export function SearchBar({
           dateTo: trackedQuery.returnDate || parsed.dateTo,
           createdAt: new Date().toISOString(),
           deleteToken: trackedQuery.deleteToken,
+          label: trackedQuery.label ?? undefined,
         });
       }
 

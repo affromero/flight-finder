@@ -5,12 +5,15 @@ import { type QueryGroup, type GroupableQuery } from '@/lib/query-grouping';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
 import { ForceScrapeButton } from '@/components/ForceScrapeButton';
+import { AGGREGATOR_LABEL, type Aggregator } from '@/lib/aggregators';
 import styles from './page.module.css';
 
 export interface AdminQuery extends GroupableQuery {
   active: boolean;
   expiresAt: string;
   scrapeInterval: number | null;
+  label: string | null;
+  preferredAggregators: string[];
   snapshotCount: number;
   runCount: number;
   scrapeStatus: string | null;
@@ -26,6 +29,9 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
   const expired = group.allExpired;
   const runCount = group.queries.reduce((sum, q) => sum + q.runCount, 0);
   const extraDestinations = group.destinations.length - 1;
+  const primaryQuery = group.queries.find((q) => q.id === group.primaryId);
+  const primaryLabel = primaryQuery?.label;
+  const primaryAggregators = primaryQuery?.preferredAggregators ?? [];
   const aggregate = aggregateScrapeStatus(
     group.queries.map((q) => ({
       status: q.scrapeStatus,
@@ -76,6 +82,14 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
         )}
         {group.routeCount > 1 && (
           <span className={styles.rowGroupTag}>{group.routeCount} charts</span>
+        )}
+        {primaryLabel && (
+          <span className={styles.rowGroupTag}>{primaryLabel}</span>
+        )}
+        {primaryAggregators.length > 0 && (
+          <span className={styles.rowGroupTag}>
+            {primaryAggregators.map((a) => AGGREGATOR_LABEL[a as Aggregator] ?? a).join(', ')}
+          </span>
         )}
       </div>
       <div className={styles.rowMeta}>
