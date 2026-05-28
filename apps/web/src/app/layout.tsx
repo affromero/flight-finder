@@ -2,7 +2,7 @@ import type { Metadata, Viewport } from 'next';
 import '@/styles/globals.css';
 import { ClientBeacon } from '@/components/analytics/ClientBeacon';
 import { prisma } from '@/lib/prisma';
-import { getThemeMode, isThemeId } from '@/lib/theme';
+import { THEME_OPTIONS, getThemeMode, isThemeId } from '@/lib/theme';
 
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
@@ -58,6 +58,24 @@ const swScript = `
   }
 `;
 
+// Apply the visitor's locally-saved theme before first paint so /q/[id] and
+// other cold renders don't flash the server-rendered default. The id->mode
+// map is derived from THEME_OPTIONS so it never drifts from theme.ts.
+const themeModeMap = JSON.stringify(
+  Object.fromEntries(THEME_OPTIONS.map((t) => [t.id, t.mode])),
+);
+const themeBootstrapScript = `
+  try {
+    var t = localStorage.getItem('ft-theme');
+    var m = ${themeModeMap};
+    if (t && m[t]) {
+      var e = document.documentElement;
+      e.setAttribute('data-theme', t);
+      e.setAttribute('data-theme-mode', m[t]);
+    }
+  } catch (e) {}
+`;
+
 export default async function RootLayout({
   children,
 }: {
@@ -72,6 +90,7 @@ export default async function RootLayout({
   return (
     <html lang="en" suppressHydrationWarning data-theme={theme} data-theme-mode={getThemeMode(theme)}>
       <head>
+        <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
         <script dangerouslySetInnerHTML={{ __html: swScript }} />
       </head>
       <body>
