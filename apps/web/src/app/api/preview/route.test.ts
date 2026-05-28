@@ -16,6 +16,7 @@ const {
   mockRunPreview,
   mockValidatePreviewPayload,
   mockUpdate,
+  mockExtractionConfigFindFirst,
 } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
   mockCreate: vi.fn(),
@@ -25,6 +26,7 @@ const {
   mockUpdate: vi.fn().mockResolvedValue({}),
   mockRunPreview: vi.fn().mockResolvedValue({ routes: [] }),
   mockValidatePreviewPayload: vi.fn().mockReturnValue({ origins: [], destinations: [], isOneWay: false }),
+  mockExtractionConfigFindFirst: vi.fn().mockResolvedValue({ previewMaxCombos: 24 }),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -36,6 +38,9 @@ vi.mock('@/lib/prisma', () => ({
       deleteMany: mockDeleteMany,
       updateMany: mockUpdateMany,
       update: mockUpdate,
+    },
+    extractionConfig: {
+      findFirst: mockExtractionConfigFindFirst,
     },
   },
 }));

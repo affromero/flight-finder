@@ -60,3 +60,33 @@ export async function authorizeMutation(
   }
   return { ok: true };
 }
+
+/**
+ * Whether the current request can manage `query` WITHOUT presenting a delete
+ * token. Used by the public tracker page to decide which edit affordances to
+ * render server-side, so a localStorage-less browser (e.g. after a machine
+ * migration) still surfaces the controls the backend would accept.
+ *
+ * Mirrors `authorizeMutation` minus the deleteToken branch:
+ *   - self hosted solo mode: anyone with box access manages everything.
+ *   - multi user mode: admin session, or the owning user.
+ *   - pure hosted mode: never (token is the only key), so anonymous visitors
+ *     keep the existing token-gated behavior.
+ */
+export async function canManageQueryWithoutToken(
+  query: { userId?: string | null },
+): Promise<boolean> {
+  const isSelfHosted = process.env.SELF_HOSTED === 'true';
+  const multiUser = isSelfHosted ? await isMultiUserEnabled() : false;
+
+  if (isSelfHosted && !multiUser) return true;
+
+  if (multiUser) {
+    const user = await getCurrentUser();
+    if (user?.isAdmin) return true;
+    if (user && query.userId && query.userId === user.id) return true;
+    return false;
+  }
+
+  return false;
+}

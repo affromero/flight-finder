@@ -15,15 +15,18 @@ const INTERVALS = [
 interface Props {
   queryId: string;
   currentInterval: number | null;
+  // Server-resolved: this viewer may edit even without a local delete token
+  // (self-hosted solo, admin, or owner). See canManageQueryWithoutToken.
+  canEdit?: boolean;
 }
 
-export function ScrapeInterval({ queryId, currentInterval }: Props) {
+export function ScrapeInterval({ queryId, currentInterval, canEdit = false }: Props) {
   const [interval, setInterval] = useState<number | null>(currentInterval);
   const [saving, setSaving] = useState(false);
 
   const token = typeof window !== 'undefined' ? getDeleteToken(queryId) : null;
 
-  if (!token) return null;
+  if (!token && !canEdit) return null;
 
   const handleChange = async (value: number | null) => {
     if (value === interval) return;

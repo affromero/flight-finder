@@ -17,6 +17,7 @@ import { StackedSortControls, type StackedItem } from '@/components/StackedSortC
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
 import { ForceScrapeButton } from '@/components/ForceScrapeButton';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
+import { canManageQueryWithoutToken } from '@/lib/query-auth';
 import { groupDateRange } from './group-date-range';
 import styles from './page.module.css';
 
@@ -89,6 +90,7 @@ interface QueryWithSnapshots {
     vpnCountries: string[];
     preferredAggregators: string[];
     label: string | null;
+    userId: string | null;
   };
   snapshots: Array<{
     id: string;
@@ -262,6 +264,11 @@ export default async function ChartPage({ params }: Props) {
 
   const adminEnabledAggregators = adminConfig?.aggregatorsEnabled ?? ['google_flights', 'airline_direct'];
 
+  // Whether to surface the per-tracker edit controls when this browser has no
+  // saved delete token (e.g. after a machine migration). The backend already
+  // authorizes solo/admin/owner mutations tokenless; this keeps the UI in step.
+  const canEdit = await canManageQueryWithoutToken(primary.query);
+
   // Mark first view for 24h auto-cleanup
   if (!primary.query.firstViewedAt) {
     await prisma.query.update({
@@ -387,7 +394,7 @@ export default async function ChartPage({ params }: Props) {
             </div>
           </>
         )}
-        <TrackerLabel queryId={id} currentLabel={primary.query.label} />
+        <TrackerLabel queryId={id} currentLabel={primary.query.label} canEdit={canEdit} />
         <div className={styles.headerActions}>
           <div className={styles.expiry}>
             {expired ? (
@@ -436,11 +443,12 @@ export default async function ChartPage({ params }: Props) {
               {primary.query.active && (
                 <ForceScrapeButton queryId={id} ariaLabel="Refresh prices now" />
               )}
-              <ScrapeInterval queryId={id} currentInterval={primary.query.scrapeInterval} />
+              <ScrapeInterval queryId={id} currentInterval={primary.query.scrapeInterval} canEdit={canEdit} />
               <AggregatorPicker
                 queryId={id}
                 currentAggregators={primary.query.preferredAggregators}
                 adminEnabledAggregators={adminEnabledAggregators}
+                canEdit={canEdit}
               />
               <DeleteTracker queryId={id} />
             </>
