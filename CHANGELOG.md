@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.9.2] - 2026-05-28
+
+### Added
+* **Configurable preview combination cap** (#89): new `previewMaxCombos` setting in `/admin/config` (default 24, range 6-96) bounds the routes x dates fan-out of the create-time preview scrape only. Wide multi-airport flex searches that exceeded the old hardcoded 24 can now be created by raising the cap; the recurring cron always covers the full grid.
+
+### Fixed
+* **Per-tracker edit controls now appear without a local delete token** (#89): the label, aggregator picker, and scrape interval controls were gated on the browser's localStorage token, so they vanished on a tracker whose token was lost (e.g. after a machine migration) even though the backend would accept the edit. They now render whenever the server already authorizes the change (self hosted solo, admin, or owner).
+* **Theme no longer flashes the default on tracker pages** (#89): the saved Dark/Light choice is applied by an inline head script before first paint, so `/q/[id]` and other cold renders stop briefly reverting to the default theme.
+
 ## [0.9.1] - 2026-05-27
 
 ### Added
