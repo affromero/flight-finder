@@ -127,7 +127,10 @@ export function buildCacheKey(
   return `preview:${hash}`;
 }
 
-export function validatePreviewPayload(payload: PreviewRequestPayload): PreviewValidationResult {
+export function validatePreviewPayload(
+  payload: PreviewRequestPayload,
+  maxCombos = 24,
+): PreviewValidationResult {
   const { dateFrom, dateTo, outboundDates, returnDates, origins, destinations, tripType } = payload;
 
   if (origins.length === 0 || destinations.length === 0 || !dateFrom || !dateTo) {
@@ -162,8 +165,8 @@ export function validatePreviewPayload(payload: PreviewRequestPayload): PreviewV
     : [dateFrom]);
   const totalTasks = combos * datesToScrape.length;
 
-  if (totalTasks > 24) {
-    throw new Error(`Too many date/route combinations (${totalTasks}). Cap is 24 (combos x dates).`);
+  if (totalTasks > maxCombos) {
+    throw new Error(`Too many date/route combinations (${totalTasks}). Cap is ${maxCombos} (combos x dates).`);
   }
 
   if (returnDates && outboundDates && !isOneWay && returnDates.length !== outboundDates.length) {
@@ -308,9 +311,9 @@ export async function runPreview(
   payload: PreviewRequestPayload,
   options: RunPreviewOptions = {}
 ): Promise<PreviewResultPayload> {
-  const { origins, destinations, isOneWay } = validatePreviewPayload(payload);
-  const { dateFrom, dateTo, maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference, cabinClass, tripType, currency: bodyCurrency } = payload;
   const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
+  const { origins, destinations, isOneWay } = validatePreviewPayload(payload, config?.previewMaxCombos ?? 24);
+  const { dateFrom, dateTo, maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference, cabinClass, tripType, currency: bodyCurrency } = payload;
   const currency: string | null = config?.defaultCurrency ?? bodyCurrency;
   const provider = config?.provider ?? 'anthropic';
   const model = config?.model ?? 'claude-haiku-4-5-20251001';

@@ -74,7 +74,7 @@ describe('settings page parity with admin config', () => {
     // aggregator allowlist that only an admin should configure). Core
     // data fields must exist in both.
     const coreFields = adminFields.filter(
-      (f) => !['hasAdminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'aggregatorsEnabled'].includes(f)
+      (f) => !['hasAdminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'previewMaxCombos', 'aggregatorsEnabled'].includes(f)
     );
 
     for (const field of coreFields) {
@@ -93,7 +93,7 @@ describe('settings page parity with admin config', () => {
     // extract timeout, the aggregator allowlist) that settings doesn't
     // surface. All other extraction-related fields should be in both.
     const extractionFields = adminSaveFields.filter(
-      (f) => !['adminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'aggregatorsEnabled'].includes(f)
+      (f) => !['adminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'previewMaxCombos', 'aggregatorsEnabled'].includes(f)
     );
 
     for (const field of extractionFields) {

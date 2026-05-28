@@ -57,7 +57,7 @@ vi.mock('@/lib/scraper/airline-urls', () => ({
   isKnownAirline: () => false,
 }));
 
-import { runPreview, parsePreviewConcurrency } from './preview-runner';
+import { runPreview, parsePreviewConcurrency, validatePreviewPayload } from './preview-runner';
 
 function makePayload(overrides: Partial<PreviewRequestPayload> = {}): PreviewRequestPayload {
   return {
@@ -343,6 +343,37 @@ describe('parsePreviewConcurrency (audit D1)', () => {
     expect(parsePreviewConcurrency('0')).toBe(3);
     expect(parsePreviewConcurrency('-5')).toBe(3);
     expect(parsePreviewConcurrency('')).toBe(3);
+  });
+});
+
+describe('validatePreviewPayload combo cap (issue #89, configurable)', () => {
+  // 5 origins x 6 destinations x 1 date = 30 combos.
+  const wideFlexPayload = makePayload({
+    tripType: 'one_way',
+    dateFrom: '2026-11-09',
+    dateTo: '2026-11-09',
+    origins: [
+      { code: 'JFK', name: 'A' }, { code: 'EWR', name: 'B' }, { code: 'BOS', name: 'C' },
+      { code: 'PHL', name: 'D' }, { code: 'BWI', name: 'E' },
+    ],
+    destinations: [
+      { code: 'LAX', name: 'F' }, { code: 'SFO', name: 'G' }, { code: 'SAN', name: 'H' },
+      { code: 'SEA', name: 'I' }, { code: 'PDX', name: 'J' }, { code: 'LAS', name: 'K' },
+    ],
+  });
+
+  it('rejects a 30-combo search under the default cap of 24', () => {
+    expect(() => validatePreviewPayload(wideFlexPayload)).toThrow(
+      'Too many date/route combinations (30). Cap is 24 (combos x dates).',
+    );
+  });
+
+  it('accepts the same 30-combo search when the admin raises the cap to 30', () => {
+    expect(() => validatePreviewPayload(wideFlexPayload, 30)).not.toThrow();
+  });
+
+  it('reports the configured cap in the error message, not a hardcoded 24', () => {
+    expect(() => validatePreviewPayload(wideFlexPayload, 12)).toThrow(/Cap is 12/);
   });
 });
 

@@ -178,8 +178,13 @@ export async function POST(request: NextRequest) {
 
   const payload = toPreviewRequestPayload(body as Record<string, unknown>);
 
+  const config = await prisma.extractionConfig.findFirst({
+    where: { id: 'singleton' },
+    select: { previewMaxCombos: true },
+  });
+
   try {
-    validatePreviewPayload(payload);
+    validatePreviewPayload(payload, config?.previewMaxCombos ?? 24);
   } catch (error) {
     return apiError(error instanceof Error ? error.message : 'Invalid preview request', 400);
   }
