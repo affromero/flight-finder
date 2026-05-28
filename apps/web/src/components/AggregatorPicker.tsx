@@ -9,9 +9,12 @@ interface Props {
   queryId: string;
   currentAggregators: string[];
   adminEnabledAggregators: string[];
+  // Server-resolved: this viewer may edit even without a local delete token
+  // (self-hosted solo, admin, or owner). See canManageQueryWithoutToken.
+  canEdit?: boolean;
 }
 
-export function AggregatorPicker({ queryId, currentAggregators, adminEnabledAggregators }: Props) {
+export function AggregatorPicker({ queryId, currentAggregators, adminEnabledAggregators, canEdit = false }: Props) {
   const [selected, setSelected] = useState<Set<Aggregator>>(
     () => new Set(
       currentAggregators.filter((s): s is Aggregator =>
@@ -23,7 +26,7 @@ export function AggregatorPicker({ queryId, currentAggregators, adminEnabledAggr
 
   const token = typeof window !== 'undefined' ? getDeleteToken(queryId) : null;
 
-  if (!token) return null;
+  if (!token && !canEdit) return null;
 
   const adminAllowed = new Set(adminEnabledAggregators);
 

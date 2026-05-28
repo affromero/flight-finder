@@ -7,9 +7,12 @@ import styles from './TrackerLabel.module.css';
 interface Props {
   queryId: string;
   currentLabel: string | null;
+  // Server-resolved: this viewer may edit even without a local delete token
+  // (self-hosted solo, admin, or owner). See canManageQueryWithoutToken.
+  canEdit?: boolean;
 }
 
-export function TrackerLabel({ queryId, currentLabel }: Props) {
+export function TrackerLabel({ queryId, currentLabel, canEdit = false }: Props) {
   const [label, setLabel] = useState(currentLabel);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(currentLabel ?? '');
@@ -51,7 +54,7 @@ export function TrackerLabel({ queryId, currentLabel }: Props) {
     requestAnimationFrame(() => inputRef.current?.focus());
   };
 
-  if (!token) {
+  if (!token && !canEdit) {
     if (!label) return null;
     return (
       <div className={styles.root}>
