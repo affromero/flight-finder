@@ -10,10 +10,12 @@
 # binaries and asserts the recorded invocations.
 #
 # Coverage per command, per runtime:
-#   docker_v2       docker + `docker compose` (v2 native)
-#   docker_v1       docker + `docker-compose` (v1 standalone)
-#   podman_native   podman + `podman compose` (v5+ native subcommand)
-#   podman_pc       podman + `podman-compose` (standalone Python tool)
+#   docker_v2        docker + `docker compose` (v2 native)
+#   docker_v1        docker + `docker-compose` (v1 standalone)
+#   podman_native    podman + `podman compose` (v5+ native subcommand)
+#   podman_delegated podman + `podman compose` wrapper delegating to the
+#                    standalone podman-compose provider (Fedora default, #96)
+#   podman_pc        podman + `podman-compose` (standalone Python tool)
 #
 # Non-TTY only (stdin redirected from /dev/null). The TTY branch of
 # `cmd_tui` is covered by the helper unit test in install-flow-test.sh.
@@ -105,14 +107,25 @@ SHIM
 
 write_podman_shim() {
   # $1: 0 if `podman compose` native subcommand available, 1 if not
+  # $2: optional provider that `podman compose` delegates to (e.g.
+  #     "podman-compose"). When set, `podman compose version` prints podman's
+  #     external-provider banner on stderr plus a "<provider> version N" line
+  #     on stdout, exactly as the real wrapper does, so the CLI can detect the
+  #     delegation (#96). Empty (default) mimics a non-delegating engine.
   local has_native="$1"
+  local provider="${2:-}"
   cat > "$SANDBOX/bin/podman" <<SHIM
 #!/usr/bin/env bash
 $SHIM_PREAMBLE
 case "\$1" in
   compose)
     case "\${2:-}" in
-      version) exit $has_native ;;
+      version)
+        if [ -n "$provider" ]; then
+          printf '>>>> Executing external compose provider "/usr/bin/%s". Please see %s(1) for how to disable this message. <<<<\n' "$provider" "$provider" >&2
+          printf '%s version 1.0.6\n' "$provider"
+        fi
+        exit $has_native ;;
       *)
         record_call podman "\$@"
         exit $has_native ;;
@@ -293,6 +306,12 @@ setup_runtime() {
       write_docker_compose_v1_shim ;;
     podman_native)
       write_podman_shim 0 ;;
+    podman_delegated)
+      # `podman compose` exists (exit 0) but delegates to the standalone
+      # podman-compose provider, which rejects -it/-i. The CLI must detect the
+      # delegation and collapse to the podman-compose path with -T flags (#96).
+      write_podman_shim 0 podman-compose
+      write_podman_compose_shim ;;
     podman_pc)
       write_podman_shim 1
       write_podman_compose_shim ;;
@@ -414,6 +433,28 @@ test_tui_list_podman_pc() {
     'podman-compose -f docker-compose.yml exec -T web flight-finder-tui --list'
 }
 
+test_tui_headless_podman_delegated() {
+  # #96: `podman compose version` succeeds, but the wrapper delegates to the
+  # external podman-compose provider, which rejects -it/-i. The CLI must detect
+  # the delegation and route exec through podman-compose with -T — never
+  # `podman compose ... -i`.
+  setup_runtime podman_delegated
+  run_cli --headless
+  assert_recorded "delegated podman compose routes exec through podman-compose -T (#96)" \
+    '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --headless$'
+  assert_not_recorded "delegated podman never sends -it/-i (#96)" \
+    'podman-compose .* exec [^ ]*(-it|-i ) '
+  assert_not_recorded "delegated podman does not exec through the podman compose wrapper (#96)" \
+    '^podman compose -f docker-compose.yml exec'
+}
+
+test_tui_list_podman_delegated() {
+  setup_runtime podman_delegated
+  run_cli --list
+  assert_recorded "delegated podman compose --list routes through podman-compose -T (#96)" \
+    '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --list$'
+}
+
 # Codex audit gap 10: argv boundaries must survive recording so a
 # multi-word arg ("--model 'gpt 5 turbo'") is distinguishable from three
 # separate words. The shims use printf %q per arg, which backslash-
@@ -438,7 +479,7 @@ test_tui_preserves_multi_word_arg_boundaries() {
 # ---------------------------------------------------------------------------
 
 test_update_pulls_then_force_recreates_web() {
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli update
     LAST_RUNTIME="$rt"; LAST_CMD="update"
@@ -456,7 +497,7 @@ test_update_pulls_then_force_recreates_web() {
 # ---------------------------------------------------------------------------
 
 test_start_calls_up_dash_d() {
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli start
     LAST_RUNTIME="$rt"; LAST_CMD="start"
@@ -465,7 +506,7 @@ test_start_calls_up_dash_d() {
 }
 
 test_logs_calls_dc_logs_f_web() {
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli logs
     LAST_RUNTIME="$rt"; LAST_CMD="logs"
@@ -473,6 +514,7 @@ test_logs_calls_dc_logs_f_web() {
       docker_v2)     assert_recorded "logs -> docker compose logs -f web"   '^docker compose -f docker-compose.yml logs -f web$' ;;
       docker_v1)     assert_recorded "logs -> docker-compose logs -f web"   '^docker-compose -f docker-compose.yml logs -f web$' ;;
       podman_native) assert_recorded "logs -> podman compose logs -f web"   '^podman compose -f docker-compose.yml logs -f web$' ;;
+      podman_delegated) assert_recorded "logs -> podman-compose logs -f web (delegated #96)" '^podman-compose -f docker-compose.yml logs -f web$' ;;
       podman_pc)     assert_recorded "logs -> podman-compose logs -f web"   '^podman-compose -f docker-compose.yml logs -f web$' ;;
     esac
   done
@@ -481,7 +523,7 @@ test_logs_calls_dc_logs_f_web() {
 test_no_arg_runs_full_foreground_pipeline() {
   # Bare `fairtrail` triggers cmd_start_foreground:
   #   dc up -d -> poll /api/health -> dc logs -f web (shim returns 0).
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli ""
     LAST_RUNTIME="$rt"; LAST_CMD="(no-arg)"
@@ -492,6 +534,7 @@ test_no_arg_runs_full_foreground_pipeline() {
       docker_v2)     assert_recorded "no-arg tails docker compose logs -f web"   '^docker compose -f docker-compose.yml logs -f web$' ;;
       docker_v1)     assert_recorded "no-arg tails docker-compose logs -f web"   '^docker-compose -f docker-compose.yml logs -f web$' ;;
       podman_native) assert_recorded "no-arg tails podman compose logs -f web"   '^podman compose -f docker-compose.yml logs -f web$' ;;
+      podman_delegated) assert_recorded "no-arg tails podman-compose logs -f web (delegated #96)" '^podman-compose -f docker-compose.yml logs -f web$' ;;
       podman_pc)     assert_recorded "no-arg tails podman-compose logs -f web"   '^podman-compose -f docker-compose.yml logs -f web$' ;;
     esac
   done
@@ -499,7 +542,7 @@ test_no_arg_runs_full_foreground_pipeline() {
 
 test_stop_aborts_without_confirmation() {
   # Empty answer (just hitting Enter) → cancel branch. dc stop must NOT run.
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli stop
     LAST_RUNTIME="$rt"; LAST_CMD="stop"
@@ -510,7 +553,7 @@ test_stop_aborts_without_confirmation() {
 
 test_stop_invokes_compose_on_y() {
   # Answer "y" → dc stop must run with the runtime-correct prefix.
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli_with_input $'y\n' stop
     LAST_RUNTIME="$rt"; LAST_CMD="stop"
@@ -518,13 +561,14 @@ test_stop_invokes_compose_on_y() {
       docker_v2)     assert_recorded "stop -> docker compose stop"   '^docker compose -f docker-compose.yml stop$' ;;
       docker_v1)     assert_recorded "stop -> docker-compose stop"   '^docker-compose -f docker-compose.yml stop$' ;;
       podman_native) assert_recorded "stop -> podman compose stop"   '^podman compose -f docker-compose.yml stop$' ;;
+      podman_delegated) assert_recorded "stop -> podman-compose stop (delegated #96)" '^podman-compose -f docker-compose.yml stop$' ;;
       podman_pc)     assert_recorded "stop -> podman-compose stop"   '^podman-compose -f docker-compose.yml stop$' ;;
     esac
   done
 }
 
 test_uninstall_aborts_without_confirmation() {
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli uninstall
     LAST_RUNTIME="$rt"; LAST_CMD="uninstall"
@@ -537,7 +581,7 @@ test_uninstall_aborts_without_confirmation() {
 }
 
 test_uninstall_invokes_compose_and_removes_dir_on_y() {
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli_with_input $'y\n' uninstall
     LAST_RUNTIME="$rt"; LAST_CMD="uninstall"
@@ -545,6 +589,7 @@ test_uninstall_invokes_compose_and_removes_dir_on_y() {
       docker_v2)     assert_recorded "uninstall -> docker compose down -v"   '^docker compose -f docker-compose.yml down -v$' ;;
       docker_v1)     assert_recorded "uninstall -> docker-compose down -v"   '^docker-compose -f docker-compose.yml down -v$' ;;
       podman_native) assert_recorded "uninstall -> podman compose down -v"   '^podman compose -f docker-compose.yml down -v$' ;;
+      podman_delegated) assert_recorded "uninstall -> podman-compose down -v (delegated #96)" '^podman-compose -f docker-compose.yml down -v$' ;;
       podman_pc)     assert_recorded "uninstall -> podman-compose down -v"   '^podman-compose -f docker-compose.yml down -v$' ;;
     esac
     if [ ! -d "$SANDBOX/.flight-finder" ]; then
@@ -609,7 +654,7 @@ SHIM
 
 test_status_only_calls_curl() {
   # status should not invoke compose at all — pure /api/health probe.
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli status
     LAST_RUNTIME="$rt"; LAST_CMD="status"
@@ -618,7 +663,7 @@ test_status_only_calls_curl() {
 }
 
 test_version_only_calls_curl() {
-  for rt in docker_v2 docker_v1 podman_native podman_pc; do
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
     run_cli version
     LAST_RUNTIME="$rt"; LAST_CMD="version"
@@ -753,6 +798,8 @@ test_tui_headless_docker_v1
 test_tui_headless_podman_native
 test_tui_headless_podman_pc
 test_tui_list_podman_pc
+test_tui_headless_podman_delegated
+test_tui_list_podman_delegated
 test_tui_preserves_multi_word_arg_boundaries
 test_update_pulls_then_force_recreates_web
 test_start_calls_up_dash_d
