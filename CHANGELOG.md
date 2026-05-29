@@ -1,6 +1,6 @@
 # Changelog
 
-## [Unreleased]
+## [0.9.3] - 2026-05-29
 
 ### Fixed
 * **Chart hover box no longer overlaps the axis labels** (#97): on the price chart the unified hover box inherited the transparent `paper_bgcolor`, so the x axis date ticks bled through it into unreadable text-on-text when hovering a point low on the plot. The hover label now has an explicit opaque surface, border, and font, so it cleanly occludes whatever sits behind it. (This is the browser chart on `/q/[id]`, not the terminal TUI.)
