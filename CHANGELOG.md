@@ -3,6 +3,7 @@
 ## [Unreleased]
 
 ### Fixed
+* **Chart hover box no longer overlaps the axis labels** (#97): on the price chart the unified hover box inherited the transparent `paper_bgcolor`, so the x axis date ticks bled through it into unreadable text-on-text when hovering a point low on the plot. The hover label now has an explicit opaque surface, border, and font, so it cleanly occludes whatever sits behind it. (This is the browser chart on `/q/[id]`, not the terminal TUI.)
 * **`flightfinder` TUI flags broke when `podman compose` delegates to `podman-compose`** (#96): on Fedora `podman compose` is a thin wrapper around the standalone `podman-compose` provider, which rejects the `-it`/`-i` exec flags, so `flightfinder --list` and `flightfinder --headless` aborted with `unrecognized arguments: -it`. Detection treated a successful `podman compose version` as a native, docker compatible engine and sent `-it`. It now inspects the version output (the external provider banner on stderr and the `podman-compose version` line on stdout) and, when `podman-compose` is the active provider, drives it directly so the existing helper selects `-T`/empty. A new `podman_delegated` runtime in `cli-runtime-test.sh` mirrors podman's external provider banner and asserts exec routes through `podman-compose` with `-T`, never through the wrapper with `-it`.
 
 ## [0.9.2] - 2026-05-28
