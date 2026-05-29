@@ -80,8 +80,23 @@ fi
 
 # Detect compose command based on detected container runtime
 if [ "$CONTAINER_CMD" = "podman" ]; then
-  if podman compose version &>/dev/null 2>&1; then
-    _DC="podman compose"
+  # `podman compose` is a thin wrapper that shells out to an external provider
+  # (docker-compose or the standalone podman-compose), it is not a native
+  # engine. When the active provider is podman-compose (Fedora's default) it
+  # rejects Docker's -it/-i exec flags, so a successful `podman compose version`
+  # is NOT proof that -it is safe (issue #96). The provider name surfaces in the
+  # version output: both the ">>>> Executing external compose provider" banner
+  # on stderr and the "podman-compose version N" line on stdout. Capture both
+  # (2>&1 into a var so nothing leaks to the terminal) and, when podman-compose
+  # is the provider, drive it directly: correct -T/empty flags via the helper
+  # and no provider banner on every command.
+  if _pc_probe=$(podman compose version 2>&1); then
+    if printf '%s\n' "$_pc_probe" | grep -q 'podman-compose' \
+        && command -v podman-compose &>/dev/null; then
+      _DC="podman-compose"
+    else
+      _DC="podman compose"
+    fi
   elif command -v podman-compose &>/dev/null; then
     _DC="podman-compose"
   else

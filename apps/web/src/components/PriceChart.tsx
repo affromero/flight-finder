@@ -265,6 +265,16 @@ export function PriceChart({ snapshots, currency = 'USD' }: { snapshots: Snapsho
             y: -0.15,
             font: { size: 11 },
           },
+          // Opaque hover box. The unified label otherwise inherits the
+          // transparent paper_bgcolor, so the x axis date ticks bled through
+          // it into unreadable text-on-text when hovering a low point (#97).
+          // A solid surface cleanly occludes whatever sits behind the box.
+          hoverlabel: {
+            bgcolor: '#0e3640',
+            bordercolor: '#80a8a5',
+            font: { family: 'IBM Plex Mono, monospace', color: '#ecdfc0', size: 11 },
+            align: 'left',
+          },
           hovermode: 'x unified',
           autosize: true,
         }}
