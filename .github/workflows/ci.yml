@@ -51,6 +51,15 @@ jobs:
     runs-on: ubuntu-latest
     if: github.ref == 'refs/heads/main'
     needs: [ci, install-smoke, integration]
+    # Staging SSHes into the single shared prod host and takes a lock there.
+    # Serialize across commits so two main pushes landing close together (for
+    # example a PR merge immediately followed by a version bump commit) cannot
+    # race the lock and fail. Wait for the running job rather than cancelling
+    # it, so cancelling during an active SSH session never orphans containers
+    # or locks on the shared host.
+    concurrency:
+      group: staging-host
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
       - name: Setup SSH
