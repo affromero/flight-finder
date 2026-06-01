@@ -21,6 +21,8 @@ jobs:
       - run: npm run typecheck
       - run: npx vitest run --reporter=verbose
         working-directory: apps/web
+      - run: npx vitest run --reporter=verbose
+        working-directory: packages/cli
       - run: npm run build
       - run: bash scripts/install-flow-test.sh
       - run: bash scripts/cli-runtime-test.sh
