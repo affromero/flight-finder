@@ -96,6 +96,11 @@ COPY --from=proddeps --chown=node:node /app/node_modules/@google ./node_modules/
 #      chalk v5 that npm could not hoist due to version conflicts at root.
 # Without layer 2 the wrapper picks up commander v2.20.3 which is ESM hostile.
 COPY --from=builder --chown=node:node /app/packages/cli/dist /app/packages/cli/dist
+# Ship the cli package.json next to dist so Node finds "type":"module" when it
+# resolves dist/index.js. Without it Node walks up to the Next standalone
+# /app/package.json (no type field) and reparses every run as ESM, printing the
+# MODULE_TYPELESS_PACKAGE_JSON performance warning.
+COPY --from=builder --chown=node:node /app/packages/cli/package.json /app/packages/cli/package.json
 COPY --from=proddeps --chown=node:node /app/node_modules /app/packages/cli/node_modules
 COPY --from=proddeps --chown=node:node /app/packages/cli/node_modules /app/packages/cli/node_modules
 RUN printf '#!/bin/sh\nexec node /app/packages/cli/dist/index.js "$@"\n' > /home/node/.npm-global/bin/flight-finder-tui \
