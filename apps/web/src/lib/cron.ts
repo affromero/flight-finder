@@ -52,15 +52,17 @@ async function runAndReschedule() {
   console.log(`[cron] Starting scheduled scrape...`);
   try {
     const { runScrapeAll, cleanupUnvisitedQueries } = await import('./scraper/run-scrape');
+    const { expireDepartedQueries } = await import('./scraper/expire-queries');
 
     await cleanupUnvisitedQueries();
+    const expired = await expireDepartedQueries();
     const results = await runScrapeAll();
     lastScrapeAt = new Date();
 
     const successful = results.filter((r) => r.status === 'success').length;
     const failed = results.filter((r) => r.status === 'failed').length;
     const snapshots = results.reduce((sum, r) => sum + r.snapshotsCount, 0);
-    console.log(`[cron] Scrape complete: ${successful} ok, ${failed} failed, ${snapshots} snapshots`);
+    console.log(`[cron] Scrape complete: ${successful} ok, ${failed} failed, ${snapshots} snapshots, ${expired} expired`);
   } catch (err) {
     console.error('[cron] Scrape failed:', err instanceof Error ? err.message : err);
   }
