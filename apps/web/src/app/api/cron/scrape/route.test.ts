@@ -3,10 +3,15 @@ import { NextRequest } from 'next/server';
 
 const mockRunScrapeAll = vi.fn();
 const mockCleanup = vi.fn();
+const mockExpire = vi.fn().mockResolvedValue(0);
 
 vi.mock('@/lib/scraper/run-scrape', () => ({
   runScrapeAll: () => mockRunScrapeAll(),
   cleanupUnvisitedQueries: () => mockCleanup(),
+}));
+
+vi.mock('@/lib/scraper/expire-queries', () => ({
+  expireDepartedQueries: () => mockExpire(),
 }));
 
 import { GET } from './route';
@@ -30,6 +35,7 @@ describe('GET /api/cron/scrape', () => {
 
   it('runs scrape and returns summary on valid auth', async () => {
     mockCleanup.mockResolvedValue(2);
+    mockExpire.mockResolvedValue(4);
     mockRunScrapeAll.mockResolvedValue([
       { status: 'success', snapshotsCount: 5, extractionCost: 0.01 },
       { status: 'failed', snapshotsCount: 0, extractionCost: 0 },
@@ -43,6 +49,7 @@ describe('GET /api/cron/scrape', () => {
     expect(body.data.successful).toBe(1);
     expect(body.data.failed).toBe(1);
     expect(body.data.totalSnapshots).toBe(5);
+    expect(body.data.expiredDeparted).toBe(4);
   });
 
   it('includes cleanup count in response', async () => {

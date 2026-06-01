@@ -11,6 +11,10 @@ vi.mock('@/lib/prisma', () => ({
   prisma: {
     query: { create: mockQueryCreate },
     priceSnapshot: { createMany: mockSnapshotCreateMany },
+    // resolveOwnerId() reads the singleton config; solo mode (multiUserMode
+    // false) short circuits before any user lookup, leaving trackers unowned.
+    extractionConfig: { findUnique: vi.fn().mockResolvedValue({ multiUserMode: false }) },
+    user: { findFirst: vi.fn().mockResolvedValue(null) },
   },
 }));
 

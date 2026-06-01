@@ -108,6 +108,10 @@ export function QueryList({ onView }: QueryListProps) {
     );
   }
 
+  const now = new Date();
+  const todayStart = new Date();
+  todayStart.setUTCHours(0, 0, 0, 0);
+
   return (
     <Box flexDirection="column">
       <Box marginBottom={1}>
@@ -128,8 +132,11 @@ export function QueryList({ onView }: QueryListProps) {
         const isCursor = i === cursor;
         const route = `${q.origin} → ${q.destination}`;
         const dates = `${formatDate(q.dateFrom)} – ${formatDate(q.dateTo)}`;
-        const isExpired = q.expiresAt && q.expiresAt < new Date();
-        const status = !q.active ? 'Paused' : isExpired ? 'Expired' : 'Active';
+        // Departure passed means the trip is unbookable; show Expired even if
+        // the scrape sweep has not yet flipped active to false.
+        const departed = q.dateFrom < todayStart;
+        const isExpired = departed || (q.expiresAt !== null && q.expiresAt < now);
+        const status = isExpired ? 'Expired' : !q.active ? 'Paused' : 'Active';
         const statusColor = status === 'Active' ? 'green' : status === 'Expired' ? 'red' : 'yellow';
         const lastScraped = q.lastScraped ? formatTimeAgo(q.lastScraped) : '—';
         const prices = q.minPrice !== null && q.maxPrice !== null

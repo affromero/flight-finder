@@ -1,32 +1,42 @@
 import React from 'react';
 import { Box, Text } from 'ink';
 import { formatCurrency, formatStops } from '../lib/format.js';
-
-interface Snapshot {
-  price: number;
-  currency: string;
-  airline: string;
-  stops: number;
-  duration: string | null;
-  bookingUrl: string | null;
-  scrapedAt: Date;
-}
+import { pickBest, formatBookingLine, type BestPriceSnapshot } from '../lib/best-price.js';
 
 interface BestPriceCardProps {
-  snapshots: Snapshot[];
+  snapshots: BestPriceSnapshot[];
 }
 
 export function BestPriceCard({ snapshots }: BestPriceCardProps) {
-  if (snapshots.length === 0) return null;
+  const best = pickBest(snapshots);
+  if (!best) return null;
 
-  const best = snapshots.reduce((min, s) => (s.price < min.price ? s : min), snapshots[0]!);
+  const bookingLine = formatBookingLine(best.bookingUrl);
 
+  // The box hugs its content (alignSelf flex-start) and only ever holds short
+  // lines, so ink keeps the border aligned. The booking url renders below the
+  // box as its own line: a long url wraps naturally instead of blowing out the
+  // border, and stays copyable in full.
   return (
     <Box flexDirection="column">
-      <Text color="cyan">{'┌─ Best Price ─────────────────────────┐'}</Text>
-      <Text color="cyan">{'│'} <Text color="green" bold>{formatCurrency(best.price, best.currency)}</Text>{'  '}<Text color="white">{best.airline}</Text>{' · '}<Text dimColor>{formatStops(best.stops)}</Text>{best.duration ? ` · ${best.duration}` : ''}{'                                      '.slice(0, Math.max(0, 36 - formatCurrency(best.price, best.currency).length - best.airline.length - formatStops(best.stops).length - (best.duration?.length ?? 0) - 7))}<Text color="cyan">{'│'}</Text></Text>
-      {best.bookingUrl && <Text color="cyan">{'│'} <Text dimColor>Book: {best.bookingUrl.slice(0, 33)}</Text><Text color="cyan">{' │'}</Text></Text>}
-      <Text color="cyan">{'└──────────────────────────────────────┘'}</Text>
+      <Box
+        flexDirection="column"
+        borderStyle="round"
+        borderColor="cyan"
+        paddingX={1}
+        alignSelf="flex-start"
+      >
+        <Text bold color="cyan">Best Price</Text>
+        <Text>
+          <Text color="green" bold>{formatCurrency(best.price, best.currency)}</Text>
+          {'  '}
+          <Text color="white">{best.airline}</Text>
+          {' · '}
+          <Text dimColor>{formatStops(best.stops)}</Text>
+          {best.duration ? <Text dimColor>{` · ${best.duration}`}</Text> : null}
+        </Text>
+      </Box>
+      {bookingLine && <Text dimColor>{bookingLine}</Text>}
     </Box>
   );
 }
