@@ -5,6 +5,24 @@ echo "============================================"
 echo "  Flight Finder — Flight Price Tracker"
 echo "============================================"
 
+# --- App mode + CLI provider install flags ---
+# This image IS the self-hosted distribution, so the app defaults to self-hosted.
+# flight-finder.org is the only deployment that opts into hosted mode, and it does
+# so by setting SELF_HOSTED=false explicitly in its compose. Exporting here (rather
+# than only defaulting inline) is what makes the Next.js server process see the same
+# value the entrypoint assumes. Without it, a compose that omits the var leaves the
+# app in hosted mode and per-tracker edit controls hide on token-less browsers.
+export SELF_HOSTED="${SELF_HOSTED:-true}"
+# CLI provider install (Claude Code / Codex) is independent of app mode: the hosted
+# production box runs hosted yet still installs the CLIs for the Claude Code provider.
+# Fast hosted test stacks set this to false to skip the ~15s install.
+export INSTALL_CLI_PROVIDERS="${INSTALL_CLI_PROVIDERS:-true}"
+if [ "$SELF_HOSTED" = "true" ]; then
+  echo "[setup] App mode: self-hosted (SELF_HOSTED=true, INSTALL_CLI_PROVIDERS=$INSTALL_CLI_PROVIDERS)"
+else
+  echo "[setup] App mode: hosted (SELF_HOSTED=false, INSTALL_CLI_PROVIDERS=$INSTALL_CLI_PROVIDERS)"
+fi
+
 # --- Auto-generate secrets if not set ---
 generate_secret() {
   # 32 random bytes → 64-char hex string
@@ -17,7 +35,7 @@ if [ -z "$ADMIN_SESSION_SECRET" ]; then
   echo "[setup] Generated ADMIN_SESSION_SECRET (set it in .env to persist across restarts)"
 fi
 
-if [ "${SELF_HOSTED:-true}" = "true" ] && [ -z "$CRON_SECRET" ]; then
+if [ "$SELF_HOSTED" = "true" ] && [ -z "$CRON_SECRET" ]; then
   export CRON_SECRET
   CRON_SECRET=$(generate_secret)
   echo "[setup] Generated CRON_SECRET (set it in .env to persist across restarts)"
@@ -69,9 +87,11 @@ else
   exit 1
 fi
 
-# --- Self-hosted only: CLI auth + install ---
-# Skip on production server (SELF_HOSTED=false) to save ~15s startup time.
-if [ "${SELF_HOSTED:-true}" = "true" ]; then
+# --- CLI provider auth + install (Claude Code / Codex) ---
+# Gated on INSTALL_CLI_PROVIDERS (default true), independent of app mode: the hosted
+# production box installs the CLIs for the Claude Code provider, while fast hosted
+# test stacks set INSTALL_CLI_PROVIDERS=false to skip the ~15s install.
+if [ "$INSTALL_CLI_PROVIDERS" = "true" ]; then
   # Copy CLI auth from read-only host mounts into writable directories.
   # The installer mounts host ~/.claude and ~/.codex as read-only at *-host paths.
   # CLIs need write access (models cache, sessions), so we copy into writable dirs.

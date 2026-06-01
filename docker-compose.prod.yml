@@ -44,6 +44,11 @@ services:
       CRON_SECRET: ${CRON_SECRET}
       CHROME_PATH: /usr/bin/chromium-browser
       NODE_ENV: production
+      # flight-finder.org is the ONLY hosted deployment. The image defaults to
+      # self-hosted, so this opt-out is explicit. CLI providers stay installed
+      # (the Claude Code provider runs here via the mounted host auth above).
+      SELF_HOSTED: "false"
+      INSTALL_CLI_PROVIDERS: "true"
 
 volumes:
   pgdata:

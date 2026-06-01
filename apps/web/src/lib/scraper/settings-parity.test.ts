@@ -74,7 +74,7 @@ describe('settings page parity with admin config', () => {
     // aggregator allowlist that only an admin should configure). Core
     // data fields must exist in both.
     const coreFields = adminFields.filter(
-      (f) => !['hasAdminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'previewMaxCombos', 'aggregatorsEnabled'].includes(f)
+      (f) => !['hasAdminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'maxTrackedPerRoute', 'previewMaxCombos', 'aggregatorsEnabled'].includes(f)
     );
 
     for (const field of coreFields) {
@@ -89,11 +89,12 @@ describe('settings page parity with admin config', () => {
     const settingsSaveFields = extractSaveBodyFields(SETTINGS_PAGE);
     const adminSaveFields = extractSaveBodyFields(ADMIN_CONFIG_PAGE);
 
-    // Admin page may send additional fields (adminPassword, the LLM
-    // extract timeout, the aggregator allowlist) that settings doesn't
-    // surface. All other extraction-related fields should be in both.
+    // Admin page may send additional fields (adminPassword, the LLM extract
+    // timeout, the per-route extraction/selection caps, the aggregator
+    // allowlist) that settings doesn't surface. All other extraction-related
+    // fields should be in both.
     const extractionFields = adminSaveFields.filter(
-      (f) => !['adminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'previewMaxCombos', 'aggregatorsEnabled'].includes(f)
+      (f) => !['adminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'maxTrackedPerRoute', 'previewMaxCombos', 'aggregatorsEnabled'].includes(f)
     );
 
     for (const field of extractionFields) {

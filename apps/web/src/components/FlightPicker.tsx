@@ -5,8 +5,6 @@ import type { PriceData } from '@/lib/scraper/extract-prices';
 import { currencySymbol } from '@/lib/currency';
 import styles from './FlightPicker.module.css';
 
-const MAX_SELECTIONS_PER_ROUTE = 10;
-
 export interface RouteFlights {
   origin: string;
   originName: string;
@@ -41,19 +39,23 @@ export function FlightPicker({
   onBack,
   onEdit,
   loading,
+  maxSelectionsPerRoute = 10,
 }: {
   routes: RouteFlights[];
   onTrack: (routeSelections: Array<{ route: RouteFlights; flights: PriceData[] }>) => void;
   onBack: () => void;
   onEdit: () => void;
   loading: boolean;
+  // Admin-configurable cap (ExtractionConfig.maxTrackedPerRoute). Also bounded in
+  // practice by route.flights.length, since you can only pick extracted flights.
+  maxSelectionsPerRoute?: number;
 }) {
   const [selections, setSelections] = useState<Record<string, Set<number>>>(() => {
     const initial: Record<string, Set<number>> = {};
     for (const route of routes) {
       if (route.flights.length > 0) {
         initial[rKey(route)] = new Set(
-          route.flights.slice(0, MAX_SELECTIONS_PER_ROUTE).map((_, i) => i)
+          route.flights.slice(0, maxSelectionsPerRoute).map((_, i) => i)
         );
       }
     }
@@ -65,7 +67,7 @@ export function FlightPicker({
       const current = new Set(prev[key] ?? []);
       if (current.has(index)) {
         current.delete(index);
-      } else if (current.size < MAX_SELECTIONS_PER_ROUTE) {
+      } else if (current.size < maxSelectionsPerRoute) {
         current.add(index);
       }
       return { ...prev, [key]: current };
@@ -73,7 +75,7 @@ export function FlightPicker({
   };
 
   const selectAll = (key: string, flights: PriceData[]) => {
-    const indices = flights.slice(0, MAX_SELECTIONS_PER_ROUTE).map((_, i) => i);
+    const indices = flights.slice(0, maxSelectionsPerRoute).map((_, i) => i);
     setSelections((prev) => ({ ...prev, [key]: new Set(indices) }));
   };
 
@@ -122,7 +124,7 @@ export function FlightPicker({
                     : route.destinationName}
                 </h3>
                 <span className={styles.counter}>
-                  {selected.size} of {Math.min(route.flights.length, MAX_SELECTIONS_PER_ROUTE)} selected
+                  {selected.size} of {Math.min(route.flights.length, maxSelectionsPerRoute)} selected
                 </span>
               </div>
               <div className={styles.headerActions}>
@@ -136,13 +138,13 @@ export function FlightPicker({
             </div>
 
             {isSingleRoute && (
-              <p className={styles.hint}>Select up to {MAX_SELECTIONS_PER_ROUTE} flights to track daily price changes</p>
+              <p className={styles.hint}>Select up to {maxSelectionsPerRoute} flights to track daily price changes</p>
             )}
 
             <div className={styles.list}>
               {route.flights.map((flight, i) => {
                 const isSelected = selected.has(i);
-                const isDisabled = !isSelected && selected.size >= MAX_SELECTIONS_PER_ROUTE;
+                const isDisabled = !isSelected && selected.size >= maxSelectionsPerRoute;
 
                 return (
                   <button

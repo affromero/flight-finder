@@ -42,6 +42,7 @@ export default function ConfigPage() {
   const [scrapeInterval, setScrapeInterval] = useState(3);
   const [extractTimeoutSeconds, setExtractTimeoutSeconds] = useState(90);
   const [maxFlightsPerDate, setMaxFlightsPerDate] = useState(10);
+  const [maxTrackedPerRoute, setMaxTrackedPerRoute] = useState(10);
   const [previewMaxCombos, setPreviewMaxCombos] = useState(24);
   const [theme, setTheme] = useState<ThemeId>('default');
   const [defaultCurrency, setDefaultCurrency] = useState('');
@@ -98,6 +99,7 @@ export default function ConfigPage() {
           setScrapeInterval(d.data.scrapeInterval);
           setExtractTimeoutSeconds(d.data.extractTimeoutSeconds ?? 90);
           setMaxFlightsPerDate(d.data.maxFlightsPerDate ?? 10);
+          setMaxTrackedPerRoute(d.data.maxTrackedPerRoute ?? 10);
           setPreviewMaxCombos(d.data.previewMaxCombos ?? 24);
           setTheme(d.data.theme || 'default');
           applyTheme(d.data.theme || 'default');
@@ -158,6 +160,7 @@ export default function ConfigPage() {
         scrapeIntervalHours: scrapeInterval,
         extractTimeoutSeconds,
         maxFlightsPerDate,
+        maxTrackedPerRoute,
         previewMaxCombos,
         theme,
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
@@ -335,6 +338,22 @@ export default function ConfigPage() {
           />
           <span className={styles.toggleHint}>
             Default 10. Raise to 20-30 for busy routes (JFK-LAX, LHR-CDG) where 10 flights may miss afternoon or budget options. Higher values use more LLM output tokens per scrape.
+          </span>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Max tracked flights per route</label>
+          <input
+            type="number"
+            className={styles.input}
+            min={1}
+            max={50}
+            step={1}
+            value={maxTrackedPerRoute}
+            onChange={(e) => setMaxTrackedPerRoute(Number(e.target.value))}
+          />
+          <span className={styles.toggleHint}>
+            Default 10. How many flights a user can select to track from one route in the results picker. The selection is also bounded by Max flights per date, since you can only pick from the flights that were extracted.
           </span>
         </div>
 
