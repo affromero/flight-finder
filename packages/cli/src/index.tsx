@@ -16,11 +16,12 @@ program
   .option('--list', 'Show all tracked queries (web) or with --headless (terminal)')
   .option('--view <id>', 'View price chart (web) or with --headless (terminal)')
   .option('--tmux', 'Split grouped routes into tmux panes (requires --headless --view)')
+  .option('--json', 'Output JSON: with --view <id> one tracker, otherwise the full list')
   .option('--backend <provider>', 'AI backend: claude-code, codex, anthropic, openai, google')
   .option('--model <model>', 'Model override (e.g. sonnet, opus, gpt-4.1-mini, codex)')
   .parse();
 
-const opts = program.opts() as { headless?: boolean; list?: boolean; view?: string; tmux?: boolean; backend?: string; model?: string };
+const opts = program.opts() as { headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string };
 
 const baseUrl = process.env.FLIGHT_FINDER_URL
   ?? `http://localhost:${process.env.HOST_PORT ?? process.env.PORT ?? '3003'}`;
@@ -62,7 +63,16 @@ if (opts.tmux && !opts.view) {
   process.exit(1);
 }
 
-if (opts.headless) {
+if (opts.json) {
+  // Machine readable output for automation. Bypasses ink and the browser; the
+  // helper prints to stdout and exits.
+  import('./lib/json-output.js')
+    .then(({ runJson }) => runJson({ view: opts.view }))
+    .catch((err) => {
+      console.error(JSON.stringify({ error: err instanceof Error ? err.message : String(err) }));
+      process.exit(1);
+    });
+} else if (opts.headless) {
   // Terminal UI mode
   if (opts.view && opts.tmux) {
     launchTmuxView(opts.view).catch((err) => {

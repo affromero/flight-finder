@@ -224,28 +224,45 @@ test_install_supports_arch_family() {
 }
 
 # ---------------------------------------------------------------------------
-# Test: docker-entrypoint.sh pins the prisma major version
-# Regression test against the v0.5.2 deploy: `npx prisma` (no version)
-# in the runtime entrypoint round-trips to the npm registry every startup
-# and Prisma 7 dropped `url = env("DATABASE_URL")`, breaking schema
-# parsing on every startup until pinned.
+# Test: the runtime entrypoint applies the schema with the BUNDLED prisma CLI
+# Regression test against the v0.5.2 deploy: `npx prisma` in the runtime
+# entrypoint round-trips to the npm registry every startup, and Prisma 7
+# dropped `url = env("DATABASE_URL")`, breaking schema parsing until pinned.
+# A later regression: even pinned `npx prisma@^6` failed to resolve the CLI at
+# runtime (`sh: prisma: not found`), so the schema was never applied.
 #
-# Bundling the CLI in the runtime image is the proper fix but requires
-# also bundling its transitive deps (effect, @prisma/config, ...). Until
-# that lands, the version pin is the cheap insurance.
+# The fix bundles the CLI in the image (the `prismacli` Dockerfile stage) and
+# the entrypoint runs it directly. This test enforces that invariant: no
+# runtime `npx prisma`, and the bundled CLI pinned to a major so it never
+# silently jumps to a new one.
 # ---------------------------------------------------------------------------
-test_entrypoint_pins_prisma_major() {
+test_entrypoint_uses_bundled_pinned_prisma() {
   local entrypoint="docker-entrypoint.sh"
-  local code_only
+  local dockerfile="Dockerfile"
+  local code_only docker_code
   code_only=$(grep -vE '^\s*#' "$entrypoint")
-  if printf '%s\n' "$code_only" | grep -qE 'npx prisma@(\^|~)?[0-9]'; then
-    pass "docker-entrypoint.sh pins the prisma major version"
+  docker_code=$(grep -vE '^\s*#' "$dockerfile")
+
+  # Entrypoint applies the schema with the bundled CLI, not a runtime fetch.
+  if printf '%s\n' "$code_only" | grep -qE 'prisma-cli/node_modules/prisma/build/index\.js'; then
+    pass "docker-entrypoint.sh applies the schema with the bundled prisma CLI"
   else
-    fail "docker-entrypoint.sh must pin prisma (e.g. 'npx prisma@^6 db push'), never run unpinned 'npx prisma'"
+    fail "docker-entrypoint.sh must run the bundled prisma CLI (/app/prisma-cli/.../build/index.js) for db push"
   fi
-  # Specifically forbid unpinned 'npx prisma' (no @version) inside code.
-  if printf '%s\n' "$code_only" | grep -qE 'npx prisma( |$)'; then
-    fail "docker-entrypoint.sh contains unpinned 'npx prisma' which silently picks up new majors"
+
+  # Forbid any runtime 'npx prisma' (pinned or not) — it round-trips the registry.
+  if printf '%s\n' "$code_only" | grep -qE 'npx +prisma'; then
+    fail "docker-entrypoint.sh must not run 'npx prisma' at runtime; use the bundled CLI"
+  fi
+
+  # The bundled CLI must be pinned to a major in the prismacli stage.
+  if printf '%s\n' "$docker_code" | grep -qE 'npm install .*prisma@(\^|~)?[0-9]'; then
+    pass "Dockerfile pins the bundled prisma CLI to a major version"
+  else
+    fail "Dockerfile prismacli stage must pin prisma (e.g. 'npm install ... prisma@6')"
+  fi
+  if printf '%s\n' "$docker_code" | grep -qE 'prisma@latest'; then
+    fail "Dockerfile must not install prisma@latest (silently picks up new majors)"
   fi
 }
 
@@ -429,7 +446,7 @@ test_cli_has_cmd_tui
 test_install_supports_no_browser
 test_dockerfile_ships_cli
 test_install_supports_arch_family
-test_entrypoint_pins_prisma_major
+test_entrypoint_uses_bundled_pinned_prisma
 test_entrypoint_self_hosted_default
 test_compose_exec_flags_matrix
 test_cmd_tui_uses_helper

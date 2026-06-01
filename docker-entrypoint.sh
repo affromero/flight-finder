@@ -73,14 +73,19 @@ done
 echo "[setup] Database is ready"
 
 # --- Run migrations ---
-# Pin prisma to the major version that matches the schema (currently v6).
-# Without the pin, `npx prisma` fetches whatever the npm registry serves
-# as latest, which broke deploys when Prisma 7 dropped `url = env(...)`.
-# A future Dockerfile change should bundle the CLI + transitive deps so
-# this stops round-tripping the registry entirely.
+# Use the Prisma CLI bundled into the image (see the prismacli stage in the
+# Dockerfile) instead of fetching it with npx at runtime, which round-trips the
+# registry and failed when it could not resolve the CLI. Run it directly and
+# honor the exit code so a failed push halts startup instead of masking the
+# error behind a misleading "Schema ready".
 echo "[setup] Applying database schema..."
-npx prisma@^6 db push --schema=apps/web/prisma/schema.prisma --skip-generate 2>&1 | tail -1
-echo "[setup] Schema ready"
+if node /app/prisma-cli/node_modules/prisma/build/index.js db push \
+     --schema=apps/web/prisma/schema.prisma --skip-generate; then
+  echo "[setup] Schema ready"
+else
+  echo "[setup] ERROR: database schema push failed" >&2
+  exit 1
+fi
 
 # --- CLI provider auth + install (Claude Code / Codex) ---
 # Gated on INSTALL_CLI_PROVIDERS (default true), independent of app mode: the hosted
