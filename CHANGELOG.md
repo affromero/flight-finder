@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.9.4] - 2026-06-01
+
+### Added
+* **Price history grouped by flight** (#89): the tracker page (`/q/[id]`) now collapses its history into one row per flight, showing the latest price, change, seats and book link, cheapest first, with each flight's full series one click away. After a week of scraping the table stays readable instead of growing into a flat wall of every snapshot. Reported by @antoniods97.
+* **Configurable max tracked flights per route** (#89): new `maxTrackedPerRoute` setting in `/admin/config` (default 10, range 1-50) drives how many flights you can select to track per route, replacing the hardcoded 10. It is still bounded by Max flights per date, since you can only pick from the flights that were extracted.
+* **Trackers expire once their departure day has passed** (#96): a tracker whose travel date is in the past stops scraping automatically instead of running forever. Reported by @backslashV.
+* **CLI `--json` output and headless polish** (#96): `flightfinder --json` emits a single tracker or the full list as JSON, and the headless view header now shows airport codes.
+
+### Fixed
+* **App defaults to self-hosted** (#89): the per-tracker edit controls hid on any browser without a delete token because the entrypoint never exported `SELF_HOSTED`, so a stack that omitted the variable ran in hosted mode. A migrated tracker that lost its localStorage token lost its controls. The image now defaults to self-hosted and flight-finder.org is the only deployment that opts into hosted mode; CLI provider install moved to its own `INSTALL_CLI_PROVIDERS` flag so production behavior is unchanged. Reported by @antoniods97.
+* **Offline Prisma schema push** (#96): the runtime image bundles the Prisma CLI instead of fetching it with `npx` at startup, so the schema push works without round-tripping the npm registry and a failed push halts startup instead of masking the error behind a misleading "Schema ready".
+* **CLI booking URL no longer truncated** (#96): the best price card was rebuilt so it stops cutting off the booking link, and the CLI package now ships its `package.json` so Node resolves the module type.
+
 ## [0.9.3] - 2026-05-29
 
 ### Fixed
