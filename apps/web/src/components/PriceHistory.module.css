@@ -139,3 +139,67 @@
 .soldOutLabel {
   color: var(--muted);
 }
+
+/* Flight-grouped history: one summary row per flight, expandable into its
+   own price history. */
+.summaryRow td {
+  background: var(--surface);
+}
+
+.summaryRow:hover td {
+  background: var(--elevated, var(--surface));
+}
+
+.expandBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: none;
+  border: none;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  white-space: nowrap;
+}
+
+.expandBtn:hover {
+  color: var(--accent);
+}
+
+.chevron {
+  display: inline-block;
+  font-size: 0.625rem;
+  line-height: 1;
+  color: var(--accent);
+  transition: transform 0.15s ease;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.historyCount {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+}
+
+.historyRow td {
+  background: transparent;
+}
+
+.historyDate {
+  padding-left: 1.6rem;
+  color: var(--muted);
+}
+
+.truncationNote {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--muted);
+  text-align: center;
+  font-style: italic;
+}
