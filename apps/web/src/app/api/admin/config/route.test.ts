@@ -93,3 +93,45 @@ describe('PATCH /api/admin/config — extractTimeoutSeconds (issue #86)', () => 
     expect(data.update.extractTimeoutSeconds).toBe(48);
   });
 });
+
+describe('PATCH /api/admin/config — maxTrackedPerRoute (issue #89)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpsert.mockResolvedValue({ id: 'singleton', maxTrackedPerRoute: 10 });
+  });
+
+  it('writes a valid number within range', async () => {
+    const res = await PATCH(patchRequest({ maxTrackedPerRoute: 30 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.maxTrackedPerRoute).toBe(30);
+  });
+
+  it('clamps a value below the floor of 1 up to 1', async () => {
+    const res = await PATCH(patchRequest({ maxTrackedPerRoute: 0 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.maxTrackedPerRoute).toBe(1);
+  });
+
+  it('clamps a value above the ceiling of 50 down to 50', async () => {
+    const res = await PATCH(patchRequest({ maxTrackedPerRoute: 999 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.maxTrackedPerRoute).toBe(50);
+  });
+
+  it('rejects NaN from a cleared number input without crashing Prisma', async () => {
+    const res = await PATCH(patchRequest({ maxTrackedPerRoute: NaN }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update).not.toHaveProperty('maxTrackedPerRoute');
+  });
+
+  it('rounds a fractional value to the nearest integer', async () => {
+    const res = await PATCH(patchRequest({ maxTrackedPerRoute: 12.4 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.maxTrackedPerRoute).toBe(12);
+  });
+});

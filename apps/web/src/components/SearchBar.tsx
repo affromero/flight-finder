@@ -107,6 +107,7 @@ export function SearchBar({
 
   const [vpnCountries, setVpnCountries] = useState<string[]>([]);
   const [adminCurrency, setAdminCurrency] = useState<string | null>(null);
+  const [maxTrackedPerRoute, setMaxTrackedPerRoute] = useState(10);
 
   const [createdTrackers, setCreatedTrackers] = useState<CreatedTracker[] | null>(null);
 
@@ -121,6 +122,7 @@ export function SearchBar({
       .then((d) => {
         if (!d.ok) return;
         if (d.data.defaultCurrency) setAdminCurrency(d.data.defaultCurrency);
+        if (typeof d.data.maxTrackedPerRoute === 'number') setMaxTrackedPerRoute(d.data.maxTrackedPerRoute);
         const searchMethod = d.data.defaultSearchMethod === 'manual' ? 'manual' : 'ai';
         setActiveSearchMethod(searchMethod);
         setManualMode(searchMethod === 'manual');
@@ -664,6 +666,7 @@ export function SearchBar({
           onBack={handleBackFromPicker}
           onEdit={handleEdit}
           loading={loading}
+          maxSelectionsPerRoute={maxTrackedPerRoute}
         />
       )}
 
