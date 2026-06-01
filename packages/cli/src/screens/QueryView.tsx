@@ -240,8 +240,10 @@ export function QueryView({ id, onBack }: QueryViewProps) {
     <Box flexDirection="column">
       <Box marginBottom={1}>
         <Text bold color="white">{query.originName}</Text>
+        <Text dimColor>{` (${query.origin})`}</Text>
         <Text color="cyan">{' → '}</Text>
         <Text bold color="white">{query.destinationName}</Text>
+        <Text dimColor>{` (${query.destination})`}</Text>
         <Text dimColor>{'  '}{formatDate(query.dateFrom)} – {formatDate(query.dateTo)}</Text>
         {newDataFlash && <Text color="green" bold>{'  ● NEW DATA'}</Text>}
       </Box>
