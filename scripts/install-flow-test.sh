@@ -250,6 +250,43 @@ test_entrypoint_pins_prisma_major() {
 }
 
 # ---------------------------------------------------------------------------
+# Test: app defaults to self-hosted; CLI install decoupled from app mode (#89)
+# The Next.js app reads process.env.SELF_HOSTED at runtime. The entrypoint must
+# EXPORT it (defaulting true) so a compose that omits the var still runs the app
+# self-hosted; otherwise canManageQueryWithoutToken returns false and per-tracker
+# edit controls hide on token-less browsers (the migrated-legacy-tracker bug).
+# CLI provider install is gated separately on INSTALL_CLI_PROVIDERS so the one
+# hosted deployment (flight-finder.org) stays hosted yet keeps the Claude Code CLI.
+# ---------------------------------------------------------------------------
+test_entrypoint_self_hosted_default() {
+  local entrypoint="docker-entrypoint.sh"
+  local prod="docker-compose.prod.yml"
+  local code_only
+  code_only=$(grep -vE '^\s*#' "$entrypoint")
+
+  # 1. Entrypoint exports SELF_HOSTED with a default of true.
+  if printf '%s\n' "$code_only" | grep -qF 'export SELF_HOSTED="${SELF_HOSTED:-true}"'; then
+    pass "docker-entrypoint.sh exports SELF_HOSTED defaulting to true (#89)"
+  else
+    fail "docker-entrypoint.sh must 'export SELF_HOSTED=\"\${SELF_HOSTED:-true}\"' so the app defaults to self-hosted (#89)"
+  fi
+
+  # 2. CLI install is gated on INSTALL_CLI_PROVIDERS, not SELF_HOSTED.
+  if printf '%s\n' "$code_only" | grep -qF '"$INSTALL_CLI_PROVIDERS" = "true"'; then
+    pass "docker-entrypoint.sh gates CLI install on INSTALL_CLI_PROVIDERS (#89)"
+  else
+    fail "docker-entrypoint.sh must gate CLI provider install on INSTALL_CLI_PROVIDERS, decoupled from SELF_HOSTED (#89)"
+  fi
+
+  # 3. The one hosted deployment opts out explicitly and keeps CLI install.
+  if grep -qE '^\s*SELF_HOSTED:\s*"false"' "$prod" && grep -qE '^\s*INSTALL_CLI_PROVIDERS:\s*"true"' "$prod"; then
+    pass "docker-compose.prod.yml sets SELF_HOSTED=false + INSTALL_CLI_PROVIDERS=true (#89)"
+  else
+    fail "docker-compose.prod.yml must explicitly set SELF_HOSTED=\"false\" and INSTALL_CLI_PROVIDERS=\"true\" (#89)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Test: _compose_exec_flags emits the right flags for each compose flavor
 # (issue #72 follow-up). docker compose, docker-compose, and podman compose
 # accept Docker's -it/-i; podman-compose (standalone Python tool) rejects
@@ -393,6 +430,7 @@ test_install_supports_no_browser
 test_dockerfile_ships_cli
 test_install_supports_arch_family
 test_entrypoint_pins_prisma_major
+test_entrypoint_self_hosted_default
 test_compose_exec_flags_matrix
 test_cmd_tui_uses_helper
 test_no_raw_it_flags_in_dc_exec

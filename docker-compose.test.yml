@@ -42,3 +42,4 @@ services:
       NODE_ENV: production
       SELF_HOSTED: "false"
       # Skip CLI install to speed up container start
+      INSTALL_CLI_PROVIDERS: "false"
