@@ -19,6 +19,18 @@ COPY apps/web/prisma ./apps/web/prisma/
 RUN npm ci --omit=dev --loglevel=error
 RUN npx prisma generate --schema=apps/web/prisma/schema.prisma
 
+# Prisma CLI as a self-contained toolchain for the entrypoint schema push.
+# The CLI is a devDependency, so it is absent from the lean runtime
+# node_modules, and fetching it with npx at container start round-trips the
+# registry and fails in restricted networks. Install it in isolation here so
+# the full dependency closure and the alpine engine binaries are bundled, then
+# copy the whole tree into the runner. Pinned to the v6 major that matches the
+# schema (Prisma 7 dropped `url = env(...)`).
+FROM docker.io/library/node:22-alpine AS prismacli
+RUN apk add --no-cache openssl
+WORKDIR /pcli
+RUN npm install --no-save --no-package-lock prisma@6
+
 FROM docker.io/library/node:22-alpine AS builder
 RUN apk add --no-cache libc6-compat openssl python3 make g++
 WORKDIR /app
@@ -66,6 +78,10 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 COPY --from=builder --chown=node:node /app/apps/web/prisma ./apps/web/prisma
 COPY --from=proddeps --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=proddeps --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
+
+# Self-contained Prisma CLI for the entrypoint schema push (db push). Calling
+# it directly avoids the unreliable runtime `npx prisma` registry fetch.
+COPY --from=prismacli --chown=node:node /pcli/node_modules /app/prisma-cli/node_modules
 
 # Runtime packages that standalone trace misses (dynamic imports in cron callbacks)
 COPY --from=proddeps --chown=node:node /app/node_modules/ioredis ./node_modules/ioredis
