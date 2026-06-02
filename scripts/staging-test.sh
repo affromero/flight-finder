@@ -283,7 +283,10 @@ if [ "$RETRIES" -gt 0 ]; then
   echo "$STATUS_OUT" | grep -qi "running" && pass "flight-finder status: running" || fail "flight-finder status: $STATUS_OUT"
 
   VERSION_OUT=$(flight-finder version 2>&1 | sed 's/\x1b\[[0-9;]*m//g') || true
-  echo "$VERSION_OUT" | grep -qi "fairtrail" && pass "flight-finder version: $(echo "$VERSION_OUT" | head -1)" || fail "flight-finder version failed"
+  # Assert it reports a semver, not a brand string: the brand was renamed from
+  # fairtrail to flightfinder (#96), and a version smoke check should survive
+  # the next rebrand too. A missing version (app down) still prints no semver.
+  echo "$VERSION_OUT" | grep -qE '[0-9]+\.[0-9]+\.[0-9]+' && pass "flight-finder version: $(echo "$VERSION_OUT" | head -1)" || fail "flight-finder version failed"
 fi
 
 # === Report ===
