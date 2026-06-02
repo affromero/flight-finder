@@ -784,6 +784,63 @@ test_run_cli_captures_exit() {
 }
 
 # ---------------------------------------------------------------------------
+# Test cases — cmd_reset_password / cmd_disable_accounts (issue #102)
+# ---------------------------------------------------------------------------
+
+test_reset_password_execs_with_credentials() {
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
+    setup_runtime "$rt"
+    run_cli reset-password garry secretpass123
+    LAST_RUNTIME="$rt"; LAST_CMD="reset-password"
+    case "$rt" in
+      docker_v2)        assert_recorded "reset-password -> docker compose exec -i web --reset-password garry --new-password" \
+        '^docker compose -f docker-compose.yml exec -i web flight-finder-tui --reset-password garry --new-password secretpass123$' ;;
+      docker_v1)        assert_recorded "reset-password -> docker-compose exec -i web --reset-password garry --new-password" \
+        '^docker-compose -f docker-compose.yml exec -i web flight-finder-tui --reset-password garry --new-password secretpass123$' ;;
+      podman_native)    assert_recorded "reset-password -> podman compose exec -i web --reset-password garry --new-password" \
+        '^podman compose -f docker-compose.yml exec -i web flight-finder-tui --reset-password garry --new-password secretpass123$' ;;
+      podman_delegated) assert_recorded "reset-password -> podman-compose exec -T web (delegated #96)" \
+        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --reset-password garry --new-password secretpass123$' ;;
+      podman_pc)        assert_recorded "reset-password -> podman-compose exec -T web (#72)" \
+        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --reset-password garry --new-password secretpass123$' ;;
+    esac
+    assert_not_recorded "reset-password never sends -it/-i to podman-compose" \
+      'podman-compose .* exec [^ ]*(-it|-i ) '
+  done
+}
+
+test_reset_password_requires_both_args() {
+  # Missing password must abort before any container exec.
+  setup_runtime docker_v2
+  EXPECT_NONZERO=1 run_cli reset-password garry
+  unset EXPECT_NONZERO
+  assert_not_recorded "reset-password with no password never execs the container" \
+    'exec .* web flight-finder-tui --reset-password'
+}
+
+test_disable_accounts_execs() {
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
+    setup_runtime "$rt"
+    run_cli disable-accounts
+    LAST_RUNTIME="$rt"; LAST_CMD="disable-accounts"
+    case "$rt" in
+      docker_v2)        assert_recorded "disable-accounts -> docker compose exec -i web --disable-accounts" \
+        '^docker compose -f docker-compose.yml exec -i web flight-finder-tui --disable-accounts$' ;;
+      docker_v1)        assert_recorded "disable-accounts -> docker-compose exec -i web --disable-accounts" \
+        '^docker-compose -f docker-compose.yml exec -i web flight-finder-tui --disable-accounts$' ;;
+      podman_native)    assert_recorded "disable-accounts -> podman compose exec -i web --disable-accounts" \
+        '^podman compose -f docker-compose.yml exec -i web flight-finder-tui --disable-accounts$' ;;
+      podman_delegated) assert_recorded "disable-accounts -> podman-compose exec -T web (delegated #96)" \
+        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --disable-accounts$' ;;
+      podman_pc)        assert_recorded "disable-accounts -> podman-compose exec -T web (#72)" \
+        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --disable-accounts$' ;;
+    esac
+    assert_not_recorded "disable-accounts never sends -it/-i to podman-compose" \
+      'podman-compose .* exec [^ ]*(-it|-i ) '
+  done
+}
+
+# ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
 echo ""
@@ -820,6 +877,9 @@ test_vpn_compose_excluded_when_empty_value
 test_vpn_compose_included_when_enabled
 test_missing_helper_fails_loudly
 test_run_cli_captures_exit
+test_reset_password_execs_with_credentials
+test_reset_password_requires_both_args
+test_disable_accounts_execs
 
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"

@@ -260,6 +260,10 @@ Commands:
   version      Show version and commit
   uninstall    Remove Flight Finder and all data
   help         Show this help
+
+Account recovery (self hosted multi user mode):
+  reset-password <username> <password>   Set a new password for a user
+  disable-accounts                       Turn multi user mode off (no login required)
 ```
 
 <details>
@@ -373,6 +377,28 @@ right person.
   admin creates accounts manually and resets passwords from the panel
 - It does **not** restrict cron, the headless CLI's read views, or
   share links — those work the same in both modes
+
+#### Locked out?
+
+Forgot the admin password, or want the accounts gone entirely? Two recovery
+commands run from the host. They exec inside the `web` container, so it has
+to be running:
+
+```bash
+flight-finder reset-password <username> <new-password>   # set a known password, keep accounts
+flight-finder disable-accounts                           # turn multi user mode off entirely
+```
+
+`reset-password` sets a new password for any user; log in with it, then
+manage everyone else from `/admin/users`. `disable-accounts` flips multi
+user mode off and clears the stored admin credential, dropping the instance
+back to solo self hosted mode where no login is required at all. Your
+trackers survive either way. (The password you pass to `reset-password`
+is visible in your shell history and in the host process list while the
+command runs, so treat it as throwaway and change it once you are back in.)
+
+Never enabled multi user mode and forgot the solo admin password instead?
+Set `ADMIN_PASSWORD` in `~/.flight-finder/.env` and restart.
 
 #### Screenshots
 

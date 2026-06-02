@@ -19,15 +19,19 @@ program
   .option('--json', 'Output JSON: with --view <id> one tracker, otherwise the full list')
   .option('--backend <provider>', 'AI backend: claude-code, codex, anthropic, openai, google')
   .option('--model <model>', 'Model override (e.g. sonnet, opus, gpt-4.1-mini, codex)')
+  .option('--reset-password <username>', "Reset a user's password (multi user mode); pair with --new-password")
+  .option('--new-password <password>', 'New password to set (use with --reset-password)')
+  .option('--disable-accounts', 'Disable multi user mode and clear stored credentials (self hosted)')
   .parse();
 
-const opts = program.opts() as { headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string };
+const opts = program.opts() as { headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string; resetPassword?: string; newPassword?: string; disableAccounts?: boolean };
 
 const baseUrl = process.env.FLIGHT_FINDER_URL
   ?? `http://localhost:${process.env.HOST_PORT ?? process.env.PORT ?? '3003'}`;
 
-// Set backend/model override — update DB config so parse-query.ts and extract-prices.ts pick it up
-if (opts.backend) {
+// Set backend/model override — update DB config so parse-query.ts and extract-prices.ts pick it up.
+// Skipped during recovery so those commands never write config as a side effect.
+if (opts.backend && !opts.resetPassword && !opts.disableAccounts) {
   process.env.FLIGHT_FINDER_BACKEND = opts.backend;
 
   const defaultModels: Record<string, string> = {
@@ -63,7 +67,24 @@ if (opts.tmux && !opts.view) {
   process.exit(1);
 }
 
-if (opts.json) {
+if (opts.resetPassword || opts.disableAccounts) {
+  // Break-glass account recovery for self hosted multi user mode. Talks to the
+  // DB and exits; never renders ink or opens a browser. First branch so it can
+  // never fall through to program.help().
+  import('./lib/recovery-cli.js')
+    .then(({ runResetPassword, runDisableAccounts }) => {
+      if (opts.disableAccounts) return runDisableAccounts();
+      if (!opts.resetPassword || !opts.newPassword) {
+        console.error('Error: --reset-password <username> requires --new-password <password>');
+        process.exit(1);
+      }
+      return runResetPassword(opts.resetPassword, opts.newPassword);
+    })
+    .catch((err) => {
+      console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
+      process.exit(1);
+    });
+} else if (opts.json) {
   // Machine readable output for automation. Bypasses ink and the browser; the
   // helper prints to stdout and exits.
   import('./lib/json-output.js')

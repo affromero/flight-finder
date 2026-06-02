@@ -1,5 +1,10 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+* **CLI account recovery for multi user mode** (#102): two recovery commands for a self hosted admin who is locked out. `flight-finder reset-password <username> <new-password>` sets a known password for any user; `flight-finder disable-accounts` turns multi user mode off and clears the stored admin credential, dropping the instance back to solo self hosted mode where no login is required. Both run inside the web container against the live database. Until now the only escape from a forgotten multi user password was hand editing Postgres. Reported by @garrynutter.
+
 ## [0.9.5] - 2026-06-02
 
 ### Fixed
