@@ -38,7 +38,9 @@ export async function resetUserPassword(
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await prisma.user.update({ where: { username }, data: { passwordHash } });
+  // Update by the id we just selected, not the username, so a concurrent rename
+  // can't redirect the write to a different row.
+  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
 
   return { ok: true, isAdmin: user.isAdmin };
 }
@@ -48,17 +50,20 @@ export async function resetUserPassword(
  * a self-hosted instance with no stored credential. In SELF_HOSTED mode the
  * middleware skips admin auth entirely, so afterward the app requires no login.
  *
- * updateMany (not update) so a missing singleton row is a no-op instead of a
- * throw, the same guarded write style the enable route uses.
+ * upsert (not updateMany) so the end state is guaranteed: a break-glass command
+ * must not print success while changing nothing if the singleton row is somehow
+ * absent. If it exists (the normal case), only these two fields change and every
+ * other setting is left intact.
  *
  * Cache invalidation is correct because this runs inside the `web` container,
  * sharing REDIS_URL and the `ft:multi-user` key; the 60s TTL would self-heal a
  * missed bust anyway.
  */
 export async function disableMultiUserMode(): Promise<void> {
-  await prisma.extractionConfig.updateMany({
+  await prisma.extractionConfig.upsert({
     where: { id: 'singleton' },
-    data: { multiUserMode: false, adminPasswordHash: null },
+    create: { id: 'singleton', multiUserMode: false, adminPasswordHash: null },
+    update: { multiUserMode: false, adminPasswordHash: null },
   });
   await invalidateMultiUserCache();
 }

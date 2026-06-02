@@ -394,7 +394,8 @@ manage everyone else from `/admin/users`. `disable-accounts` flips multi
 user mode off and clears the stored admin credential, dropping the instance
 back to solo self hosted mode where no login is required at all. Your
 trackers survive either way. (The password you pass to `reset-password`
-lands in your shell history, so clear it afterward.)
+is visible in your shell history and in the host process list while the
+command runs, so treat it as throwaway and change it once you are back in.)
 
 Never enabled multi user mode and forgot the solo admin password instead?
 Set `ADMIN_PASSWORD` in `~/.flight-finder/.env` and restart.

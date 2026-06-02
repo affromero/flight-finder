@@ -129,5 +129,12 @@ COPY --chown=node:node docker-entrypoint.sh ./
 RUN chmod +x docker-entrypoint.sh
 USER node
 RUN flight-finder-tui --help >/dev/null
+# Guard: the recovery commands depend on tsup's `@`->apps/web/src alias inlining
+# the real admin-recovery into the bundle. If the typecheck/dev stub leaks in
+# instead, every recovery run would throw. Fail the build if its sentinel is
+# present.
+RUN if grep -q 'admin-recovery stub' /app/packages/cli/dist/index.js; then \
+      echo 'ERROR: admin-recovery stub leaked into the CLI bundle' >&2; exit 1; \
+    fi
 EXPOSE 3003
 ENTRYPOINT ["./docker-entrypoint.sh"]

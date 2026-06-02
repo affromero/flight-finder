@@ -13,7 +13,7 @@ vi.mock('@/lib/prisma', () => ({
       update: vi.fn().mockResolvedValue({}),
     },
     extractionConfig: {
-      updateMany: vi.fn().mockResolvedValue({ count: 1 }),
+      upsert: vi.fn().mockResolvedValue({}),
     },
   },
 }));
@@ -32,7 +32,7 @@ describe('resetUserPassword', () => {
 
     expect(result).toEqual({ ok: true, isAdmin: true });
     expect(prisma.user.update).toHaveBeenCalledWith({
-      where: { username: 'garry' },
+      where: { id: 'u1' },
       data: { passwordHash: expect.stringMatching(/^[0-9a-f]+:[0-9a-f]+$/) },
     });
   });
@@ -72,9 +72,10 @@ describe('disableMultiUserMode', () => {
 
     await disableMultiUserMode();
 
-    expect(prisma.extractionConfig.updateMany).toHaveBeenCalledWith({
+    expect(prisma.extractionConfig.upsert).toHaveBeenCalledWith({
       where: { id: 'singleton' },
-      data: { multiUserMode: false, adminPasswordHash: null },
+      create: { id: 'singleton', multiUserMode: false, adminPasswordHash: null },
+      update: { multiUserMode: false, adminPasswordHash: null },
     });
     expect(invalidateMultiUserCache).toHaveBeenCalledTimes(1);
   });
