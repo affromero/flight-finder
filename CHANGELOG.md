@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.9.5] - 2026-06-02
+
+### Fixed
+* **CLI header box alignment and brand** (#96): the terminal header drew its own border and padded a line by hand, so the right edge drifted out of column, and it still showed the pre rename FAIRTRAIL brand. It now renders on a self sizing box that stays aligned and reads FLIGHT FINDER. Reported by @backslashV.
+
+### Changed
+* **Remaining CLI brand strings now read `flightfinder`** (#96): the leftover `fairtrail` references in user facing CLI output (the usage hints, the tmux pane command, the version line) were swept to `flightfinder`. The deprecated `fairtrail` command still works as an alias.
+
 ## [0.9.4] - 2026-06-01
 
 ### Added
