@@ -103,7 +103,7 @@ export function QueryList({ onView }: QueryListProps) {
     return (
       <Box flexDirection="column">
         <Text dimColor>No tracked queries yet.</Text>
-        <Text dimColor>Run <Text color="white">fairtrail</Text> to search and track flights.</Text>
+        <Text dimColor>Run <Text color="white">flightfinder</Text> to search and track flights.</Text>
       </Box>
     );
   }

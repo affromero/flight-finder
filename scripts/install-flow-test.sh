@@ -429,7 +429,7 @@ test_helper_shipped_by_install_and_update() {
 # Run all tests
 # ---------------------------------------------------------------------------
 echo ""
-printf "${BOLD}Fairtrail install flow regression tests${RESET}\n"
+printf "${BOLD}Flight Finder install flow regression tests${RESET}\n"
 echo ""
 
 test_update_self_path

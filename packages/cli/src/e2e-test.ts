@@ -14,7 +14,7 @@ const RAW_INPUT = 'Frankfurt to Bogota December 2026 economy';
 
 async function main() {
   console.log('═══════════════════════════════════════');
-  console.log('  ✈  FAIRTRAIL E2E TEST');
+  console.log('  ✈  FLIGHT FINDER E2E TEST');
   console.log('  Frankfurt → Bogota, December 2026');
   console.log('═══════════════════════════════════════\n');
 
@@ -103,7 +103,7 @@ async function main() {
   console.log(chart);
   console.log('\n═══════════════════════════════════════');
   console.log('  ✓ E2E test complete');
-  console.log(`  View with: fairtrail --view ${queries[0]?.id}`);
+  console.log(`  View with: flightfinder --view ${queries[0]?.id}`);
   console.log('═══════════════════════════════════════');
 
   // Clean exit (close Prisma/Redis connections)

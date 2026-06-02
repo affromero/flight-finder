@@ -257,8 +257,8 @@ export function SearchWizard() {
             ))}
           </Box>
           <Box marginTop={1} flexDirection="column">
-            <Text dimColor>View with: <Text color="white">fairtrail --view {'<id>'}</Text></Text>
-            <Text dimColor>List all:  <Text color="white">fairtrail --list</Text></Text>
+            <Text dimColor>View with: <Text color="white">flightfinder --view {'<id>'}</Text></Text>
+            <Text dimColor>List all:  <Text color="white">flightfinder --list</Text></Text>
           </Box>
         </Box>
       )}
