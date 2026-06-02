@@ -13,12 +13,24 @@ export function Header() {
   const backend = process.env.FLIGHT_FINDER_BACKEND;
   const label = backend ? BACKEND_LABELS[backend] ?? backend : null;
 
+  // ink draws and sizes the border, so it stays aligned regardless of the
+  // brand, the optional backend label, or the ✈ glyph width. alignSelf keeps
+  // the box hugging its content instead of stretching the full terminal width.
   return (
-    <Box flexDirection="column" marginBottom={1}>
-      <Text color="cyan" bold>{'╔══════════════════════════════════════╗'}</Text>
-      <Text color="cyan" bold>{'║'}<Text color="cyan" bold>  ✈  </Text><Text color="white" bold>F A I R T R A I L</Text>{label ? <Text color="yellow" bold>{'  '}{label}</Text> : ''}{'              '.slice(0, label ? 14 - label.length : 14)}{'║'}</Text>
-      <Text color="cyan" bold>{'║'}<Text dimColor>  The price trail they don&apos;t show  </Text>{'║'}</Text>
-      <Text color="cyan" bold>{'╚══════════════════════════════════════╝'}</Text>
+    <Box
+      flexDirection="column"
+      borderStyle="double"
+      borderColor="cyan"
+      paddingX={1}
+      marginBottom={1}
+      alignSelf="flex-start"
+    >
+      <Box>
+        <Text color="cyan" bold>{'✈  '}</Text>
+        <Text color="white" bold>FLIGHT FINDER</Text>
+        {label ? <Text color="yellow" bold>{'  '}{label}</Text> : null}
+      </Box>
+      <Text dimColor>The price trail they don&apos;t show</Text>
     </Box>
   );
 }
