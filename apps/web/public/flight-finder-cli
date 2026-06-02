@@ -519,6 +519,10 @@ cmd_help() {
   echo "    uninstall    Remove Flight Finder and all data"
   echo "    help         Show this help"
   echo ""
+  echo "  Account recovery (self hosted multi user mode):"
+  echo "    reset-password <username> <password>   Set a new password for a user"
+  echo "    disable-accounts                       Turn multi user mode off (no login required)"
+  echo ""
   echo "  Terminal UI flags (forwarded to flight-finder-tui inside the container):"
   echo "    --headless              Render the Ink terminal UI"
   echo "    --list                  List tracked queries (with --headless)"
@@ -550,6 +554,50 @@ cmd_tui() {
   exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui "$@"
 }
 
+# Recover a locked out multi user mode account by setting a new password.
+# Runs the recovery path inside the container against the same DB.
+cmd_reset_password() {
+  local username="$1" newpass="$2"
+  if [ -z "$username" ] || [ -z "$newpass" ]; then
+    printf "${RED}${BOLD}✗${RESET} Usage: flight-finder reset-password <username> <new-password>\n"
+    printf "  ${DIM}The password is visible in your shell history; clear it afterward.${RESET}\n"
+    exit 1
+  fi
+
+  local health
+  health=$(fetch_health)
+  if [ -z "$health" ]; then
+    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: flightfinder\n"
+    exit 1
+  fi
+
+  # Same compose-flavor flag handling as cmd_tui (issue #72).
+  local stdin_tty stdout_tty exec_flags
+  [ -t 0 ] && stdin_tty=1 || stdin_tty=0
+  [ -t 1 ] && stdout_tty=1 || stdout_tty=0
+  exec_flags=$(_compose_exec_flags "$_DC" "$stdin_tty" "$stdout_tty")
+
+  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --reset-password "$username" --new-password "$newpass"
+}
+
+# Turn multi user mode off entirely. Drops the self hosted instance back to solo
+# mode where no login is required, and clears the stored admin credential.
+cmd_disable_accounts() {
+  local health
+  health=$(fetch_health)
+  if [ -z "$health" ]; then
+    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: flightfinder\n"
+    exit 1
+  fi
+
+  local stdin_tty stdout_tty exec_flags
+  [ -t 0 ] && stdin_tty=1 || stdin_tty=0
+  [ -t 1 ] && stdout_tty=1 || stdout_tty=0
+  exec_flags=$(_compose_exec_flags "$_DC" "$stdin_tty" "$stdout_tty")
+
+  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --disable-accounts
+}
+
 cmd_migrate() {
   printf "${CYAN}${BOLD}▸${RESET} Running Flight Finder migration...\n"
   if [ -d "$HOME/.fairtrail" ]; then
@@ -568,6 +616,8 @@ case "${1:-}" in
     printf "${YELLOW}${BOLD}!${RESET} --tmux is not supported in the production install. Use the dev mode CLI: npm run cli -- --tmux ...\n"
     exit 1 ;;
   search)    shift; cmd_search "$@" ;;
+  reset-password)   shift; cmd_reset_password "$@" ;;
+  disable-accounts) cmd_disable_accounts ;;
   start)     cmd_start_background ;;
   stop)      cmd_stop ;;
   logs)      cmd_logs ;;
