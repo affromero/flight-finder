@@ -10,7 +10,7 @@ import { App } from './app.js';
 import { launchTmuxView } from './lib/tmux-view.js';
 
 program
-  .name('fairtrail')
+  .name('flightfinder')
   .description('The price trail airlines don\'t show you')
   .option('--headless', 'Terminal UI mode (required for CLI interaction)')
   .option('--list', 'Show all tracked queries (web) or with --headless (terminal)')
@@ -52,14 +52,14 @@ if (opts.backend) {
 // --tmux requires --headless
 if (opts.tmux && !opts.headless) {
   console.error('Error: --tmux requires --headless mode');
-  console.error('Usage: fairtrail --headless --view <id> --tmux');
+  console.error('Usage: flightfinder --headless --view <id> --tmux');
   process.exit(1);
 }
 
 // --tmux requires --view
 if (opts.tmux && !opts.view) {
   console.error('Error: --tmux requires --view <id>');
-  console.error('Usage: fairtrail --headless --view <id> --tmux');
+  console.error('Usage: flightfinder --headless --view <id> --tmux');
   process.exit(1);
 }
 

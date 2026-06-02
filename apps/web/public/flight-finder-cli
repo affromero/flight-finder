@@ -242,7 +242,7 @@ cmd_stop() {
   dc stop 2>/dev/null
   printf "${GREEN}${BOLD}✓${RESET} Stopped\n"
   printf "  ${YELLOW}Price tracking is paused — no scrapes will run until you start again.${RESET}\n"
-  printf "  ${DIM}Your data and queries are saved. Run 'fairtrail' to resume.${RESET}\n"
+  printf "  ${DIM}Your data and queries are saved. Run 'flightfinder' to resume.${RESET}\n"
 }
 
 cmd_logs() {
@@ -256,7 +256,7 @@ cmd_status() {
     printf "${GREEN}${BOLD}✓${RESET} Flight Finder is running at ${BOLD}http://localhost:${PORT}${RESET}\n"
     show_tracking_info
   else
-    printf "${DIM}Flight Finder is not running. Start with: fairtrail${RESET}\n"
+    printf "${DIM}Flight Finder is not running. Start with: flightfinder${RESET}\n"
   fi
 }
 
@@ -335,7 +335,7 @@ cmd_search() {
   local health
   health=$(fetch_health)
   if [ -z "$health" ]; then
-    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: fairtrail\n"
+    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: flightfinder\n"
     exit 1
   fi
 
@@ -494,9 +494,9 @@ cmd_version() {
     local ver commit
     ver=$(echo "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['current'])" 2>/dev/null)
     commit=$(echo "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['data'].get('commit','unknown'))" 2>/dev/null)
-    printf "fairtrail ${BOLD}%s${RESET} ${DIM}(%s)${RESET}\n" "$ver" "${commit:0:7}"
+    printf "flightfinder ${BOLD}%s${RESET} ${DIM}(%s)${RESET}\n" "$ver" "${commit:0:7}"
   else
-    printf "fairtrail ${DIM}(not running — start with: fairtrail)${RESET}\n"
+    printf "flightfinder ${DIM}(not running — start with: flightfinder)${RESET}\n"
   fi
 }
 
@@ -533,7 +533,7 @@ cmd_tui() {
   local health
   health=$(fetch_health)
   if [ -z "$health" ]; then
-    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: fairtrail\n"
+    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: flightfinder\n"
     exit 1
   fi
 

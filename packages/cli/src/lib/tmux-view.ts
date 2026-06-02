@@ -1,7 +1,7 @@
 import { execSync, spawnSync, spawn } from 'child_process';
 import { prisma } from '@/lib/prisma';
 
-const SESSION_NAME = 'fairtrail-view';
+const SESSION_NAME = 'flightfinder-view';
 
 function tmux(...args: string[]): string {
   const result = spawnSync('tmux', args, { encoding: 'utf-8' });
@@ -34,10 +34,10 @@ function buildViewCommand(queryId: string): string {
   const cwd = process.cwd();
   const backend = process.env.FLIGHT_FINDER_BACKEND;
   const backendFlag = backend ? ` --backend ${backend}` : '';
-  // Use the fairtrail wrapper if on PATH, otherwise fall back to raw command
+  // Use the flightfinder wrapper if on PATH, otherwise fall back to raw command
   try {
-    execSync('which fairtrail', { stdio: 'ignore' });
-    return `cd ${cwd} && fairtrail --headless --view ${queryId}${backendFlag}`;
+    execSync('which flightfinder', { stdio: 'ignore' });
+    return `cd ${cwd} && flightfinder --headless --view ${queryId}${backendFlag}`;
   } catch {
     return `cd ${cwd} && doppler run -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/index.tsx --headless --view ${queryId}${backendFlag}`;
   }
