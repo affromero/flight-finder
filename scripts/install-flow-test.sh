@@ -182,6 +182,37 @@ test_cli_has_cmd_tui() {
 }
 
 # ---------------------------------------------------------------------------
+# Test: flight-finder-cli ships the multi user recovery commands (#102)
+# ---------------------------------------------------------------------------
+test_cli_has_recovery_commands() {
+  local cli="apps/web/public/flight-finder-cli"
+
+  if grep -q 'cmd_reset_password()' "$cli" && grep -q 'cmd_disable_accounts()' "$cli"; then
+    pass "flight-finder-cli defines cmd_reset_password and cmd_disable_accounts (#102)"
+  else
+    fail "flight-finder-cli should define cmd_reset_password and cmd_disable_accounts (#102)"
+  fi
+
+  if grep -qE 'reset-password\)' "$cli" && grep -qE 'disable-accounts\)' "$cli"; then
+    pass "flight-finder-cli dispatches reset-password and disable-accounts (#102)"
+  else
+    fail "flight-finder-cli should dispatch reset-password and disable-accounts (#102)"
+  fi
+
+  if grep -q 'flight-finder-tui --reset-password' "$cli" && grep -q 'flight-finder-tui --disable-accounts' "$cli"; then
+    pass "recovery commands exec flight-finder-tui with the recovery flags (#102)"
+  else
+    fail "recovery commands should exec flight-finder-tui --reset-password / --disable-accounts (#102)"
+  fi
+
+  if grep -q 'Account recovery' "$cli"; then
+    pass "cmd_help documents the account recovery commands (#102)"
+  else
+    fail "cmd_help should document reset-password and disable-accounts (#102)"
+  fi
+}
+
+# ---------------------------------------------------------------------------
 # Test: install.sh supports --no-browser flag
 # ---------------------------------------------------------------------------
 test_install_supports_no_browser() {
@@ -443,6 +474,7 @@ test_install_overrides
 test_ansi_variables_defined
 test_cli_dispatches_tui_flags
 test_cli_has_cmd_tui
+test_cli_has_recovery_commands
 test_install_supports_no_browser
 test_dockerfile_ships_cli
 test_install_supports_arch_family
