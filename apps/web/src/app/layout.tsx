@@ -58,20 +58,33 @@ const swScript = `
   }
 `;
 
-// Apply the visitor's locally-saved theme before first paint so /q/[id] and
-// other cold renders don't flash the server-rendered default. The id->mode
-// map is derived from THEME_OPTIONS so it never drifts from theme.ts.
+// Theme bootstrap, runs before first paint.
+//
+// Hosted: apply the visitor's per browser preference (localStorage) over the
+// server default so a cold render of /q/[id] doesn't flash the default.
+//
+// Self hosted: the theme is a global server side setting already rendered into
+// `<html data-theme>`, so we do NOT touch it here. A stale localStorage value
+// from an old toggle must not override it (issue #89: theme kept resetting on
+// /q/[id], which never re-fetches config to self correct like the admin pages).
+//
+// The id->mode map is derived from THEME_OPTIONS so it never drifts from
+// theme.ts. window.__ftSelfHosted lets client components (ThemeToggle) apply the
+// same rule without prop drilling.
 const themeModeMap = JSON.stringify(
   Object.fromEntries(THEME_OPTIONS.map((t) => [t.id, t.mode])),
 );
 const themeBootstrapScript = `
+  window.__ftSelfHosted = ${isSelfHosted};
   try {
-    var t = localStorage.getItem('ft-theme');
-    var m = ${themeModeMap};
-    if (t && m[t]) {
-      var e = document.documentElement;
-      e.setAttribute('data-theme', t);
-      e.setAttribute('data-theme-mode', m[t]);
+    if (!${isSelfHosted}) {
+      var t = localStorage.getItem('ft-theme');
+      var m = ${themeModeMap};
+      if (t && m[t]) {
+        var e = document.documentElement;
+        e.setAttribute('data-theme', t);
+        e.setAttribute('data-theme-mode', m[t]);
+      }
     }
   } catch (e) {}
 `;

@@ -20,6 +20,8 @@
 npm workspaces: `@flight-finder/web` (`apps/web/`).
 Root `package.json` proxies to `@flight-finder/web`.
 
+**Versioning:** the release version of record is `apps/web/package.json` (git tags `vX.Y.Z` track it). The root `package.json` version is not published, but release tooling reads it, so bump it to match `apps/web` on every release (`/create-release` must update both, plus the lockfile). `packages/cli` is versioned independently.
+
 ## Environment Variables
 
 All secrets via **Doppler** — NEVER use `.env` files. Project: `flight-finder`, config: `dev`.
@@ -159,6 +161,8 @@ All four tests must pass before tagging a release:
 ```
 
 If any fails, fix the issue and re-run. Do NOT tag without all four passing.
+
+The release commit must bump both `apps/web/package.json` and the root `package.json` to the new version (and regenerate `package-lock.json`) so the root version stays accurate for tooling that reads it.
 
 The runtime-matrix harness (`cli-runtime-test.sh`) is what catches the
 "works on docker, broken on podman" class of bug (issues #62, #72). It
