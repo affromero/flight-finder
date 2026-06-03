@@ -1,12 +1,13 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
-import { PriceHistory } from './PriceHistory';
-import type { Snapshot } from './FlightHistoryGroup';
+import { PriceHistory, type Snapshot } from './PriceHistory';
 
-// Issue #89: the history table used to render every snapshot as a flat row, so a
-// week of scraping turned it into an unreadable wall. It now groups by flight and
-// shows one summary row per flight, expandable into that flight's history.
+// Issue #89: the grouped-by-flight view ordered parent rows by lifetime-cheapest
+// price, so a flight last seen days ago (or a stale "cheapest ever") interleaved
+// with currently-live flights and you couldn't read today's situation. The view
+// now defaults to a flat snapshot of the latest scrape only (cheapest first),
+// with the full chronological log behind a "Show full history" toggle.
 
 function snap(over: Partial<Snapshot> & Pick<Snapshot, 'id' | 'flightId' | 'airline' | 'price' | 'scrapedAt'>): Snapshot {
   return {
@@ -25,7 +26,8 @@ function snap(over: Partial<Snapshot> & Pick<Snapshot, 'id' | 'flightId' | 'airl
   };
 }
 
-// Two flights, three scrapes each. Latest prices: Alpha 300, Beta 200.
+// Alpha and Beta are present in the latest scrape (May 3). Gamma was the cheapest
+// price ever seen but only appeared on May 1, then disappeared.
 const SNAPSHOTS: Snapshot[] = [
   snap({ id: 'a1', flightId: 'A', airline: 'Alpha', price: 350, scrapedAt: '2026-05-01T08:00:00.000Z' }),
   snap({ id: 'a2', flightId: 'A', airline: 'Alpha', price: 320, scrapedAt: '2026-05-02T08:00:00.000Z' }),
@@ -33,42 +35,67 @@ const SNAPSHOTS: Snapshot[] = [
   snap({ id: 'b1', flightId: 'B', airline: 'Beta', price: 250, scrapedAt: '2026-05-01T08:00:00.000Z' }),
   snap({ id: 'b2', flightId: 'B', airline: 'Beta', price: 210, scrapedAt: '2026-05-02T08:00:00.000Z' }),
   snap({ id: 'b3', flightId: 'B', airline: 'Beta', price: 200, scrapedAt: '2026-05-03T08:00:00.000Z' }),
+  snap({ id: 'c1', flightId: 'C', airline: 'Gamma', price: 150, scrapedAt: '2026-05-01T08:00:00.000Z' }),
 ];
 
-describe('PriceHistory — grouped by flight (issue #89)', () => {
-  it('collapses to one summary row per flight showing only the latest price', () => {
+describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
+  it('shows only the latest scrape by default, hiding earlier checks', () => {
     render(<PriceHistory snapshots={SNAPSHOTS} />);
 
-    // Latest price of each flight is visible...
+    // Latest price of each live flight is visible...
     expect(screen.getByText(/\b300\b/)).toBeInTheDocument();
     expect(screen.getByText(/\b200\b/)).toBeInTheDocument();
 
-    // ...but the older history is hidden until expanded.
+    // ...earlier checks are hidden until expanded.
     expect(screen.queryByText(/\b350\b/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\b320\b/)).not.toBeInTheDocument();
     expect(screen.queryByText(/\b250\b/)).not.toBeInTheDocument();
-
-    // One expand control per flight (both have history).
-    expect(screen.getAllByRole('button', { name: /earlier checks/i })).toHaveLength(2);
   });
 
-  it('reveals a flight\'s own history when its summary row is expanded', () => {
+  it('excludes flights absent from the latest scrape, even if they were the cheapest ever', () => {
     render(<PriceHistory snapshots={SNAPSHOTS} />);
 
-    fireEvent.click(screen.getByRole('button', { name: /earlier checks for Alpha/i }));
+    // Gamma (150) was the lifetime-cheapest but is gone from the latest scrape,
+    // so it must not surface in the current snapshot.
+    expect(screen.queryByText('Gamma')).not.toBeInTheDocument();
+    expect(screen.queryByText(/\b150\b/)).not.toBeInTheDocument();
+  });
 
-    // Alpha's older prices now show...
-    expect(screen.getByText(/\b320\b/)).toBeInTheDocument();
+  it('orders the latest scrape cheapest first', () => {
+    render(<PriceHistory snapshots={SNAPSHOTS} />);
+
+    const dataRows = screen
+      .getAllByRole('row')
+      .map((r) => r.textContent ?? '')
+      .filter((t) => t.includes('$'));
+
+    expect(dataRows[0]).toMatch(/Beta/); // 200
+    expect(dataRows[1]).toMatch(/Alpha/); // 300
+  });
+
+  it('reveals the full chronological log when full history is shown', () => {
+    render(<PriceHistory snapshots={SNAPSHOTS} />);
+
+    fireEvent.click(screen.getByRole('button', { name: /show full history/i }));
+
+    // Earlier checks and the vanished flight now appear.
     expect(screen.getByText(/\b350\b/)).toBeInTheDocument();
-
-    // ...while Beta stays collapsed.
-    expect(screen.queryByText(/\b250\b/)).not.toBeInTheDocument();
+    expect(screen.getByText(/\b210\b/)).toBeInTheDocument();
+    expect(screen.getByText('Gamma')).toBeInTheDocument();
+    expect(screen.getByText(/\b150\b/)).toBeInTheDocument();
   });
 
-  it('shows a total-checks count so the summary row signals there is history', () => {
+  it('labels the toggle with the total number of checks', () => {
     render(<PriceHistory snapshots={SNAPSHOTS} />);
-    // Each flight has 3 snapshots.
-    expect(screen.getAllByText(/3 checks/).length).toBeGreaterThanOrEqual(2);
+    expect(screen.getByRole('button', { name: /show full history \(7 checks\)/i })).toBeInTheDocument();
+  });
+
+  it('omits the full-history toggle when there is only one scrape', () => {
+    const single = [
+      snap({ id: 'x1', flightId: 'X', airline: 'Solo', price: 400, scrapedAt: '2026-05-03T08:00:00.000Z' }),
+    ];
+    render(<PriceHistory snapshots={single} />);
+    expect(screen.queryByRole('button', { name: /full history/i })).not.toBeInTheDocument();
   });
 
   it('renders nothing when there are no snapshots', () => {

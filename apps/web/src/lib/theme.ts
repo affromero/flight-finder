@@ -38,6 +38,28 @@ export function isLightTheme(theme: ThemeId) {
   return getThemeMode(theme) === 'light';
 }
 
+/**
+ * Which theme to apply on a fresh page load.
+ *
+ * Self hosted: the theme is a global instance setting saved server side
+ * (ExtractionConfig), already rendered into `<html data-theme>`. The per browser
+ * localStorage value must NOT override it, otherwise a stale value left by an old
+ * toggle masks the real theme on pages that don't re-fetch config (e.g. /q/[id]),
+ * which is issue #89's "theme keeps resetting" report. So the server (DOM) wins.
+ *
+ * Hosted: anonymous visitors can't write the server config, so their per browser
+ * toggle, persisted in localStorage, is the only place their preference lives and
+ * therefore wins, falling back to the server default.
+ */
+export function resolveInitialTheme(opts: {
+  selfHosted: boolean;
+  localTheme: ThemeId | null;
+  domTheme: ThemeId;
+}): ThemeId {
+  if (opts.selfHosted) return opts.domTheme;
+  return opts.localTheme ?? opts.domTheme;
+}
+
 export function getNextToggleTheme(theme: ThemeId, previousDarkTheme: ThemeId = 'default'): ThemeId {
   if (getThemeMode(theme) === 'light') {
     return getThemeMode(previousDarkTheme) === 'dark' ? previousDarkTheme : 'default';

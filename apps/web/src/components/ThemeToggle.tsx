@@ -2,9 +2,21 @@
 
 import { useEffect, useState } from 'react';
 import styles from './ThemeToggle.module.css';
-import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isLightTheme, isThemeId, type ThemeId } from '@/lib/theme';
+import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isLightTheme, isThemeId, resolveInitialTheme, type ThemeId } from '@/lib/theme';
 
 const LOCAL_THEME_KEY = 'ft-theme';
+
+declare global {
+  interface Window {
+    // Set by the theme bootstrap in the root layout. True on self hosted
+    // instances, where the global server theme wins over per browser localStorage.
+    __ftSelfHosted?: boolean;
+  }
+}
+
+function isSelfHostedClient(): boolean {
+  return typeof window !== 'undefined' && window.__ftSelfHosted === true;
+}
 
 function readLocalTheme(): ThemeId | null {
   if (typeof window === 'undefined') return null;
@@ -31,10 +43,15 @@ export function ThemeToggle() {
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    // Prefer per-browser preference over server-side default so a visitor's
-    // toggle sticks across reloads even in hosted mode where /api/admin/config
-    // requires admin auth and the server-side save is rejected.
-    const resolved = readLocalTheme() ?? getThemeFromDom();
+    // Hosted: prefer the per-browser preference so a visitor's toggle sticks
+    // across reloads even when the server-side save is rejected (admin only).
+    // Self hosted: the global server theme already on the DOM wins, so a stale
+    // localStorage value can't override it (issue #89).
+    const resolved = resolveInitialTheme({
+      selfHosted: isSelfHostedClient(),
+      localTheme: readLocalTheme(),
+      domTheme: getThemeFromDom(),
+    });
     setTheme(resolved);
     setLastDarkTheme(isLightTheme(resolved) ? 'default' : resolved);
     applyTheme(resolved);
