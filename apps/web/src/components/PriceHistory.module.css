@@ -140,60 +140,36 @@
   color: var(--muted);
 }
 
-/* Flight-grouped history: one summary row per flight, expandable into its
-   own price history. */
-.summaryRow td {
-  background: var(--surface);
+/* One country section: a "latest check" snapshot table, a toggle, and the
+   full chronological log below it when expanded. */
+.section {
+  margin-bottom: 0.5rem;
 }
 
-.summaryRow:hover td {
-  background: var(--elevated, var(--surface));
-}
-
-.expandBtn {
-  display: inline-flex;
-  align-items: center;
-  gap: 0.35rem;
-  background: none;
-  border: none;
-  padding: 0;
-  margin: 0;
-  cursor: pointer;
-  font-family: var(--font-mono);
-  font-size: 0.75rem;
-  color: var(--text-secondary);
-  white-space: nowrap;
-}
-
-.expandBtn:hover {
-  color: var(--accent);
-}
-
-.chevron {
-  display: inline-block;
-  font-size: 0.625rem;
-  line-height: 1;
-  color: var(--accent);
-  transition: transform 0.15s ease;
-}
-
-.chevronOpen {
-  transform: rotate(90deg);
-}
-
-.historyCount {
+.caption {
   font-family: var(--font-mono);
   font-size: 0.6875rem;
   color: var(--muted);
+  padding: 0.5rem 0 0.4rem;
 }
 
-.historyRow td {
-  background: transparent;
+.historyToggle {
+  display: inline-flex;
+  align-items: center;
+  background: none;
+  border: none;
+  padding: 0.5rem 0;
+  margin: 0;
+  cursor: pointer;
+  font-family: var(--font-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: var(--accent);
 }
 
-.historyDate {
-  padding-left: 1.6rem;
-  color: var(--muted);
+.historyToggle:hover {
+  text-decoration: underline;
 }
 
 .truncationNote {

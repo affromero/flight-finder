@@ -21,6 +21,16 @@ import { canManageQueryWithoutToken } from '@/lib/query-auth';
 import { groupDateRange } from './group-date-range';
 import styles from './page.module.css';
 
+// Render on every request. In self-hosted solo mode this page reads no dynamic
+// request API (canManageQueryWithoutToken short-circuits before touching
+// cookies), so without this opt-out Next.js parks the route in the Full Route
+// Cache. That cache bakes in the root layout's `<html data-theme>` and the
+// snapshot data, so a later theme change in /admin/config (or fresh prices)
+// would not show on /q/[id] until the cache happened to regenerate. Every other
+// primary page is already force-dynamic; this brings the public tracker page in
+// line so it always reflects the current theme and the latest snapshots.
+export const dynamic = 'force-dynamic';
+
 interface Props {
   params: Promise<{ id: string }>;
 }
