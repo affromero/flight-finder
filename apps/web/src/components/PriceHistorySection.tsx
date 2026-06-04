@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { currencySymbol } from '@/lib/currency';
+import { safeHttpUrl } from '@/lib/safe-url';
 import styles from './PriceHistory.module.css';
 import type { Snapshot } from './PriceHistory';
 
@@ -104,10 +105,10 @@ function FlightRow({
         ) : null}
       </td>
       <td>
-        {s.status === 'sold_out' || !s.bookingUrl ? (
+        {s.status === 'sold_out' || !safeHttpUrl(s.bookingUrl) ? (
           <span className={styles.soldOutLabel}>&mdash;</span>
         ) : (
-          <a href={s.bookingUrl} target="_blank" rel="noopener noreferrer" className={styles.bookLink}>
+          <a href={safeHttpUrl(s.bookingUrl)} target="_blank" rel="noopener noreferrer" className={styles.bookLink}>
             Book
           </a>
         )}

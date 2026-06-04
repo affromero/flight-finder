@@ -1,5 +1,6 @@
 'use client';
 
+import { safeHttpUrl } from '@/lib/safe-url';
 import styles from './PriceCalendar.module.css';
 
 interface Snapshot {
@@ -69,7 +70,7 @@ export function PriceCalendar({ snapshots, currency }: Props) {
           return (
             <a
               key={d.date}
-              href={d.bookingUrl || undefined}
+              href={safeHttpUrl(d.bookingUrl) || undefined}
               target="_blank"
               rel="noopener noreferrer"
               className={`${styles.cell} ${isMin ? styles.cellBest : ''}`}

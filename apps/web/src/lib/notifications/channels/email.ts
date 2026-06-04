@@ -20,6 +20,6 @@ export async function sendEmail(config: EmailConfig, message: ChannelMessage): P
 function renderHtml(message: ChannelMessage): string {
   const esc = (s: string) =>
     s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
-  const link = message.url ? `<p><a href="${esc(message.url)}">View price history</a></p>` : '';
+  const link = message.url ? `<p><a href="${esc(message.url)}">Open</a></p>` : '';
   return `<p>${esc(message.body)}</p>${link}`;
 }
