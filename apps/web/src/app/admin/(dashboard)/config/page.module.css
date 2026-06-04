@@ -56,18 +56,6 @@
   outline: none;
 }
 
-.enabled {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  color: var(--accent);
-}
-
-.disabled {
-  font-family: var(--font-mono);
-  font-size: 0.875rem;
-  color: var(--price-up);
-}
-
 .actions {
   display: flex;
   align-items: center;

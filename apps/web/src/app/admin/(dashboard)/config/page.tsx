@@ -460,10 +460,33 @@ export default function ConfigPage() {
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Status</label>
-          <span className={config.enabled ? styles.enabled : styles.disabled}>
-            {config.enabled ? 'Enabled' : 'Disabled'}
-          </span>
+          <label className={styles.label}>Scraping</label>
+          <div className={styles.toggleRow}>
+            <button
+              type="button"
+              className={`${styles.toggle} ${config.enabled ? styles.toggleOn : ''}`}
+              onClick={async () => {
+                const newValue = !config.enabled;
+                const res = await fetch('/api/admin/config', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ enabled: newValue }),
+                });
+                const data = await res.json();
+                if (data.ok) setConfig(data.data);
+              }}
+            >
+              <span className={styles.toggleKnob} />
+            </button>
+            <div>
+              <span className={styles.toggleLabel}>
+                {config.enabled ? 'Scraping enabled' : 'Scraping paused'}
+              </span>
+              <p className={styles.toggleHint}>
+                Pause to stop all background price checks, for example while away or over an API quota. Existing trackers and price history are kept.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className={styles.actions}>
