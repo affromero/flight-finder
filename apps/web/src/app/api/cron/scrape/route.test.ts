@@ -1,9 +1,10 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockRunScrapeAll = vi.fn();
 const mockCleanup = vi.fn();
 const mockExpire = vi.fn().mockResolvedValue(0);
+const mockNotify = vi.fn().mockResolvedValue(undefined);
 
 vi.mock('@/lib/scraper/run-scrape', () => ({
   runScrapeAll: () => mockRunScrapeAll(),
@@ -12,6 +13,10 @@ vi.mock('@/lib/scraper/run-scrape', () => ({
 
 vi.mock('@/lib/scraper/expire-queries', () => ({
   expireDepartedQueries: () => mockExpire(),
+}));
+
+vi.mock('@/lib/notifications/run', () => ({
+  notifyNewLows: (...args: unknown[]) => mockNotify(...args),
 }));
 
 import { GET } from './route';
@@ -23,6 +28,11 @@ function makeRequest(token?: string): NextRequest {
 }
 
 describe('GET /api/cron/scrape', () => {
+  beforeEach(() => {
+    mockNotify.mockReset();
+    mockNotify.mockResolvedValue(undefined);
+  });
+
   it('rejects request without auth header with 401', async () => {
     const res = await GET(makeRequest());
     expect(res.status).toBe(401);
@@ -59,5 +69,30 @@ describe('GET /api/cron/scrape', () => {
     const res = await GET(makeRequest('test-cron-secret'));
     const body = await res.json();
     expect(body.data.deletedUnvisited).toBe(3);
+  });
+
+  it('runs the new-low notification pass for successful queries only', async () => {
+    mockCleanup.mockResolvedValue(0);
+    mockExpire.mockResolvedValue(0);
+    mockRunScrapeAll.mockResolvedValue([
+      { queryId: 'q-ok', status: 'success', snapshotsCount: 5, extractionCost: 0.01 },
+      { queryId: 'q-bad', status: 'failed', snapshotsCount: 0, extractionCost: 0 },
+    ]);
+
+    const res = await GET(makeRequest('test-cron-secret'));
+    expect(res.status).toBe(200);
+    expect(mockNotify).toHaveBeenCalledWith(['q-ok'], expect.any(Date));
+  });
+
+  it('still returns 200 when the notification pass throws', async () => {
+    mockCleanup.mockResolvedValue(0);
+    mockExpire.mockResolvedValue(0);
+    mockRunScrapeAll.mockResolvedValue([
+      { queryId: 'q-ok', status: 'success', snapshotsCount: 1, extractionCost: 0 },
+    ]);
+    mockNotify.mockRejectedValue(new Error('telegram down'));
+
+    const res = await GET(makeRequest('test-cron-secret'));
+    expect(res.status).toBe(200);
   });
 });

@@ -127,6 +127,29 @@ describe('getCurrentUser', () => {
     const { getCurrentUser } = await import('./user-auth');
     expect(await getCurrentUser()).toEqual(fakeUser);
   });
+
+  it('returns null when the token predates sessionsValidFrom (revoked by a password change)', async () => {
+    const { createUserSessionToken } = await import('./user-auth');
+    cookieStore.get.mockReturnValueOnce({ value: createUserSessionToken('uid_99') });
+    const { prisma } = await import('@/lib/prisma');
+    vi.mocked(prisma.user.findUnique).mockResolvedValue({
+      id: 'uid_99',
+      isAdmin: false,
+      sessionsValidFrom: new Date(Date.now() + 60_000), // changed after this token was issued
+    } as never);
+    const { getCurrentUser } = await import('./user-auth');
+    expect(await getCurrentUser()).toBeNull();
+  });
+
+  it('returns the user when the token postdates sessionsValidFrom', async () => {
+    const { createUserSessionToken } = await import('./user-auth');
+    cookieStore.get.mockReturnValueOnce({ value: createUserSessionToken('uid_99') });
+    const { prisma } = await import('@/lib/prisma');
+    const u = { id: 'uid_99', isAdmin: false, sessionsValidFrom: new Date(Date.now() - 60_000) };
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(u as never);
+    const { getCurrentUser } = await import('./user-auth');
+    expect(await getCurrentUser()).toEqual(u);
+  });
 });
 
 describe('requireUser / requireAdminUser', () => {

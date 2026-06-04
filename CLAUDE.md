@@ -53,6 +53,7 @@ npm run ci                     # lint + typecheck + build
 | `admin/(dashboard)/page.tsx` | Admin dashboard — active queries, costs |
 | `admin/(dashboard)/queries/page.tsx` | Query management — pause/resume/delete/reassign |
 | `admin/(dashboard)/config/page.tsx` | LLM agent config — provider/model selection |
+| `admin/(dashboard)/notifications/page.tsx` | Notification channels + new-low alert thresholds |
 | `admin/(dashboard)/users/page.tsx` | User management (multi user mode only) — create/reset/delete |
 | `login/page.tsx` | Unified login (multi user mode only) — admin + non admin |
 | `account/page.tsx` | Logged in user's tracker list (multi user mode only) |
@@ -69,10 +70,14 @@ npm run ci                     # lint + typecheck + build
 | `api/admin/queries/route.ts` | GET — list all queries |
 | `api/admin/queries/[id]/route.ts` | PATCH/DELETE — manage query; PATCH accepts userId reassignment |
 | `api/admin/config/route.ts` | GET/PATCH — extraction config (exposes isSelfHosted) |
-| `api/admin/multi-user/route.ts` | POST — enable multi user mode atomically (creates first admin, backfills) |
+| `api/admin/multi-user/route.ts` | POST — enable multi user mode atomically (creates first admin, backfills); DELETE — disable (admin only, clears admin hash) |
 | `api/admin/users/route.ts` | GET/POST — list/create users (admin only) |
 | `api/admin/users/[id]/route.ts` | PATCH/DELETE — reset password, toggle isAdmin, delete |
+| `api/admin/notifications/route.ts` | GET/POST — list/create global notification channels (admin) |
+| `api/admin/notifications/[id]/route.ts` | PATCH/DELETE — update/toggle/delete a channel |
+| `api/admin/notifications/[id]/test/route.ts` | POST — send a test notification (rate limited) |
 | `api/account/settings/route.ts` | GET/PATCH — current user's preferences |
+| `api/account/password/route.ts` | POST — self-service password change (verifies current, rate limited) |
 | `api/health/route.ts` | GET — health check (DB + Redis) |
 
 ### `apps/web/src/components/` — UI components
@@ -97,6 +102,8 @@ npm run ci                     # lint + typecheck + build
 | `multi-user.ts` | `isMultiUserEnabled()` (hard gated on SELF_HOSTED, cached 60s) |
 | `rate-limit.ts` | Redis backed login throttling (5 per 15 min per IP+username) |
 | `password.ts` | scrypt hashing and verification |
+| `secret-crypto.ts` | AES-256-GCM encrypt/decrypt for secrets at rest (keyed on ADMIN_SESSION_SECRET) |
+| `notifications/` | New-low alert detection + dispatch + pluggable channel senders (Telegram, email, ntfy, webhook) |
 
 ### `apps/web/src/lib/scraper/` — Extraction pipeline
 

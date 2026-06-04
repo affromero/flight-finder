@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { EXTRACTION_PROVIDERS } from '@/lib/scraper/ai-registry';
 import { hashPassword } from '@/lib/password';
 import { registerForCommunity } from '@/lib/community-sync';
-import { encryptVpnCode } from '@/lib/vpn-crypto';
+import { encryptSecret } from '@/lib/secret-crypto';
 import { isThemeId } from '@/lib/theme';
 import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
@@ -82,6 +82,32 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.previewMaxCombos === 'number' && Number.isFinite(body.previewMaxCombos)) {
     data.previewMaxCombos = Math.max(6, Math.min(96, Math.round(body.previewMaxCombos)));
   }
+  if (typeof body.notifyMinDropAbs === 'number' && Number.isFinite(body.notifyMinDropAbs)) {
+    data.notifyMinDropAbs = Math.max(0, Math.min(100000, body.notifyMinDropAbs));
+  }
+  if (typeof body.notifyMinDropPct === 'number' && Number.isFinite(body.notifyMinDropPct)) {
+    data.notifyMinDropPct = Math.max(0, Math.min(1, body.notifyMinDropPct));
+  }
+  // Provider RPM overrides. null clears the override (revert to env/default).
+  for (const key of ['anthropicRpm', 'googleRpm', 'openaiRpm', 'groqRpm']) {
+    if (body[key] === null) {
+      data[key] = null;
+    } else if (typeof body[key] === 'number' && Number.isFinite(body[key])) {
+      data[key] = Math.max(1, Math.min(10000, Math.round(body[key])));
+    }
+  }
+  if (body.previewConcurrency === null) {
+    data.previewConcurrency = null;
+  } else if (typeof body.previewConcurrency === 'number' && Number.isFinite(body.previewConcurrency)) {
+    // Match the env-path ceiling (parsePreviewConcurrency caps at 10) so the two
+    // sources never disagree on the max parallel browsers.
+    data.previewConcurrency = Math.max(1, Math.min(10, Math.round(body.previewConcurrency)));
+  }
+  if (body.previewAdmissionCap === null) {
+    data.previewAdmissionCap = null;
+  } else if (typeof body.previewAdmissionCap === 'number' && Number.isFinite(body.previewAdmissionCap)) {
+    data.previewAdmissionCap = Math.max(1, Math.min(50, Math.round(body.previewAdmissionCap)));
+  }
   if (body.defaultSearchMethod !== undefined) {
     if (body.defaultSearchMethod !== 'ai' && body.defaultSearchMethod !== 'manual') {
       return apiError('defaultSearchMethod must be "ai" or "manual"', 400);
@@ -137,7 +163,7 @@ export async function PATCH(request: NextRequest) {
     data.vpnCountries = body.vpnCountries;
   }
   if (typeof body.vpnActivationCode === 'string' && body.vpnActivationCode.length > 0) {
-    data.vpnActivationCode = encryptVpnCode(body.vpnActivationCode);
+    data.vpnActivationCode = encryptSecret(body.vpnActivationCode);
   } else if (body.vpnActivationCode === null) {
     data.vpnActivationCode = null;
   }
@@ -152,6 +178,18 @@ export async function PATCH(request: NextRequest) {
       }
     }
     data.customBaseUrl = body.customBaseUrl || null;
+  }
+
+  if (body.publicBaseUrl !== undefined) {
+    if (body.publicBaseUrl !== null && typeof body.publicBaseUrl !== 'string') {
+      return apiError('publicBaseUrl must be a URL string or null', 400);
+    }
+    if (body.publicBaseUrl && typeof body.publicBaseUrl === 'string') {
+      try { new URL(body.publicBaseUrl); } catch {
+        return apiError('publicBaseUrl must be a valid URL', 400);
+      }
+    }
+    data.publicBaseUrl = body.publicBaseUrl || null;
   }
 
   if (body.aggregatorsEnabled !== undefined) {

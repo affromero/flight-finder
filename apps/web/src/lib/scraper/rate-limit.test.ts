@@ -4,10 +4,17 @@
  * _resetRateLimitForTests in beforeEach to start with a fresh quota.
  */
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
+
+const mockConfigFindFirst = vi.fn().mockResolvedValue(null);
+vi.mock('@/lib/prisma', () => ({
+  prisma: { extractionConfig: { findFirst: (...args: unknown[]) => mockConfigFindFirst(...args) } },
+}));
+
 import { acquireProviderToken, _resetRateLimitForTests } from './rate-limit';
 
 beforeEach(() => {
   _resetRateLimitForTests();
+  mockConfigFindFirst.mockResolvedValue(null); // no DB override by default
   process.env.GOOGLE_RPM = undefined;
 });
 
@@ -63,14 +70,24 @@ describe('acquireProviderToken', () => {
     expect(resolved).toBe(true);
   });
 
-  it('honors per provider env overrides', async () => {
-    process.env.ANTHROPIC_RPM = '2';
-    // The env is read at module load; this test relies on the
-    // existing module having already read the default 50 for
-    // anthropic, so we skip the override assertion and document the
-    // module-level read contract instead.
-    // (The contract is verified by inspection of rate-limit.ts:33.)
-    expect(typeof process.env.ANTHROPIC_RPM).toBe('string');
+  it('applies an admin-configured RPM override from the DB', async () => {
+    vi.useFakeTimers();
+    mockConfigFindFirst.mockResolvedValue({ anthropicRpm: 2, googleRpm: null, openaiRpm: null, groqRpm: null });
+    _resetRateLimitForTests(); // drop the cached overrides so the new value is read
+
+    // With anthropic capped at 2, the first two admit instantly and the third blocks.
+    await acquireProviderToken('anthropic');
+    await acquireProviderToken('anthropic');
+    const third = acquireProviderToken('anthropic');
+    let resolved = false;
+    void third.then(() => { resolved = true; });
+
+    await vi.advanceTimersByTimeAsync(30_000);
+    expect(resolved).toBe(false);
+
+    await vi.advanceTimersByTimeAsync(31_000);
+    await third;
+    expect(resolved).toBe(true);
   });
 
   it('isolates counters per provider', async () => {

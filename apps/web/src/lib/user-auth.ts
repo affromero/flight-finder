@@ -61,7 +61,11 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!token) return null;
   const parsed = parseSession(token);
   if (!parsed || parsed.kind !== 'user') return null;
-  return prisma.user.findUnique({ where: { id: parsed.userId } });
+  const user = await prisma.user.findUnique({ where: { id: parsed.userId } });
+  if (!user) return null;
+  // Revoke any session issued before the user's last password change/reset.
+  if (user.sessionsValidFrom && parsed.ts < user.sessionsValidFrom.getTime()) return null;
+  return user;
 }
 
 export async function requireUser(): Promise<User> {

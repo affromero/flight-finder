@@ -13,6 +13,7 @@ const ALL_NAV_ITEMS = [
   { href: '/admin/insights', label: 'Insights', selfHosted: true },
   { href: '/admin/analytics', label: 'Analytics', selfHosted: false },
   { href: '/admin/config', label: 'Config', selfHosted: true },
+  { href: '/admin/notifications', label: 'Notifications', selfHosted: true },
 ];
 
 const USERS_NAV_ITEM = { href: '/admin/users', label: 'Users' };

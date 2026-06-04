@@ -5,12 +5,12 @@ const IV_LENGTH = 12;
 
 function getKey(): Buffer {
   const secret = process.env.ADMIN_SESSION_SECRET;
-  if (!secret) throw new Error('ADMIN_SESSION_SECRET is required for VPN code encryption');
+  if (!secret) throw new Error('ADMIN_SESSION_SECRET is required to encrypt stored secrets');
   return crypto.createHash('sha256').update(secret).digest();
 }
 
-/** Encrypt a plaintext string. Returns hex-encoded iv:tag:ciphertext */
-export function encryptVpnCode(plaintext: string): string {
+/** Encrypt a plaintext secret at rest. Returns hex-encoded iv:tag:ciphertext. */
+export function encryptSecret(plaintext: string): string {
   const key = getKey();
   const iv = crypto.randomBytes(IV_LENGTH);
   const cipher = crypto.createCipheriv(ALGORITHM, key, iv);
@@ -19,10 +19,10 @@ export function encryptVpnCode(plaintext: string): string {
   return `${iv.toString('hex')}:${tag.toString('hex')}:${encrypted.toString('hex')}`;
 }
 
-/** Decrypt a hex-encoded iv:tag:ciphertext string */
-export function decryptVpnCode(encoded: string): string {
+/** Decrypt a hex-encoded iv:tag:ciphertext string produced by encryptSecret. */
+export function decryptSecret(encoded: string): string {
   const parts = encoded.split(':');
-  if (parts.length !== 3) throw new Error('Invalid encrypted VPN code format');
+  if (parts.length !== 3) throw new Error('Invalid encrypted secret format');
   const iv = Buffer.from(parts[0]!, 'hex');
   const tag = Buffer.from(parts[1]!, 'hex');
   const encrypted = Buffer.from(parts[2]!, 'hex');

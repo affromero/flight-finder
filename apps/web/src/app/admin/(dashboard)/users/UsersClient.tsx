@@ -91,6 +91,21 @@ export function UsersClient({ initialUsers }: Props) {
     else alert((await res.json()).error || 'Failed to update user');
   };
 
+  const handleDisableMultiUser = async () => {
+    if (
+      !confirm(
+        'Disable multi user mode? This turns off all logins and clears the admin password, reverting to a single user self hosted instance. Accounts stay in the database but become inaccessible until you re-enable multi user mode. Continue?',
+      )
+    )
+      return;
+    const res = await fetch('/api/admin/multi-user', { method: 'DELETE' });
+    if (res.ok) {
+      window.location.href = '/admin';
+    } else {
+      alert((await res.json()).error || 'Failed to disable multi user mode');
+    }
+  };
+
   return (
     <>
       {banner !== null && (
@@ -137,6 +152,16 @@ export function UsersClient({ initialUsers }: Props) {
             </div>
           ))
         )}
+      </div>
+
+      <div className={styles.addForm}>
+        <h2 className={styles.formTitle}>Danger zone</h2>
+        <p className={styles.rowMeta}>
+          Turn off multi user mode and revert to a single user self hosted instance. Accounts are kept in the database but become inaccessible, and the admin password is cleared.
+        </p>
+        <button className={styles.danger} onClick={handleDisableMultiUser}>
+          Disable multi user mode
+        </button>
       </div>
     </>
   );

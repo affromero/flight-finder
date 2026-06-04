@@ -23,6 +23,12 @@ interface Config {
   vpnCountries: string[];
   hasVpnActivationCode: boolean;
   aggregatorsEnabled: string[];
+  anthropicRpm: number | null;
+  googleRpm: number | null;
+  openaiRpm: number | null;
+  groqRpm: number | null;
+  previewConcurrency: number | null;
+  previewAdmissionCap: number | null;
 }
 
 const AGGREGATOR_OPTIONS = [
@@ -52,6 +58,13 @@ export default function ConfigPage() {
   const [vpnProvider, setVpnProvider] = useState('none');
   const [vpnCountries, setVpnCountries] = useState<string[]>([]);
   const [aggregatorsEnabled, setAggregatorsEnabled] = useState<string[]>(['google_flights', 'airline_direct']);
+  // Advanced perf knobs. Empty string = use the env var / built-in default.
+  const [anthropicRpm, setAnthropicRpm] = useState('');
+  const [googleRpm, setGoogleRpm] = useState('');
+  const [openaiRpm, setOpenaiRpm] = useState('');
+  const [groqRpm, setGroqRpm] = useState('');
+  const [previewConcurrency, setPreviewConcurrency] = useState('');
+  const [previewAdmissionCap, setPreviewAdmissionCap] = useState('');
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
 
@@ -110,6 +123,12 @@ export default function ConfigPage() {
           setVpnProvider(d.data.vpnProvider || 'none');
           setVpnCountries(d.data.vpnCountries || []);
           setAggregatorsEnabled(d.data.aggregatorsEnabled ?? ['google_flights', 'airline_direct']);
+          setAnthropicRpm(String(d.data.anthropicRpm ?? ''));
+          setGoogleRpm(String(d.data.googleRpm ?? ''));
+          setOpenaiRpm(String(d.data.openaiRpm ?? ''));
+          setGroqRpm(String(d.data.groqRpm ?? ''));
+          setPreviewConcurrency(String(d.data.previewConcurrency ?? ''));
+          setPreviewAdmissionCap(String(d.data.previewAdmissionCap ?? ''));
           const pc = EXTRACTION_PROVIDERS[d.data.provider];
           const knownModel = pc?.models.find((m) => m.id === d.data.model);
           if (knownModel) {
@@ -170,6 +189,12 @@ export default function ConfigPage() {
         vpnProvider: vpnProvider === 'none' ? null : vpnProvider,
         vpnCountries,
         aggregatorsEnabled,
+        anthropicRpm: anthropicRpm.trim() === '' ? null : Number(anthropicRpm),
+        googleRpm: googleRpm.trim() === '' ? null : Number(googleRpm),
+        openaiRpm: openaiRpm.trim() === '' ? null : Number(openaiRpm),
+        groqRpm: groqRpm.trim() === '' ? null : Number(groqRpm),
+        previewConcurrency: previewConcurrency.trim() === '' ? null : Number(previewConcurrency),
+        previewAdmissionCap: previewAdmissionCap.trim() === '' ? null : Number(previewAdmissionCap),
       }),
     });
 
@@ -460,10 +485,70 @@ export default function ConfigPage() {
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Status</label>
-          <span className={config.enabled ? styles.enabled : styles.disabled}>
-            {config.enabled ? 'Enabled' : 'Disabled'}
+          <label className={styles.label}>Provider rate limits (advanced)</label>
+          <span className={styles.toggleHint}>
+            Requests per minute per provider. Leave blank to use the conservative free tier defaults (Anthropic 50, Google 15, OpenAI 60, Groq 30). Raise these to match a paid API tier; lower them to stay under a quota.
           </span>
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Anthropic RPM</label>
+          <input type="number" className={styles.input} min={1} placeholder="default 50" value={anthropicRpm} onChange={(e) => setAnthropicRpm(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Google / Gemini RPM</label>
+          <input type="number" className={styles.input} min={1} placeholder="default 15" value={googleRpm} onChange={(e) => setGoogleRpm(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>OpenAI RPM</label>
+          <input type="number" className={styles.input} min={1} placeholder="default 60" value={openaiRpm} onChange={(e) => setOpenaiRpm(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Groq RPM</label>
+          <input type="number" className={styles.input} min={1} placeholder="default 30" value={groqRpm} onChange={(e) => setGroqRpm(e.target.value)} />
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Preview concurrency</label>
+          <input type="number" className={styles.input} min={1} max={10} placeholder="default 3" value={previewConcurrency} onChange={(e) => setPreviewConcurrency(e.target.value)} />
+          <span className={styles.toggleHint}>
+            Parallel browser instances for the create-time preview scrape. Higher is faster but uses more memory. Leave blank for the default (3).
+          </span>
+        </div>
+        <div className={styles.field}>
+          <label className={styles.label}>Preview admission cap per IP</label>
+          <input type="number" className={styles.input} min={1} max={50} placeholder="default 3" value={previewAdmissionCap} onChange={(e) => setPreviewAdmissionCap(e.target.value)} />
+          <span className={styles.toggleHint}>
+            Max preview runs one client can have in flight at once. Leave blank for the default (3).
+          </span>
+        </div>
+
+        <div className={styles.field}>
+          <label className={styles.label}>Scraping</label>
+          <div className={styles.toggleRow}>
+            <button
+              type="button"
+              className={`${styles.toggle} ${config.enabled ? styles.toggleOn : ''}`}
+              onClick={async () => {
+                const newValue = !config.enabled;
+                const res = await fetch('/api/admin/config', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ enabled: newValue }),
+                });
+                const data = await res.json();
+                if (data.ok) setConfig(data.data);
+              }}
+            >
+              <span className={styles.toggleKnob} />
+            </button>
+            <div>
+              <span className={styles.toggleLabel}>
+                {config.enabled ? 'Scraping enabled' : 'Scraping paused'}
+              </span>
+              <p className={styles.toggleHint}>
+                Pause to stop all background price checks, for example while away or over an API quota. Existing trackers and price history are kept.
+              </p>
+            </div>
+          </div>
         </div>
 
         <div className={styles.actions}>

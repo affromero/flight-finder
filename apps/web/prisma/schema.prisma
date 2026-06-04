@@ -36,6 +36,8 @@ model Query {
   vpnCountries    String[] @default([]) // ISO 3166-1 codes for VPN comparison
   label           String?
   scrapeInterval  Int?     // hours, null = follow extractionConfig.scrapeInterval (global)
+  lastNotifiedLowPrice Float?    // price of the most recent new-low alert sent for this query (notification dedupe)
+  lastNotifiedAt       DateTime? // when that last new-low alert was sent
   userId          String?  // owner when self-hosted multi-user is enabled; null = anonymous or seed
   createdAt       DateTime @default(now())
   updatedAt       DateTime @updatedAt
@@ -123,6 +125,15 @@ model ExtractionConfig {
   maxTrackedPerRoute    Int @default(10) // max flights a user can select to track per route in the picker; bounded by maxFlightsPerDate
   previewMaxCombos      Int @default(24) // max (routes x dates) the create-time preview scrape fans out; cron does the full grid
   aggregatorsEnabled    String[] @default(["google_flights", "airline_direct"]) // sources allowed in the fallback chain; skyscanner/kayak opt-in
+  notifyMinDropAbs      Float    @default(5)  // minimum absolute price drop (in the query's currency) to fire a new-low alert
+  notifyMinDropPct      Float    @default(0)  // minimum fractional drop (0..1) to fire a new-low alert; 0 = absolute floor only
+  publicBaseUrl         String?  // this instance's public URL for notification deep links; null = APP_URL env / default
+  anthropicRpm          Int?     // override Anthropic requests-per-minute cap; null = ANTHROPIC_RPM env / built-in default
+  googleRpm             Int?     // override Google/Gemini requests-per-minute cap; null = GOOGLE_RPM env / built-in default
+  openaiRpm             Int?     // override OpenAI requests-per-minute cap; null = OPENAI_RPM env / built-in default
+  groqRpm               Int?     // override Groq requests-per-minute cap; null = GROQ_RPM env / built-in default
+  previewConcurrency    Int?     // parallel Playwright instances for the create-time preview; null = PREVIEW_CONCURRENCY env / default
+  previewAdmissionCap   Int?     // max concurrent preview runs per client IP; null = PREVIEW_ADMISSION_CAP env / default
 }
 
 model User {
@@ -130,6 +141,7 @@ model User {
   username          String   @unique
   displayName       String?
   passwordHash      String
+  sessionsValidFrom DateTime? // sessions issued before this instant are revoked (set on password change/reset)
   isAdmin           Boolean  @default(false)
   defaultCurrency   String?  // override; null falls back to ExtractionConfig.defaultCurrency
   defaultCountry    String?  // override; null falls back to ExtractionConfig.defaultCountry
@@ -139,9 +151,26 @@ model User {
   createdAt         DateTime @default(now())
   updatedAt         DateTime @updatedAt
 
-  queries Query[]
+  queries  Query[]
+  channels NotificationChannel[]
 
   @@index([isAdmin])
+}
+
+model NotificationChannel {
+  id        String   @id @default(cuid())
+  userId    String?  // owner; null = global/admin-owned (single-user self-hosted). set = per-user (multi-user mode)
+  type      String   // 'telegram' | 'email' | 'ntfy' | 'webhook'
+  label     String?  // friendly name shown in the admin UI
+  config    Json     // per-type settings; secret fields stored encrypted (see lib/notifications/channels)
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([enabled])
 }
 
 

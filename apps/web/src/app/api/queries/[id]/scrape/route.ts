@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { authorizeMutation } from '@/lib/query-auth';
 import { redis } from '@/lib/redis';
 import { runFullScrapeForQuery } from '@/lib/scraper/run-scrape';
+import { notifyNewLows } from '@/lib/notifications/run';
 
 const THROTTLE_SECONDS = 60;
 // A multi-VPN run can stretch past 10 minutes per sibling. Anything older
@@ -66,6 +67,14 @@ export async function POST(
 
   if (query.expiresAt.getTime() <= Date.now()) {
     return apiError('Tracker has expired; create a fresh one to keep scraping.', 410);
+  }
+
+  const scrapeConfig = await prisma.extractionConfig.findFirst({
+    where: { id: 'singleton' },
+    select: { enabled: true },
+  });
+  if (scrapeConfig?.enabled === false) {
+    return apiError('Scraping is paused. Resume it in the config before refreshing.', 409);
   }
 
   // Only target siblings that are themselves still alive (active, non-seed,
@@ -152,6 +161,10 @@ export async function POST(
   const orderedTargets = [id, ...targetIds.filter((qid) => qid !== id)];
   const groupLabel = query.groupId ?? id;
   void (async () => {
+    // Capture the boundary BEFORE scraping so snapshots written during this
+    // run count as "current" for new-low detection.
+    const cycleStartedAt = new Date();
+    const succeededIds: string[] = [];
     let successCount = 0;
     let failureCount = 0;
     for (let i = 0; i < orderedTargets.length; i++) {
@@ -168,6 +181,11 @@ export async function POST(
           successCount += 1;
         } else {
           failureCount += 1;
+        }
+        // Notify on any target that landed fresh prices (even a partial VPN
+        // pass), matching the cron path which notifies any successful query.
+        if (results.some((r) => r.status === 'success')) {
+          succeededIds.push(qid);
         }
       } catch (err) {
         failureCount += 1;
@@ -188,6 +206,14 @@ export async function POST(
       }
     }
     console.log(`[scrape] manual run complete (group=${groupLabel}): ${successCount} successes, ${failureCount} failures`);
+
+    // Fire new-low alerts only for targets that actually landed fresh prices
+    // this run. Isolated so a notification failure never affects the scrape.
+    try {
+      await notifyNewLows(succeededIds, cycleStartedAt);
+    } catch (err) {
+      console.error(`[notify] manual run notification pass failed: ${err instanceof Error ? err.message : err}`);
+    }
   })();
 
   return apiSuccess({

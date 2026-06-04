@@ -106,6 +106,7 @@ export function SettingsForm({
   };
 
   return (
+    <>
     <form className={styles.form} onSubmit={handleSubmit}>
       <div className={styles.field}>
         <label className={styles.label}>Username</label>
@@ -233,6 +234,100 @@ export function SettingsForm({
 
       <button type="submit" className={styles.button} disabled={saving}>
         {saving ? 'Saving...' : 'Save'}
+      </button>
+    </form>
+    <PasswordSection />
+    </>
+  );
+}
+
+function PasswordSection() {
+  const [currentPassword, setCurrentPassword] = useState('');
+  const [newPassword, setNewPassword] = useState('');
+  const [confirmPassword, setConfirmPassword] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [message, setMessage] = useState('');
+  const [error, setError] = useState('');
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setMessage('');
+    setError('');
+    if (newPassword.length < 8) {
+      setError('New password must be at least 8 characters');
+      return;
+    }
+    if (newPassword !== confirmPassword) {
+      setError('New passwords do not match');
+      return;
+    }
+    setSaving(true);
+    const res = await fetch('/api/account/password', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ currentPassword, newPassword }),
+    });
+    setSaving(false);
+    if (res.ok) {
+      setCurrentPassword('');
+      setNewPassword('');
+      setConfirmPassword('');
+      // The change revoked all sessions (this one included); send to login.
+      setMessage('Password changed. Logging you out...');
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1200);
+    } else {
+      setError((await res.json()).error || 'Failed to change password');
+    }
+  };
+
+  return (
+    <form className={styles.form} onSubmit={handleSubmit}>
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor="currentPassword">Current password</label>
+        <input
+          id="currentPassword"
+          className={styles.input}
+          type="password"
+          autoComplete="current-password"
+          value={currentPassword}
+          onChange={(e) => setCurrentPassword(e.target.value)}
+          required
+        />
+      </div>
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor="newPassword">New password</label>
+        <input
+          id="newPassword"
+          className={styles.input}
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={newPassword}
+          onChange={(e) => setNewPassword(e.target.value)}
+          required
+        />
+      </div>
+      <div className={styles.field}>
+        <label className={styles.label} htmlFor="confirmPassword">Confirm new password</label>
+        <input
+          id="confirmPassword"
+          className={styles.input}
+          type="password"
+          autoComplete="new-password"
+          minLength={8}
+          value={confirmPassword}
+          onChange={(e) => setConfirmPassword(e.target.value)}
+          required
+        />
+      </div>
+
+      {error && <p className={styles.error}>{error}</p>}
+      {message && <p className={styles.success}>{message}</p>}
+
+      <button type="submit" className={styles.button} disabled={saving}>
+        {saving ? 'Changing...' : 'Change password'}
       </button>
     </form>
   );

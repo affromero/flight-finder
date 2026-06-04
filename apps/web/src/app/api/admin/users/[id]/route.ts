@@ -50,6 +50,7 @@ export async function PATCH(
       return apiError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400);
     }
     data.passwordHash = await hashPassword(body.password);
+    data.sessionsValidFrom = new Date(); // a reset revokes the target user's existing sessions
   }
 
   if (Object.keys(data).length === 0) {

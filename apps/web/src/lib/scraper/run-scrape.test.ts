@@ -60,7 +60,18 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { runScrapeForQuery } from './run-scrape';
+import { runScrapeForQuery, runScrapeAll } from './run-scrape';
+
+describe('runScrapeAll pause gate (issue #106)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('skips the entire run when scraping is paused (config.enabled=false)', async () => {
+    mockPrisma.extractionConfig.findFirst.mockResolvedValue({ enabled: false });
+    const results = await runScrapeAll();
+    expect(results).toEqual([]);
+    expect(mockPrisma.query.findUnique).not.toHaveBeenCalled();
+  });
+});
 
 const BASE_QUERY = {
   id: 'q1',
