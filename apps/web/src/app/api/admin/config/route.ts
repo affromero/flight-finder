@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { EXTRACTION_PROVIDERS } from '@/lib/scraper/ai-registry';
 import { hashPassword } from '@/lib/password';
 import { registerForCommunity } from '@/lib/community-sync';
-import { encryptVpnCode } from '@/lib/vpn-crypto';
+import { encryptSecret } from '@/lib/secret-crypto';
 import { isThemeId } from '@/lib/theme';
 import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
@@ -137,7 +137,7 @@ export async function PATCH(request: NextRequest) {
     data.vpnCountries = body.vpnCountries;
   }
   if (typeof body.vpnActivationCode === 'string' && body.vpnActivationCode.length > 0) {
-    data.vpnActivationCode = encryptVpnCode(body.vpnActivationCode);
+    data.vpnActivationCode = encryptSecret(body.vpnActivationCode);
   } else if (body.vpnActivationCode === null) {
     data.vpnActivationCode = null;
   }

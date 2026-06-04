@@ -1,0 +1,102 @@
+import { describe, it, expect } from 'vitest';
+import {
+  validateChannelConfig,
+  encryptChannelConfig,
+  decryptChannelConfig,
+  assertPublicUrl,
+  SECRET_FIELDS,
+} from './config';
+
+// ADMIN_SESSION_SECRET is provided by src/test/setup.ts, so the AES round-trip works.
+
+describe('validateChannelConfig', () => {
+  it('accepts a complete telegram config', () => {
+    expect(validateChannelConfig('telegram', { botToken: 'abc', chatId: '123' })).toEqual({
+      botToken: 'abc',
+      chatId: '123',
+    });
+  });
+
+  it('rejects a telegram config missing a required field', () => {
+    expect(() => validateChannelConfig('telegram', { botToken: 'abc' })).toThrow(/chatId/);
+  });
+
+  it('defaults the ntfy server when omitted', () => {
+    const cfg = validateChannelConfig('ntfy', { topic: 'flights' });
+    expect(cfg.server).toBe('https://ntfy.sh');
+    expect(cfg.token).toBeUndefined();
+  });
+
+  it('rejects an email config with an out-of-range port', () => {
+    expect(() =>
+      validateChannelConfig('email', { host: 'smtp.x', port: 70000, from: 'a@x', to: 'b@y' }),
+    ).toThrow(/port/);
+  });
+
+  it('coerces a string email port and reads secure as a strict boolean', () => {
+    const cfg = validateChannelConfig('email', {
+      host: 'smtp.x',
+      port: '587',
+      secure: 'yes',
+      from: 'a@x',
+      to: 'b@y',
+    });
+    expect(cfg.port).toBe(587);
+    expect(cfg.secure).toBe(false); // only literal true enables TLS
+  });
+
+  it('rejects a non-object config', () => {
+    expect(() => validateChannelConfig('webhook', 'http://x')).toThrow(/object/);
+  });
+});
+
+describe('encrypt/decrypt channel config', () => {
+  it('encrypts only the secret fields and round-trips back to plaintext', () => {
+    const plain = { botToken: 'super-secret-token', chatId: '999' };
+    const stored = encryptChannelConfig('telegram', plain);
+
+    // Secret field is encrypted; non-secret field is untouched.
+    expect(stored.botToken).not.toBe('super-secret-token');
+    expect(String(stored.botToken)).toContain(':'); // iv:tag:ciphertext
+    expect(stored.chatId).toBe('999');
+
+    const back = decryptChannelConfig('telegram', stored);
+    expect(back).toEqual(plain);
+  });
+
+  it('declares exactly the sensitive fields as secret', () => {
+    expect(SECRET_FIELDS).toEqual({
+      telegram: ['botToken'],
+      email: ['pass'],
+      ntfy: ['token'],
+      webhook: ['secret'],
+    });
+  });
+});
+
+describe('assertPublicUrl', () => {
+  it('allows a public https url for an untrusted owner', () => {
+    expect(() => assertPublicUrl('https://example.com/hook', { trusted: false })).not.toThrow();
+  });
+
+  it.each([
+    'http://localhost/hook',
+    'http://127.0.0.1/hook',
+    'http://10.1.2.3/hook',
+    'http://192.168.0.5/hook',
+    'http://172.16.9.9/hook',
+    'http://169.254.169.254/latest/meta-data', // cloud metadata
+    'http://[::1]/hook',
+  ])('blocks internal address %s for an untrusted owner', (url) => {
+    expect(() => assertPublicUrl(url, { trusted: false })).toThrow();
+  });
+
+  it('allows internal addresses for a trusted (admin/global) owner', () => {
+    expect(() => assertPublicUrl('http://localhost:11434/hook', { trusted: true })).not.toThrow();
+  });
+
+  it('rejects non-http(s) schemes and credentials in the url', () => {
+    expect(() => assertPublicUrl('ftp://example.com', { trusted: true })).toThrow(/http/);
+    expect(() => assertPublicUrl('https://user:pass@example.com', { trusted: true })).toThrow(/credentials/);
+  });
+});
