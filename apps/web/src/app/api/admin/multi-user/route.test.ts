@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NextRequest } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 
 const mockConfigFindUnique = vi.fn();
 const mockConfigUpsert = vi.fn();
@@ -12,6 +12,9 @@ const mockInvalidateCache = vi.fn();
 const mockGetSessionToken = vi.fn();
 const mockVerifySessionToken = vi.fn();
 const mockGetCurrentUser = vi.fn();
+const mockIsMultiUserEnabled = vi.fn();
+const mockRequireAdmin = vi.fn();
+const mockDisable = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -44,6 +47,7 @@ vi.mock('@/lib/password', () => ({
 
 vi.mock('@/lib/multi-user', () => ({
   invalidateMultiUserCache: () => mockInvalidateCache(),
+  isMultiUserEnabled: () => mockIsMultiUserEnabled(),
 }));
 
 vi.mock('@/lib/admin-auth', () => ({
@@ -55,7 +59,15 @@ vi.mock('@/lib/user-auth', () => ({
   getCurrentUser: () => mockGetCurrentUser(),
 }));
 
-import { POST } from './route';
+vi.mock('@/lib/admin-guard', () => ({
+  requireAdminApi: () => mockRequireAdmin(),
+}));
+
+vi.mock('@/lib/admin-recovery', () => ({
+  disableMultiUserMode: () => mockDisable(),
+}));
+
+import { POST, DELETE } from './route';
 
 function makeRequest(body: unknown): NextRequest {
   return new NextRequest('http://localhost/api/admin/multi-user', {
@@ -151,5 +163,42 @@ describe('POST /api/admin/multi-user', () => {
     expect(mockUserCreate).not.toHaveBeenCalled();
     expect(mockQueryUpdateMany).not.toHaveBeenCalled();
     expect(mockInvalidateCache).not.toHaveBeenCalled();
+  });
+});
+
+describe('DELETE /api/admin/multi-user', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    process.env.SELF_HOSTED = 'true';
+    mockIsMultiUserEnabled.mockResolvedValue(true);
+    mockRequireAdmin.mockResolvedValue(null);
+    mockDisable.mockResolvedValue(undefined);
+  });
+
+  it('disables multi user mode for an authenticated admin', async () => {
+    const res = await DELETE();
+    expect(res.status).toBe(200);
+    expect(mockDisable).toHaveBeenCalled();
+  });
+
+  it('rejects when SELF_HOSTED is not true', async () => {
+    delete process.env.SELF_HOSTED;
+    const res = await DELETE();
+    expect(res.status).toBe(400);
+    expect(mockDisable).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 when multi user mode is not enabled', async () => {
+    mockIsMultiUserEnabled.mockResolvedValue(false);
+    const res = await DELETE();
+    expect(res.status).toBe(404);
+    expect(mockDisable).not.toHaveBeenCalled();
+  });
+
+  it('rejects a non-admin caller and does not disable', async () => {
+    mockRequireAdmin.mockResolvedValue(NextResponse.json({ ok: false }, { status: 403 }));
+    const res = await DELETE();
+    expect(res.status).toBe(403);
+    expect(mockDisable).not.toHaveBeenCalled();
   });
 });

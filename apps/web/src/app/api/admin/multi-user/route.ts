@@ -2,9 +2,11 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/password';
-import { invalidateMultiUserCache } from '@/lib/multi-user';
+import { invalidateMultiUserCache, isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { verifySessionToken, getSessionToken } from '@/lib/admin-auth';
+import { requireAdminApi } from '@/lib/admin-guard';
+import { disableMultiUserMode } from '@/lib/admin-recovery';
 
 const MIN_PASSWORD_LENGTH = 8;
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{2,32}$/;
@@ -140,4 +142,30 @@ export async function POST(request: NextRequest) {
     },
     201,
   );
+}
+
+/**
+ * Turn multi user mode off. Reverts the instance to solo self-hosted: the flag
+ * flips to false and the dormant legacy admin hash is cleared, so the app stops
+ * requiring a login (SELF_HOSTED middleware bypasses admin auth). User rows are
+ * NOT deleted — they remain in the DB and reactivate if multi user mode is
+ * re-enabled — they simply become inaccessible while it is off.
+ *
+ * Authorization: must be an authenticated admin. Unlike POST (which bootstraps
+ * the first admin and therefore cannot require one), this is gated by
+ * requireAdminApi so a non-admin household member cannot wipe the admin
+ * credential and open the instance.
+ */
+export async function DELETE() {
+  if (process.env.SELF_HOSTED !== 'true') {
+    return apiError('Multi user mode is only available in self-hosted deployments', 400);
+  }
+  if (!(await isMultiUserEnabled())) {
+    return apiError('Multi user mode is not enabled', 404);
+  }
+  const denial = await requireAdminApi();
+  if (denial) return denial;
+
+  await disableMultiUserMode();
+  return apiSuccess({ disabled: true });
 }

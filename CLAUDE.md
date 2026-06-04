@@ -70,7 +70,7 @@ npm run ci                     # lint + typecheck + build
 | `api/admin/queries/route.ts` | GET — list all queries |
 | `api/admin/queries/[id]/route.ts` | PATCH/DELETE — manage query; PATCH accepts userId reassignment |
 | `api/admin/config/route.ts` | GET/PATCH — extraction config (exposes isSelfHosted) |
-| `api/admin/multi-user/route.ts` | POST — enable multi user mode atomically (creates first admin, backfills) |
+| `api/admin/multi-user/route.ts` | POST — enable multi user mode atomically (creates first admin, backfills); DELETE — disable (admin only, clears admin hash) |
 | `api/admin/users/route.ts` | GET/POST — list/create users (admin only) |
 | `api/admin/users/[id]/route.ts` | PATCH/DELETE — reset password, toggle isAdmin, delete |
 | `api/admin/notifications/route.ts` | GET/POST — list/create global notification channels (admin) |
