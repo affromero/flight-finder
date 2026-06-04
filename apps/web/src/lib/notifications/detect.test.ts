@@ -40,7 +40,6 @@ function arrange(opts: {
 function run(over: Partial<Parameters<typeof detectNewLow>[0]> = {}) {
   return detectNewLow({
     query: { id: 'q1', currency: 'USD', lastNotifiedLowPrice: null },
-    currentRunIds: ['run-1'],
     cycleStartedAt: CYCLE_START,
     floorAbs: 5,
     floorPct: 0,
@@ -103,11 +102,6 @@ describe('detectNewLow', () => {
   it('returns null when no available fares were found this cycle', async () => {
     arrange({ current: null, priorMin: 300 });
     expect(await run()).toBeNull();
-  });
-
-  it('returns null when the cycle produced no runs', async () => {
-    expect(await run({ currentRunIds: [] })).toBeNull();
-    expect(mockFindFirst).not.toHaveBeenCalled();
   });
 
   it('falls back to the query currency when the snapshot has none', async () => {

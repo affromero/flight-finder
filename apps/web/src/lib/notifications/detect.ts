@@ -15,9 +15,8 @@ export interface NewLowAlert {
 
 export interface DetectNewLowParams {
   query: { id: string; currency: string | null; lastNotifiedLowPrice: number | null };
-  /** FetchRun ids produced for this query during the current scrape cycle. */
-  currentRunIds: string[];
-  /** Snapshots scraped before this instant are treated as history. */
+  /** Boundary between this cycle's fresh snapshots and history. Snapshots
+   * scraped at/after this instant are "current"; earlier ones are history. */
   cycleStartedAt: Date;
   /** Minimum absolute drop (in the query's currency) required to fire. */
   floorAbs: number;
@@ -37,13 +36,12 @@ export interface DetectNewLowParams {
  * the create-time preview scrape from firing a spurious alert.
  */
 export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAlert | null> {
-  const { query, currentRunIds, cycleStartedAt, floorAbs, floorPct } = params;
-  if (currentRunIds.length === 0) return null;
+  const { query, cycleStartedAt, floorAbs, floorPct } = params;
 
   // Cheapest available fare found this cycle. Carry its booking details so the
   // notification can deep-link straight to the flight.
   const cheapest = await prisma.priceSnapshot.findFirst({
-    where: { queryId: query.id, fetchRunId: { in: currentRunIds }, status: 'available' },
+    where: { queryId: query.id, status: 'available', scrapedAt: { gte: cycleStartedAt } },
     orderBy: { price: 'asc' },
     select: {
       price: true,
