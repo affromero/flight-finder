@@ -77,6 +77,7 @@ npm run ci                     # lint + typecheck + build
 | `api/admin/notifications/[id]/route.ts` | PATCH/DELETE — update/toggle/delete a channel |
 | `api/admin/notifications/[id]/test/route.ts` | POST — send a test notification (rate limited) |
 | `api/account/settings/route.ts` | GET/PATCH — current user's preferences |
+| `api/account/password/route.ts` | POST — self-service password change (verifies current, rate limited) |
 | `api/health/route.ts` | GET — health check (DB + Redis) |
 
 ### `apps/web/src/components/` — UI components
