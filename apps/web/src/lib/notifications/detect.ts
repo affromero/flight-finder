@@ -38,10 +38,17 @@ export interface DetectNewLowParams {
 export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAlert | null> {
   const { query, cycleStartedAt, floorAbs, floorPct } = params;
 
+  // Only ever compare prices in the same currency. When the query has an
+  // explicit currency, scope both queries to it so a stray or pre-change
+  // snapshot in another currency can't produce a false drop (numerically
+  // comparing 300 USD against 40000 JPY). Null currency means Google
+  // auto-detects per locale, which is consistent within a query.
+  const currencyFilter = query.currency ? { currency: query.currency } : {};
+
   // Cheapest available fare found this cycle. Carry its booking details so the
   // notification can deep-link straight to the flight.
   const cheapest = await prisma.priceSnapshot.findFirst({
-    where: { queryId: query.id, status: 'available', scrapedAt: { gte: cycleStartedAt } },
+    where: { queryId: query.id, status: 'available', scrapedAt: { gte: cycleStartedAt }, ...currencyFilter },
     orderBy: { price: 'asc' },
     select: {
       price: true,
@@ -58,7 +65,7 @@ export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAl
   // Prior best across all history before this cycle. Scoped by scrapedAt rather
   // than fetchRunId so legacy snapshots with a null fetchRunId still count.
   const prior = await prisma.priceSnapshot.aggregate({
-    where: { queryId: query.id, status: 'available', scrapedAt: { lt: cycleStartedAt } },
+    where: { queryId: query.id, status: 'available', scrapedAt: { lt: cycleStartedAt }, ...currencyFilter },
     _min: { price: true },
   });
 

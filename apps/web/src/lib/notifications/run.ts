@@ -3,10 +3,18 @@ import { detectNewLow } from './detect';
 import { formatNewLowMessage } from './format';
 import { dispatchNotifications } from './notify';
 
-/** Base URL for deep links in notifications. Precedence: admin-configured
- * publicBaseUrl, then APP_URL env, then the hosted default. */
-export function resolveBaseUrl(publicBaseUrl?: string | null): string {
-  return (publicBaseUrl || process.env.APP_URL || 'https://flight-finder.org').replace(/\/+$/, '');
+/**
+ * Base URL for deep links in notifications. Precedence: admin-configured
+ * publicBaseUrl, then APP_URL env. Returns null when nothing is configured on a
+ * self-hosted instance, so alerts omit the link rather than pointing at the
+ * hosted flight-finder.org (where the local /q/<id> would not exist). Only the
+ * hosted instance itself (SELF_HOSTED unset) falls back to flight-finder.org.
+ */
+export function resolveBaseUrl(publicBaseUrl?: string | null): string | null {
+  const configured = publicBaseUrl || process.env.APP_URL;
+  if (configured) return configured.replace(/\/+$/, '');
+  if (process.env.SELF_HOSTED === 'true') return null;
+  return 'https://flight-finder.org';
 }
 
 /**
@@ -62,10 +70,11 @@ export async function notifyNewLows(queryIds: string[], cycleStartedAt: Date): P
       });
       const outcomes = await dispatchNotifications(query.userId, message);
 
-      // Only advance the dedupe marker once we actually had a channel to send
-      // to. With no channels, leave it untouched so the user starts getting
-      // alerts as soon as they configure one (no silently-consumed low).
-      if (outcomes.length > 0) {
+      // Only advance the dedupe marker once at least one channel actually
+      // delivered. A transient failure on every channel must not consume the
+      // low and suppress the retry next cycle; and with no channels at all we
+      // leave it untouched so alerts start the moment one is configured.
+      if (outcomes.some((o) => o.ok)) {
         await prisma.query.update({
           where: { id: query.id },
           data: { lastNotifiedLowPrice: alert.currentMin, lastNotifiedAt: new Date() },

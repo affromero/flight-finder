@@ -87,6 +87,9 @@ describe('assertPublicUrl', () => {
     'http://172.16.9.9/hook',
     'http://169.254.169.254/latest/meta-data', // cloud metadata
     'http://[::1]/hook',
+    'http://[::ffff:127.0.0.1]/hook', // IPv4-mapped IPv6, dotted
+    'http://[::ffff:7f00:1]/hook', // IPv4-mapped IPv6, hex form (127.0.0.1)
+    'http://999.10.0.1/hook', // malformed numeric host
   ])('blocks internal address %s for an untrusted owner', (url) => {
     expect(() => assertPublicUrl(url, { trusted: false })).toThrow();
   });

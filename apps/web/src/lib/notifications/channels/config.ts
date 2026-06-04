@@ -187,26 +187,46 @@ export function assertPublicUrl(rawUrl: string, opts: { trusted: boolean }): voi
   }
 }
 
+function isPrivateIPv4(octets: number[]): boolean {
+  const [a = 0, b = 0] = octets;
+  if (a === 0 || a === 10 || a === 127) return true;
+  if (a === 169 && b === 254) return true; // link-local + cloud metadata
+  if (a === 172 && b >= 16 && b <= 31) return true;
+  if (a === 192 && b === 168) return true;
+  if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
+  if (a >= 224) return true; // multicast / reserved
+  return false;
+}
+
 function isPrivateHost(host: string): boolean {
   if (host === 'localhost' || host.endsWith('.localhost')) return true;
-  const h = host.replace(/^\[|\]$/g, ''); // strip IPv6 brackets
+  const h = host.replace(/^\[|\]$/g, '').toLowerCase(); // strip IPv6 brackets, normalise
 
   const ipv4 = h.match(/^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$/);
   if (ipv4) {
-    const a = Number(ipv4[1]);
-    const b = Number(ipv4[2]);
-    if (a === 0 || a === 10 || a === 127) return true;
-    if (a === 169 && b === 254) return true; // link-local + cloud metadata
-    if (a === 172 && b >= 16 && b <= 31) return true;
-    if (a === 192 && b === 168) return true;
-    if (a === 100 && b >= 64 && b <= 127) return true; // CGNAT
-    if (a >= 224) return true; // multicast / reserved
-    return false;
+    const octets = ipv4.slice(1).map(Number);
+    // A literal with an out-of-range octet is a malformed numeric host; block
+    // it rather than trusting how a downstream resolver might reinterpret it.
+    if (octets.some((o) => o > 255)) return true;
+    return isPrivateIPv4(octets);
   }
 
   if (h === '::1' || h === '::' || h === '0.0.0.0') return true;
   if (h.startsWith('fc') || h.startsWith('fd')) return true; // unique local
   if (h.startsWith('fe80')) return true; // link-local
-  if (h.startsWith('::ffff:')) return isPrivateHost(h.slice('::ffff:'.length)); // IPv4-mapped
+
+  // IPv4-mapped IPv6, dotted (::ffff:127.0.0.1) or hex (::ffff:7f00:1) form.
+  const mapped = h.match(/^::ffff:(.+)$/);
+  if (mapped) {
+    const tail = mapped[1]!;
+    if (/^\d{1,3}(\.\d{1,3}){3}$/.test(tail)) return isPrivateHost(tail);
+    const hex = tail.match(/^([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+    if (hex) {
+      const hi = parseInt(hex[1]!, 16);
+      const lo = parseInt(hex[2]!, 16);
+      return isPrivateIPv4([(hi >> 8) & 0xff, hi & 0xff, (lo >> 8) & 0xff, lo & 0xff]);
+    }
+    return true; // unrecognised mapped form — block conservatively
+  }
   return false;
 }

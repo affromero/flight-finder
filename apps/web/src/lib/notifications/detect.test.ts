@@ -104,6 +104,22 @@ describe('detectNewLow', () => {
     expect(await run()).toBeNull();
   });
 
+  it('scopes both comparisons to the query currency when it is set', async () => {
+    arrange({ current: { price: 250 }, priorMin: 300 });
+    await run({ query: { id: 'q1', currency: 'EUR', lastNotifiedLowPrice: null } });
+    const cheapestWhere = (mockFindFirst.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+    const priorWhere = (mockAggregate.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+    expect(cheapestWhere.currency).toBe('EUR');
+    expect(priorWhere.currency).toBe('EUR');
+  });
+
+  it('does not filter by currency when the query currency is null (auto-detect)', async () => {
+    arrange({ current: { price: 250 }, priorMin: 300 });
+    await run({ query: { id: 'q1', currency: null, lastNotifiedLowPrice: null } });
+    const cheapestWhere = (mockFindFirst.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+    expect(cheapestWhere.currency).toBeUndefined();
+  });
+
   it('falls back to the query currency when the snapshot has none', async () => {
     mockFindFirst.mockResolvedValue({
       price: 250,

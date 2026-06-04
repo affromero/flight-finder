@@ -52,6 +52,13 @@ describe('sendTelegram', () => {
     fetchMock.mockResolvedValue(errResponse(403, 'forbidden'));
     await expect(sendTelegram({ botToken: 'T', chatId: '1' }, MESSAGE)).rejects.toThrow(/403/);
   });
+
+  it('omits the trailing link when the message has no url', async () => {
+    await sendTelegram({ botToken: 'T', chatId: '1' }, { ...MESSAGE, url: '' });
+    const body = JSON.parse(fetchMock.mock.calls[0]![1].body);
+    expect(body.text).toBe(`${MESSAGE.title}\n\n${MESSAGE.body}`);
+    expect(body.text).not.toContain('http');
+  });
 });
 
 describe('sendNtfy', () => {
@@ -70,6 +77,12 @@ describe('sendNtfy', () => {
     const [url, init] = fetchMock.mock.calls[0]!;
     expect(url).toBe('https://ntfy.mybox.dev/deals');
     expect(init.headers.Authorization).toBe('Bearer tk_1');
+  });
+
+  it('omits the Click header when the message has no url', async () => {
+    await sendNtfy({ server: '', topic: 'flights' }, { ...MESSAGE, url: '' });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.headers.Click).toBeUndefined();
   });
 });
 
@@ -119,5 +132,13 @@ describe('sendEmail', () => {
     expect(nodemailer.createTransport).toHaveBeenCalledWith(
       expect.objectContaining({ auth: undefined }),
     );
+  });
+
+  it('omits the link when the message has no url', async () => {
+    mockSendMail.mockResolvedValue({ messageId: '3' });
+    await sendEmail({ host: 'smtp.x', port: 25, secure: false, from: 'a@x', to: 'b@y' }, { ...MESSAGE, url: '' });
+    const mail = mockSendMail.mock.calls[0]![0];
+    expect(mail.text).toBe(MESSAGE.body);
+    expect(mail.html).not.toContain('<a href');
   });
 });

@@ -12,7 +12,7 @@ export async function sendEmail(config: EmailConfig, message: ChannelMessage): P
     from: config.from,
     to: config.to,
     subject: message.title,
-    text: `${message.body}\n\n${message.url}`,
+    text: message.url ? `${message.body}\n\n${message.url}` : message.body,
     html: renderHtml(message),
   });
 }
@@ -20,5 +20,6 @@ export async function sendEmail(config: EmailConfig, message: ChannelMessage): P
 function renderHtml(message: ChannelMessage): string {
   const esc = (s: string) =>
     s.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c] ?? c);
-  return `<p>${esc(message.body)}</p><p><a href="${esc(message.url)}">View price history</a></p>`;
+  const link = message.url ? `<p><a href="${esc(message.url)}">View price history</a></p>` : '';
+  return `<p>${esc(message.body)}</p>${link}`;
 }

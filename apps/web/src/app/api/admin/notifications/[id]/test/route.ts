@@ -41,7 +41,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   const message: ChannelMessage = {
     title: 'Flight Finder test alert',
     body: 'This is a test notification from Flight Finder. If you can read this, the channel is working.',
-    url: baseUrl,
+    url: baseUrl ?? '',
     data: { test: true },
   };
 

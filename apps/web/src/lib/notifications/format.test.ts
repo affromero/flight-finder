@@ -45,6 +45,17 @@ describe('formatNewLowMessage', () => {
     });
     expect(msg.url).toBe('https://flights.example/q/q-abc');
   });
+
+  it('emits no link when the base url is null (self-hosted, unset)', () => {
+    const msg = formatNewLowMessage({
+      alert: ALERT,
+      route: { origin: 'LHR', destination: 'JFK' },
+      baseUrl: null,
+    });
+    expect(msg.url).toBe('');
+    // The price/route content is still there.
+    expect(msg.body).toContain('dropped to $250');
+  });
 });
 
 describe('formatPrice', () => {

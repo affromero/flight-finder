@@ -6,9 +6,9 @@ export async function sendNtfy(config: NtfyConfig, message: ChannelMessage): Pro
   const headers: Record<string, string> = {
     // ntfy header values must be latin-1 safe — strip anything outside ASCII.
     Title: message.title.replace(/[^\x20-\x7E]/g, ''),
-    Click: message.url,
     Tags: 'airplane',
   };
+  if (message.url) headers.Click = message.url;
   if (config.token) headers.Authorization = `Bearer ${config.token}`;
   const res = await fetch(endpoint, { method: 'POST', headers, body: message.body });
   if (!res.ok) {

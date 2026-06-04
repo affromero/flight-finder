@@ -156,6 +156,7 @@ export async function POST(
     // Capture the boundary BEFORE scraping so snapshots written during this
     // run count as "current" for new-low detection.
     const cycleStartedAt = new Date();
+    const succeededIds: string[] = [];
     let successCount = 0;
     let failureCount = 0;
     for (let i = 0; i < orderedTargets.length; i++) {
@@ -170,6 +171,7 @@ export async function POST(
         // for.
         if (results.length > 0 && results.every((r) => r.status === 'success')) {
           successCount += 1;
+          succeededIds.push(qid);
         } else {
           failureCount += 1;
         }
@@ -193,10 +195,10 @@ export async function POST(
     }
     console.log(`[scrape] manual run complete (group=${groupLabel}): ${successCount} successes, ${failureCount} failures`);
 
-    // Fire new-low alerts for every target touched this run. Isolated so a
-    // notification failure never affects the scrape itself.
+    // Fire new-low alerts only for targets that actually landed fresh prices
+    // this run. Isolated so a notification failure never affects the scrape.
     try {
-      await notifyNewLows(orderedTargets, cycleStartedAt);
+      await notifyNewLows(succeededIds, cycleStartedAt);
     } catch (err) {
       console.error(`[notify] manual run notification pass failed: ${err instanceof Error ? err.message : err}`);
     }

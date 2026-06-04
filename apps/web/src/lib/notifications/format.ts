@@ -6,15 +6,17 @@ export interface AlertRoute {
   destination: string;
 }
 
-/** Build a channel-agnostic message for a new-low fare alert. */
+/** Build a channel-agnostic message for a new-low fare alert. `baseUrl` is null
+ * when no public site URL is configured (self-hosted, unset), in which case the
+ * message carries no chart link. */
 export function formatNewLowMessage(params: {
   alert: NewLowAlert;
   route: AlertRoute;
-  baseUrl: string;
+  baseUrl: string | null;
 }): ChannelMessage {
   const { alert, route, baseUrl } = params;
   const price = (n: number) => formatPrice(n, alert.currency);
-  const url = `${baseUrl.replace(/\/+$/, '')}/q/${alert.queryId}`;
+  const url = baseUrl ? `${baseUrl.replace(/\/+$/, '')}/q/${alert.queryId}` : '';
   const travelDate = alert.travelDate.toISOString().slice(0, 10);
   const lane = `${route.origin} to ${route.destination}`;
   const title = `New low: ${lane} ${price(alert.currentMin)}`;

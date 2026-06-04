@@ -253,7 +253,7 @@ export default function NotificationsPage() {
             value={publicBaseUrl}
             onChange={(e) => setPublicBaseUrl(e.target.value)}
           />
-          <span className={styles.hint}>Used for the chart link inside each alert. Leave blank to use the APP_URL environment variable.</span>
+          <span className={styles.hint}>Your instance&apos;s address, used for the chart link inside each alert. Set this (or the APP_URL environment variable) so alerts link back to your site; if left blank, alerts are sent without a link.</span>
         </div>
         <div className={styles.actions}>
           <button className={styles.primary} onClick={handleSaveSettings} disabled={savingSettings}>
