@@ -7,12 +7,14 @@ const {
   mockFetchRunCreate,
   mockFetchRunFindFirst,
   mockFetchRunUpdate,
+  mockExtractionFindFirst,
 } = vi.hoisted(() => ({
   mockQueryFindUnique: vi.fn(),
   mockQueryFindMany: vi.fn(),
   mockFetchRunCreate: vi.fn(),
   mockFetchRunFindFirst: vi.fn(),
   mockFetchRunUpdate: vi.fn(),
+  mockExtractionFindFirst: vi.fn(),
 }));
 
 vi.mock('@/lib/prisma', () => {
@@ -25,6 +27,9 @@ vi.mock('@/lib/prisma', () => {
       create: (...args: unknown[]) => mockFetchRunCreate(...args),
       findFirst: (...args: unknown[]) => mockFetchRunFindFirst(...args),
       update: (...args: unknown[]) => mockFetchRunUpdate(...args),
+    },
+    extractionConfig: {
+      findFirst: (...args: unknown[]) => mockExtractionFindFirst(...args),
     },
   };
   return {
@@ -110,6 +115,7 @@ describe('POST /api/queries/[id]/scrape', () => {
     );
     mockFetchRunFindFirst.mockResolvedValue(null);
     mockFetchRunUpdate.mockResolvedValue({});
+    mockExtractionFindFirst.mockResolvedValue({ enabled: true });
     mockIsMultiUserEnabled.mockResolvedValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
     mockGetSessionToken.mockResolvedValue(undefined);
@@ -148,6 +154,16 @@ describe('POST /api/queries/[id]/scrape', () => {
     const data = await res.json();
     expect(res.status).toBe(409);
     expect(data.error).toContain('paused');
+    expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when scraping is globally paused (config.enabled=false)', async () => {
+    mockQueryFindUnique.mockResolvedValue(rowDefaults());
+    mockExtractionFindFirst.mockResolvedValue({ enabled: false });
+    const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
+    const data = await res.json();
+    expect(res.status).toBe(409);
+    expect(data.error).toMatch(/paused/i);
     expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
   });
 

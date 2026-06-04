@@ -62,10 +62,19 @@ export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAl
   if (!cheapest) return null;
   const currentMin = cheapest.price;
 
-  // Prior best across all history before this cycle. Scoped by scrapedAt rather
-  // than fetchRunId so legacy snapshots with a null fetchRunId still count.
+  // Prior best across all history before this cycle, in the SAME currency as the
+  // cheapest fare. When the query has an explicit currency we use it; otherwise
+  // (Google auto-detect, where VPN passes can differ by country) we fall back to
+  // the cheapest snapshot's own currency so we never cross-compare e.g. JPY
+  // against USD. Scoped by scrapedAt (not fetchRunId) so legacy null-fetchRunId
+  // snapshots still count.
   const prior = await prisma.priceSnapshot.aggregate({
-    where: { queryId: query.id, status: 'available', scrapedAt: { lt: cycleStartedAt }, ...currencyFilter },
+    where: {
+      queryId: query.id,
+      status: 'available',
+      scrapedAt: { lt: cycleStartedAt },
+      currency: query.currency ?? cheapest.currency,
+    },
     _min: { price: true },
   });
 

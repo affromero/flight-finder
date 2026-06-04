@@ -141,6 +141,7 @@ model User {
   username          String   @unique
   displayName       String?
   passwordHash      String
+  sessionsValidFrom DateTime? // sessions issued before this instant are revoked (set on password change/reset)
   isAdmin           Boolean  @default(false)
   defaultCurrency   String?  // override; null falls back to ExtractionConfig.defaultCurrency
   defaultCountry    String?  // override; null falls back to ExtractionConfig.defaultCountry

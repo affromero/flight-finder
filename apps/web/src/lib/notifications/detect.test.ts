@@ -113,11 +113,19 @@ describe('detectNewLow', () => {
     expect(priorWhere.currency).toBe('EUR');
   });
 
-  it('does not filter by currency when the query currency is null (auto-detect)', async () => {
+  it('does not filter the current-cycle query by currency when the query currency is null', async () => {
     arrange({ current: { price: 250 }, priorMin: 300 });
     await run({ query: { id: 'q1', currency: null, lastNotifiedLowPrice: null } });
     const cheapestWhere = (mockFindFirst.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
     expect(cheapestWhere.currency).toBeUndefined();
+  });
+
+  it('scopes the prior baseline to the cheapest fare currency when the query currency is null', async () => {
+    // The arrange helper stamps the cheapest snapshot currency as USD.
+    arrange({ current: { price: 250 }, priorMin: 300 });
+    await run({ query: { id: 'q1', currency: null, lastNotifiedLowPrice: null } });
+    const priorWhere = (mockAggregate.mock.calls[0]![0] as { where: Record<string, unknown> }).where;
+    expect(priorWhere.currency).toBe('USD');
   });
 
   it('falls back to the query currency when the snapshot has none', async () => {

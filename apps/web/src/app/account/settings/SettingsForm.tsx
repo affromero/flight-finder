@@ -272,7 +272,11 @@ function PasswordSection() {
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
-      setMessage('Password changed.');
+      // The change revoked all sessions (this one included); send to login.
+      setMessage('Password changed. Logging you out...');
+      setTimeout(() => {
+        window.location.href = '/login';
+      }, 1200);
     } else {
       setError((await res.json()).error || 'Failed to change password');
     }

@@ -192,10 +192,10 @@ describe('PATCH /api/admin/config — perf knobs (issue #106 gaps 2 & 4)', () =>
     expect(data.update.googleRpm).toBeNull();
   });
 
-  it('clamps previewConcurrency to the 16 ceiling', async () => {
+  it('clamps previewConcurrency to the 10 ceiling (matching the env path)', async () => {
     await PATCH(patchRequest({ previewConcurrency: 999 }));
     const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
-    expect(data.update.previewConcurrency).toBe(16);
+    expect(data.update.previewConcurrency).toBe(10);
   });
 
   it('clamps previewAdmissionCap to the 50 ceiling', async () => {

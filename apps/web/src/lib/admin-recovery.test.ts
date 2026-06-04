@@ -33,7 +33,10 @@ describe('resetUserPassword', () => {
     expect(result).toEqual({ ok: true, isAdmin: true });
     expect(prisma.user.update).toHaveBeenCalledWith({
       where: { id: 'u1' },
-      data: { passwordHash: expect.stringMatching(/^[0-9a-f]+:[0-9a-f]+$/) },
+      data: {
+        passwordHash: expect.stringMatching(/^[0-9a-f]+:[0-9a-f]+$/),
+        sessionsValidFrom: expect.any(Date),
+      },
     });
   });
 

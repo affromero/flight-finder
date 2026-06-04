@@ -49,7 +49,13 @@ export async function POST(request: NextRequest) {
   }
 
   const passwordHash = await hashPassword(newPassword);
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  // sessionsValidFrom revokes every existing session (this device included);
+  // the client redirects to login. Closes the window where a stolen pre-change
+  // cookie keeps working.
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, sessionsValidFrom: new Date() },
+  });
   await clearAuthFailures(rlKey);
 
   return apiSuccess({ changed: true });

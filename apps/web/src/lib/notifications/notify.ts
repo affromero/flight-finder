@@ -20,8 +20,20 @@ export async function dispatchNotifications(
   ownerUserId: string | null,
   message: ChannelMessage,
 ): Promise<NotifyOutcome[]> {
+  // A query owned by a user must still fire the global (userId:null) channels:
+  // those are the only channels the current UI can create. Without OR-ing in the
+  // globals, enabling multi-user mode (which reassigns every query to a user id)
+  // would match zero channels and silently kill all alerts, including the
+  // admin's own. When per-user channels land, both a user's own and the globals
+  // fire — the natural household behavior.
   const channels = await prisma.notificationChannel.findMany({
-    where: { userId: ownerUserId, enabled: true },
+    where: {
+      enabled: true,
+      // SQL `IN (id, NULL)` never matches NULL rows, so OR the two explicitly.
+      ...(ownerUserId === null
+        ? { userId: null }
+        : { OR: [{ userId: ownerUserId }, { userId: null }] }),
+    },
     select: { id: true, type: true, config: true },
   });
 

@@ -508,7 +508,7 @@ export default function ConfigPage() {
         </div>
         <div className={styles.field}>
           <label className={styles.label}>Preview concurrency</label>
-          <input type="number" className={styles.input} min={1} max={16} placeholder="default 3" value={previewConcurrency} onChange={(e) => setPreviewConcurrency(e.target.value)} />
+          <input type="number" className={styles.input} min={1} max={10} placeholder="default 3" value={previewConcurrency} onChange={(e) => setPreviewConcurrency(e.target.value)} />
           <span className={styles.toggleHint}>
             Parallel browser instances for the create-time preview scrape. Higher is faster but uses more memory. Leave blank for the default (3).
           </span>

@@ -51,10 +51,12 @@ describe('POST /api/account/password', () => {
     expect(mockUserUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ where: { id: 'u1' } }),
     );
-    // The stored hash is freshly derived, never the plaintext.
-    const written = (mockUserUpdate.mock.calls[0]![0] as { data: { passwordHash: string } }).data.passwordHash;
-    expect(written).not.toBe('newpassword1');
-    expect(written).toContain(':');
+    // The stored hash is freshly derived, never the plaintext, and the change
+    // revokes existing sessions.
+    const data = (mockUserUpdate.mock.calls[0]![0] as { data: { passwordHash: string; sessionsValidFrom: unknown } }).data;
+    expect(data.passwordHash).not.toBe('newpassword1');
+    expect(data.passwordHash).toContain(':');
+    expect(data.sessionsValidFrom).toBeInstanceOf(Date);
     expect(mockClearFailures).toHaveBeenCalled();
   });
 

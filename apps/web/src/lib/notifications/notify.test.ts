@@ -31,11 +31,13 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('dispatchNotifications', () => {
-  it('requests only the enabled channels for the owner', async () => {
+  it('includes the global channels for an owned query (so multi-user alerts still fire)', async () => {
     mockFindMany.mockResolvedValue([]);
     await dispatchNotifications('user-1', MESSAGE);
     expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: 'user-1', enabled: true } }),
+      expect.objectContaining({
+        where: { enabled: true, OR: [{ userId: 'user-1' }, { userId: null }] },
+      }),
     );
   });
 
@@ -43,8 +45,16 @@ describe('dispatchNotifications', () => {
     mockFindMany.mockResolvedValue([]);
     await dispatchNotifications(null, MESSAGE);
     expect(mockFindMany).toHaveBeenCalledWith(
-      expect.objectContaining({ where: { userId: null, enabled: true } }),
+      expect.objectContaining({ where: { enabled: true, userId: null } }),
     );
+  });
+
+  it('delivers an owned query to a global channel', async () => {
+    mockFindMany.mockResolvedValue([
+      { id: 'g1', type: 'telegram', config: encryptChannelConfig('telegram', { botToken: 'T', chatId: '1' }) },
+    ]);
+    const outcomes = await dispatchNotifications('user-1', MESSAGE);
+    expect(outcomes).toEqual([{ channelId: 'g1', type: 'telegram', ok: true }]);
   });
 
   it('delivers to every channel and reports per-channel success', async () => {

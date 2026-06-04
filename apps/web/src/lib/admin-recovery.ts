@@ -39,8 +39,12 @@ export async function resetUserPassword(
 
   const passwordHash = await hashPassword(newPassword);
   // Update by the id we just selected, not the username, so a concurrent rename
-  // can't redirect the write to a different row.
-  await prisma.user.update({ where: { id: user.id }, data: { passwordHash } });
+  // can't redirect the write to a different row. sessionsValidFrom revokes the
+  // user's existing sessions so a break-glass reset also locks out old cookies.
+  await prisma.user.update({
+    where: { id: user.id },
+    data: { passwordHash, sessionsValidFrom: new Date() },
+  });
 
   return { ok: true, isAdmin: user.isAdmin };
 }

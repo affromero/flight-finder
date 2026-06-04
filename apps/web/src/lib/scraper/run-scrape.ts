@@ -697,6 +697,12 @@ export async function runScrapeAll(): Promise<ScrapeResult[]> {
 
 async function runScrapeAllInner(): Promise<ScrapeResult[]> {
   const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
+  // Respect the GUI pause toggle (ExtractionConfig.enabled). When paused, skip
+  // the entire run so no background scraping or API cost happens.
+  if (config?.enabled === false) {
+    console.log('[scrape-all] paused via config.enabled=false — skipping run');
+    return [];
+  }
   const globalInterval = config?.scrapeInterval ?? 3;
 
   // Create VPN provider from config

@@ -69,6 +69,14 @@ export async function POST(
     return apiError('Tracker has expired; create a fresh one to keep scraping.', 410);
   }
 
+  const scrapeConfig = await prisma.extractionConfig.findFirst({
+    where: { id: 'singleton' },
+    select: { enabled: true },
+  });
+  if (scrapeConfig?.enabled === false) {
+    return apiError('Scraping is paused. Resume it in the config before refreshing.', 409);
+  }
+
   // Only target siblings that are themselves still alive (active, non-seed,
   // not expired). The primary already passed those checks above.
   const now = new Date();
@@ -171,9 +179,13 @@ export async function POST(
         // for.
         if (results.length > 0 && results.every((r) => r.status === 'success')) {
           successCount += 1;
-          succeededIds.push(qid);
         } else {
           failureCount += 1;
+        }
+        // Notify on any target that landed fresh prices (even a partial VPN
+        // pass), matching the cron path which notifies any successful query.
+        if (results.some((r) => r.status === 'success')) {
+          succeededIds.push(qid);
         }
       } catch (err) {
         failureCount += 1;

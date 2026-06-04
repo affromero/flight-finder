@@ -99,7 +99,9 @@ export async function PATCH(request: NextRequest) {
   if (body.previewConcurrency === null) {
     data.previewConcurrency = null;
   } else if (typeof body.previewConcurrency === 'number' && Number.isFinite(body.previewConcurrency)) {
-    data.previewConcurrency = Math.max(1, Math.min(16, Math.round(body.previewConcurrency)));
+    // Match the env-path ceiling (parsePreviewConcurrency caps at 10) so the two
+    // sources never disagree on the max parallel browsers.
+    data.previewConcurrency = Math.max(1, Math.min(10, Math.round(body.previewConcurrency)));
   }
   if (body.previewAdmissionCap === null) {
     data.previewAdmissionCap = null;
