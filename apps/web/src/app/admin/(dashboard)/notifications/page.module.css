@@ -244,3 +244,13 @@
   gap: 0.4rem;
   flex-wrap: wrap;
 }
+
+.clearToggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  margin-top: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--muted);
+  cursor: pointer;
+}

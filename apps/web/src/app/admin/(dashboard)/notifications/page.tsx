@@ -103,6 +103,10 @@ export default function NotificationsPage() {
   const [formMsg, setFormMsg] = useState('');
   const [savingForm, setSavingForm] = useState(false);
   const [rowMsg, setRowMsg] = useState<Record<string, string>>({});
+  // Which optional secrets the channel being edited already has set, and which
+  // of those the user has marked to remove on save.
+  const [secretsSet, setSecretsSet] = useState<Record<string, boolean>>({});
+  const [clearSecrets, setClearSecrets] = useState<Set<string>>(new Set());
 
   const loadChannels = useCallback(async () => {
     const res = await fetch('/api/admin/notifications');
@@ -130,6 +134,8 @@ export default function NotificationsPage() {
     setFormType(type);
     setFormLabel('');
     setFormValues(initialValues(type));
+    setSecretsSet({});
+    setClearSecrets(new Set());
     setFormMsg('');
   };
 
@@ -138,6 +144,13 @@ export default function NotificationsPage() {
     setFormType(channel.type);
     setFormLabel(channel.label ?? '');
     setFormValues(initialValues(channel.type, channel.config));
+    // The redacted config carries `<field>Set` booleans for each secret.
+    const flags: Record<string, boolean> = {};
+    for (const f of FIELD_DEFS[channel.type]) {
+      if (f.secret) flags[f.key] = Boolean(channel.config[`${f.key}Set`]);
+    }
+    setSecretsSet(flags);
+    setClearSecrets(new Set());
     setFormMsg('');
     window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
   };
@@ -163,6 +176,8 @@ export default function NotificationsPage() {
     setSavingForm(true);
     setFormMsg('');
     const config = buildConfig(formType, formValues);
+    // Explicit null tells the API to clear a stored optional secret.
+    for (const key of clearSecrets) config[key] = null;
     const url = editingId ? `/api/admin/notifications/${editingId}` : '/api/admin/notifications';
     const method = editingId ? 'PATCH' : 'POST';
     const res = await fetch(url, {
@@ -333,15 +348,39 @@ export default function NotificationsPage() {
                 onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.checked }))}
               />
             ) : (
-              <input
-                type={f.type === 'number' ? 'number' : f.type}
-                className={styles.input}
-                placeholder={
-                  f.secret && editingId ? 'Leave blank to keep current' : f.placeholder ?? ''
-                }
-                value={String(formValues[f.key] ?? '')}
-                onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.value }))}
-              />
+              <>
+                <input
+                  type={f.type === 'number' ? 'number' : f.type}
+                  className={styles.input}
+                  placeholder={
+                    clearSecrets.has(f.key)
+                      ? 'Will be removed on save'
+                      : f.secret && editingId && secretsSet[f.key]
+                        ? 'Leave blank to keep current'
+                        : f.placeholder ?? ''
+                  }
+                  value={String(formValues[f.key] ?? '')}
+                  disabled={clearSecrets.has(f.key)}
+                  onChange={(e) => setFormValues((v) => ({ ...v, [f.key]: e.target.value }))}
+                />
+                {f.secret && f.optional && editingId && secretsSet[f.key] && (
+                  <label className={styles.clearToggle}>
+                    <input
+                      type="checkbox"
+                      checked={clearSecrets.has(f.key)}
+                      onChange={(e) =>
+                        setClearSecrets((prev) => {
+                          const next = new Set(prev);
+                          if (e.target.checked) next.add(f.key);
+                          else next.delete(f.key);
+                          return next;
+                        })
+                      }
+                    />
+                    Remove saved value
+                  </label>
+                )}
+              </>
             )}
           </div>
         ))}

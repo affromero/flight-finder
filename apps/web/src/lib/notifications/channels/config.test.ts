@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
+import { encryptSecret } from '@/lib/secret-crypto';
 import {
   validateChannelConfig,
   encryptChannelConfig,
   decryptChannelConfig,
+  mergeStoredConfig,
   assertPublicUrl,
   SECRET_FIELDS,
 } from './config';
@@ -71,6 +73,26 @@ describe('encrypt/decrypt channel config', () => {
       ntfy: ['token'],
       webhook: ['secret'],
     });
+  });
+});
+
+describe('mergeStoredConfig — clearing optional secrets', () => {
+  it('clears an optional secret when the field is explicitly null', () => {
+    const existing = { url: 'https://hook.example', secret: encryptSecret('shh') };
+    const merged = mergeStoredConfig('webhook', existing, { url: 'https://hook.example', secret: null });
+    expect(merged.secret).toBeUndefined();
+    expect(merged.url).toBe('https://hook.example');
+  });
+
+  it('keeps an existing secret when the field is blank/absent', () => {
+    const enc = encryptSecret('shh');
+    const merged = mergeStoredConfig('webhook', { url: 'https://hook.example', secret: enc }, { url: 'https://hook.example' });
+    expect(merged.secret).toBe(enc);
+  });
+
+  it('refuses to clear a required secret (validation fails)', () => {
+    const existing = { botToken: encryptSecret('tok'), chatId: '1' };
+    expect(() => mergeStoredConfig('telegram', existing, { botToken: null })).toThrow();
   });
 });
 

@@ -118,9 +118,10 @@ export function prepareStoredConfig(type: ChannelType, input: unknown): Record<s
 
 /**
  * Merge a partial plaintext update onto an existing stored (encrypted) config.
- * Secret fields left blank keep their existing encrypted value; provided ones
- * are re-encrypted. The merged result is validated by decrypting it, so a
- * missing required field still fails.
+ * For secret fields: a non-empty string is re-encrypted, an explicit `null`
+ * clears it, and blank/absent keeps the existing encrypted value. The merged
+ * result is validated by decrypting it, so clearing a *required* secret (or a
+ * missing required field) still fails.
  */
 export function mergeStoredConfig(
   type: ChannelType,
@@ -133,7 +134,11 @@ export function mergeStoredConfig(
   const secrets = SECRET_FIELDS[type];
   for (const [k, v] of Object.entries(update)) {
     if (secrets.includes(k)) {
-      if (typeof v === 'string' && v.length > 0) merged[k] = encryptSecret(v);
+      if (v === null) {
+        delete merged[k]; // explicit clear of an optional secret
+      } else if (typeof v === 'string' && v.length > 0) {
+        merged[k] = encryptSecret(v);
+      }
       // blank/absent secret → keep the existing encrypted value
     } else {
       merged[k] = v;

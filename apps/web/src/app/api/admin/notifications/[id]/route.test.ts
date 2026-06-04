@@ -77,6 +77,19 @@ describe('PATCH /api/admin/notifications/[id]', () => {
     expect(String(stored.botToken)).toContain(':');
   });
 
+  it('clears an optional secret when the field is sent as null', async () => {
+    const encSecret = encryptSecret('shh');
+    mockFindFirst.mockResolvedValue({ id: 'c1', type: 'webhook', config: { url: 'https://hook.example', secret: encSecret } });
+    mockUpdate.mockImplementation((args: { data: { config: unknown } }) =>
+      Promise.resolve({ id: 'c1', type: 'webhook', label: null, enabled: true, createdAt: new Date('2026-06-04T00:00:00Z'), config: args.data.config }),
+    );
+    const res = await PATCH(patchReq({ config: { url: 'https://hook.example', secret: null } }), ctx());
+    expect(res.status).toBe(200);
+    const stored = (mockUpdate.mock.calls[0]![0] as { data: { config: Record<string, unknown> } }).data.config;
+    expect(stored.secret).toBeUndefined();
+    expect(stored.url).toBe('https://hook.example');
+  });
+
   it('returns 404 for a missing or non-global channel', async () => {
     mockFindFirst.mockResolvedValue(null);
     const res = await PATCH(patchReq({ enabled: false }), ctx('nope'));
