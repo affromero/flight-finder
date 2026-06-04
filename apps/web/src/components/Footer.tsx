@@ -11,6 +11,8 @@ export function Footer() {
         <Link href="/explore">Explore community data</Link>
         {' '}&middot;{' '}
         <a href="https://github.com/affromero/flight-finder" target="_blank" rel="noopener noreferrer">GitHub</a>
+        {' '}&middot;{' '}
+        <a href="https://ko-fi.com/afromero" target="_blank" rel="noopener noreferrer">Support on Ko-fi</a>
       </p>
     </footer>
   );
