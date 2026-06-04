@@ -82,6 +82,12 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.previewMaxCombos === 'number' && Number.isFinite(body.previewMaxCombos)) {
     data.previewMaxCombos = Math.max(6, Math.min(96, Math.round(body.previewMaxCombos)));
   }
+  if (typeof body.notifyMinDropAbs === 'number' && Number.isFinite(body.notifyMinDropAbs)) {
+    data.notifyMinDropAbs = Math.max(0, Math.min(100000, body.notifyMinDropAbs));
+  }
+  if (typeof body.notifyMinDropPct === 'number' && Number.isFinite(body.notifyMinDropPct)) {
+    data.notifyMinDropPct = Math.max(0, Math.min(1, body.notifyMinDropPct));
+  }
   if (body.defaultSearchMethod !== undefined) {
     if (body.defaultSearchMethod !== 'ai' && body.defaultSearchMethod !== 'manual') {
       return apiError('defaultSearchMethod must be "ai" or "manual"', 400);
@@ -152,6 +158,18 @@ export async function PATCH(request: NextRequest) {
       }
     }
     data.customBaseUrl = body.customBaseUrl || null;
+  }
+
+  if (body.publicBaseUrl !== undefined) {
+    if (body.publicBaseUrl !== null && typeof body.publicBaseUrl !== 'string') {
+      return apiError('publicBaseUrl must be a URL string or null', 400);
+    }
+    if (body.publicBaseUrl && typeof body.publicBaseUrl === 'string') {
+      try { new URL(body.publicBaseUrl); } catch {
+        return apiError('publicBaseUrl must be a valid URL', 400);
+      }
+    }
+    data.publicBaseUrl = body.publicBaseUrl || null;
   }
 
   if (body.aggregatorsEnabled !== undefined) {

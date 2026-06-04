@@ -29,5 +29,8 @@ export {
   validateChannelConfig,
   encryptChannelConfig,
   decryptChannelConfig,
+  prepareStoredConfig,
+  mergeStoredConfig,
+  redactChannelConfig,
   assertPublicUrl,
 } from './config';

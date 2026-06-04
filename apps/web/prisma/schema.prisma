@@ -127,6 +127,7 @@ model ExtractionConfig {
   aggregatorsEnabled    String[] @default(["google_flights", "airline_direct"]) // sources allowed in the fallback chain; skyscanner/kayak opt-in
   notifyMinDropAbs      Float    @default(5)  // minimum absolute price drop (in the query's currency) to fire a new-low alert
   notifyMinDropPct      Float    @default(0)  // minimum fractional drop (0..1) to fire a new-low alert; 0 = absolute floor only
+  publicBaseUrl         String?  // this instance's public URL for notification deep links; null = APP_URL env / default
 }
 
 model User {

@@ -3,10 +3,10 @@ import { detectNewLow } from './detect';
 import { formatNewLowMessage } from './format';
 import { dispatchNotifications } from './notify';
 
-/** Base URL for deep links in notifications. Self-hosters set APP_URL to their
- * own domain; Phase 4 also exposes this in the admin config. */
-function resolveBaseUrl(): string {
-  return (process.env.APP_URL || 'https://flight-finder.org').replace(/\/+$/, '');
+/** Base URL for deep links in notifications. Precedence: admin-configured
+ * publicBaseUrl, then APP_URL env, then the hosted default. */
+export function resolveBaseUrl(publicBaseUrl?: string | null): string {
+  return (publicBaseUrl || process.env.APP_URL || 'https://flight-finder.org').replace(/\/+$/, '');
 }
 
 /**
@@ -26,7 +26,7 @@ export async function notifyNewLows(queryIds: string[], cycleStartedAt: Date): P
   const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
   const floorAbs = config?.notifyMinDropAbs ?? 5;
   const floorPct = config?.notifyMinDropPct ?? 0;
-  const baseUrl = resolveBaseUrl();
+  const baseUrl = resolveBaseUrl(config?.publicBaseUrl);
 
   for (const queryId of ids) {
     try {

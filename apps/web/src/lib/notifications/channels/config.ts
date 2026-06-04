@@ -110,6 +110,53 @@ export function decryptChannelConfig<T extends ChannelType>(type: T, stored: unk
   return validateChannelConfig(type, out);
 }
 
+/** Validate plaintext input and encrypt its secret fields, returning the row to store. */
+export function prepareStoredConfig(type: ChannelType, input: unknown): Record<string, unknown> {
+  const validated = validateChannelConfig(type, input) as unknown as Record<string, unknown>;
+  return encryptChannelConfig(type, validated);
+}
+
+/**
+ * Merge a partial plaintext update onto an existing stored (encrypted) config.
+ * Secret fields left blank keep their existing encrypted value; provided ones
+ * are re-encrypted. The merged result is validated by decrypting it, so a
+ * missing required field still fails.
+ */
+export function mergeStoredConfig(
+  type: ChannelType,
+  existingStored: unknown,
+  input: unknown,
+): Record<string, unknown> {
+  const existing = obj(existingStored);
+  const update = obj(input);
+  const merged: Record<string, unknown> = { ...existing };
+  const secrets = SECRET_FIELDS[type];
+  for (const [k, v] of Object.entries(update)) {
+    if (secrets.includes(k)) {
+      if (typeof v === 'string' && v.length > 0) merged[k] = encryptSecret(v);
+      // blank/absent secret → keep the existing encrypted value
+    } else {
+      merged[k] = v;
+    }
+  }
+  decryptChannelConfig(type, merged); // throws if the merged result is invalid
+  return merged;
+}
+
+/** Strip secret values for safe return to the client, adding `<field>Set` flags. */
+export function redactChannelConfig(type: ChannelType, stored: unknown): Record<string, unknown> {
+  const o = obj(stored);
+  const secrets = SECRET_FIELDS[type];
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(o)) {
+    if (!secrets.includes(k)) out[k] = v;
+  }
+  for (const field of secrets) {
+    out[`${field}Set`] = typeof o[field] === 'string' && (o[field] as string).length > 0;
+  }
+  return out;
+}
+
 /**
  * Reject URLs that could reach internal infrastructure (SSRF). Global/admin
  * channels are trusted (the operator's own machine); per-user channels in

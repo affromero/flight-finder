@@ -135,3 +135,41 @@ describe('PATCH /api/admin/config — maxTrackedPerRoute (issue #89)', () => {
     expect(data.update.maxTrackedPerRoute).toBe(12);
   });
 });
+
+describe('PATCH /api/admin/config — notification settings (issue #106)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpsert.mockResolvedValue({ id: 'singleton' });
+  });
+
+  it('clamps notifyMinDropPct into the 0..1 range', async () => {
+    const res = await PATCH(patchRequest({ notifyMinDropPct: 5 }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.notifyMinDropPct).toBe(1);
+  });
+
+  it('clamps a negative notifyMinDropAbs up to 0', async () => {
+    await PATCH(patchRequest({ notifyMinDropAbs: -3 }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.notifyMinDropAbs).toBe(0);
+  });
+
+  it('rejects an invalid publicBaseUrl', async () => {
+    const res = await PATCH(patchRequest({ publicBaseUrl: 'not a url' }));
+    expect(res.status).toBe(400);
+  });
+
+  it('accepts a valid publicBaseUrl', async () => {
+    const res = await PATCH(patchRequest({ publicBaseUrl: 'https://flights.example.com' }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.publicBaseUrl).toBe('https://flights.example.com');
+  });
+
+  it('stores null when publicBaseUrl is cleared', async () => {
+    await PATCH(patchRequest({ publicBaseUrl: '' }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.publicBaseUrl).toBeNull();
+  });
+});
