@@ -88,6 +88,24 @@ export async function PATCH(request: NextRequest) {
   if (typeof body.notifyMinDropPct === 'number' && Number.isFinite(body.notifyMinDropPct)) {
     data.notifyMinDropPct = Math.max(0, Math.min(1, body.notifyMinDropPct));
   }
+  // Provider RPM overrides. null clears the override (revert to env/default).
+  for (const key of ['anthropicRpm', 'googleRpm', 'openaiRpm', 'groqRpm']) {
+    if (body[key] === null) {
+      data[key] = null;
+    } else if (typeof body[key] === 'number' && Number.isFinite(body[key])) {
+      data[key] = Math.max(1, Math.min(10000, Math.round(body[key])));
+    }
+  }
+  if (body.previewConcurrency === null) {
+    data.previewConcurrency = null;
+  } else if (typeof body.previewConcurrency === 'number' && Number.isFinite(body.previewConcurrency)) {
+    data.previewConcurrency = Math.max(1, Math.min(16, Math.round(body.previewConcurrency)));
+  }
+  if (body.previewAdmissionCap === null) {
+    data.previewAdmissionCap = null;
+  } else if (typeof body.previewAdmissionCap === 'number' && Number.isFinite(body.previewAdmissionCap)) {
+    data.previewAdmissionCap = Math.max(1, Math.min(50, Math.round(body.previewAdmissionCap)));
+  }
   if (body.defaultSearchMethod !== undefined) {
     if (body.defaultSearchMethod !== 'ai' && body.defaultSearchMethod !== 'manual') {
       return apiError('defaultSearchMethod must be "ai" or "manual"', 400);

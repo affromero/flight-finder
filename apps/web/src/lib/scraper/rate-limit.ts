@@ -22,6 +22,8 @@
  * either local or have their own provider side throttles.
  */
 
+import { prisma } from '@/lib/prisma';
+
 const UNLIMITED = Number.POSITIVE_INFINITY;
 
 function readRpm(envName: string, defaultRpm: number): number {
@@ -49,6 +51,46 @@ const PROVIDER_RPM: Record<string, number> = {
 const WINDOW_MS = 60_000;
 const timestampsByProvider = new Map<string, number[]>();
 
+// Admin-configured per-provider RPM overrides (ExtractionConfig), cached 60s so
+// the hot extract path does not hit the DB on every call. Precedence:
+// DB override > env (baked into PROVIDER_RPM) > built-in default. On any DB
+// error we fall back to the env/default values, preserving current behavior.
+const RPM_CACHE_TTL_MS = 60_000;
+let rpmOverrideCache: { value: Record<string, number | null>; expiresAt: number } | null = null;
+
+async function getRpmOverrides(): Promise<Record<string, number | null>> {
+  const now = Date.now();
+  if (rpmOverrideCache && rpmOverrideCache.expiresAt > now) return rpmOverrideCache.value;
+
+  let value: Record<string, number | null> = {};
+  try {
+    const config = await prisma.extractionConfig.findFirst({
+      where: { id: 'singleton' },
+      select: { anthropicRpm: true, googleRpm: true, openaiRpm: true, groqRpm: true },
+    });
+    if (config) {
+      value = {
+        anthropic: config.anthropicRpm,
+        google: config.googleRpm,
+        openai: config.openaiRpm,
+        groq: config.groqRpm,
+      };
+    }
+  } catch {
+    // DB unavailable — leave overrides empty so env/defaults apply.
+  }
+  rpmOverrideCache = { value, expiresAt: now + RPM_CACHE_TTL_MS };
+  return value;
+}
+
+async function resolveRpm(provider: string): Promise<number> {
+  const base = PROVIDER_RPM[provider] ?? 60;
+  if (base === UNLIMITED) return UNLIMITED; // local/CLI providers never override
+  const override = (await getRpmOverrides())[provider];
+  if (override != null && Number.isFinite(override) && override > 0) return override;
+  return base;
+}
+
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -59,7 +101,7 @@ function sleep(ms: number): Promise<void> {
  * can be tuned by adding the provider name to PROVIDER_RPM.
  */
 export async function acquireProviderToken(provider: string): Promise<void> {
-  const rpm = PROVIDER_RPM[provider] ?? 60;
+  const rpm = await resolveRpm(provider);
   if (rpm === UNLIMITED) return;
 
   while (true) {
@@ -90,4 +132,5 @@ export async function acquireProviderToken(provider: string): Promise<void> {
  */
 export function _resetRateLimitForTests(): void {
   timestampsByProvider.clear();
+  rpmOverrideCache = null;
 }

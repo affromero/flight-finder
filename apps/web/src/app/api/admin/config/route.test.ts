@@ -173,3 +173,40 @@ describe('PATCH /api/admin/config — notification settings (issue #106)', () =>
     expect(data.update.publicBaseUrl).toBeNull();
   });
 });
+
+describe('PATCH /api/admin/config — perf knobs (issue #106 gaps 2 & 4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpsert.mockResolvedValue({ id: 'singleton' });
+  });
+
+  it('clamps and rounds an out-of-range RPM override', async () => {
+    await PATCH(patchRequest({ anthropicRpm: 99999.6 }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.anthropicRpm).toBe(10000);
+  });
+
+  it('clears an RPM override when set to null', async () => {
+    await PATCH(patchRequest({ googleRpm: null }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.googleRpm).toBeNull();
+  });
+
+  it('clamps previewConcurrency to the 16 ceiling', async () => {
+    await PATCH(patchRequest({ previewConcurrency: 999 }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.previewConcurrency).toBe(16);
+  });
+
+  it('clamps previewAdmissionCap to the 50 ceiling', async () => {
+    await PATCH(patchRequest({ previewAdmissionCap: 999 }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.previewAdmissionCap).toBe(50);
+  });
+
+  it('ignores a non-numeric RPM value instead of writing NaN', async () => {
+    await PATCH(patchRequest({ openaiRpm: 'fast' }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update).not.toHaveProperty('openaiRpm');
+  });
+});

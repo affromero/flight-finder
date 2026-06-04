@@ -128,6 +128,12 @@ model ExtractionConfig {
   notifyMinDropAbs      Float    @default(5)  // minimum absolute price drop (in the query's currency) to fire a new-low alert
   notifyMinDropPct      Float    @default(0)  // minimum fractional drop (0..1) to fire a new-low alert; 0 = absolute floor only
   publicBaseUrl         String?  // this instance's public URL for notification deep links; null = APP_URL env / default
+  anthropicRpm          Int?     // override Anthropic requests-per-minute cap; null = ANTHROPIC_RPM env / built-in default
+  googleRpm             Int?     // override Google/Gemini requests-per-minute cap; null = GOOGLE_RPM env / built-in default
+  openaiRpm             Int?     // override OpenAI requests-per-minute cap; null = OPENAI_RPM env / built-in default
+  groqRpm               Int?     // override Groq requests-per-minute cap; null = GROQ_RPM env / built-in default
+  previewConcurrency    Int?     // parallel Playwright instances for the create-time preview; null = PREVIEW_CONCURRENCY env / default
+  previewAdmissionCap   Int?     // max concurrent preview runs per client IP; null = PREVIEW_ADMISSION_CAP env / default
 }
 
 model User {

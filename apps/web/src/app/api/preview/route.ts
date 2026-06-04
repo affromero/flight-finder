@@ -137,7 +137,7 @@ async function updatePreviewRun(id: string, data: Record<string, unknown>) {
   }
 }
 
-async function runPreviewInBackground(id: string, payload: PreviewRequestPayload) {
+async function runPreviewInBackground(id: string, payload: PreviewRequestPayload, concurrency?: number) {
   await updatePreviewRun(id, { status: 'running', error: null });
 
   // Independent timer based heartbeat. Audit finding A2: the per task
@@ -153,6 +153,7 @@ async function runPreviewInBackground(id: string, payload: PreviewRequestPayload
 
   try {
     const result = await runPreview(payload, {
+      concurrency,
       onTaskComplete: () => updatePreviewRun(id, { status: 'running' }),
     });
     clearInterval(heartbeatTimer);
@@ -180,7 +181,7 @@ export async function POST(request: NextRequest) {
 
   const config = await prisma.extractionConfig.findFirst({
     where: { id: 'singleton' },
-    select: { previewMaxCombos: true },
+    select: { previewMaxCombos: true, previewAdmissionCap: true, previewConcurrency: true },
   });
 
   try {
@@ -224,6 +225,11 @@ export async function POST(request: NextRequest) {
   // updatedAt freshness in the filter means a stuck or zombie row
   // (heartbeat stopped, sweep not yet run) does not block new
   // submissions from the same IP.
+  // Admin-configured cap wins over the env/default, clamped to a safe ceiling.
+  const admissionCap =
+    config?.previewAdmissionCap != null && config.previewAdmissionCap > 0
+      ? Math.min(config.previewAdmissionCap, 50)
+      : PREVIEW_ADMISSION_CAP;
   if (clientIp !== 'unknown') {
     const freshSince = new Date(now.getTime() - PREVIEW_ACTIVE_TIMEOUT_MS);
     const activeForIp = await previewRunStore.count({
@@ -233,9 +239,9 @@ export async function POST(request: NextRequest) {
         updatedAt: { gte: freshSince },
       },
     });
-    if (activeForIp >= PREVIEW_ADMISSION_CAP) {
+    if (activeForIp >= admissionCap) {
       return apiError(
-        `Too many active previews for this client (cap ${PREVIEW_ADMISSION_CAP}). Wait for one to finish or try again later.`,
+        `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
         429,
       );
     }
@@ -251,7 +257,7 @@ export async function POST(request: NextRequest) {
     },
   });
 
-  void runPreviewInBackground(previewRun.id, payload);
+  void runPreviewInBackground(previewRun.id, payload, config?.previewConcurrency ?? undefined);
 
   return apiSuccess({
     previewRunId: previewRun.id,
