@@ -1,4 +1,5 @@
 import { currencySymbol } from '@/lib/currency';
+import { safeHttpUrl } from '@/lib/safe-url';
 import styles from './BestPrice.module.css';
 
 interface Snapshot {
@@ -42,9 +43,9 @@ export function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
             {(best.departureTime || best.arrivalTime) && ` · ${best.departureTime ?? '?'} - ${best.arrivalTime ?? '?'}`}
           </span>
         </div>
-        {best.bookingUrl && (
+        {safeHttpUrl(best.bookingUrl) && (
           <a
-            href={best.bookingUrl}
+            href={safeHttpUrl(best.bookingUrl)}
             target="_blank"
             rel="noopener noreferrer"
             className={styles.bookButton}

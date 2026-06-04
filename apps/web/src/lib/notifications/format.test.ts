@@ -46,15 +46,44 @@ describe('formatNewLowMessage', () => {
     expect(msg.url).toBe('https://flights.example/q/q-abc');
   });
 
-  it('emits no link when the base url is null (self-hosted, unset)', () => {
+  it('prefers the chart link over the booking link when a base url is set', () => {
+    const msg = formatNewLowMessage({
+      alert: ALERT, // bookingUrl: https://book/x
+      route: { origin: 'LHR', destination: 'JFK' },
+      baseUrl: 'https://flights.example',
+    });
+    expect(msg.url).toBe('https://flights.example/q/q-abc');
+    expect(msg.data.chartUrl).toBe('https://flights.example/q/q-abc');
+    expect(msg.data.bookingUrl).toBe('https://book/x');
+  });
+
+  it('falls back to the booking link when no base url is set (self-hosted, unset)', () => {
     const msg = formatNewLowMessage({
       alert: ALERT,
       route: { origin: 'LHR', destination: 'JFK' },
       baseUrl: null,
     });
+    expect(msg.url).toBe('https://book/x');
+    expect(msg.body).toContain('dropped to $250'); // price/route still present
+  });
+
+  it('emits no link when there is no base url and no usable booking url', () => {
+    const msg = formatNewLowMessage({
+      alert: { ...ALERT, bookingUrl: null },
+      route: { origin: 'LHR', destination: 'JFK' },
+      baseUrl: null,
+    });
     expect(msg.url).toBe('');
-    // The price/route content is still there.
     expect(msg.body).toContain('dropped to $250');
+  });
+
+  it('rejects a dangerous booking url scheme instead of linking to it', () => {
+    const msg = formatNewLowMessage({
+      alert: { ...ALERT, bookingUrl: 'javascript:alert(1)' },
+      route: { origin: 'LHR', destination: 'JFK' },
+      baseUrl: null,
+    });
+    expect(msg.url).toBe('');
   });
 });
 
