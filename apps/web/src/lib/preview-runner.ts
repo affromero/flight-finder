@@ -8,11 +8,12 @@
 import { mkdir, writeFile } from 'fs/promises';
 import { createHash } from 'crypto';
 import { prisma } from '@/lib/prisma';
-import { cached } from '@/lib/redis';
-import type {
-  PreviewRequestPayload,
-  PreviewResultPayload,
-  RouteResultPayload,
+import { cached, redis } from '@/lib/redis';
+import {
+  PREVIEW_ACTIVE_TIMEOUT_MS,
+  type PreviewRequestPayload,
+  type PreviewResultPayload,
+  type RouteResultPayload,
 } from '@/lib/preview-run';
 import { getModelCosts } from '@/lib/scraper/ai-registry';
 import { isKnownAirline } from '@/lib/scraper/airline-urls';
@@ -48,6 +49,109 @@ export function parsePreviewConcurrency(raw: string | undefined = process.env.PR
 }
 
 export const PREVIEW_CONCURRENCY = parsePreviewConcurrency();
+
+/**
+ * Redis key prefix for the per IP concurrent preview admission counter.
+ * The counter is an integer incremented on admission and decremented when
+ * the background run reaches a terminal state. It carries a TTL equal to
+ * PREVIEW_ACTIVE_TIMEOUT_MS so a crashed worker that never releases cannot
+ * permanently wedge a client's quota: the slot self heals once the run can
+ * no longer be in flight.
+ */
+const PREVIEW_ADMISSION_KEY_PREFIX = 'preview-admit:';
+const PREVIEW_ADMISSION_TTL_SECONDS = Math.ceil(PREVIEW_ACTIVE_TIMEOUT_MS / 1000);
+
+/**
+ * Outcome of acquirePreviewAdmission.
+ *
+ * - admitted: Redis atomically reserved a slot under the cap. The caller
+ *   owns exactly one releasePreviewAdmission call once the run settles.
+ * - rejected: the slot was not reserved and none is owed. This covers both
+ *   "already at the cap" and "Redis is unavailable or errored." The gate
+ *   fails CLOSED on any Redis problem (audit finding F): there is no DB
+ *   count fallback, because that read then create path is non atomic and
+ *   reopens the TOCTOU race the Redis counter exists to close. The caller
+ *   returns 429 for either case.
+ */
+export type PreviewAdmission = 'admitted' | 'rejected';
+
+function previewAdmissionKey(clientIp: string): string {
+  return `${PREVIEW_ADMISSION_KEY_PREFIX}${clientIp}`;
+}
+
+/**
+ * Atomic admission script. Runs INCR, the cap check, the conditional EXPIRE,
+ * and the overshoot rollback DECR in a single server side step so there is no
+ * window where INCR succeeds but a follow up command fails and leaks a slot
+ * (audit finding F). Redis evaluates a script atomically, so a concurrent
+ * burst is serialized: at most `cap` invocations see a post increment value at
+ * or below the cap, and every overshoot rolls its own increment back, leaving
+ * the counter exact.
+ *
+ * Returns 1 when the slot was reserved (the caller owns one release), 0 when
+ * the client is already at the cap.
+ */
+const PREVIEW_ADMISSION_SCRIPT = `
+local current = redis.call('INCR', KEYS[1])
+if current == 1 then
+  redis.call('EXPIRE', KEYS[1], ARGV[2])
+end
+if current > tonumber(ARGV[1]) then
+  redis.call('DECR', KEYS[1])
+  return 0
+end
+return 1
+`;
+
+/**
+ * Atomically reserve a concurrent preview slot for clientIp. Closes the
+ * TOCTOU race in the old count then create gate (audit M5) and the partial
+ * failure slot leak in the old INCR/EXPIRE/DECR sequence (audit finding F) by
+ * running the whole admission decision as one Lua script.
+ *
+ * Fails CLOSED: if Redis is not configured or the script errors, the request
+ * is rejected rather than admitted via a non atomic DB count. A preview is a
+ * background scrape, so denying admission during a Redis outage is the safe
+ * default; it cannot leak unbounded concurrent scrapes.
+ */
+export async function acquirePreviewAdmission(
+  clientIp: string,
+  cap: number,
+): Promise<PreviewAdmission> {
+  if (!redis) return 'rejected';
+  const key = previewAdmissionKey(clientIp);
+  try {
+    const reserved = await redis.eval(
+      PREVIEW_ADMISSION_SCRIPT,
+      1,
+      key,
+      String(cap),
+      String(PREVIEW_ADMISSION_TTL_SECONDS),
+    );
+    return reserved === 1 ? 'admitted' : 'rejected';
+  } catch {
+    // Fail closed: do not fall back to a non atomic DB count.
+    return 'rejected';
+  }
+}
+
+/**
+ * Release a slot previously reserved by acquirePreviewAdmission. Floors at
+ * zero so a double release or a release after the TTL reset key cannot drive
+ * the counter negative and hand a client extra capacity.
+ */
+export async function releasePreviewAdmission(clientIp: string): Promise<void> {
+  if (!redis) return;
+  const key = previewAdmissionKey(clientIp);
+  try {
+    const remaining = await redis.decr(key);
+    if (remaining < 0) {
+      await redis.set(key, '0');
+    }
+  } catch {
+    // Counter will TTL out on its own; nothing actionable here.
+  }
+}
 
 export type RouteResult = RouteResultPayload;
 
@@ -207,6 +311,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
         ? await navigateAirlineDirect(searchParams, directAirline)
         : await navigateGoogleFlights(searchParams);
     } catch {
+      // Airline-direct navigation failed; fall back to Google Flights.
       nav = await navigateGoogleFlights(searchParams);
     }
 

@@ -6,6 +6,13 @@ vi.mock('nodemailer', () => ({
   default: { createTransport: vi.fn(() => ({ sendMail: mockSendMail })) },
 }));
 
+// DNS boundary: lets tests drive what a hostname resolves to, so the resolve-and-
+// validate / pinning path (SSRF-5) can be exercised without real network lookups.
+const mockDnsLookup = vi.fn();
+vi.mock('node:dns/promises', () => ({
+  lookup: (...args: unknown[]) => mockDnsLookup(...args),
+}));
+
 import nodemailer from 'nodemailer';
 import { sendTelegram } from './telegram';
 import { sendNtfy } from './ntfy';
@@ -84,6 +91,48 @@ describe('sendNtfy', () => {
     const [, init] = fetchMock.mock.calls[0]!;
     expect(init.headers.Click).toBeUndefined();
   });
+
+  it('rejects redirects on an untrusted custom server so a 307 cannot reach an internal host', async () => {
+    // The literal host and its resolved address look public, so the request goes
+    // out, but the server could 307/308 to the metadata IP. The redirect target
+    // is not re-pinned, so the send must refuse to follow any redirect.
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    await sendNtfy({ server: 'https://ntfy.public.dev', topic: 'deals' }, MESSAGE, { trusted: false });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.redirect).toBe('error');
+  });
+
+  it('treats a redirect response to an internal host as a failure for an untrusted server', async () => {
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    // fetch with redirect:'error' rejects when the server responds with a redirect.
+    fetchMock.mockRejectedValue(new TypeError('unexpected redirect'));
+    await expect(
+      sendNtfy({ server: 'https://ntfy.public.dev', topic: 'deals' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow();
+  });
+
+  it('follows redirects (default) for a trusted custom server', async () => {
+    await sendNtfy({ server: 'http://127.0.0.1:8080', topic: 'deals' }, MESSAGE, { trusted: true });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.redirect).toBeUndefined();
+  });
+
+  it('blocks an untrusted (per-user) custom ntfy server on an internal host', async () => {
+    await expect(
+      sendNtfy({ server: 'http://127.0.0.1:8080', topic: 'deals' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow(/not allowed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('still allows an untrusted channel on the public default ntfy.sh', async () => {
+    await sendNtfy({ server: '', topic: 'flights' }, MESSAGE, { trusted: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('allows a trusted (admin/global) custom ntfy server on an internal host', async () => {
+    await sendNtfy({ server: 'http://127.0.0.1:8080', topic: 'deals' }, MESSAGE, { trusted: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('sendWebhook', () => {
@@ -102,6 +151,68 @@ describe('sendWebhook', () => {
     const [, init] = fetchMock.mock.calls[0]!;
     const expected = 'sha256=' + crypto.createHmac('sha256', 'shh').update(init.body).digest('hex');
     expect(init.headers['X-Signature-256']).toBe(expected);
+  });
+
+  it.each([
+    'http://127.0.0.1/hook',
+    'http://169.254.169.254/latest/meta-data',
+    'http://10.1.2.3/hook',
+  ])('blocks an untrusted (per-user) webhook aimed at %s and never sends', async (url) => {
+    await expect(sendWebhook({ url }, MESSAGE, { trusted: false })).rejects.toThrow(/not allowed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('allows a trusted (admin/global) webhook to an internal host', async () => {
+    await sendWebhook({ url: 'http://127.0.0.1/hook' }, MESSAGE, { trusted: true });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks an untrusted webhook to a public host that embeds credentials', async () => {
+    await expect(
+      sendWebhook({ url: 'http://user:pass@hook.example/x' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow(/credentials/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('blocks an untrusted webhook whose public hostname resolves to a private address', async () => {
+    // The literal-host check passes (hook.example looks public), but DNS resolves
+    // it to an internal IP, so the resolve-and-validate step must reject it.
+    mockDnsLookup.mockResolvedValue([{ address: '10.1.2.3', family: 4 }]);
+    await expect(
+      sendWebhook({ url: 'https://hook.example/x' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow(/not allowed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends an untrusted webhook when the public hostname resolves to a public address', async () => {
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    await sendWebhook({ url: 'https://hook.example/x' }, MESSAGE, { trusted: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('rejects redirects on an untrusted webhook so a 307 cannot reach an internal host', async () => {
+    // hook.example and its resolved address look public, so the request goes out,
+    // but the server could 307/308 to localhost or the metadata IP. The redirect
+    // target is not re-pinned, so the send must refuse to follow any redirect.
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    await sendWebhook({ url: 'https://hook.example/x' }, MESSAGE, { trusted: false });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.redirect).toBe('error');
+  });
+
+  it('treats a redirect response to an internal host as a failure for an untrusted webhook', async () => {
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    // fetch with redirect:'error' rejects when the server responds with a redirect.
+    fetchMock.mockRejectedValue(new TypeError('unexpected redirect'));
+    await expect(
+      sendWebhook({ url: 'https://hook.example/x' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow();
+  });
+
+  it('follows redirects (default) for a trusted/global webhook', async () => {
+    await sendWebhook({ url: 'https://hook.example/x' }, MESSAGE, { trusted: true });
+    const [, init] = fetchMock.mock.calls[0]!;
+    expect(init.redirect).toBeUndefined();
   });
 });
 
@@ -140,5 +251,63 @@ describe('sendEmail', () => {
     const mail = mockSendMail.mock.calls[0]![0];
     expect(mail.text).toBe(MESSAGE.body);
     expect(mail.html).not.toContain('<a href');
+  });
+
+  it.each(['127.0.0.1', '169.254.169.254', '10.1.2.3'])(
+    'blocks an untrusted (per-user) channel using internal SMTP host %s and never sends',
+    async (host) => {
+      await expect(
+        sendEmail({ host, port: 25, secure: false, from: 'a@x', to: 'b@y' }, MESSAGE, { trusted: false }),
+      ).rejects.toThrow(/SMTP host is not allowed/);
+      expect(mockSendMail).not.toHaveBeenCalled();
+    },
+  );
+
+  it('allows a trusted (admin/global) channel using an internal SMTP relay', async () => {
+    mockSendMail.mockResolvedValue({ messageId: '4' });
+    await sendEmail({ host: '127.0.0.1', port: 25, secure: false, from: 'a@x', to: 'b@y' }, MESSAGE, { trusted: true });
+    expect(mockSendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks an untrusted channel whose public SMTP host resolves to a private address', async () => {
+    mockDnsLookup.mockResolvedValue([{ address: '10.1.2.3', family: 4 }]);
+    await expect(
+      sendEmail({ host: 'smtp.example', port: 587, secure: false, from: 'a@x', to: 'b@y' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow(/SMTP host is not allowed/);
+    expect(mockSendMail).not.toHaveBeenCalled();
+  });
+
+  it('pins an untrusted channel to the validated IP and keeps the hostname for TLS identity', async () => {
+    // Closes the DNS rebinding gap: nodemailer must connect to the address we
+    // already validated, not re-resolve the name (which could rebind to an
+    // internal IP). The original hostname stays as the TLS servername so cert
+    // validation still matches.
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    mockSendMail.mockResolvedValue({ messageId: '5' });
+    await sendEmail(
+      { host: 'smtp.example', port: 587, secure: true, from: 'a@x', to: 'b@y' },
+      MESSAGE,
+      { trusted: false },
+    );
+    expect(nodemailer.createTransport).toHaveBeenCalledWith(
+      expect.objectContaining({
+        host: '93.184.216.34',
+        tls: { servername: 'smtp.example' },
+      }),
+    );
+    expect(mockSendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not pin or override TLS identity for a trusted channel', async () => {
+    mockSendMail.mockResolvedValue({ messageId: '6' });
+    await sendEmail(
+      { host: 'smtp.internal', port: 587, secure: false, from: 'a@x', to: 'b@y' },
+      MESSAGE,
+      { trusted: true },
+    );
+    const args = (nodemailer.createTransport as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
+    expect(args.host).toBe('smtp.internal');
+    expect(args.tls).toBeUndefined();
+    expect(mockDnsLookup).not.toHaveBeenCalled();
   });
 });

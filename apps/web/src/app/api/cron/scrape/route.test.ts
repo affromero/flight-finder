@@ -43,6 +43,22 @@ describe('GET /api/cron/scrape', () => {
     expect(res.status).toBe(401);
   });
 
+  it('rejects "Bearer undefined" when CRON_SECRET is unset', async () => {
+    const saved = process.env.CRON_SECRET;
+    delete process.env.CRON_SECRET;
+    try {
+      // An attacker sending the literal string "Bearer undefined" must be blocked
+      // even though that is what the old code would have accepted.
+      const req = new NextRequest('http://localhost/api/cron/scrape', {
+        headers: { authorization: 'Bearer undefined' },
+      });
+      const res = await GET(req);
+      expect(res.status).toBe(401);
+    } finally {
+      process.env.CRON_SECRET = saved;
+    }
+  });
+
   it('runs scrape and returns summary on valid auth', async () => {
     mockCleanup.mockResolvedValue(2);
     mockExpire.mockResolvedValue(4);

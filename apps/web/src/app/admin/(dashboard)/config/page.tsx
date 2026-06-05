@@ -254,6 +254,16 @@ export default function ConfigPage() {
               <option key={key} value={key}>{p.displayName}</option>
             ))}
           </select>
+          {(provider === 'claude-code' || provider === 'codex') && (
+            <div className={styles.info}>
+              <div className={styles.infoTitle}>Security note</div>
+              <div className={styles.infoText}>
+                {provider === 'codex'
+                  ? 'Codex runs an agentic CLI to read scraped pages. It is pinned to a read-only sandbox, but an agentic CLI can still read local files, so a crafted page could read (not write or execute) host data. The page is sanitized and fenced as untrusted first. For the strongest isolation, prefer an API provider.'
+                  : 'Claude Code runs a local CLI to read scraped pages, locked to text-only inference with every tool disabled, so scraped page content cannot trigger file or command access.'}
+              </div>
+            </div>
+          )}
         </div>
 
         <div className={styles.field}>

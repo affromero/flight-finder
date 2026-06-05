@@ -5,6 +5,10 @@ import { encryptSecret } from '@/lib/secret-crypto';
 const mockChannelFindFirst = vi.fn();
 const mockConfigFindFirst = vi.fn();
 const mockRequireAdmin = vi.fn().mockResolvedValue(null);
+const mockRedisSet = vi.fn();
+// Holder so individual tests can swap the redis client (null = throttle off,
+// object = throttle on, with mockRedisSet controlling reserve/error behaviour).
+const redisHolder: { redis: { set: typeof mockRedisSet } | null } = { redis: null };
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -13,7 +17,11 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 vi.mock('@/lib/admin-guard', () => ({ requireAdminApi: () => mockRequireAdmin() }));
-vi.mock('@/lib/redis', () => ({ redis: null })); // no throttle in tests
+vi.mock('@/lib/redis', () => ({
+  get redis() {
+    return redisHolder.redis;
+  },
+}));
 
 import { POST } from './route';
 
@@ -31,8 +39,12 @@ beforeEach(() => {
   mockConfigFindFirst.mockResolvedValue({ publicBaseUrl: 'https://flights.example' });
   fetchMock = vi.fn().mockResolvedValue({ ok: true, status: 200, text: async () => '' });
   vi.stubGlobal('fetch', fetchMock);
+  redisHolder.redis = null; // throttle disabled by default
 });
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  redisHolder.redis = null;
+});
 
 describe('POST /api/admin/notifications/[id]/test', () => {
   it('sends a test message through the channel', async () => {
@@ -61,5 +73,23 @@ describe('POST /api/admin/notifications/[id]/test', () => {
     const res = await POST(req(), ctx());
     expect(res.status).toBe(403);
     expect(mockChannelFindFirst).not.toHaveBeenCalled();
+  });
+
+  it('throttles a repeat send when the reservation is already held', async () => {
+    redisHolder.redis = { set: mockRedisSet };
+    mockRedisSet.mockResolvedValue(null); // NX failed: key already set
+    mockChannelFindFirst.mockResolvedValue({ id: 'c1', type: 'telegram', config: { botToken: encryptSecret('tok'), chatId: '42' } });
+    const res = await POST(req(), ctx());
+    expect(res.status).toBe(429);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('fails closed and denies the send when the rate limiter errors', async () => {
+    redisHolder.redis = { set: mockRedisSet };
+    mockRedisSet.mockRejectedValue(new Error('redis down'));
+    mockChannelFindFirst.mockResolvedValue({ id: 'c1', type: 'telegram', config: { botToken: encryptSecret('tok'), chatId: '42' } });
+    const res = await POST(req(), ctx());
+    expect(res.status).toBe(503);
+    expect(fetchMock).not.toHaveBeenCalled();
   });
 });

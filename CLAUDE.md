@@ -17,8 +17,8 @@
 
 ## Monorepo
 
-npm workspaces: `@flight-finder/web` (`apps/web/`).
-Root `package.json` proxies to `@flight-finder/web`.
+npm workspaces: `@flight-finder/web` (`apps/web/`), `@flight-finder/cli` (`packages/cli/`).
+Root `package.json` proxies common scripts to `@flight-finder/web`.
 
 **Versioning:** the release version of record is `apps/web/package.json` (git tags `vX.Y.Z` track it). The root `package.json` version is not published, but release tooling reads it, so bump it to match `apps/web` on every release (`/create-release` must update both, plus the lockfile). `packages/cli` is versioned independently.
 
@@ -36,8 +36,8 @@ npm install                    # All workspaces
 docker compose -f docker-compose.prod.yml up -d db redis
 npx prisma db push --schema=apps/web/prisma/schema.prisma
 npx prisma generate --schema=apps/web/prisma/schema.prisma
-npm run dev                    # Web app on :3003 (wraps with doppler run)
-npm run ci                     # lint + typecheck + build
+npm run dev                    # Web app on :3003 (next dev --port 3003, no doppler wrapper at workspace level)
+npm run ci                     # lint + typecheck + test + build (both web and cli workspaces)
 ```
 
 ## File Index
@@ -60,7 +60,11 @@ npm run ci                     # lint + typecheck + build
 | `account/settings/page.tsx` | Per user preferences — currency, country, airlines, cabin |
 | `api/parse/route.ts` | POST — LLM parses natural language flight query |
 | `api/queries/route.ts` | POST — create new tracked query (401 anon in multi user mode) |
+| `api/queries/[id]/route.ts` | PATCH/DELETE — update or delete a query by deleteToken or user session |
 | `api/queries/[id]/prices/route.ts` | GET — public price data for chart |
+| `api/queries/[id]/scrape/route.ts` | POST — force-scrape a single query immediately (deleteToken or session auth) |
+| `api/queries/active/route.ts` | GET — active non-seed queries for the current user (scoped in multi user mode) |
+| `api/queries/status/route.ts` | POST — batch-check active/expired status for up to 20 query IDs |
 | `api/cron/scrape/route.ts` | GET — trigger scrape run (CRON_SECRET auth) |
 | `api/auth/login/route.ts` | POST — user login (multi user mode only); rate limited |
 | `api/auth/logout/route.ts` | POST — clears the shared ft-session cookie |
@@ -76,8 +80,31 @@ npm run ci                     # lint + typecheck + build
 | `api/admin/notifications/route.ts` | GET/POST — list/create global notification channels (admin) |
 | `api/admin/notifications/[id]/route.ts` | PATCH/DELETE — update/toggle/delete a channel |
 | `api/admin/notifications/[id]/test/route.ts` | POST — send a test notification (rate limited) |
+| `api/admin/insights/route.ts` | GET — admin-only airline reliability stats (cached 5 min) |
+| `api/admin/analytics/aggregate/route.ts` | POST — aggregate daily page-view events and clean up old raw data (admin only) |
+| `api/admin/analytics/query/route.ts` | GET — query aggregated analytics (page views, devices, countries, referrers, etc.) (admin only) |
+| `api/admin/seed-routes/route.ts` | GET/POST — list or create seed demo queries (admin only) |
+| `api/admin/seed-routes/[id]/route.ts` | PATCH/DELETE — update or delete a seed query (admin only) |
+| `api/admin/local-models/route.ts` | GET — probe local LLM servers (Ollama, llama.cpp, vLLM) and return available model IDs (admin only) |
+| `api/admin/providers/route.ts` | GET — list all LLM providers with readiness status (admin only) |
 | `api/account/settings/route.ts` | GET/PATCH — current user's preferences |
 | `api/account/password/route.ts` | POST — self-service password change (verifies current, rate limited) |
+| `api/alerts/route.ts` | GET — active queries with their current low-price alert state (scoped in multi user mode) |
+| `api/airports/route.ts` | GET — airport autocomplete search against bundled IATA dataset |
+| `api/analytics/track/route.ts` | POST — internal analytics write endpoint; middleware calls fire-and-forget; gated by ADMIN_SESSION_SECRET |
+| `api/analytics/event/route.ts` | POST — record a page-engagement event (scroll depth, dwell time) from the client |
+| `api/community/register/route.ts` | POST — mint a community API key (rate limited; COMMUNITY_REGISTRATION_OPEN must be true) |
+| `api/community/ingest/route.ts` | POST — accept a batch of price snapshots from a registered community node (API key auth) |
+| `api/community/routes/route.ts` | GET — list all routes that have community snapshot data (cached 5 min) |
+| `api/community/routes/[route]/route.ts` | GET — price history for one community route, formatted as ORIGIN-DESTINATION |
+| `api/preview/route.ts` | POST — start a create-time preview scrape; returns a PreviewRun ID |
+| `api/preview/[id]/route.ts` | GET — poll a preview run for status and results |
+| `api/setup/route.ts` | POST — one-time setup: store admin password and initial provider config (403 after first run) |
+| `api/setup/status/route.ts` | GET — setup completion state and detected LLM providers (used by setup wizard) |
+| `api/stats/route.ts` | GET — public instance stats (active queries, total scrapes, price points, cron info) |
+| `api/version/route.ts` | GET — current version, commit SHA, and whether an update is available |
+| `api/test/scrape/route.ts` | GET — smoke test for extraction pipeline: checks DB, Chromium, and LLM (CRON_SECRET auth) |
+| `api/vpn/status/route.ts` | GET — VPN provider config and whether the sidecar container is reachable |
 | `api/health/route.ts` | GET — health check (DB + Redis) |
 
 ### `apps/web/src/components/` — UI components
@@ -117,7 +144,17 @@ npm run ci                     # lint + typecheck + build
 
 ## Prisma Schema
 
-Models: `Query` (tracked flights, optional `userId` owner), `PriceSnapshot` (price data points), `FetchRun` (scrape run logs), `ExtractionConfig` (LLM settings singleton; `multiUserMode` flag), `ApiUsageLog` (cost tracking), `User` (multi user accounts, self hosted only).
+Models:
+- `Query` (tracked flights, optional `userId` owner)
+- `PriceSnapshot` (price data points; optional `vpnCountry` for VPN comparison runs)
+- `FetchRun` (scrape run logs; optional `vpnCountry`)
+- `ExtractionConfig` (LLM settings singleton; `multiUserMode` flag; `adminSessionsValidFrom` for session revocation on password change; RPM caps and preview concurrency fields)
+- `ApiUsageLog` (cost tracking per provider/model)
+- `User` (multi user accounts, self hosted only; `sessionsValidFrom` for per-user session revocation)
+- `NotificationChannel` (per-channel notification config; nullable `userId` for admin-owned global channels)
+- `PreviewRun` (create-time preview scrape job; `clientIp` for per-IP concurrency cap)
+- `CommunityApiKey` (registered community node keys; tracks snapshot count and last-seen time)
+- `CommunitySnapshot` (anonymized price snapshots ingested from community nodes)
 
 ## Design System: "Altitude"
 

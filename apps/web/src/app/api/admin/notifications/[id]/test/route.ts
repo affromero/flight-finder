@@ -22,6 +22,8 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
   if (!channel) return apiError('Channel not found', 404);
 
   // Throttle test sends so the endpoint can't be used as an outbound relay.
+  // Fail closed: if the limiter cannot confirm the reservation (Redis down or
+  // erroring), deny the send rather than letting the relay guard silently lapse.
   if (redis) {
     try {
       const reserved = await redis.set(`notify:test:${id}`, '1', 'EX', TEST_THROTTLE_SECONDS, 'NX');
@@ -29,7 +31,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
         return apiError('Test send was triggered moments ago. Try again shortly.', 429);
       }
     } catch {
-      // Redis unavailable — allow the send rather than blocking.
+      return apiError('Rate limiter is unavailable. Try again shortly.', 503);
     }
   }
 
@@ -47,7 +49,7 @@ export async function POST(_request: NextRequest, { params }: { params: Promise<
 
   try {
     await sendToChannel(
-      { id: channel.id, type: channel.type as ChannelType, config: channel.config },
+      { id: channel.id, type: channel.type as ChannelType, config: channel.config, userId: null },
       message,
     );
     return apiSuccess({ sent: true });

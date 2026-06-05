@@ -1,5 +1,4 @@
 import { prisma } from '@/lib/prisma';
-import { detectAvailableProviders } from '@/lib/scraper/ai-registry';
 
 export async function GET() {
   const config = await prisma.extractionConfig.findFirst({
@@ -10,13 +9,12 @@ export async function GET() {
   const setupComplete = isSelfHosted
     ? Boolean(config?.provider)
     : Boolean(config?.adminPasswordHash);
-  const detectedProviders = await detectAvailableProviders();
 
+  // Return only the boolean the setup wizard and SetupRedirect component need.
+  // Provider names and key-presence details are internal configuration that
+  // must not be revealed to unauthenticated callers.
   return Response.json({
     setupComplete,
-    isSelfHosted,
-    detectedProviders,
-    currentProvider: config?.provider ?? null,
-    currentModel: config?.model ?? null,
+    needsSetup: !setupComplete,
   });
 }

@@ -11,9 +11,10 @@ import { UpdateBanner } from '@/components/UpdateBanner';
 import { Footer } from '@/components/Footer';
 import { DemoGif } from '@/components/DemoGif';
 import { InstallCommand } from '@/components/InstallCommand';
-import { getSessionToken, verifySessionToken } from '@/lib/admin-auth';
+import { verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
+import { safeJsonLd } from '@/app/q/[id]/safe-json-ld';
 
 // Force dynamic — isMultiUserEnabled + getCurrentUser run per request to
 // decide between the public landing, the multi user login redirect, and
@@ -32,12 +33,9 @@ export default async function HomePage() {
     redirect('/login?next=/');
   }
 
-  const token = await getSessionToken();
   const isAdmin = multiUserEnabled
     ? Boolean(user?.isAdmin)
-    : token
-      ? verifySessionToken(token)
-      : false;
+    : await verifyAdminSessionRevocable();
 
   const jsonLd = {
     '@context': 'https://schema.org',
@@ -60,7 +58,7 @@ export default async function HomePage() {
       {isSelfHosted && <SetupRedirect />}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
       <div className={styles.topBar}>
         {isSelfHosted ? (

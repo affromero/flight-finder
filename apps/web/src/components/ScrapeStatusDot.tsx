@@ -1,6 +1,7 @@
 'use client';
 
 import type { ScrapeStatus } from '@/lib/scrape-status';
+import { useHydrated } from '@/lib/use-hydrated';
 import styles from './ScrapeStatusDot.module.css';
 
 export interface ScrapeStatusDotProps {
@@ -30,12 +31,15 @@ function timeAgo(iso: string): string {
 }
 
 export function ScrapeStatusDot({ status, error, lastScrapedAt }: ScrapeStatusDotProps): React.ReactElement | null {
+  const hydrated = useHydrated();
   if (status === null) return null;
 
   const parts: string[] = [];
   parts.push(`Last scrape: ${statusLabel(status)}`);
   if (error) parts.push(error);
-  if (lastScrapedAt) parts.push(timeAgo(lastScrapedAt));
+  // timeAgo derives from Date.now(), so the server and client clocks differ.
+  // Only include it after mount so the title/aria-label match during hydration.
+  if (hydrated && lastScrapedAt) parts.push(timeAgo(lastScrapedAt));
   const label = parts.join('. ');
 
   return (

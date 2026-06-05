@@ -1,13 +1,28 @@
-import { apiSuccess } from '@/lib/api-response';
+import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { isMultiUserEnabled } from '@/lib/multi-user';
+import { getCurrentUser } from '@/lib/user-auth';
 
 export const dynamic = 'force-dynamic';
 
 export async function GET() {
+  const multiUser = await isMultiUserEnabled();
 
-  // Get active non-seed queries
+  let userIdFilter: string | undefined;
+  if (multiUser) {
+    const user = await getCurrentUser();
+    if (!user) return apiError('Unauthorized', 401);
+    userIdFilter = user.id;
+  }
+
+  // Get active non-seed queries, scoped to the current user in multi-user mode
   const queries = await prisma.query.findMany({
-    where: { active: true, isSeed: false, expiresAt: { gt: new Date() } },
+    where: {
+      active: true,
+      isSeed: false,
+      expiresAt: { gt: new Date() },
+      ...(userIdFilter !== undefined ? { userId: userIdFilter } : {}),
+    },
     select: {
       id: true,
       origin: true,

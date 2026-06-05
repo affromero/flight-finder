@@ -51,7 +51,7 @@ describe('dispatchNotifications', () => {
 
   it('delivers an owned query to a global channel', async () => {
     mockFindMany.mockResolvedValue([
-      { id: 'g1', type: 'telegram', config: encryptChannelConfig('telegram', { botToken: 'T', chatId: '1' }) },
+      { id: 'g1', type: 'telegram', config: encryptChannelConfig('telegram', { botToken: 'T', chatId: '1' }), userId: null },
     ]);
     const outcomes = await dispatchNotifications('user-1', MESSAGE);
     expect(outcomes).toEqual([{ channelId: 'g1', type: 'telegram', ok: true }]);
@@ -59,8 +59,8 @@ describe('dispatchNotifications', () => {
 
   it('delivers to every channel and reports per-channel success', async () => {
     mockFindMany.mockResolvedValue([
-      { id: 'c1', type: 'telegram', config: encryptChannelConfig('telegram', { botToken: 'T', chatId: '1' }) },
-      { id: 'c2', type: 'ntfy', config: { server: 'https://ntfy.sh', topic: 'flights' } },
+      { id: 'c1', type: 'telegram', config: encryptChannelConfig('telegram', { botToken: 'T', chatId: '1' }), userId: null },
+      { id: 'c2', type: 'ntfy', config: { server: 'https://ntfy.sh', topic: 'flights' }, userId: null },
     ]);
     const outcomes = await dispatchNotifications(null, MESSAGE);
     expect(outcomes).toEqual([
@@ -73,7 +73,7 @@ describe('dispatchNotifications', () => {
   it('isolates a failing channel so the others still deliver', async () => {
     mockFindMany.mockResolvedValue([
       { id: 'good', type: 'telegram', config: encryptChannelConfig('telegram', { botToken: 'T', chatId: '1' }) },
-      { id: 'bad', type: 'webhook', config: { url: 'https://bad.example/hook' } },
+      { id: 'bad', type: 'webhook', config: { url: 'https://bad.example/hook' }, userId: null },
     ]);
     const outcomes = await dispatchNotifications(null, MESSAGE);
     const good = outcomes.find((o) => o.channelId === 'good')!;
@@ -81,5 +81,42 @@ describe('dispatchNotifications', () => {
     expect(good.ok).toBe(true);
     expect(bad.ok).toBe(false);
     expect(bad.error).toMatch(/500/);
+  });
+
+  it('loads the channel owner id so per-user trust can be decided downstream', async () => {
+    mockFindMany.mockResolvedValue([]);
+    await dispatchNotifications('user-1', MESSAGE);
+    expect(mockFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        select: expect.objectContaining({ userId: true }),
+      }),
+    );
+  });
+
+  it('treats a per-user (userId set) channel as untrusted and blocks an internal webhook host', async () => {
+    // The owner id is threaded through to the sender, so a user-owned channel
+    // aimed at the cloud metadata IP must be SSRF-blocked, never delivered.
+    mockFindMany.mockResolvedValue([
+      {
+        id: 'u1',
+        type: 'webhook',
+        config: { url: 'http://169.254.169.254/latest/meta-data' },
+        userId: 'user-1',
+      },
+    ]);
+    const outcomes = await dispatchNotifications('user-1', MESSAGE);
+    expect(outcomes).toEqual([
+      { channelId: 'u1', type: 'webhook', ok: false, error: expect.stringMatching(/not allowed/) },
+    ]);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('keeps a global (userId null) channel trusted so an internal host still delivers', async () => {
+    mockFindMany.mockResolvedValue([
+      { id: 'g1', type: 'webhook', config: { url: 'http://127.0.0.1/hook' }, userId: null },
+    ]);
+    const outcomes = await dispatchNotifications(null, MESSAGE);
+    expect(outcomes).toEqual([{ channelId: 'g1', type: 'webhook', ok: true }]);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 });

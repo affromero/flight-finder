@@ -3,6 +3,7 @@
 import { useState } from 'react';
 import { currencySymbol } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
+import { useHydrated } from '@/lib/use-hydrated';
 import styles from './PriceHistory.module.css';
 import type { Snapshot } from './PriceHistory';
 
@@ -15,13 +16,30 @@ function flightKey(s: Snapshot): string {
   return s.flightId ?? `${s.airline}|${s.flightNumber ?? ''}|${s.departureTime ?? ''}|${s.arrivalTime ?? ''}`;
 }
 
-function formatDateTime(iso: string): string {
+function formatScrapeTime(iso: string, timeZone?: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    ...(timeZone ? { timeZone } : {}),
   });
+}
+
+/**
+ * Render a scrape timestamp in each visitor's OWN local timezone, robustly.
+ * The server and the first client render both format in UTC, so the hydrated
+ * markup matches and React reports no mismatch (#418). Immediately after mount
+ * we re-render in the visitor's local zone via Intl's default (no timeZone
+ * option). Each person therefore sees their own local time and there is no
+ * hydration warning. Travel dates stay absolute and are handled elsewhere; only
+ * a moment-in-time like a scrape timestamp is localized to the viewer.
+ */
+function ScrapeTime({ iso }: { iso: string }) {
+  const hydrated = useHydrated();
+  // UTC until mounted (so it matches the server-rendered markup), then the
+  // visitor's own local zone (omitting timeZone uses Intl's local default).
+  return <>{formatScrapeTime(iso, hydrated ? undefined : 'UTC')}</>;
 }
 
 function flightName(s: Snapshot): string {
@@ -88,12 +106,12 @@ function FlightRow({
 }) {
   return (
     <tr>
-      {showDate && <td className={styles.date}>{formatDateTime(s.scrapedAt)}</td>}
+      {showDate && <td className={styles.date}><ScrapeTime iso={s.scrapedAt} /></td>}
       <td>{flightName(s)}</td>
       <td className={styles.times}>{timesLabel(s)}</td>
       <td className={styles.price}>
         {currencySymbol(s.currency)}
-        {s.price.toLocaleString()}
+        {s.price.toLocaleString('en-US')}
       </td>
       <TrendCell current={s} previous={previous} />
       <td className={styles.stops}>{stopsLabel(s)}</td>
@@ -160,7 +178,7 @@ export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
   return (
     <div className={styles.section}>
       <div className={styles.caption}>
-        Latest check &middot; {formatDateTime(latestScrapedAt)} &middot; {current.length} flight
+        Latest check &middot; <ScrapeTime iso={latestScrapedAt} /> &middot; {current.length} flight
         {current.length === 1 ? '' : 's'}
       </div>
       <div className={styles.tableWrapper}>

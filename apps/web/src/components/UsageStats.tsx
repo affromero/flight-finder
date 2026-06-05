@@ -7,7 +7,7 @@ interface Stats {
   activeQueries: number;
   totalScrapes: number;
   totalPricePoints: number;
-  llmCost30d: number;
+  llmCost30d?: number; // only returned to authenticated admins; hidden otherwise
   cron: {
     intervalHours: number;
     nextScrape: string | null;
@@ -53,10 +53,12 @@ export function UsageStats() {
         <span className={styles.value}>{stats.totalPricePoints.toLocaleString()}</span>
         <span className={styles.label}>Prices</span>
       </div>
-      <div className={styles.card}>
-        <span className={styles.value}>${stats.llmCost30d}</span>
-        <span className={styles.label}>LLM cost (30d)</span>
-      </div>
+      {stats.llmCost30d !== undefined && (
+        <div className={styles.card}>
+          <span className={styles.value}>${stats.llmCost30d}</span>
+          <span className={styles.label}>LLM cost (30d)</span>
+        </div>
+      )}
       {stats.cron.nextScrape && (
         <span className={styles.cron}>
           Next scrape {timeUntil(stats.cron.nextScrape)} (every {stats.cron.intervalHours}h)

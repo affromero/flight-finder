@@ -333,7 +333,19 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
       const result = await new Promise<string>((resolve, reject) => {
         const env = { ...process.env };
         delete env.ANTHROPIC_API_KEY;
-        const proc = spawn('claude', ['--print', '--model', model], {
+        // Extraction is pure text-in / JSON-out and needs no agentic capability.
+        // The input is adversarial scraped HTML, so run the agent locked down:
+        // deny every tool (overrides any pre-approval in the host's
+        // ~/.claude config) and force the default permission mode, which in
+        // non-interactive --print mode denies anything not explicitly allowed.
+        // Together a prompt injection in the page cannot make the agent run a
+        // shell command, write a file, or read and exfiltrate host credentials.
+        const proc = spawn('claude', [
+          '--print',
+          '--model', model,
+          '--permission-mode', 'default',
+          '--disallowedTools', 'Bash,Edit,MultiEdit,Write,Read,Glob,Grep,WebFetch,WebSearch,Task,NotebookEdit,TodoWrite',
+        ], {
           timeout: 240_000,
           env,
         });
@@ -389,10 +401,17 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
       const tmpFile = join(mkdtempSync(join(os.tmpdir(), 'codex-')), 'output.txt');
 
       const result = await new Promise<string>((resolve, reject) => {
+        // Pin the read-only sandbox: model-generated shell commands cannot write
+        // files, execute side effects, or reach the network. codex exec is
+        // inherently agentic and cannot be reduced to pure inference, so a
+        // residual read-only exfil risk remains (the agent could still read a
+        // file and emit it); the admin UI warns about this and the scraped HTML
+        // is sanitized and fenced as untrusted data before it reaches here.
         const proc = spawn('codex', [
           'exec', '-',
           '--skip-git-repo-check',
           '--ephemeral',
+          '-s', 'read-only',
           '-o', tmpFile,
         ], {
           timeout: 240_000,

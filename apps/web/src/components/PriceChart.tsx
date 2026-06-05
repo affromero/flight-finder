@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
 import { currencySymbol } from '@/lib/currency';
+import { safeHttpUrl } from '@/lib/safe-url';
 import styles from './PriceChart.module.css';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
@@ -286,8 +287,8 @@ export function PriceChart({ snapshots, currency = 'USD' }: { snapshots: Snapsho
         onClick={(data) => {
           const point = data.points[0];
           if (point?.customdata) {
-            const url = (point.customdata as string[])[0];
-            if (url) window.open(url, '_blank');
+            const url = safeHttpUrl((point.customdata as string[])[0]);
+            if (url) window.open(url, '_blank', 'noopener,noreferrer');
           }
         }}
       />

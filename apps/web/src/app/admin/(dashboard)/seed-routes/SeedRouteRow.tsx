@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useHydrated } from '@/lib/use-hydrated';
 import styles from './page.module.css';
 
 interface SeedData {
@@ -32,6 +33,7 @@ function timeAgo(iso: string): string {
 
 export function SeedRouteRow({ seed }: { seed: SeedData }) {
   const router = useRouter();
+  const hydrated = useHydrated();
 
   const handleToggle = async () => {
     await fetch(`/api/admin/seed-routes/${seed.id}`, {
@@ -87,7 +89,7 @@ export function SeedRouteRow({ seed }: { seed: SeedData }) {
         {seed.lastRunAt && (
           <>
             <span className={styles.rowSep}>·</span>
-            <span>last: {timeAgo(seed.lastRunAt)} ({seed.lastRunStatus})</span>
+            <span>last: {hydrated ? timeAgo(seed.lastRunAt) : '…'} ({seed.lastRunStatus})</span>
           </>
         )}
       </div>

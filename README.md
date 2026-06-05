@@ -150,6 +150,7 @@ Each country profile aligns: locale, timezone, Accept-Language header, and geolo
 
 ## Requirements
 
+- [Node.js](https://nodejs.org/) >= 22 (for local development; not needed for the Docker install path)
 - [Docker Desktop](https://docs.docker.com/get-docker/)
 - One of:
   - [Claude Code](https://docs.anthropic.com/en/docs/claude-code) (free with Claude Pro/Max)
@@ -550,6 +551,8 @@ Access at `/admin` (no login required on self-hosted instances):
 </details>
 
 ## Development
+
+Requires Node.js >= 22.
 
 ```bash
 npm install

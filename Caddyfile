@@ -4,8 +4,18 @@ flight-finder.org {
 	header {
 		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
 		X-Content-Type-Options "nosniff"
+		# frame-ancestors 'none' is the CSP equivalent of X-Frame-Options DENY.
+		# Both are set for defence-in-depth with older browsers.
 		X-Frame-Options "DENY"
 		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+		# Content Security Policy
+		# unsafe-inline is required because:
+		#   - script-src: theme bootstrap snippet, JSON-LD, service worker registration
+		#   - style-src:  Plotly injects inline styles at runtime
+		# Future hardening: replace unsafe-inline with per-request nonces for
+		# script-src once the Next.js build supports nonce injection.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
 		-Server
 	}
 

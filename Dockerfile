@@ -47,7 +47,7 @@ RUN npm run build --workspace=@flight-finder/web
 RUN npm run build --workspace=@flight-finder/cli
 
 FROM docker.io/library/node:22-alpine AS runner
-RUN apk add --no-cache libc6-compat openssl chromium
+RUN apk add --no-cache libc6-compat openssl chromium curl
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3003
@@ -137,4 +137,9 @@ RUN if grep -q 'admin-recovery stub' /app/packages/cli/dist/index.js; then \
       echo 'ERROR: admin-recovery stub leaked into the CLI bundle' >&2; exit 1; \
     fi
 EXPOSE 3003
+# INFRA-9: probe the /api/health endpoint so Docker (and compose) can report
+# container health and restart unhealthy containers automatically.
+# curl is available via the chromium apk layer.
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
+  CMD curl -sf http://localhost:3003/api/health || exit 1
 ENTRYPOINT ["./docker-entrypoint.sh"]

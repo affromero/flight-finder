@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
 const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
+const mockVerifyAdminSessionRevocable = vi.fn().mockResolvedValue(false);
 
 vi.mock('@/lib/multi-user', () => ({
   isMultiUserEnabled: () => mockIsMultiUserEnabled(),
@@ -11,22 +12,71 @@ vi.mock('@/lib/user-auth', () => ({
   getCurrentUser: () => mockGetCurrentUser(),
 }));
 
-// canManageQueryWithoutToken never touches admin-auth, but the module imports
-// it for authorizeMutation, so stub it to keep the import graph headless-safe.
-vi.mock('@/lib/admin-auth', () => ({
-  getSessionToken: vi.fn().mockResolvedValue(undefined),
-  verifySessionToken: vi.fn().mockReturnValue(false),
+// authorizeMutation's hosted admin branch goes through the revocation-aware
+// admin check (HMAC + expiry + adminSessionsValidFrom). Mock it at the
+// admin-guard boundary so we can assert how a revoked vs valid admin cookie is
+// treated. canManageQueryWithoutToken never touches it.
+vi.mock('@/lib/admin-guard', () => ({
+  verifyAdminSessionRevocable: () => mockVerifyAdminSessionRevocable(),
 }));
 
-import { canManageQueryWithoutToken } from './query-auth';
+import { authorizeMutation, canManageQueryWithoutToken } from './query-auth';
 
 const ORIGINAL_SELF_HOSTED = process.env.SELF_HOSTED;
+
+describe('authorizeMutation hosted admin branch', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockIsMultiUserEnabled.mockResolvedValue(false);
+    mockGetCurrentUser.mockResolvedValue(null);
+    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
+    // Pure hosted mode: SELF_HOSTED unset.
+    delete process.env.SELF_HOSTED;
+  });
+
+  afterEach(() => {
+    if (ORIGINAL_SELF_HOSTED === undefined) delete process.env.SELF_HOSTED;
+    else process.env.SELF_HOSTED = ORIGINAL_SELF_HOSTED;
+  });
+
+  it('authorizes a valid (non-revoked) admin session', async () => {
+    mockVerifyAdminSessionRevocable.mockResolvedValue(true);
+    const res = await authorizeMutation({ deleteToken: null, userId: null }, undefined);
+    expect(res.ok).toBe(true);
+  });
+
+  it('rejects an admin cookie revoked by a password change (no delete token)', async () => {
+    // The admin token predates adminSessionsValidFrom, so the revocation-aware
+    // check returns false. With no delete token supplied, the request is denied
+    // instead of being silently authorized on a stale admin cookie.
+    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
+    const res = await authorizeMutation({ deleteToken: 'real-token', userId: null }, undefined);
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(401);
+  });
+
+  it('falls back to the delete token when the admin cookie is revoked', async () => {
+    // A revoked admin cookie must not grant access on its own, but a caller
+    // presenting the correct delete token is still authorized.
+    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
+    const res = await authorizeMutation({ deleteToken: 'real-token', userId: null }, 'real-token');
+    expect(res.ok).toBe(true);
+  });
+
+  it('rejects a revoked admin cookie paired with a wrong delete token', async () => {
+    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
+    const res = await authorizeMutation({ deleteToken: 'real-token', userId: null }, 'wrong-token');
+    expect(res.ok).toBe(false);
+    expect(res.status).toBe(403);
+  });
+});
 
 describe('canManageQueryWithoutToken', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockIsMultiUserEnabled.mockResolvedValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
+    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
   });
 
   afterEach(() => {

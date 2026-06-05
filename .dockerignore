@@ -11,3 +11,12 @@ dist
 **/__pycache__
 .DS_Store
 *.log
+
+# Keep secrets out of the build context (M10)
+.env
+.env.*
+!.env.example
+
+# Analytics SQLite database and WAL sidecars must not be baked into the image
+# (INFRA-4). The runtime uses a named volume at /app/data instead.
+apps/web/data

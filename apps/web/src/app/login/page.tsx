@@ -1,6 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
+import { sanitizeNext } from '@/lib/safe-next';
 import { LoginForm } from './LoginForm';
 
 // Force dynamic rendering — isMultiUserEnabled and getCurrentUser depend on
@@ -19,7 +20,7 @@ export default async function LoginPage({ searchParams }: PageProps) {
   if (!(await isMultiUserEnabled())) notFound();
 
   const { next } = await searchParams;
-  const safeNext = next && next.startsWith('/') && !next.startsWith('//') ? next : null;
+  const safeNext = sanitizeNext(next);
 
   const user = await getCurrentUser();
   if (user) redirect(safeNext ?? (user.isAdmin ? '/admin' : '/account'));

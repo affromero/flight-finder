@@ -245,12 +245,18 @@ export async function parseFlightQuery(
   }
 
   // Build prompt with conversation history. Cap to the most recent turns to
-  // prevent token bloat across long clarification loops.
+  // prevent token bloat across long clarification loops. Clamp each entry's
+  // content so a single oversized entry cannot inflate the prompt beyond a
+  // safe bound (CONVERSATION_HISTORY_LIMIT turns x 2000 chars = ~12 KB max).
+  const HISTORY_ENTRY_MAX_CHARS = 2000;
   let fullPrompt = rawInput;
   if (conversationHistory?.length) {
     const recentHistory = conversationHistory.slice(-CONVERSATION_HISTORY_LIMIT);
     fullPrompt = recentHistory
-      .map((m) => `${m.role === 'user' ? 'User' : 'Assistant'}: ${m.content}`)
+      .map((m) => {
+        const content = String(m.content).slice(0, HISTORY_ENTRY_MAX_CHARS);
+        return `${m.role === 'user' ? 'User' : 'Assistant'}: ${content}`;
+      })
       .join('\n') + '\nUser: ' + rawInput;
   }
 

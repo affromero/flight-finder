@@ -4,6 +4,8 @@ Thanks for your interest in contributing! Flight Finder is a self-hosted flight 
 
 ## Development Setup
 
+Requires Node.js >= 22.
+
 ```bash
 git clone git@github.com:affromero/flight-finder.git
 cd flight-finder

@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { extractPrices } from '@/lib/scraper/extract-prices';
@@ -24,10 +25,20 @@ async function runCheck(name: string, fn: () => Promise<string>): Promise<CheckR
 }
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const expected = `Bearer ${process.env.CRON_SECRET}`;
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return apiError('Unauthorized', 401);
+  }
 
-  if (!authHeader || authHeader !== expected) {
+  const authHeader = request.headers.get('authorization');
+  const expected = `Bearer ${cronSecret}`;
+
+  const authorized =
+    !!authHeader &&
+    authHeader.length === expected.length &&
+    timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+
+  if (!authorized) {
     return apiError('Unauthorized', 401);
   }
 

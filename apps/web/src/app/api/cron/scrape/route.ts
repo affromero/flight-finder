@@ -1,14 +1,25 @@
 import { NextRequest } from 'next/server';
+import { timingSafeEqual } from 'crypto';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { runScrapeAll, cleanupUnvisitedQueries } from '@/lib/scraper/run-scrape';
 import { expireDepartedQueries } from '@/lib/scraper/expire-queries';
 import { notifyNewLows } from '@/lib/notifications/run';
 
 export async function GET(request: NextRequest) {
-  const authHeader = request.headers.get('authorization');
-  const expected = `Bearer ${process.env.CRON_SECRET}`;
+  const cronSecret = process.env.CRON_SECRET;
+  if (!cronSecret) {
+    return apiError('Unauthorized', 401);
+  }
 
-  if (!authHeader || authHeader !== expected) {
+  const authHeader = request.headers.get('authorization');
+  const expected = `Bearer ${cronSecret}`;
+
+  const authorized =
+    !!authHeader &&
+    authHeader.length === expected.length &&
+    timingSafeEqual(Buffer.from(authHeader), Buffer.from(expected));
+
+  if (!authorized) {
     return apiError('Unauthorized', 401);
   }
 

@@ -69,16 +69,30 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/staging_key
           chmod 600 ~/.ssh/staging_key
+          # Pin the host key and verify strictly. Prefer the DEPLOY_KNOWN_HOSTS
+          # secret (an out-of-band pinned key, strongest). When it is not set,
+          # scan the key now and pin it for this run, which still rejects a key
+          # that changes mid-run. Either way StrictHostKeyChecking is "yes", so
+          # the connection is never made with host verification disabled.
+          if [ -n "${{ secrets.DEPLOY_KNOWN_HOSTS }}" ]; then
+            echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
+          else
+            ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
+          fi
+          chmod 600 ~/.ssh/known_hosts
+          STRICT_CHECKING="yes"
           echo "Host fairtrail-prod" >> ~/.ssh/config
           echo "  HostName ${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/config
           echo "  User ${{ secrets.DEPLOY_USER }}" >> ~/.ssh/config
           echo "  IdentityFile ~/.ssh/staging_key" >> ~/.ssh/config
-          echo "  StrictHostKeyChecking no" >> ~/.ssh/config
+          echo "  StrictHostKeyChecking ${STRICT_CHECKING}" >> ~/.ssh/config
           echo "  ServerAliveInterval 30" >> ~/.ssh/config
           echo "  ServerAliveCountMax 120" >> ~/.ssh/config
           echo "  TCPKeepAlive yes" >> ~/.ssh/config
       - name: Run staging tests
         env:
           STAGING_HOST: fairtrail-prod
+          # REPO_TOKEN is read from the environment by staging-test.sh; passing it
+          # via env (not inline in the command) keeps it out of the process list.
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}
         run: bash scripts/staging-test.sh

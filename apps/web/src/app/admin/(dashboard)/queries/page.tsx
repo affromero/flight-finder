@@ -8,6 +8,7 @@ export const dynamic = 'force-dynamic';
 export default async function QueriesPage() {
   const queries = await prisma.query.findMany({
     orderBy: { createdAt: 'desc' },
+    take: 500,
     include: {
       _count: { select: { snapshots: true, fetchRuns: true } },
       fetchRuns: {

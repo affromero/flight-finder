@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { getClientIp } from '@/lib/trusted-ip';
 import {
   ACTIVE_PREVIEW_STATUSES,
   PREVIEW_ACTIVE_TIMEOUT_MS,
@@ -10,7 +11,12 @@ import {
   TERMINAL_PREVIEW_STATUSES,
   type PreviewRequestPayload,
 } from '@/lib/preview-run';
-import { runPreview, validatePreviewPayload } from '@/lib/preview-runner';
+import {
+  acquirePreviewAdmission,
+  releasePreviewAdmission,
+  runPreview,
+  validatePreviewPayload,
+} from '@/lib/preview-runner';
 import type { Airport } from '@/lib/scraper/parse-query';
 
 const PREVIEW_RUN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -42,7 +48,6 @@ interface PreviewRunStore {
   update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<PreviewRunRow>;
   findFirst(args: { where: Record<string, unknown>; orderBy: { createdAt: 'desc' } }): Promise<PreviewRunRow | null>;
   create(args: { data: Record<string, unknown> }): Promise<PreviewRunRow>;
-  count(args: { where: Record<string, unknown> }): Promise<number>;
 }
 
 /**
@@ -59,10 +64,6 @@ const PREVIEW_ADMISSION_CAP = (() => {
   if (!Number.isFinite(parsed) || parsed <= 0) return 3;
   return Math.min(parsed, 50);
 })();
-
-function getClientIp(request: NextRequest): string {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-}
 
 const previewRunStore = (prisma as unknown as { previewRun: PreviewRunStore }).previewRun;
 
@@ -137,7 +138,23 @@ async function updatePreviewRun(id: string, data: Record<string, unknown>) {
   }
 }
 
-async function runPreviewInBackground(id: string, payload: PreviewRequestPayload, concurrency?: number) {
+interface BackgroundPreviewOptions {
+  concurrency?: number;
+  /**
+   * Client IP whose Redis admission slot this run holds. Always present for an
+   * admitted run, since admission is now Redis only (no DB count fallback). The
+   * slot is released exactly once when the run reaches a terminal state
+   * (completed or failed) so the client's concurrent quota frees up.
+   */
+  releaseIp?: string;
+}
+
+async function runPreviewInBackground(
+  id: string,
+  payload: PreviewRequestPayload,
+  options: BackgroundPreviewOptions = {},
+) {
+  const { concurrency, releaseIp } = options;
   await updatePreviewRun(id, { status: 'running', error: null });
 
   // Independent timer based heartbeat. Audit finding A2: the per task
@@ -170,6 +187,14 @@ async function runPreviewInBackground(id: string, payload: PreviewRequestPayload
       error: error instanceof Error ? error.message : 'Failed to preview flights',
       expiresAt: new Date(Date.now() + PREVIEW_RUN_TTL_MS),
     });
+  } finally {
+    // Free the admission slot the moment this run can no longer be in
+    // flight, so the client's concurrent quota recovers without waiting on
+    // the TTL. Runs in a finally so an unexpected throw from either branch
+    // above still releases.
+    if (releaseIp) {
+      await releasePreviewAdmission(releaseIp);
+    }
   }
 }
 
@@ -221,43 +246,64 @@ export async function POST(request: NextRequest) {
     }, 202);
   }
 
-  // Audit finding D2: cap concurrent active previews per source IP.
-  // updatedAt freshness in the filter means a stuck or zombie row
-  // (heartbeat stopped, sweep not yet run) does not block new
-  // submissions from the same IP.
+  // Audit finding D2/M5: cap concurrent active previews per source IP.
   // Admin-configured cap wins over the env/default, clamped to a safe ceiling.
   const admissionCap =
     config?.previewAdmissionCap != null && config.previewAdmissionCap > 0
       ? Math.min(config.previewAdmissionCap, 50)
       : PREVIEW_ADMISSION_CAP;
-  if (clientIp !== 'unknown') {
-    const freshSince = new Date(now.getTime() - PREVIEW_ACTIVE_TIMEOUT_MS);
-    const activeForIp = await previewRunStore.count({
-      where: {
+
+  // Audit finding M5/B/F: the old gate read previewRunStore.count then, outside
+  // any transaction, ran create. N concurrent requests all observed the
+  // pre-insert count and slipped past the cap. The Redis counter is an atomic
+  // admission gate run as a single Lua script (INCR + cap + EXPIRE + overshoot
+  // rollback), so at most `admissionCap` of a burst are admitted and no partial
+  // failure can leak a slot. The slot is released in runPreviewInBackground
+  // when the run settles.
+  //
+  // The gate always runs, including for the 'unknown' bucket that getClientIp
+  // returns when no trusted proxy is asserted (TRUSTED_FORWARDED_FOR=false) or
+  // no forwarded header is present (audit finding B). Skipping it there would
+  // let a caller bypass the cap by simply omitting the header. All unknown-IP
+  // callers share one bucket, so the cap still binds them collectively.
+  //
+  // On any Redis problem the gate fails CLOSED (rejected): there is no DB count
+  // fallback, because that non atomic read then create reopens the TOCTOU race
+  // (audit finding F). A preview is a background scrape, so denying admission
+  // during a Redis outage is the safe default.
+  const admission = await acquirePreviewAdmission(clientIp, admissionCap);
+  if (admission === 'rejected') {
+    return apiError(
+      `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
+      429,
+    );
+  }
+  // Admission succeeded, so a Redis slot is reserved for clientIp. From here
+  // exactly one releasePreviewAdmission(clientIp) must run on every path: the
+  // background runner releases it when the run settles, and the create-failed
+  // path below releases it directly since that run never starts.
+  let previewRun: PreviewRunRow;
+  try {
+    previewRun = await previewRunStore.create({
+      data: {
+        requestHash,
+        status: 'pending',
+        requestPayload: payload as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(now.getTime() + PREVIEW_RUN_TTL_MS),
         clientIp,
-        status: { in: [...ACTIVE_PREVIEW_STATUSES] },
-        updatedAt: { gte: freshSince },
       },
     });
-    if (activeForIp >= admissionCap) {
-      return apiError(
-        `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
-        429,
-      );
-    }
+  } catch (error) {
+    // The row never persisted, so the background runner will never run to
+    // release the reserved slot. Release it here to avoid leaking quota.
+    await releasePreviewAdmission(clientIp);
+    throw error;
   }
 
-  const previewRun = await previewRunStore.create({
-    data: {
-      requestHash,
-      status: 'pending',
-      requestPayload: payload as unknown as Prisma.InputJsonValue,
-      expiresAt: new Date(now.getTime() + PREVIEW_RUN_TTL_MS),
-      clientIp,
-    },
+  void runPreviewInBackground(previewRun.id, payload, {
+    concurrency: config?.previewConcurrency ?? undefined,
+    releaseIp: clientIp,
   });
-
-  void runPreviewInBackground(previewRun.id, payload, config?.previewConcurrency ?? undefined);
 
   return apiSuccess({
     previewRunId: previewRun.id,

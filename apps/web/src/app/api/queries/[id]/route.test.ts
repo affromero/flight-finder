@@ -18,6 +18,7 @@ vi.mock('@/lib/prisma', () => ({
       updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args),
       update: (...args: unknown[]) => mockQueryUpdate(...args),
     },
+    extractionConfig: { findUnique: async () => null },
   },
 }));
 
@@ -40,6 +41,7 @@ const mockVerifySessionToken = vi.fn().mockReturnValue(false);
 vi.mock('@/lib/admin-auth', () => ({
   getSessionToken: () => mockGetSessionToken(),
   verifySessionToken: (token: string) => mockVerifySessionToken(token),
+  parseAdminTokenTimestamp: () => 1000,
 }));
 
 import { DELETE, PATCH } from './route';

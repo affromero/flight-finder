@@ -16,6 +16,11 @@ const {
   mockNavigateAirlineDirect,
   mockWriteFile,
   mockMkdir,
+  mockRedisEval,
+  mockRedisIncr,
+  mockRedisDecr,
+  mockRedisExpire,
+  mockRedisSet,
 } = vi.hoisted(() => ({
   mockExtractionConfigFindFirst: vi.fn(),
   mockApiUsageLogCreate: vi.fn().mockResolvedValue({}),
@@ -24,6 +29,11 @@ const {
   mockNavigateAirlineDirect: vi.fn(),
   mockWriteFile: vi.fn().mockResolvedValue(undefined),
   mockMkdir: vi.fn().mockResolvedValue(undefined),
+  mockRedisEval: vi.fn(),
+  mockRedisIncr: vi.fn(),
+  mockRedisDecr: vi.fn(),
+  mockRedisExpire: vi.fn().mockResolvedValue(1),
+  mockRedisSet: vi.fn().mockResolvedValue('OK'),
 }));
 
 vi.mock('fs/promises', () => ({
@@ -38,10 +48,19 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-// Bypass Redis: just call the inner factory. Dogpile protection is not
-// in scope; each task in a single runPreview has a unique cache key.
+// Bypass the cache wrapper: just call the inner factory. Dogpile protection
+// is not in scope; each task in a single runPreview has a unique cache key.
+// The redis client itself is a controllable stub so the admission gate tests
+// can drive INCR/DECR at the boundary instead of standing up a real Redis.
 vi.mock('@/lib/redis', () => ({
   cached: <T>(_key: string, fn: () => Promise<T>): Promise<T> => fn(),
+  redis: {
+    eval: mockRedisEval,
+    incr: mockRedisIncr,
+    decr: mockRedisDecr,
+    expire: mockRedisExpire,
+    set: mockRedisSet,
+  },
 }));
 
 vi.mock('@/lib/scraper/navigate', () => ({
@@ -57,7 +76,13 @@ vi.mock('@/lib/scraper/airline-urls', () => ({
   isKnownAirline: () => false,
 }));
 
-import { runPreview, parsePreviewConcurrency, validatePreviewPayload } from './preview-runner';
+import {
+  runPreview,
+  parsePreviewConcurrency,
+  validatePreviewPayload,
+  acquirePreviewAdmission,
+  releasePreviewAdmission,
+} from './preview-runner';
 
 function makePayload(overrides: Partial<PreviewRequestPayload> = {}): PreviewRequestPayload {
   return {
@@ -99,6 +124,13 @@ beforeEach(() => {
   mockNavigateAirlineDirect.mockReset();
   mockWriteFile.mockClear();
   mockMkdir.mockClear();
+  mockRedisEval.mockReset();
+  mockRedisIncr.mockReset();
+  mockRedisDecr.mockReset();
+  mockRedisExpire.mockClear();
+  mockRedisSet.mockClear();
+  mockRedisExpire.mockResolvedValue(1);
+  mockRedisSet.mockResolvedValue('OK');
 
   mockExtractionConfigFindFirst.mockResolvedValue({
     id: 'singleton',
@@ -374,6 +406,128 @@ describe('validatePreviewPayload combo cap (issue #89, configurable)', () => {
 
   it('reports the configured cap in the error message, not a hardcoded 24', () => {
     expect(() => validatePreviewPayload(wideFlexPayload, 12)).toThrow(/Cap is 12/);
+  });
+});
+
+describe('preview admission gate (audit M5 TOCTOU, finding F)', () => {
+  /**
+   * Backs the gate with a per-key integer counter that mirrors how the atomic
+   * Lua script and the release path mutate Redis. acquire runs through
+   * redis.eval (the whole admission decision is one server side script);
+   * release runs through redis.decr / redis.set. The script is evaluated
+   * atomically by real Redis, so a concurrent burst is serialized: at most
+   * `cap` invocations see a post-increment value at or below the cap, and
+   * every overshoot rolls its own increment back, leaving the counter exact.
+   *
+   * Modeling acquire as a single eval (not separate INCR/EXPIRE/DECR calls) is
+   * what proves finding F: there is no interleaving window where one command
+   * can fail and leak a slot, because Redis runs the script start to finish.
+   */
+  function backCounterWithRedis(initial = 0) {
+    const store = new Map<string, number>();
+    let ttlSets = 0;
+    mockRedisEval.mockImplementation(
+      async (_script: string, _numKeys: number, key: string, capArg: string, _ttl: string) => {
+        const cap = Number(capArg);
+        const current = (store.get(key) ?? initial) + 1;
+        store.set(key, current);
+        if (current === 1) ttlSets++;
+        if (current > cap) {
+          store.set(key, current - 1); // overshoot rollback DECR
+          return 0;
+        }
+        return 1;
+      },
+    );
+    mockRedisDecr.mockImplementation(async (key: string) => {
+      const next = (store.get(key) ?? 0) - 1;
+      store.set(key, next);
+      return next;
+    });
+    mockRedisSet.mockImplementation(async (key: string) => {
+      store.set(key, 0);
+      return 'OK';
+    });
+    return {
+      get: (key = 'preview-admit:203.0.113.5') => store.get(key) ?? 0,
+      ttlSets: () => ttlSets,
+    };
+  }
+
+  it('admits at most `cap` requests from a concurrent burst for one IP', async () => {
+    const counter = backCounterWithRedis();
+    const cap = 3;
+
+    const results = await Promise.all(
+      Array.from({ length: 10 }, () => acquirePreviewAdmission('203.0.113.5', cap)),
+    );
+
+    const admitted = results.filter((r) => r === 'admitted');
+    const rejected = results.filter((r) => r === 'rejected');
+    expect(admitted).toHaveLength(cap);
+    expect(rejected).toHaveLength(10 - cap);
+    // Overshooting requests roll their own increment back inside the script,
+    // so the counter settles exactly at the cap, not at 10.
+    expect(counter.get()).toBe(cap);
+  });
+
+  it('passes the cap and TTL into the atomic script', async () => {
+    backCounterWithRedis();
+
+    await acquirePreviewAdmission('198.51.100.1', 5);
+
+    const call = mockRedisEval.mock.calls[0]!;
+    // eval(script, numKeys, key, cap, ttlSeconds)
+    expect(call[1]).toBe(1);
+    expect(call[2]).toBe('preview-admit:198.51.100.1');
+    expect(call[3]).toBe('5');
+    expect(Number(call[4])).toBeGreaterThan(0);
+  });
+
+  it('frees a slot on release so a later request is admitted again', async () => {
+    const counter = backCounterWithRedis();
+    const cap = 1;
+
+    expect(await acquirePreviewAdmission('203.0.113.9', cap)).toBe('admitted');
+    expect(await acquirePreviewAdmission('203.0.113.9', cap)).toBe('rejected');
+
+    await releasePreviewAdmission('203.0.113.9');
+    expect(counter.get('preview-admit:203.0.113.9')).toBe(0);
+
+    expect(await acquirePreviewAdmission('203.0.113.9', cap)).toBe('admitted');
+  });
+
+  it('floors the counter at zero on an over-release', async () => {
+    const counter = backCounterWithRedis(0);
+
+    await releasePreviewAdmission('203.0.113.11');
+
+    // DECR from 0 returns -1; the gate resets it to 0 so a stray release
+    // cannot hand the client extra capacity.
+    expect(mockRedisSet).toHaveBeenCalled();
+    expect(counter.get('preview-admit:203.0.113.11')).toBe(0);
+  });
+
+  it('fails CLOSED (rejected, not admitted) when the admission script throws', async () => {
+    // Finding F: a Redis error must deny admission, never silently admit or
+    // fall back to a non atomic DB count that reopens the TOCTOU race.
+    mockRedisEval.mockRejectedValue(new Error('redis down'));
+
+    const result = await acquirePreviewAdmission('203.0.113.13', 3);
+
+    expect(result).toBe('rejected');
+  });
+
+  it('does not leak a slot when the script errors after reserving (single atomic call)', async () => {
+    // The whole admission decision is one eval, so there is no partial state to
+    // leak: if eval throws, no slot was reserved and the caller owes no release.
+    // Assert the gate never issued a stray INCR/DECR outside the script.
+    mockRedisEval.mockRejectedValue(new Error('redis down'));
+
+    await acquirePreviewAdmission('203.0.113.14', 3);
+
+    expect(mockRedisIncr).not.toHaveBeenCalled();
+    expect(mockRedisDecr).not.toHaveBeenCalled();
   });
 });
 

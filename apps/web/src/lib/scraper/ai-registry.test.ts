@@ -745,3 +745,44 @@ describe('EXTRACT_TIMEOUT_MS env parsing (issue #65)', () => {
     expect(mod.EXTRACT_TIMEOUT_MS).toBe(90_000);
   });
 });
+
+describe('CLI provider lockdown (Finding 4)', () => {
+  beforeEach(() => {
+    mockSpawn.mockReset();
+  });
+
+  it('claude-code runs with every tool disabled and the default permission mode', async () => {
+    const proc = createFakeProc();
+    mockSpawn.mockReturnValue(proc);
+    const done = EXTRACTION_PROVIDERS['claude-code']!.extract('', 'sonnet', 'system', 'page');
+    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
+    proc.stdout!.emit('data', Buffer.from('[]'));
+    proc.emit('close', 0);
+    await done;
+
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args).toContain('--disallowedTools');
+    const denied = args[args.indexOf('--disallowedTools') + 1]!;
+    for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'WebFetch', 'Task']) {
+      expect(denied).toContain(tool);
+    }
+    expect(args[args.indexOf('--permission-mode') + 1]).toBe('default');
+    expect(args).not.toContain('--dangerously-skip-permissions');
+    expect(args).not.toContain('--allow-dangerously-skip-permissions');
+  });
+
+  it('codex runs with the read-only sandbox, never danger-full-access', async () => {
+    const proc = createFakeProc();
+    mockSpawn.mockReturnValue(proc);
+    // No output file is written, so the call rejects; we only assert the args.
+    const done = EXTRACTION_PROVIDERS['codex']!.extract('', 'codex', 'system', 'page').catch(() => undefined);
+    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
+    proc.emit('close', 1);
+    await done;
+
+    const args = mockSpawn.mock.calls[0]![1] as string[];
+    expect(args[args.indexOf('-s') + 1]).toBe('read-only');
+    expect(args).not.toContain('danger-full-access');
+    expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
+  });
+});

@@ -47,12 +47,18 @@ export async function GET(
     return apiError('This tracker has expired', 410);
   }
 
-  const snapshots = await cached(
+  // Fetch the most recent MAX_SNAPSHOTS snapshots (desc), then reverse so the
+  // result is chronological (asc) for chart rendering. This bounds the payload
+  // for queries with a very long history while keeping the most relevant data.
+  const MAX_SNAPSHOTS = 5000;
+
+  const snapshotsDesc = await cached(
     `ft:prices:${id}`,
     () =>
       prisma.priceSnapshot.findMany({
         where: { queryId: id },
-        orderBy: { scrapedAt: 'asc' },
+        orderBy: { scrapedAt: 'desc' },
+        take: MAX_SNAPSHOTS,
         select: {
           id: true,
           travelDate: true,
@@ -75,6 +81,8 @@ export async function GET(
       }),
     120 // 2 min cache for public page
   );
+
+  const snapshots = snapshotsDesc.slice().reverse();
 
   const lastRun = await prisma.fetchRun.findFirst({
     where: { queryId: id },

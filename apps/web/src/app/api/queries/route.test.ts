@@ -8,6 +8,19 @@ const { mockQueryCreate, mockSnapshotCreateMany } = vi.hoisted(() => ({
   mockSnapshotCreateMany: vi.fn().mockResolvedValue({ count: 0 }),
 }));
 
+// Redis mock: incr returns 1 (under limit) by default
+const mockRedisIncr = vi.fn().mockResolvedValue(1);
+const mockRedisExpire = vi.fn().mockResolvedValue(1);
+const mockRedisTtl = vi.fn().mockResolvedValue(600);
+
+vi.mock('@/lib/redis', () => ({
+  redis: {
+    incr: (...args: unknown[]) => mockRedisIncr(...args),
+    expire: (...args: unknown[]) => mockRedisExpire(...args),
+    ttl: (...args: unknown[]) => mockRedisTtl(...args),
+  },
+}));
+
 vi.mock('next/headers', () => ({
   cookies: vi.fn().mockResolvedValue({ get: vi.fn(), set: vi.fn(), delete: vi.fn() }),
 }));
@@ -32,11 +45,14 @@ vi.mock('@/lib/user-auth', () => ({
 
 import { POST } from './route';
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: unknown, ip = '1.2.3.4'): NextRequest {
   return new NextRequest('http://localhost/api/queries', {
     method: 'POST',
     body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'x-forwarded-for': ip,
+    },
   });
 }
 
@@ -61,6 +77,9 @@ describe('POST /api/queries', () => {
     mockSnapshotCreateMany.mockClear();
     mockIsMultiUserEnabled.mockResolvedValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
+    mockRedisIncr.mockResolvedValue(1);
+    mockRedisExpire.mockResolvedValue(1);
+    mockRedisTtl.mockResolvedValue(600);
   });
 
   it('allows unauthenticated request (public endpoint)', async () => {
@@ -299,5 +318,307 @@ describe('POST /api/queries', () => {
     const res = await POST(makeRequest({ ...validBody, label: 'a'.repeat(61) }));
     expect(res.status).toBe(400);
     expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects routes[] exceeding MAX_ROUTES (20) with 400', async () => {
+    const tooManyRoutes = Array.from({ length: 21 }, () => ({
+      origin: 'JFK',
+      originName: 'New York JFK',
+      destination: 'LAX',
+      destinationName: 'Los Angeles',
+      selectedFlights: [],
+    }));
+    const res = await POST(makeRequest({ ...validBody, routes: tooManyRoutes }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Too many routes');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects selectedFlights[] exceeding MAX_FLIGHTS_PER_ROUTE (50) with 400', async () => {
+    const tooManyFlights = Array.from({ length: 51 }, (_, i) => ({
+      travelDate: '2026-06-15',
+      price: 300 + i,
+      airline: 'Delta',
+      bookingUrl: 'https://delta.com',
+    }));
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        origin: 'JFK',
+        originName: 'New York JFK',
+        destination: 'LAX',
+        destinationName: 'Los Angeles',
+        selectedFlights: tooManyFlights,
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Too many flights');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  // ---- Field size / type validation (Finding G) ----
+
+  it('rejects rawInput exceeding 500 characters with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, rawInput: 'x'.repeat(501) }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('rawInput');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects originName exceeding 200 characters with 400', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        originName: 'O'.repeat(201),
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('originName');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects destinationName exceeding 200 characters with 400', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        destinationName: 'D'.repeat(201),
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('destinationName');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a preferredAirlines entry exceeding 100 characters with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, preferredAirlines: ['A'.repeat(101)] }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('preferredAirlines');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects maxPrice that is not a finite number with 400', async () => {
+    // A non-numeric value survives JSON transport (Infinity/NaN serialize to
+    // null, which the route treats as "unset"). Number('not-a-number') is NaN.
+    const res = await POST(makeRequest({ ...validBody, maxPrice: 'not-a-number' }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('maxPrice');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects maxPrice that exceeds the ceiling with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, maxPrice: 1_000_001 }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('maxPrice');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects maxStops outside 0-10 range with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, maxStops: 11 }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('maxStops');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects maxStops that is a non-integer with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, maxStops: 1.5 }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('maxStops');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a route with an invalid pinned date with 400', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        date: 'not-a-date',
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('date');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a route with an invalid returnDate with 400', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        date: '2026-06-15',
+        returnDate: 'bad-date',
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('returnDate');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a selected flight with an invalid travelDate with 400', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [{ travelDate: 'nope', price: 200, airline: 'Delta', bookingUrl: null }],
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('travelDate');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a selected flight with a non-finite price with 400', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [{ travelDate: '2026-06-15', price: 'not-a-number', airline: 'Delta', bookingUrl: null }],
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('price');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects a selected flight with an airline name exceeding 100 characters with 400', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [{ travelDate: '2026-06-15', price: 200, airline: 'A'.repeat(101), bookingUrl: null }],
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('airline');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('stores empty string for a non-http bookingUrl (javascript: scheme dropped)', async () => {
+    const bodyWithBadUrl = {
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: 300, airline: 'Delta', bookingUrl: 'javascript:alert(1)' },
+        ],
+      }],
+    };
+    const res = await POST(makeRequest(bodyWithBadUrl));
+    expect(res.status).toBe(201);
+    const snapshotCall = mockSnapshotCreateMany.mock.calls[0]![0] as {
+      data: Array<{ bookingUrl: string }>;
+    };
+    expect(snapshotCall.data[0]!.bookingUrl).toBe('');
+  });
+
+  it('stores empty string for a data: bookingUrl', async () => {
+    const bodyWithDataUrl = {
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: 300, airline: 'Delta', bookingUrl: 'data:text/html,<h1>x</h1>' },
+        ],
+      }],
+    };
+    const res = await POST(makeRequest(bodyWithDataUrl));
+    expect(res.status).toBe(201);
+    const snapshotCall = mockSnapshotCreateMany.mock.calls[0]![0] as {
+      data: Array<{ bookingUrl: string }>;
+    };
+    expect(snapshotCall.data[0]!.bookingUrl).toBe('');
+  });
+
+  it('stores the URL for a valid https bookingUrl', async () => {
+    const url = 'https://www.delta.com/book/123';
+    const bodyWithValidUrl = {
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: 300, airline: 'Delta', bookingUrl: url },
+        ],
+      }],
+    };
+    const res = await POST(makeRequest(bodyWithValidUrl));
+    expect(res.status).toBe(201);
+    const snapshotCall = mockSnapshotCreateMany.mock.calls[0]![0] as {
+      data: Array<{ bookingUrl: string }>;
+    };
+    expect(snapshotCall.data[0]!.bookingUrl).toBe(url);
+  });
+
+  it('rejects an impossible calendar date (2026-02-31) with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, dateFrom: '2026-02-31' }));
+    expect(res.status).toBe(400);
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('stores a numeric-string price as a number, not a string', async () => {
+    const bodyWithStringPrice = {
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: '300', airline: 'Delta', bookingUrl: null, stops: '1' },
+        ],
+      }],
+    };
+    const res = await POST(makeRequest(bodyWithStringPrice));
+    expect(res.status).toBe(201);
+    const snapshotCall = mockSnapshotCreateMany.mock.calls[0]![0] as {
+      data: Array<{ price: unknown; stops: unknown }>;
+    };
+    expect(snapshotCall.data[0]!.price).toBe(300);
+    expect(typeof snapshotCall.data[0]!.price).toBe('number');
+    expect(snapshotCall.data[0]!.stops).toBe(1);
+    expect(typeof snapshotCall.data[0]!.stops).toBe('number');
+  });
+
+  // ---- Per-IP rate limit (Finding G) ----
+
+  it('returns 429 when per-IP creation rate is exceeded', async () => {
+    // Simulate incr returning a count above the limit (20)
+    mockRedisIncr.mockResolvedValue(21);
+    mockRedisTtl.mockResolvedValue(540);
+
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toContain('Too many tracker requests');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('includes Retry-After header on 429 rate limit response', async () => {
+    mockRedisIncr.mockResolvedValue(21);
+    mockRedisTtl.mockResolvedValue(300);
+
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(429);
+    expect(res.headers.get('Retry-After')).toBe('300');
+  });
+
+  it('allows the request when Redis is unavailable (fail-open)', async () => {
+    mockRedisIncr.mockRejectedValue(new Error('Redis connection refused'));
+
+    const res = await POST(makeRequest(validBody));
+    // Should still succeed -- Redis failure must not block query creation
+    expect(res.status).toBe(201);
   });
 });

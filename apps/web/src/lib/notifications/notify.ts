@@ -34,14 +34,16 @@ export async function dispatchNotifications(
         ? { userId: null }
         : { OR: [{ userId: ownerUserId }, { userId: null }] }),
     },
-    select: { id: true, type: true, config: true },
+    select: { id: true, type: true, config: true, userId: true },
   });
 
   return Promise.all(
     channels.map(async (ch): Promise<NotifyOutcome> => {
       const type = ch.type as ChannelType;
       try {
-        await sendToChannel({ id: ch.id, type, config: ch.config }, message);
+        // Thread the owner id through: a per-user channel (userId set) stays
+        // untrusted, so its outbound host is SSRF-checked at send time.
+        await sendToChannel({ id: ch.id, type, config: ch.config, userId: ch.userId }, message);
         return { channelId: ch.id, type, ok: true };
       } catch (err) {
         return {

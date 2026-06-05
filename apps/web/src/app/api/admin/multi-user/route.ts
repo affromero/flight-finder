@@ -4,8 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/password';
 import { invalidateMultiUserCache, isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
-import { verifySessionToken, getSessionToken } from '@/lib/admin-auth';
-import { requireAdminApi } from '@/lib/admin-guard';
+import { requireAdminApi, verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { disableMultiUserMode } from '@/lib/admin-recovery';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -30,11 +29,19 @@ interface ToggleBody {
  * surface the count on a one-time banner so the admin can reassign queries
  * that belong to other household members.
  *
- * Authorization: this endpoint must be reachable BEFORE the User table has
- * any rows (it bootstraps the first user). We accept either:
- *   - a valid admin (legacy HMAC) session, OR
- *   - SELF_HOSTED solo mode (middleware bypasses admin auth there anyway)
- * Once multi user mode is on, this route is a no-op and returns 409.
+ * Authorization: two-phase bootstrap rule:
+ *
+ *   Phase 1 (first boot): if the User table is empty, unauthenticated access
+ *   is allowed so the instance owner can create the first admin without
+ *   needing a pre-existing session. This window closes the moment any User
+ *   row exists.
+ *
+ *   Phase 2 (already bootstrapped): once at least one User row exists, the
+ *   caller must present a valid admin session (legacy HMAC or DB-backed admin
+ *   user). This prevents any network caller from hijacking the endpoint after
+ *   setup is complete.
+ *
+ * Once multi user mode is already on, the route is a no-op and returns 409.
  */
 class AlreadyEnabledError extends Error {
   constructor() {
@@ -59,13 +66,22 @@ export async function POST(request: NextRequest) {
     return apiError('Multi user mode is already enabled', 409);
   }
 
-  const isSelfHosted = process.env.SELF_HOSTED === 'true';
-  const token = await getSessionToken();
-  const adminSession = token ? verifySessionToken(token) : false;
-  const userSession = await getCurrentUser();
-  const isAdminCaller = adminSession || userSession?.isAdmin === true;
-  if (!isAdminCaller && !isSelfHosted) {
-    return apiError('Unauthorized', 401);
+  // Two-phase bootstrap: allow unauthenticated access only when no users exist
+  // yet (first-boot window). Once any User row exists, an authenticated admin
+  // session is required so the endpoint cannot be hijacked after initial setup.
+  const existingUserCount = await prisma.user.count();
+  const isFirstBoot = existingUserCount === 0;
+
+  if (!isFirstBoot) {
+    // Revocation-aware admin check: a legacy admin cookie issued before the
+    // last admin password change (adminSessionsValidFrom) must not re-enable
+    // multi user mode, so verify HMAC + expiry + the DB revocation stamp.
+    const adminSession = await verifyAdminSessionRevocable();
+    const userSession = await getCurrentUser();
+    const isAdminCaller = adminSession || userSession?.isAdmin === true;
+    if (!isAdminCaller) {
+      return apiError('Unauthorized', 401);
+    }
   }
 
   const body = (await request.json().catch(() => null)) as ToggleBody | null;

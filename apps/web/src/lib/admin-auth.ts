@@ -31,6 +31,22 @@ export function createSessionToken(): string {
   return `${payload}.${signPayload(payload)}`;
 }
 
+/**
+ * Parses the issue timestamp (ms) out of a verified admin payload
+ * (`admin:<ms>`). Returns null when the payload is not an admin token or
+ * the timestamp is not a finite number. HMAC verification is the caller's
+ * responsibility; this is a pure string parse.
+ */
+export function parseAdminTokenTimestamp(token: string): number | null {
+  const lastDot = token.lastIndexOf('.');
+  if (lastDot === -1) return null;
+  const payload = token.slice(0, lastDot);
+  if (!payload.startsWith('admin:')) return null;
+  const ts = Number(payload.slice('admin:'.length));
+  if (!Number.isFinite(ts)) return null;
+  return ts;
+}
+
 export function verifySessionToken(token: string): boolean {
   const lastDot = token.lastIndexOf('.');
   if (lastDot === -1) return false;
@@ -39,7 +55,15 @@ export function verifySessionToken(token: string): boolean {
   if (!payload.startsWith('admin:')) return false;
 
   const sig = token.slice(lastDot + 1);
-  return verifyPayload(payload, sig);
+  if (!verifyPayload(payload, sig)) return false;
+
+  // Server-side expiry: reject tokens older than the cookie maxAge so a stolen
+  // or stale cookie cannot be replayed indefinitely once it passes the HMAC.
+  const ts = Number(payload.slice('admin:'.length));
+  if (!Number.isFinite(ts)) return false;
+  if (Date.now() - ts > SESSION_MAX_AGE * 1000) return false;
+
+  return true;
 }
 
 export async function verifyPassword(
@@ -89,6 +113,13 @@ export async function clearSessionCookie(): Promise<void> {
 }
 
 export async function getSessionToken(): Promise<string | undefined> {
-  const jar = await cookies();
-  return jar.get(SESSION_COOKIE)?.value;
+  try {
+    const jar = await cookies();
+    return jar.get(SESSION_COOKIE)?.value;
+  } catch {
+    // cookies() throws when called outside a request scope (for example a unit
+    // test invoking a route handler directly). No request scope means there is
+    // no session cookie to read.
+    return undefined;
+  }
 }
