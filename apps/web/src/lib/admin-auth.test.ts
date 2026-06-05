@@ -1,6 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { createSessionToken, verifySessionToken, verifyPassword } from './admin-auth';
+import {
+  createSessionToken,
+  verifySessionToken,
+  verifyPassword,
+  signPayload,
+  parseAdminTokenTimestamp,
+} from './admin-auth';
 import { hashPassword } from './password';
+
+const SESSION_MAX_AGE_MS = 60 * 60 * 24 * 7 * 1000;
+
+/** Builds a correctly-signed admin token with an arbitrary issue timestamp. */
+function signedAdminToken(issuedAtMs: number): string {
+  const payload = `admin:${issuedAtMs}`;
+  return `${payload}.${signPayload(payload)}`;
+}
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -65,6 +79,46 @@ describe('verifySessionToken', () => {
     const { createUserSessionToken } = await import('./user-auth');
     const userToken = createUserSessionToken('uid_x');
     expect(verifySessionToken(userToken)).toBe(false);
+  });
+
+  it('accepts a correctly signed token issued just under the max age', () => {
+    const token = signedAdminToken(Date.now() - (SESSION_MAX_AGE_MS - 60_000));
+    expect(verifySessionToken(token)).toBe(true);
+  });
+
+  it('rejects a correctly signed token older than the 7-day max age', () => {
+    // Signature is valid, only the embedded timestamp is stale: the
+    // server-side expiry must still reject it so a leaked cookie cannot be
+    // replayed indefinitely.
+    const token = signedAdminToken(Date.now() - (SESSION_MAX_AGE_MS + 60_000));
+    expect(verifySessionToken(token)).toBe(false);
+  });
+
+  it('rejects a token with a non-numeric timestamp', () => {
+    const payload = 'admin:notanumber';
+    const token = `${payload}.${signPayload(payload)}`;
+    expect(verifySessionToken(token)).toBe(false);
+  });
+});
+
+describe('parseAdminTokenTimestamp', () => {
+  it('returns the embedded timestamp for an admin token', () => {
+    const issuedAt = 1_700_000_000_000;
+    expect(parseAdminTokenTimestamp(signedAdminToken(issuedAt))).toBe(issuedAt);
+  });
+
+  it('returns null for a user token', async () => {
+    const { createUserSessionToken } = await import('./user-auth');
+    expect(parseAdminTokenTimestamp(createUserSessionToken('uid_x'))).toBeNull();
+  });
+
+  it('returns null when there is no dot', () => {
+    expect(parseAdminTokenTimestamp('nodot')).toBeNull();
+  });
+
+  it('returns null for a non-numeric timestamp', () => {
+    const payload = 'admin:nope';
+    expect(parseAdminTokenTimestamp(`${payload}.${signPayload(payload)}`)).toBeNull();
   });
 });
 

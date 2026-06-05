@@ -6,6 +6,7 @@ import {
   decryptChannelConfig,
   mergeStoredConfig,
   assertPublicUrl,
+  assertPublicHost,
   SECRET_FIELDS,
 } from './config';
 
@@ -123,5 +124,26 @@ describe('assertPublicUrl', () => {
   it('rejects non-http(s) schemes and credentials in the url', () => {
     expect(() => assertPublicUrl('ftp://example.com', { trusted: true })).toThrow(/http/);
     expect(() => assertPublicUrl('https://user:pass@example.com', { trusted: true })).toThrow(/credentials/);
+  });
+});
+
+describe('assertPublicHost (SMTP)', () => {
+  it('allows a public host for an untrusted owner', () => {
+    expect(() => assertPublicHost('smtp.example.com', { trusted: false })).not.toThrow();
+  });
+
+  it.each(['localhost', '127.0.0.1', '10.0.0.5', '192.168.1.10', '172.16.0.1', '169.254.169.254', '::1'])(
+    'blocks internal SMTP host %s for an untrusted owner',
+    (host) => {
+      expect(() => assertPublicHost(host, { trusted: false })).toThrow(/not allowed/);
+    },
+  );
+
+  it('allows internal SMTP hosts for a trusted (admin/global) owner', () => {
+    expect(() => assertPublicHost('127.0.0.1', { trusted: true })).not.toThrow();
+  });
+
+  it('rejects a blank host', () => {
+    expect(() => assertPublicHost('', { trusted: true })).toThrow(/required/);
   });
 });

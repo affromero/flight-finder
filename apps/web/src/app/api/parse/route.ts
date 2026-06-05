@@ -2,8 +2,54 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { parseFlightQuery } from '@/lib/scraper/parse-query';
 import { prisma } from '@/lib/prisma';
+import { redis } from '@/lib/redis';
+
+const PARSE_RATE_LIMIT = 30;        // max requests
+const PARSE_RATE_WINDOW_SECONDS = 60; // per 60 seconds
+const PARSE_HISTORY_MAX_ENTRIES = 12; // defensive server-side cap on history array length
+
+function getClientIp(request: NextRequest): string {
+  const forwarded = request.headers.get('x-forwarded-for');
+  return (
+    forwarded?.split(',')[0]?.trim() ||
+    request.headers.get('x-real-ip') ||
+    '127.0.0.1'
+  );
+}
+
+async function checkParseRateLimit(ip: string): Promise<{ limited: boolean; retryAfter: number }> {
+  if (!redis) return { limited: false, retryAfter: 0 };
+  const key = `parse-rate:${ip}`;
+  try {
+    const count = await redis.incr(key);
+    if (count === 1) {
+      await redis.expire(key, PARSE_RATE_WINDOW_SECONDS);
+    }
+    if (count > PARSE_RATE_LIMIT) {
+      const ttl = await redis.ttl(key);
+      return { limited: true, retryAfter: ttl > 0 ? ttl : PARSE_RATE_WINDOW_SECONDS };
+    }
+  } catch {
+    // Redis unavailable: fail-open so parsing still works during outages
+  }
+  return { limited: false, retryAfter: 0 };
+}
 
 export async function POST(request: NextRequest) {
+  const ip = getClientIp(request);
+  const { limited, retryAfter } = await checkParseRateLimit(ip);
+  if (limited) {
+    return new Response(
+      JSON.stringify({ ok: false, error: 'Too many requests; please slow down' }),
+      {
+        status: 429,
+        headers: {
+          'Content-Type': 'application/json',
+          'Retry-After': String(retryAfter),
+        },
+      },
+    );
+  }
 
   const body = await request.json().catch(() => null);
   if (!body?.query || typeof body.query !== 'string') {
@@ -15,9 +61,25 @@ export async function POST(request: NextRequest) {
     return apiError('Query must be between 5 and 500 characters', 400);
   }
 
-  const conversationHistory = Array.isArray(body.conversationHistory)
-    ? body.conversationHistory as Array<{ role: 'user' | 'assistant'; content: string }>
-    : undefined;
+  // Validate and sanitize conversationHistory defensively before passing to
+  // the parser. Each entry must have string role and content; cap the array
+  // length so callers cannot bypass the per-entry truncation done in
+  // parse-query.ts via sheer volume.
+  let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;
+  if (Array.isArray(body.conversationHistory)) {
+    const raw = (body.conversationHistory as unknown[]).slice(0, PARSE_HISTORY_MAX_ENTRIES);
+    const valid = raw.filter(
+      (entry): entry is { role: string; content: string } =>
+        entry !== null &&
+        typeof entry === 'object' &&
+        typeof (entry as Record<string, unknown>).role === 'string' &&
+        typeof (entry as Record<string, unknown>).content === 'string',
+    );
+    conversationHistory = valid.map((entry) => ({
+      role: entry.role === 'assistant' ? 'assistant' : 'user',
+      content: entry.content,
+    }));
+  }
 
   try {
     const { response, usage } = await parseFlightQuery(rawInput, conversationHistory);

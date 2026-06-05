@@ -2,9 +2,29 @@ import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { isValidIATA } from '@/lib/iata-codes';
 import { redis } from '@/lib/redis';
+import { timingSafeEqual } from 'crypto';
 
 const MAX_BATCH_SIZE = 1000;
 const RATE_LIMIT_WINDOW = 3600; // 1 hour per API key
+
+// Snapshot field bounds. Values outside these ranges are almost certainly
+// malformed or hostile, so the whole batch is rejected.
+const MAX_PRICE = 50000;
+const MAX_STOPS = 5;
+const MAX_AIRLINE_LEN = 100;
+const MAX_CABIN_LEN = 20;
+const ALLOWED_CABIN_CLASSES = new Set([
+  'economy',
+  'premium_economy',
+  'business',
+  'first',
+]);
+// travelDate must land in a believable window: airlines do not sell tickets
+// years out, and a far-past date is meaningless for a price tracker.
+const TRAVEL_PAST_MS = 2 * 365 * 24 * 3600 * 1000; // 2 years back
+const TRAVEL_FUTURE_MS = 2 * 365 * 24 * 3600 * 1000; // 2 years ahead
+
+type LimitResult = 'allowed' | 'denied' | 'unavailable';
 
 interface IngestSnapshot {
   origin: string;
@@ -18,16 +38,29 @@ interface IngestSnapshot {
   scrapedAt: string;
 }
 
-async function checkRateLimit(apiKeyId: string): Promise<boolean> {
-  if (!redis) return true;
+async function checkRateLimit(apiKeyId: string): Promise<LimitResult> {
+  if (!redis) return 'unavailable';
   const key = `community:ingest:${apiKeyId}`;
   try {
     const count = await redis.incr(key);
     if (count === 1) await redis.expire(key, RATE_LIMIT_WINDOW);
-    return count <= 1; // 1 request per hour per key
+    return count <= 1 ? 'allowed' : 'denied'; // 1 request per hour per key
   } catch {
-    return true;
+    return 'unavailable';
   }
+}
+
+/**
+ * Constant-time comparison of two API tokens. Equal-length byte buffers are
+ * compared with timingSafeEqual; unequal lengths short-circuit (length is not
+ * secret). Used so the authenticated path does not leak key bytes via a
+ * variable-time string compare.
+ */
+function tokensMatch(a: string, b: string): boolean {
+  const bufA = Buffer.from(a, 'utf8');
+  const bufB = Buffer.from(b, 'utf8');
+  if (bufA.length !== bufB.length) return false;
+  return timingSafeEqual(bufA, bufB);
 }
 
 export async function POST(request: Request) {
@@ -42,13 +75,21 @@ export async function POST(request: Request) {
     where: { apiKey: token },
   });
 
-  if (!apiKeyRecord || !apiKeyRecord.active) {
+  // Always run a constant-time comparison so the not-found path does roughly
+  // the same work as the found path, normalizing timing for key existence.
+  const stored = apiKeyRecord?.apiKey ?? '';
+  const tokenValid = tokensMatch(token, stored) && Boolean(apiKeyRecord?.active);
+  if (!apiKeyRecord || !tokenValid) {
     return apiError('Invalid or revoked API key', 401);
   }
 
-  // Rate limit
+  // Rate limit. Fail closed (deny) when Redis cannot be consulted so a cache
+  // outage cannot be used to bypass the per-key ingest cap.
   const allowed = await checkRateLimit(apiKeyRecord.id);
-  if (!allowed) {
+  if (allowed === 'unavailable') {
+    return apiError('Ingest temporarily unavailable.', 503);
+  }
+  if (allowed === 'denied') {
     return apiError('Rate limit exceeded. Max 1 request per hour.', 429);
   }
 
@@ -63,6 +104,8 @@ export async function POST(request: Request) {
   }
 
   const now = new Date();
+  const travelMin = new Date(now.getTime() - TRAVEL_PAST_MS);
+  const travelMax = new Date(now.getTime() + TRAVEL_FUTURE_MS);
   const valid: {
     origin: string;
     destination: string;
@@ -80,19 +123,25 @@ export async function POST(request: Request) {
   for (let i = 0; i < snapshots.length; i++) {
     const s = snapshots[i]!;
 
-    // Validate fields
-    if (!isValidIATA(s.origin)) { errors.push(`[${i}] invalid origin: ${s.origin}`); continue; }
-    if (!isValidIATA(s.destination)) { errors.push(`[${i}] invalid destination: ${s.destination}`); continue; }
-    if (typeof s.price !== 'number' || s.price <= 0 || s.price > 50000) { errors.push(`[${i}] invalid price: ${s.price}`); continue; }
-    if (typeof s.stops !== 'number' || s.stops < 0 || s.stops > 5) { errors.push(`[${i}] invalid stops: ${s.stops}`); continue; }
+    // IATA codes must be uppercase A-Z (the validator rejects lowercase, so a
+    // permissive client cannot smuggle in unnormalized routes).
+    if (typeof s.origin !== 'string' || !isValidIATA(s.origin)) { errors.push(`[${i}] invalid origin: ${s.origin}`); continue; }
+    if (typeof s.destination !== 'string' || !isValidIATA(s.destination)) { errors.push(`[${i}] invalid destination: ${s.destination}`); continue; }
+    if (typeof s.price !== 'number' || !Number.isFinite(s.price) || s.price <= 0 || s.price > MAX_PRICE) { errors.push(`[${i}] invalid price: ${s.price}`); continue; }
+    if (typeof s.stops !== 'number' || !Number.isInteger(s.stops) || s.stops < 0 || s.stops > MAX_STOPS) { errors.push(`[${i}] invalid stops: ${s.stops}`); continue; }
 
     const scrapedAt = new Date(s.scrapedAt);
     if (isNaN(scrapedAt.getTime()) || scrapedAt > now) { errors.push(`[${i}] invalid scrapedAt`); continue; }
 
     const travelDate = new Date(s.travelDate);
-    if (isNaN(travelDate.getTime())) { errors.push(`[${i}] invalid travelDate`); continue; }
+    if (isNaN(travelDate.getTime()) || travelDate < travelMin || travelDate > travelMax) { errors.push(`[${i}] invalid travelDate`); continue; }
 
-    if (typeof s.airline !== 'string' || s.airline.length === 0 || s.airline.length > 100) { errors.push(`[${i}] invalid airline`); continue; }
+    if (typeof s.airline !== 'string' || s.airline.length === 0 || s.airline.length > MAX_AIRLINE_LEN) { errors.push(`[${i}] invalid airline`); continue; }
+
+    // cabinClass is constrained to a known enum and a short length so unbounded
+    // attacker-controlled strings cannot be persisted.
+    const cabinClass = typeof s.cabinClass === 'string' ? s.cabinClass.toLowerCase() : 'economy';
+    if (cabinClass.length > MAX_CABIN_LEN || !ALLOWED_CABIN_CLASSES.has(cabinClass)) { errors.push(`[${i}] invalid cabinClass: ${s.cabinClass}`); continue; }
 
     valid.push({
       origin: s.origin,
@@ -100,9 +149,9 @@ export async function POST(request: Request) {
       travelDate,
       price: s.price,
       currency: typeof s.currency === 'string' ? s.currency.toUpperCase().slice(0, 3) : 'USD',
-      airline: s.airline.slice(0, 100),
+      airline: s.airline.slice(0, MAX_AIRLINE_LEN),
       stops: s.stops,
-      cabinClass: typeof s.cabinClass === 'string' ? s.cabinClass : 'economy',
+      cabinClass,
       scrapedAt,
       apiKeyId: apiKeyRecord.id,
     });

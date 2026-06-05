@@ -4,12 +4,11 @@ const DEFAULT_TTL_SECONDS = 15 * 60; // 15 minutes
 const KEY_PREFIX = 'auth-fail:';
 
 /**
- * Rate limit key extraction trusts the x-forwarded-for header as set by the
- * deployment's reverse proxy (Caddy / nginx / Cloudflare). On the typical
- * self-hosted setup the app is reachable only from the LAN behind Caddy
- * (docker-compose.prod.yml), so spoofing requires already being inside the
- * trust boundary. For deployments without a trusted proxy, set
- * TRUSTED_FORWARDED_FOR=false to fall back to the connection-level IP.
+ * Rate limit keys are built from the client IP plus a scope (username/admin).
+ * IP extraction lives in `lib/trusted-ip.ts` (`getClientIp`), which honors the
+ * TRUSTED_FORWARDED_FOR env switch: with no trusted reverse proxy
+ * (TRUSTED_FORWARDED_FOR=false) the x-forwarded-for header is ignored so it
+ * cannot be rotated to mint fresh per-IP buckets and bypass the limit.
  */
 
 /**

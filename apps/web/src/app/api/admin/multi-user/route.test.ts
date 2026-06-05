@@ -15,6 +15,7 @@ const mockGetCurrentUser = vi.fn();
 const mockIsMultiUserEnabled = vi.fn();
 const mockRequireAdmin = vi.fn();
 const mockDisable = vi.fn();
+const mockUserCount = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -24,6 +25,7 @@ vi.mock('@/lib/prisma', () => ({
       updateMany: (...args: unknown[]) => mockConfigUpdateMany(...args),
     },
     user: {
+      count: () => mockUserCount(),
       create: (...args: unknown[]) => mockUserCreate(...args),
     },
     query: {
@@ -82,6 +84,8 @@ describe('POST /api/admin/multi-user', () => {
     vi.clearAllMocks();
     process.env.SELF_HOSTED = 'true';
     mockConfigFindUnique.mockResolvedValue({ multiUserMode: false });
+    // Default: no users exist yet (first-boot window allows unauthenticated access).
+    mockUserCount.mockResolvedValue(0);
     mockGetSessionToken.mockResolvedValue(undefined);
     mockVerifySessionToken.mockReturnValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
@@ -163,6 +167,36 @@ describe('POST /api/admin/multi-user', () => {
     expect(mockUserCreate).not.toHaveBeenCalled();
     expect(mockQueryUpdateMany).not.toHaveBeenCalled();
     expect(mockInvalidateCache).not.toHaveBeenCalled();
+  });
+
+  it('allows unauthenticated bootstrap when the User table is empty (first-boot)', async () => {
+    // No session provided, no users in DB: first-boot window must be open.
+    mockUserCount.mockResolvedValue(0);
+    mockGetSessionToken.mockResolvedValue(undefined);
+    mockVerifySessionToken.mockReturnValue(false);
+    mockGetCurrentUser.mockResolvedValue(null);
+    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
+    expect(res.status).toBe(201);
+  });
+
+  it('rejects unauthenticated call with 401 once a User row already exists', async () => {
+    // A user exists: first-boot window is closed, auth is now required.
+    mockUserCount.mockResolvedValue(1);
+    mockGetSessionToken.mockResolvedValue(undefined);
+    mockVerifySessionToken.mockReturnValue(false);
+    mockGetCurrentUser.mockResolvedValue(null);
+    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
+    expect(res.status).toBe(401);
+    expect(mockUserCreate).not.toHaveBeenCalled();
+  });
+
+  it('allows an authenticated admin to re-enable after user rows exist', async () => {
+    // User rows exist but the caller is an authenticated admin.
+    mockUserCount.mockResolvedValue(1);
+    mockGetSessionToken.mockResolvedValue('admin:123.sig');
+    mockVerifySessionToken.mockReturnValue(true);
+    const res = await POST(makeRequest({ adminUsername: 'admin2', adminPassword: 'longenough' }));
+    expect(res.status).toBe(201);
   });
 });
 

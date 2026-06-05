@@ -6,6 +6,9 @@ import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 
+const MAX_ROUTES = 20;
+const MAX_FLIGHTS_PER_ROUTE = 50;
+
 interface RouteInput {
   origin: string;
   originName: string;
@@ -87,10 +90,21 @@ export async function POST(request: NextRequest) {
     return apiError('Missing required fields: rawInput, dateFrom, dateTo', 400);
   }
 
-  // Validate all route airport codes
+  if (routeInputs.length > MAX_ROUTES) {
+    return apiError(`Too many routes: maximum is ${MAX_ROUTES}`, 400);
+  }
+
+  // Validate all route airport codes and per-route flight counts
   for (const route of routeInputs) {
     if (!/^[A-Z]{3}$/.test(route.origin) || !/^[A-Z]{3}$/.test(route.destination)) {
       return apiError(`Invalid airport code in route ${route.origin}→${route.destination}`, 400);
+    }
+    const flights = route.selectedFlights ?? [];
+    if (flights.length > MAX_FLIGHTS_PER_ROUTE) {
+      return apiError(
+        `Too many flights for route ${route.origin}→${route.destination}: maximum is ${MAX_FLIGHTS_PER_ROUTE}`,
+        400
+      );
     }
   }
 

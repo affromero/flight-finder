@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockVerifyPassword = vi.fn();
@@ -19,14 +19,19 @@ vi.mock('@/lib/multi-user', () => ({
 const rateLimitState = {
   failures: 0,
   retryAfter: 0,
+  keys: [] as string[],
 };
 
 vi.mock('@/lib/rate-limit', () => ({
-  incrementAuthFailure: vi.fn(async () => {
+  incrementAuthFailure: vi.fn(async (key: string) => {
+    rateLimitState.keys.push(key);
     rateLimitState.failures++;
     return rateLimitState.failures;
   }),
-  getAuthFailureCount: vi.fn(async () => rateLimitState.failures),
+  getAuthFailureCount: vi.fn(async (key: string) => {
+    rateLimitState.keys.push(key);
+    return rateLimitState.failures;
+  }),
   getRetryAfterSeconds: vi.fn(async () => rateLimitState.retryAfter),
   clearAuthFailures: vi.fn(async () => {
     rateLimitState.failures = 0;
@@ -35,11 +40,13 @@ vi.mock('@/lib/rate-limit', () => ({
 
 import { POST } from './route';
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: unknown, forwardedFor?: string): NextRequest {
+  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
+  if (forwardedFor) headers['x-forwarded-for'] = forwardedFor;
   return new NextRequest('http://localhost/api/admin/auth', {
     method: 'POST',
     body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
+    headers,
   });
 }
 
@@ -51,6 +58,12 @@ describe('POST /api/admin/auth', () => {
     mockIsMultiUserEnabled.mockResolvedValue(false);
     rateLimitState.failures = 0;
     rateLimitState.retryAfter = 0;
+    rateLimitState.keys = [];
+    delete process.env.TRUSTED_FORWARDED_FOR;
+  });
+
+  afterEach(() => {
+    delete process.env.TRUSTED_FORWARDED_FOR;
   });
 
   it('rejects missing password with 400', async () => {
@@ -99,5 +112,16 @@ describe('POST /api/admin/auth', () => {
     rateLimitState.failures = 2;
     await POST(makeRequest({ password: 'correct' }));
     expect(rateLimitState.failures).toBe(0);
+  });
+
+  it('collapses spoofed x-forwarded-for into one bucket when no proxy is trusted', async () => {
+    process.env.TRUSTED_FORWARDED_FOR = 'false';
+    mockVerifyPassword.mockResolvedValue(false);
+    await POST(makeRequest({ password: 'wrong' }, '1.1.1.1'));
+    await POST(makeRequest({ password: 'wrong' }, '2.2.2.2'));
+    const distinct = new Set(rateLimitState.keys);
+    expect(distinct.size).toBe(1);
+    expect(distinct.has('1.1.1.1:admin')).toBe(false);
+    expect(distinct.has('2.2.2.2:admin')).toBe(false);
   });
 });

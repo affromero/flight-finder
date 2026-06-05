@@ -1,3 +1,4 @@
+import { timingSafeEqual } from 'node:crypto';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { getSessionToken, verifySessionToken } from '@/lib/admin-auth';
@@ -6,6 +7,20 @@ export interface AuthResult {
   ok: boolean;
   status?: number;
   error?: string;
+}
+
+/**
+ * Constant-time delete-token comparison. A plain === leaks, byte by byte via
+ * timing, how much of a guessed token is correct. Length is compared first
+ * (timingSafeEqual throws on unequal-length buffers); that only reveals the
+ * token length, which is not secret.
+ */
+function deleteTokensMatch(stored: string | null | undefined, provided: string | null | undefined): boolean {
+  if (!stored || !provided) return false;
+  const a = Buffer.from(stored);
+  const b = Buffer.from(provided);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
 
 /**
@@ -37,7 +52,7 @@ export async function authorizeMutation(
   if (multiUser) {
     const user = await getCurrentUser();
     if (user?.isAdmin) return { ok: true };
-    if (token && query.deleteToken && query.deleteToken === token) {
+    if (deleteTokensMatch(query.deleteToken, token)) {
       return { ok: true };
     }
     if (user && query.userId && query.userId === user.id) {
@@ -55,7 +70,7 @@ export async function authorizeMutation(
   if (!token || typeof token !== 'string') {
     return { ok: false, status: 401, error: 'Missing delete token' };
   }
-  if (!query.deleteToken || query.deleteToken !== token) {
+  if (!deleteTokensMatch(query.deleteToken, token)) {
     return { ok: false, status: 403, error: 'Invalid delete token' };
   }
   return { ok: true };

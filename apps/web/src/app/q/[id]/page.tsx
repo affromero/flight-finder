@@ -19,6 +19,7 @@ import { ForceScrapeButton } from '@/components/ForceScrapeButton';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { canManageQueryWithoutToken } from '@/lib/query-auth';
 import { groupDateRange } from './group-date-range';
+import { safeJsonLd } from './safe-json-ld';
 import styles from './page.module.css';
 
 interface Props {
@@ -351,7 +352,7 @@ export default async function ChartPage({ params }: Props) {
     <main className={styles.root}>
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
       <nav className={styles.topBar}>
         <Link href="/" className={styles.brand}>Flight Finder</Link>

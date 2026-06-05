@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockFindUnique = vi.fn();
@@ -29,13 +29,17 @@ vi.mock('@/lib/multi-user', () => ({
   isMultiUserEnabled: () => mockIsMultiUserEnabled(),
 }));
 
-const rateLimitState = { failures: 0, retryAfter: 0 };
+const rateLimitState = { failures: 0, retryAfter: 0, keys: [] as string[] };
 vi.mock('@/lib/rate-limit', () => ({
-  incrementAuthFailure: vi.fn(async () => {
+  incrementAuthFailure: vi.fn(async (key: string) => {
+    rateLimitState.keys.push(key);
     rateLimitState.failures++;
     return rateLimitState.failures;
   }),
-  getAuthFailureCount: vi.fn(async () => rateLimitState.failures),
+  getAuthFailureCount: vi.fn(async (key: string) => {
+    rateLimitState.keys.push(key);
+    return rateLimitState.failures;
+  }),
   getRetryAfterSeconds: vi.fn(async () => rateLimitState.retryAfter),
   clearAuthFailures: vi.fn(async () => {
     rateLimitState.failures = 0;
@@ -44,11 +48,11 @@ vi.mock('@/lib/rate-limit', () => ({
 
 import { POST } from './route';
 
-function makeRequest(body: unknown): NextRequest {
+function makeRequest(body: unknown, forwardedFor = '10.0.0.1'): NextRequest {
   return new NextRequest('http://localhost/api/auth/login', {
     method: 'POST',
     body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '10.0.0.1' },
+    headers: { 'Content-Type': 'application/json', 'x-forwarded-for': forwardedFor },
   });
 }
 
@@ -61,6 +65,12 @@ describe('POST /api/auth/login', () => {
     mockIsMultiUserEnabled.mockResolvedValue(true);
     rateLimitState.failures = 0;
     rateLimitState.retryAfter = 0;
+    rateLimitState.keys = [];
+    delete process.env.TRUSTED_FORWARDED_FOR;
+  });
+
+  afterEach(() => {
+    delete process.env.TRUSTED_FORWARDED_FOR;
   });
 
   it('returns 404 when multi user mode is disabled', async () => {
@@ -114,5 +124,25 @@ describe('POST /api/auth/login', () => {
     const res = await POST(makeRequest({ username: 'alice', password: 'wrong' }));
     expect(res.status).toBe(429);
     expect(res.headers.get('Retry-After')).toBe('300');
+  });
+
+  it('derives distinct rate-limit buckets per forwarded IP when a proxy is trusted', async () => {
+    mockFindUnique.mockResolvedValue(null);
+    await POST(makeRequest({ username: 'alice', password: 'x' }, '1.1.1.1'));
+    await POST(makeRequest({ username: 'alice', password: 'x' }, '2.2.2.2'));
+    const distinct = new Set(rateLimitState.keys);
+    expect(distinct.has('1.1.1.1:alice')).toBe(true);
+    expect(distinct.has('2.2.2.2:alice')).toBe(true);
+  });
+
+  it('collapses spoofed x-forwarded-for into one bucket when no proxy is trusted', async () => {
+    process.env.TRUSTED_FORWARDED_FOR = 'false';
+    mockFindUnique.mockResolvedValue(null);
+    await POST(makeRequest({ username: 'alice', password: 'x' }, '1.1.1.1'));
+    await POST(makeRequest({ username: 'alice', password: 'x' }, '2.2.2.2'));
+    const distinct = new Set(rateLimitState.keys);
+    expect(distinct.size).toBe(1);
+    expect(distinct.has('1.1.1.1:alice')).toBe(false);
+    expect(distinct.has('2.2.2.2:alice')).toBe(false);
   });
 });

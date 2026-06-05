@@ -1,7 +1,14 @@
 import crypto from 'crypto';
 import type { ChannelMessage, WebhookConfig } from './types';
+import { assertPublicUrl } from './config';
 
-export async function sendWebhook(config: WebhookConfig, message: ChannelMessage): Promise<void> {
+export async function sendWebhook(
+  config: WebhookConfig,
+  message: ChannelMessage,
+  opts: { trusted: boolean } = { trusted: true },
+): Promise<void> {
+  // Untrusted (per-user) channels may not point a webhook at internal hosts.
+  assertPublicUrl(config.url, { trusted: opts.trusted });
   const payload = JSON.stringify({
     title: message.title,
     body: message.body,

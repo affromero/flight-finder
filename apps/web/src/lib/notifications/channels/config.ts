@@ -167,11 +167,14 @@ export function redactChannelConfig(type: ChannelType, stored: unknown): Record<
  * channels are trusted (the operator's own machine); per-user channels in
  * multi-user mode are not, so a non-admin owner cannot aim a webhook or custom
  * ntfy server at localhost, link-local (incl. cloud metadata at
- * 169.254.169.254), or private ranges.
+ * 169.254.169.254), or private ranges (127.0.0.0/8, 10/8, 172.16/12,
+ * 192.168/16, 169.254/16, ::1, fc00::/7, fe80::/10).
  *
- * Literal-host based: this does not resolve DNS, so a hostname that resolves to
- * a private address is not caught here. Acceptable for the household multi-user
- * threat model; revisit with resolve-and-pin if instances open to the public.
+ * Literal-host based: this checks the literal IP or hostname only, it does not
+ * resolve DNS. A hostname that resolves to a private address (the DNS rebinding
+ * class, SSRF-5) is therefore only partially mitigated here. Full mitigation
+ * needs resolve-and-pin at the socket layer, which we deliberately do not do
+ * in this layer; the literal checks below are kept robust as the first line.
  */
 export function assertPublicUrl(rawUrl: string, opts: { trusted: boolean }): void {
   let url: URL;
@@ -189,6 +192,24 @@ export function assertPublicUrl(rawUrl: string, opts: { trusted: boolean }): voi
   if (opts.trusted) return;
   if (isPrivateHost(url.hostname.toLowerCase())) {
     throw new Error('URL host is not allowed');
+  }
+}
+
+/**
+ * SSRF guard for a bare host (no URL wrapper), used for SMTP hosts. Trusted
+ * (admin/global) channels may target a private mail relay; untrusted per-user
+ * channels may not, so a non-admin owner cannot point email delivery at
+ * localhost, link-local (incl. 169.254.169.254), or private ranges. Same
+ * literal-only caveat as assertPublicUrl: DNS rebinding is only partially
+ * mitigated here.
+ */
+export function assertPublicHost(host: string, opts: { trusted: boolean }): void {
+  if (typeof host !== 'string' || host.trim() === '') {
+    throw new Error('Host is required');
+  }
+  if (opts.trusted) return;
+  if (isPrivateHost(host.trim().toLowerCase())) {
+    throw new Error('SMTP host is not allowed');
   }
 }
 

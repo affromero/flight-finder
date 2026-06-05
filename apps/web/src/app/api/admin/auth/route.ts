@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { verifyPassword, createSessionToken, setSessionCookie } from '@/lib/admin-auth';
 import { isMultiUserEnabled } from '@/lib/multi-user';
+import { getClientIp } from '@/lib/trusted-ip';
 import {
   incrementAuthFailure,
   getAuthFailureCount,
@@ -10,15 +11,6 @@ import {
 } from '@/lib/rate-limit';
 
 const MAX_FAILURES = 5;
-
-function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  return (
-    forwarded?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    '127.0.0.1'
-  );
-}
 
 export async function POST(request: NextRequest) {
   if (await isMultiUserEnabled()) {

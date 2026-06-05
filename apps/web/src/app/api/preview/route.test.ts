@@ -17,6 +17,8 @@ const {
   mockValidatePreviewPayload,
   mockUpdate,
   mockExtractionConfigFindFirst,
+  mockAcquireAdmission,
+  mockReleaseAdmission,
 } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
   mockCreate: vi.fn(),
@@ -27,6 +29,8 @@ const {
   mockRunPreview: vi.fn().mockResolvedValue({ routes: [] }),
   mockValidatePreviewPayload: vi.fn().mockReturnValue({ origins: [], destinations: [], isOneWay: false }),
   mockExtractionConfigFindFirst: vi.fn().mockResolvedValue({ previewMaxCombos: 24 }),
+  mockAcquireAdmission: vi.fn(),
+  mockReleaseAdmission: vi.fn().mockResolvedValue(undefined),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -48,6 +52,8 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/preview-runner', () => ({
   runPreview: mockRunPreview,
   validatePreviewPayload: mockValidatePreviewPayload,
+  acquirePreviewAdmission: mockAcquireAdmission,
+  releasePreviewAdmission: mockReleaseAdmission,
 }));
 
 import { POST } from './route';
@@ -79,9 +85,15 @@ beforeEach(() => {
   mockRunPreview.mockClear();
   mockValidatePreviewPayload.mockReset();
   mockValidatePreviewPayload.mockReturnValue({ origins: [], destinations: [], isOneWay: false });
+  mockAcquireAdmission.mockReset();
+  mockReleaseAdmission.mockClear();
 
   mockFindFirst.mockResolvedValue(null);
   mockCount.mockResolvedValue(0);
+  // Default to the Redis-unavailable path so the DB-count fallback gate is
+  // exercised by the legacy tests below. The atomic Redis gate gets its own
+  // describe block that overrides this.
+  mockAcquireAdmission.mockResolvedValue('unavailable');
   mockCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
     Promise.resolve({ id: 'pr-1', expiresAt: new Date(Date.now() + 86_400_000), status: data.status, ...data }),
   );
@@ -155,6 +167,103 @@ describe('POST /api/preview admission cap (audit D2)', () => {
 
     expect(res.status).toBe(202);
     expect(mockCount).not.toHaveBeenCalled();
+  });
+});
+
+describe('POST /api/preview atomic admission gate (audit M5 TOCTOU)', () => {
+  it('rejects with 429 when the atomic Redis gate is at the cap, without ever reaching create or the DB count', async () => {
+    mockAcquireAdmission.mockResolvedValue('rejected');
+
+    const res = await POST(makeRequest(validBody));
+
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toMatch(/Too many active previews/i);
+    expect(mockCreate).not.toHaveBeenCalled();
+    // The Redis gate is authoritative; the non-atomic DB count must not be
+    // the thing deciding admission once Redis answered.
+    expect(mockCount).not.toHaveBeenCalled();
+  });
+
+  it('consults the atomic gate with the configured admission cap', async () => {
+    mockExtractionConfigFindFirst.mockResolvedValue({ previewMaxCombos: 24, previewAdmissionCap: 5 });
+    mockAcquireAdmission.mockResolvedValue('admitted');
+
+    await POST(makeRequest(validBody, '203.0.113.99'));
+
+    expect(mockAcquireAdmission).toHaveBeenCalledWith('203.0.113.99', 5);
+  });
+
+  it('admits via the atomic gate and skips the DB count entirely', async () => {
+    mockAcquireAdmission.mockResolvedValue('admitted');
+
+    const res = await POST(makeRequest(validBody));
+
+    expect(res.status).toBe(202);
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+    expect(mockCount).not.toHaveBeenCalled();
+  });
+
+  it('simulates a concurrent burst: only requests the atomic gate admits create rows', async () => {
+    // Model an INCR-backed counter that the route's gate would consult. The
+    // gate hands out at most `cap` admissions across a concurrent burst; the
+    // rest get 'rejected'. We assert exactly `cap` create calls happen.
+    const cap = 3;
+    let inFlight = 0;
+    mockAcquireAdmission.mockImplementation(async () => {
+      // Each concurrent invocation observes the post-increment value, the
+      // way a single-threaded Redis INCR would.
+      const current = ++inFlight;
+      if (current > cap) {
+        inFlight--; // mirror the route helper's DECR-on-overshoot
+        return 'rejected';
+      }
+      return 'admitted';
+    });
+
+    const requests = Array.from({ length: 8 }, () => POST(makeRequest(validBody)));
+    const responses = await Promise.all(requests);
+
+    const admitted = responses.filter((r) => r.status === 202);
+    const rejected = responses.filter((r) => r.status === 429);
+    expect(admitted).toHaveLength(cap);
+    expect(rejected).toHaveLength(8 - cap);
+    expect(mockCreate).toHaveBeenCalledTimes(cap);
+  });
+
+  it('releases the admission slot when create throws after a successful admission', async () => {
+    mockAcquireAdmission.mockResolvedValue('admitted');
+    mockCreate.mockRejectedValue(new Error('db write failed'));
+
+    await expect(POST(makeRequest(validBody, '198.51.100.7'))).rejects.toThrow('db write failed');
+
+    expect(mockReleaseAdmission).toHaveBeenCalledWith('198.51.100.7');
+  });
+
+  it('does not reserve or release a slot when admission falls back to the DB count', async () => {
+    mockAcquireAdmission.mockResolvedValue('unavailable');
+    mockCount.mockResolvedValue(0);
+
+    const res = await POST(makeRequest(validBody));
+
+    expect(res.status).toBe(202);
+    expect(mockCount).toHaveBeenCalledTimes(1);
+    // No Redis slot was held, so nothing must be released for this run.
+    expect(mockReleaseAdmission).not.toHaveBeenCalled();
+  });
+
+  it('does not consult the atomic gate for an unknown client IP', async () => {
+    const req = new NextRequest('http://localhost/api/preview', {
+      method: 'POST',
+      body: JSON.stringify(validBody),
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    const res = await POST(req);
+
+    expect(res.status).toBe(202);
+    expect(mockAcquireAdmission).not.toHaveBeenCalled();
+    expect(mockReleaseAdmission).not.toHaveBeenCalled();
   });
 });
 

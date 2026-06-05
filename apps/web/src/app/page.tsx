@@ -14,6 +14,7 @@ import { InstallCommand } from '@/components/InstallCommand';
 import { getSessionToken, verifySessionToken } from '@/lib/admin-auth';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
+import { safeJsonLd } from '@/app/q/[id]/safe-json-ld';
 
 // Force dynamic — isMultiUserEnabled + getCurrentUser run per request to
 // decide between the public landing, the multi user login redirect, and
@@ -60,7 +61,7 @@ export default async function HomePage() {
       {isSelfHosted && <SetupRedirect />}
       <script
         type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+        dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
       <div className={styles.topBar}>
         {isSelfHosted ? (

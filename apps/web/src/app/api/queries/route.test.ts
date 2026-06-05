@@ -300,4 +300,42 @@ describe('POST /api/queries', () => {
     expect(res.status).toBe(400);
     expect(mockQueryCreate).not.toHaveBeenCalled();
   });
+
+  it('rejects routes[] exceeding MAX_ROUTES (20) with 400', async () => {
+    const tooManyRoutes = Array.from({ length: 21 }, () => ({
+      origin: 'JFK',
+      originName: 'New York JFK',
+      destination: 'LAX',
+      destinationName: 'Los Angeles',
+      selectedFlights: [],
+    }));
+    const res = await POST(makeRequest({ ...validBody, routes: tooManyRoutes }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Too many routes');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('rejects selectedFlights[] exceeding MAX_FLIGHTS_PER_ROUTE (50) with 400', async () => {
+    const tooManyFlights = Array.from({ length: 51 }, (_, i) => ({
+      travelDate: '2026-06-15',
+      price: 300 + i,
+      airline: 'Delta',
+      bookingUrl: 'https://delta.com',
+    }));
+    const res = await POST(makeRequest({
+      ...validBody,
+      routes: [{
+        origin: 'JFK',
+        originName: 'New York JFK',
+        destination: 'LAX',
+        destinationName: 'Los Angeles',
+        selectedFlights: tooManyFlights,
+      }],
+    }));
+    expect(res.status).toBe(400);
+    const body = await res.json();
+    expect(body.error).toContain('Too many flights');
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
 });

@@ -10,10 +10,24 @@ import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 
+/**
+ * Masks the middle of a secret so the full value never crosses the wire.
+ * Keeps the first 8 and last 4 characters (the fingerprint the admin UI
+ * renders) and replaces the interior with a fixed mask. Short keys are masked
+ * whole.
+ */
+function maskSecret(value: string): string {
+  if (value.length <= 12) return '************';
+  return `${value.slice(0, 8)}...${value.slice(-4)}`;
+}
+
 function stripHashes(config: Record<string, unknown>) {
-  const { adminPasswordHash, vpnActivationCode, ...rest } = config;
+  const { adminPasswordHash, vpnActivationCode, communityApiKey, ...rest } = config;
   return {
     ...rest,
+    // Never return the community API key in plaintext. The GET response is
+    // redacted to a masked fingerprint; the key stays writable via PATCH.
+    communityApiKey: typeof communityApiKey === 'string' ? maskSecret(communityApiKey) : null,
     hasAdminPassword: !!adminPasswordHash,
     hasVpnActivationCode: !!vpnActivationCode,
     isSelfHosted: process.env.SELF_HOSTED === 'true',
@@ -115,7 +129,13 @@ export async function PATCH(request: NextRequest) {
     data.defaultSearchMethod = body.defaultSearchMethod;
   }
   if (typeof body.adminPassword === 'string' && body.adminPassword.length > 0) {
+    if (body.adminPassword.length < 8) {
+      return apiError('adminPassword must be at least 8 characters', 400);
+    }
     data.adminPasswordHash = await hashPassword(body.adminPassword);
+    // Revoke every existing admin session: any token issued before now is
+    // rejected by the Node guard's adminSessionsValidFrom check.
+    data.adminSessionsValidFrom = new Date();
   }
   if (typeof body.communitySharing === 'boolean') {
     data.communitySharing = body.communitySharing;

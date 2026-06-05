@@ -24,7 +24,7 @@ vi.mock('@/lib/scraper/ai-registry', () => ({
   },
 }));
 
-import { PATCH } from './route';
+import { GET, PATCH } from './route';
 import { NextRequest } from 'next/server';
 
 function patchRequest(body: Record<string, unknown>): NextRequest {
@@ -208,5 +208,77 @@ describe('PATCH /api/admin/config — perf knobs (issue #106 gaps 2 & 4)', () =>
     await PATCH(patchRequest({ openaiRpm: 'fast' }));
     const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
     expect(data.update).not.toHaveProperty('openaiRpm');
+  });
+});
+
+describe('PATCH /api/admin/config: admin password (AUTH-3, AUTH-4)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUpsert.mockResolvedValue({ id: 'singleton' });
+  });
+
+  it('rejects a password shorter than 8 characters with 400', async () => {
+    const res = await PATCH(patchRequest({ adminPassword: 'short' }));
+    expect(res.status).toBe(400);
+    // Nothing must be written when the password is rejected.
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('accepts an 8+ character password and revokes existing sessions', async () => {
+    const before = Date.now();
+    const res = await PATCH(patchRequest({ adminPassword: 'longenough123' }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    // The password is stored hashed, never in plaintext.
+    expect(data.update.adminPasswordHash).toEqual(expect.any(String));
+    expect(data.update.adminPasswordHash).not.toBe('longenough123');
+    // A revocation cutoff is stamped so older admin tokens are invalidated.
+    const validFrom = data.update.adminSessionsValidFrom as Date;
+    expect(validFrom).toBeInstanceOf(Date);
+    expect(validFrom.getTime()).toBeGreaterThanOrEqual(before);
+  });
+
+  it('does not stamp adminSessionsValidFrom when no password is set', async () => {
+    await PATCH(patchRequest({ extractTimeoutSeconds: 120 }));
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update).not.toHaveProperty('adminSessionsValidFrom');
+  });
+});
+
+describe('GET /api/admin/config: secret redaction (CRYPTO-5/COMM-8)', () => {
+  beforeEach(() => vi.clearAllMocks());
+
+  it('does not return the community API key in plaintext', async () => {
+    const realKey = 'comm_live_abcdefghijklmnopqrstuvwxyz1234';
+    mockUpsert.mockResolvedValue({
+      id: 'singleton',
+      communityApiKey: realKey,
+      adminPasswordHash: 'hash',
+    });
+
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const json = (await res.json()) as { data: { communityApiKey: string | null } };
+    // The full secret must never cross the wire.
+    expect(json.data.communityApiKey).not.toBe(realKey);
+    expect(json.data.communityApiKey).not.toContain(realKey.slice(8, -4));
+    // A masked fingerprint is still returned so the UI can render it.
+    expect(json.data.communityApiKey).toContain('...');
+  });
+
+  it('does not leak the admin password hash', async () => {
+    mockUpsert.mockResolvedValue({
+      id: 'singleton',
+      adminPasswordHash: 'super-secret-hash',
+      communityApiKey: null,
+    });
+
+    const res = await GET();
+    const json = (await res.json()) as {
+      data: { adminPasswordHash?: string; hasAdminPassword: boolean; communityApiKey: string | null };
+    };
+    expect(json.data.adminPasswordHash).toBeUndefined();
+    expect(json.data.hasAdminPassword).toBe(true);
+    expect(json.data.communityApiKey).toBeNull();
   });
 });

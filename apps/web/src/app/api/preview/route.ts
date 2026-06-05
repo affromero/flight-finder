@@ -10,7 +10,12 @@ import {
   TERMINAL_PREVIEW_STATUSES,
   type PreviewRequestPayload,
 } from '@/lib/preview-run';
-import { runPreview, validatePreviewPayload } from '@/lib/preview-runner';
+import {
+  acquirePreviewAdmission,
+  releasePreviewAdmission,
+  runPreview,
+  validatePreviewPayload,
+} from '@/lib/preview-runner';
 import type { Airport } from '@/lib/scraper/parse-query';
 
 const PREVIEW_RUN_TTL_MS = 24 * 60 * 60 * 1000;
@@ -137,7 +142,24 @@ async function updatePreviewRun(id: string, data: Record<string, unknown>) {
   }
 }
 
-async function runPreviewInBackground(id: string, payload: PreviewRequestPayload, concurrency?: number) {
+interface BackgroundPreviewOptions {
+  concurrency?: number;
+  /**
+   * Client IP whose Redis admission slot this run holds. Present only when
+   * acquirePreviewAdmission reserved a slot; the slot is released exactly
+   * once when the run reaches a terminal state (completed or failed) so the
+   * client's concurrent quota frees up. Absent when admission fell back to
+   * the DB count gate (Redis unavailable), where there is no slot to free.
+   */
+  releaseIp?: string;
+}
+
+async function runPreviewInBackground(
+  id: string,
+  payload: PreviewRequestPayload,
+  options: BackgroundPreviewOptions = {},
+) {
+  const { concurrency, releaseIp } = options;
   await updatePreviewRun(id, { status: 'running', error: null });
 
   // Independent timer based heartbeat. Audit finding A2: the per task
@@ -170,6 +192,14 @@ async function runPreviewInBackground(id: string, payload: PreviewRequestPayload
       error: error instanceof Error ? error.message : 'Failed to preview flights',
       expiresAt: new Date(Date.now() + PREVIEW_RUN_TTL_MS),
     });
+  } finally {
+    // Free the admission slot the moment this run can no longer be in
+    // flight, so the client's concurrent quota recovers without waiting on
+    // the TTL. Runs in a finally so an unexpected throw from either branch
+    // above still releases.
+    if (releaseIp) {
+      await releasePreviewAdmission(releaseIp);
+    }
   }
 }
 
@@ -221,43 +251,79 @@ export async function POST(request: NextRequest) {
     }, 202);
   }
 
-  // Audit finding D2: cap concurrent active previews per source IP.
-  // updatedAt freshness in the filter means a stuck or zombie row
-  // (heartbeat stopped, sweep not yet run) does not block new
-  // submissions from the same IP.
+  // Audit finding D2/M5: cap concurrent active previews per source IP.
   // Admin-configured cap wins over the env/default, clamped to a safe ceiling.
   const admissionCap =
     config?.previewAdmissionCap != null && config.previewAdmissionCap > 0
       ? Math.min(config.previewAdmissionCap, 50)
       : PREVIEW_ADMISSION_CAP;
+
+  // Audit finding M5: the old gate read previewRunStore.count then, outside
+  // any transaction, ran create. N concurrent requests all observed the
+  // pre-insert count and slipped past the cap. The Redis counter is an
+  // atomic admission gate: INCR returns a distinct value per concurrent
+  // request, so at most `admissionCap` of a burst are admitted. The slot is
+  // released in runPreviewInBackground when the run settles. If Redis is
+  // unavailable, fall back to the best effort DB count so the cap still
+  // degrades gracefully rather than disappearing. updatedAt freshness in
+  // that fallback filter means a stuck or zombie row does not block new
+  // submissions from the same IP.
+  let releaseIp: string | undefined;
   if (clientIp !== 'unknown') {
-    const freshSince = new Date(now.getTime() - PREVIEW_ACTIVE_TIMEOUT_MS);
-    const activeForIp = await previewRunStore.count({
-      where: {
-        clientIp,
-        status: { in: [...ACTIVE_PREVIEW_STATUSES] },
-        updatedAt: { gte: freshSince },
-      },
-    });
-    if (activeForIp >= admissionCap) {
+    const admission = await acquirePreviewAdmission(clientIp, admissionCap);
+    if (admission === 'rejected') {
       return apiError(
         `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
         429,
       );
     }
+    if (admission === 'admitted') {
+      releaseIp = clientIp;
+    } else {
+      // Redis unavailable: best effort DB count gate. Non-atomic, so a
+      // tight concurrent burst can still slip a few past, but it preserves
+      // the cap under normal single-request-at-a-time load.
+      const freshSince = new Date(now.getTime() - PREVIEW_ACTIVE_TIMEOUT_MS);
+      const activeForIp = await previewRunStore.count({
+        where: {
+          clientIp,
+          status: { in: [...ACTIVE_PREVIEW_STATUSES] },
+          updatedAt: { gte: freshSince },
+        },
+      });
+      if (activeForIp >= admissionCap) {
+        return apiError(
+          `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
+          429,
+        );
+      }
+    }
   }
 
-  const previewRun = await previewRunStore.create({
-    data: {
-      requestHash,
-      status: 'pending',
-      requestPayload: payload as unknown as Prisma.InputJsonValue,
-      expiresAt: new Date(now.getTime() + PREVIEW_RUN_TTL_MS),
-      clientIp,
-    },
-  });
+  let previewRun: PreviewRunRow;
+  try {
+    previewRun = await previewRunStore.create({
+      data: {
+        requestHash,
+        status: 'pending',
+        requestPayload: payload as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(now.getTime() + PREVIEW_RUN_TTL_MS),
+        clientIp,
+      },
+    });
+  } catch (error) {
+    // The row never persisted, so the background runner will never run to
+    // release the reserved slot. Release it here to avoid leaking quota.
+    if (releaseIp) {
+      await releasePreviewAdmission(releaseIp);
+    }
+    throw error;
+  }
 
-  void runPreviewInBackground(previewRun.id, payload, config?.previewConcurrency ?? undefined);
+  void runPreviewInBackground(previewRun.id, payload, {
+    concurrency: config?.previewConcurrency ?? undefined,
+    releaseIp,
+  });
 
   return apiSuccess({
     previewRunId: previewRun.id,

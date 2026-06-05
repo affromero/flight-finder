@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockQueryFindUnique = vi.fn();
@@ -23,11 +23,24 @@ import { GET } from './route';
 
 const request = new NextRequest('http://localhost/api/queries/test-id/prices');
 
+function futureDate(): Date {
+  const d = new Date();
+  d.setFullYear(d.getFullYear() + 1);
+  return d;
+}
+
 function callGet(id = 'test-id') {
   return GET(request, { params: Promise.resolve({ id }) });
 }
 
 describe('GET /api/queries/[id]/prices', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockExtractionConfigFindFirst.mockResolvedValue({ scrapeInterval: 3 });
+    mockSnapshotFindMany.mockResolvedValue([]);
+    mockFetchRunFindFirst.mockResolvedValue(null);
+  });
+
   it('returns 404 for nonexistent query', async () => {
     mockQueryFindUnique.mockResolvedValue(null);
     const res = await callGet();
@@ -46,13 +59,11 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('returns price snapshots for valid query', async () => {
-    const futureDate = new Date();
-    futureDate.setFullYear(futureDate.getFullYear() + 1);
     mockQueryFindUnique.mockResolvedValue({
       id: 'test-id',
       origin: 'JFK',
       destination: 'LAX',
-      expiresAt: futureDate,
+      expiresAt: futureDate(),
     });
     mockSnapshotFindMany.mockResolvedValue([
       { id: 's1', price: 300, airline: 'Delta' },
@@ -71,9 +82,7 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('includes lastChecked from most recent fetch run', async () => {
-    const futureDate = new Date();
-    futureDate.setFullYear(futureDate.getFullYear() + 1);
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
     mockSnapshotFindMany.mockResolvedValue([]);
     mockFetchRunFindFirst.mockResolvedValue({
       startedAt: new Date('2026-06-01T10:00:00Z'),
@@ -87,9 +96,7 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('returns null lastChecked when no fetch runs', async () => {
-    const futureDate = new Date();
-    futureDate.setFullYear(futureDate.getFullYear() + 1);
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
     mockSnapshotFindMany.mockResolvedValue([]);
     mockFetchRunFindFirst.mockResolvedValue(null);
 
@@ -97,5 +104,40 @@ describe('GET /api/queries/[id]/prices', () => {
     const body = await res.json();
     expect(body.data.lastChecked).toBeNull();
     expect(body.data.lastStatus).toBeNull();
+  });
+
+  it('passes take: 5000 and orderBy desc to priceSnapshot.findMany (DB-2 bound)', async () => {
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockSnapshotFindMany.mockResolvedValue([]);
+
+    await callGet();
+
+    expect(mockSnapshotFindMany).toHaveBeenCalledWith(
+      expect.objectContaining({
+        take: 5000,
+        orderBy: { scrapedAt: 'desc' },
+      }),
+    );
+  });
+
+  it('returns snapshots in ascending chronological order regardless of DB fetch order', async () => {
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    // Mock returns desc order (newest first) as the route requests
+    const t1 = '2026-01-01T00:00:00.000Z';
+    const t2 = '2026-02-01T00:00:00.000Z';
+    const t3 = '2026-03-01T00:00:00.000Z';
+    mockSnapshotFindMany.mockResolvedValue([
+      { id: 's3', price: 300, scrapedAt: t3 },
+      { id: 's2', price: 200, scrapedAt: t2 },
+      { id: 's1', price: 100, scrapedAt: t1 },
+    ]);
+
+    const res = await callGet();
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    // After in-memory reverse, order must be ascending
+    expect(body.data.snapshots[0].id).toBe('s1');
+    expect(body.data.snapshots[1].id).toBe('s2');
+    expect(body.data.snapshots[2].id).toBe('s3');
   });
 });

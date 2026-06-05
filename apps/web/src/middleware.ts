@@ -2,9 +2,22 @@ import { NextRequest, NextResponse } from 'next/server';
 import { classifyBot, classifyByHeaders, isMaliciousPath } from '@/lib/analytics/bots';
 
 // "ft-" prefix kept across the Flight Finder rename so existing sessions survive.
+// Mirrors SESSION_COOKIE in lib/admin-auth.ts. The two are kept separate on
+// purpose: this file runs on the Edge runtime and cannot import admin-auth,
+// which pulls in next/headers and the Node crypto module (neither is Edge
+// safe). Keep both literals in sync if the cookie name ever changes.
 const SESSION_COOKIE = 'ft-session';
+// Server-side expiry bound, in seconds. Mirrors SESSION_MAX_AGE in
+// lib/admin-auth.ts and the cookie maxAge (7 days). Tokens older than this are
+// rejected even when the HMAC is valid, so a stale or stolen cookie cannot be
+// replayed indefinitely.
+const SESSION_MAX_AGE_MS = 60 * 60 * 24 * 7 * 1000;
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
+// Edge-safe HMAC + expiry check for the admin session cookie. The signature
+// algorithm matches lib/admin-auth.ts verifySessionToken, but is reimplemented
+// with crypto.subtle here because the Node crypto module is not available on
+// the Edge runtime where middleware executes.
 async function verifyHmacToken(token: string): Promise<boolean> {
   const secret = process.env.ADMIN_SESSION_SECRET;
   if (!secret) return false;
@@ -18,6 +31,13 @@ async function verifyHmacToken(token: string): Promise<boolean> {
   // self-hosted multi user mode can't be replayed as admin against a
   // hosted deployment that happens to share ADMIN_SESSION_SECRET.
   if (!payload.startsWith('admin:')) return false;
+
+  // Server-side expiry: reject tokens older than the cookie maxAge before
+  // spending a crypto.subtle verify on them.
+  const ts = Number(payload.slice('admin:'.length));
+  if (!Number.isFinite(ts)) return false;
+  if (Date.now() - ts > SESSION_MAX_AGE_MS) return false;
+
   const sig = token.slice(lastDot + 1);
 
   try {
@@ -115,11 +135,17 @@ export async function middleware(request: NextRequest) {
       // Invalid referrer URL — ignore
     }
 
-    // Fire-and-forget to internal tracking API (avoids importing Node.js-only modules)
+    // Fire-and-forget to internal tracking API (avoids importing Node.js-only
+    // modules here). The shared secret proves the call originates from the
+    // middleware so the public route can reject direct internet writes while
+    // still trusting the real client IP and bot score we computed above.
     const trackUrl = new URL('/api/analytics/track', request.url);
     fetch(trackUrl, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: {
+        'Content-Type': 'application/json',
+        'x-internal-token': process.env.ADMIN_SESSION_SECRET ?? '',
+      },
       body: JSON.stringify({ path: pathname, ip, userAgent, referrer, botScore }),
     }).catch(() => {});
   }

@@ -747,6 +747,46 @@ describe('parseFlightQuery', () => {
     expect(promptArg.endsWith('User: latest answer')).toBe(true);
   });
 
+  it('truncates oversized conversation history entry content to 2000 chars', async () => {
+    mockExtract.mockResolvedValue({
+      content: makeLlmResponse({
+        confidence: 'high',
+        ambiguities: [],
+        parsed: {
+          origins: [{ code: 'JFK', name: 'JFK' }],
+          destinations: [{ code: 'LAX', name: 'LAX' }],
+          dateFrom: '2026-06-15',
+          dateTo: '2026-06-22',
+          flexibility: 0,
+          maxPrice: null,
+          maxStops: null,
+          preferredAirlines: [],
+          timePreference: 'any',
+          cabinClass: 'economy',
+          tripType: 'round_trip',
+          currency: 'USD',
+        },
+      }),
+      usage: { inputTokens: 100, outputTokens: 50 },
+    });
+
+    // One entry with content well over 2000 chars
+    const oversizedContent = 'x'.repeat(5000);
+    const history: Array<{ role: 'user' | 'assistant'; content: string }> = [
+      { role: 'user', content: oversizedContent },
+    ];
+
+    await parseFlightQuery('follow-up', history);
+
+    const promptArg = mockExtract.mock.calls[0]?.[3] as string;
+    // The oversized entry must be clamped: the prompt should not contain the full 5000-char string
+    expect(promptArg).not.toContain(oversizedContent);
+    // But the first 2000 chars of the entry content must be present
+    expect(promptArg).toContain('x'.repeat(2000));
+    // The trailing chars beyond 2000 must be absent
+    expect(promptArg.indexOf('x'.repeat(2001))).toBe(-1);
+  });
+
   it('throws when api key is missing', async () => {
     const { prisma } = await import('@/lib/prisma');
     vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({

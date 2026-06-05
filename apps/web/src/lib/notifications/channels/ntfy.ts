@@ -1,7 +1,17 @@
 import type { ChannelMessage, NtfyConfig } from './types';
+import { assertPublicUrl } from './config';
 
-export async function sendNtfy(config: NtfyConfig, message: ChannelMessage): Promise<void> {
+export async function sendNtfy(
+  config: NtfyConfig,
+  message: ChannelMessage,
+  opts: { trusted: boolean } = { trusted: true },
+): Promise<void> {
   const base = (config.server || 'https://ntfy.sh').replace(/\/+$/, '');
+  // Untrusted (per-user) channels may not aim a custom ntfy server at internal
+  // hosts. The default ntfy.sh is public, so only check a custom base.
+  if (base !== 'https://ntfy.sh') {
+    assertPublicUrl(base, { trusted: opts.trusted });
+  }
   const endpoint = `${base}/${encodeURIComponent(config.topic)}`;
   const headers: Record<string, string> = {
     // ntfy header values must be latin-1 safe — strip anything outside ASCII.

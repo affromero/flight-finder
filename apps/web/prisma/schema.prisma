@@ -119,6 +119,7 @@ model ExtractionConfig {
   vpnCountries         String[]  @default([]) // default VPN countries (used when query has none)
   vpnActivationCode    String?   // encrypted VPN activation code
   multiUserMode        Boolean   @default(false) // self-hosted only; admin manages User table for households
+  adminSessionsValidFrom DateTime? // admin sessions issued before this instant are revoked (set on admin password change)
   updatedAt            DateTime  @updatedAt
   extractTimeoutSeconds Int @default(90)
   maxFlightsPerDate     Int @default(10) // max flights the LLM extracts per date pair; raise for busy routes
