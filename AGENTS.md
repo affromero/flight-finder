@@ -6,7 +6,14 @@ Base URL: `http://localhost:3003` (or whatever `HOST_PORT` is set to in `.env`)
 
 All endpoints return JSON: `{ "data": {...} }` on success, `{ "error": "message" }` on failure.
 
-In self-hosted mode, all endpoints except `/api/cron/scrape` are auth-free.
+Auth requirements depend on mode and endpoint family:
+- `/api/cron/scrape` always requires `Authorization: Bearer <CRON_SECRET>`.
+- `/api/admin/*` routes require an admin session cookie.
+- `/api/analytics/track` is gated to internal callers via `ADMIN_SESSION_SECRET`.
+- `/api/community/ingest` requires a registered community API key.
+- `/api/community/register` requires `COMMUNITY_REGISTRATION_OPEN=true` and passes rate limiting.
+- In multi user mode (`ExtractionConfig.multiUserMode = true`), `POST /api/queries`, `GET /api/alerts`, `GET /api/queries/active`, and `POST /api/queries/{id}/scrape` require a valid user session.
+- All other endpoints listed below are public (no auth required).
 
 ---
 

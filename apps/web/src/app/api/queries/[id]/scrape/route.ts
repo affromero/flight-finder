@@ -201,7 +201,11 @@ export async function POST(
           await prisma.fetchRun.update({
             where: { id: primaryFetchRun.id },
             data: { status: 'failed', error: errorMsg, completedAt: new Date() },
-          }).catch(() => {});
+          }).catch((dbErr: unknown) => {
+            // If this update fails the in_progress row stays stuck and blocks
+            // future refreshes for this group. Log so operators can detect it.
+            console.error(`[scrape] failed to finalise FetchRun ${primaryFetchRun.id}: ${dbErr instanceof Error ? dbErr.message : dbErr}`);
+          });
         }
       }
     }

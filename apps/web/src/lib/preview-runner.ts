@@ -286,6 +286,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
         ? await navigateAirlineDirect(searchParams, directAirline)
         : await navigateGoogleFlights(searchParams);
     } catch {
+      // Airline-direct navigation failed; fall back to Google Flights.
       nav = await navigateGoogleFlights(searchParams);
     }
 
