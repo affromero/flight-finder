@@ -137,6 +137,9 @@ export async function PATCH(request: NextRequest) {
     // rejected by the Node guard's adminSessionsValidFrom check.
     data.adminSessionsValidFrom = new Date();
   }
+  if (typeof body.communityRegistrationOpen === 'boolean') {
+    data.communityRegistrationOpen = body.communityRegistrationOpen;
+  }
   if (typeof body.communitySharing === 'boolean') {
     data.communitySharing = body.communitySharing;
     // Register for community API key if enabling and no key exists

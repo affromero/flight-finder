@@ -504,13 +504,15 @@ mode, with quick links to `/account` and logout.
 
 Flight Finder is fully decentralized. You run everything on your own machine.
 
+**Why share?** The price trail gets richer the more instances pool their history. When you opt in, your anonymized data points join a shared fare dataset everyone can explore, and you get community prices back on routes you have not scraped yourself. It is genuinely opt-in, reversible any time, and never touches anything personal.
+
 **flight-finder.org** aggregates anonymized price data that self-hosted instances **opt in** to share.
 
 **What gets shared (opt-in only):** route, travel date, price, currency, airline, stops, cabin class, scrape timestamp.
 
 **What is never shared:** your queries, search history, preferences, API keys, IP address, or identity.
 
-Enable in Settings or during setup. Explore community data at [flight-finder.org/explore](https://flight-finder.org/explore).
+Turn on **Community Data Sharing** in Settings (or during setup) to contribute. If you run a shared hub that other instances contribute to, enable **Accept community registrations** in the same panel (off by default; rate limited and globally capped). Explore community data at [flight-finder.org/explore](https://flight-finder.org/explore).
 </details>
 
 <details>

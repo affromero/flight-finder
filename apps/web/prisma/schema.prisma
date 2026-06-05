@@ -110,6 +110,7 @@ model ExtractionConfig {
   defaultSearchMethod  String    @default("ai") // 'ai' | 'manual'
   adminPasswordHash    String?
   communitySharing     Boolean   @default(false)
+  communityRegistrationOpen Boolean @default(false) // hub side: accept new community key registrations (opt-in). Env COMMUNITY_REGISTRATION_OPEN still works as an override.
   communityApiKey      String?
   lastCommunitySyncAt  DateTime?
   defaultCurrency      String?   // ISO 4217 (EUR, GBP). null = Google auto-detects
