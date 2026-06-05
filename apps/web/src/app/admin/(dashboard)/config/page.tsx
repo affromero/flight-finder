@@ -12,6 +12,7 @@ interface Config {
   scrapeInterval: number;
   hasAdminPassword: boolean;
   communitySharing: boolean;
+  communityRegistrationOpen: boolean;
   communityApiKey: string | null;
   theme: ThemeId;
   defaultCurrency: string | null;
@@ -597,6 +598,14 @@ export default function ConfigPage() {
       <div className={styles.form}>
         <h2 className={styles.sectionTitle}>Community Data Sharing</h2>
 
+        <p className={styles.toggleHint}>
+          Flight Finder gets better when instances pool their price history. Turn on
+          sharing to contribute your anonymized data points (route, price, airline,
+          and date only, never anything personal) to a shared fare dataset everyone
+          can explore, and in return you see community prices on routes you have not
+          scraped yourself. It is fully opt-in and you can turn it off any time.
+        </p>
+
         <div className={styles.toggleRow}>
           <button
             type="button"
@@ -619,7 +628,34 @@ export default function ConfigPage() {
               {config.communitySharing ? 'Sharing enabled' : 'Sharing disabled'}
             </span>
             <p className={styles.toggleHint}>
-              Share anonymized price data (route, price, airline, date) with the Flight Finder community.
+              Contribute this instance&apos;s anonymized prices (route, price, airline, date) to the community dataset.
+            </p>
+          </div>
+        </div>
+
+        <div className={styles.toggleRow}>
+          <button
+            type="button"
+            className={`${styles.toggle} ${config.communityRegistrationOpen ? styles.toggleOn : ''}`}
+            onClick={async () => {
+              const newValue = !config.communityRegistrationOpen;
+              const res = await fetch('/api/admin/config', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ communityRegistrationOpen: newValue }),
+              });
+              const data = await res.json();
+              if (data.ok) setConfig(data.data);
+            }}
+          >
+            <span className={styles.toggleKnob} />
+          </button>
+          <div>
+            <span className={styles.toggleLabel}>
+              {config.communityRegistrationOpen ? 'Accepting new contributors' : 'Registration closed'}
+            </span>
+            <p className={styles.toggleHint}>
+              Let other Flight Finder instances register with this one to contribute their data. Off by default, for when you run a shared hub. New registrations are rate limited and globally capped.
             </p>
           </div>
         </div>

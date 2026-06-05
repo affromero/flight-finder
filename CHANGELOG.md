@@ -1,5 +1,13 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+* **Admin toggle for accepting community registrations.** The hub-side control that lets other instances register to contribute their data is now an admin toggle in Settings (default off, opt-in), next to a clearer explainer of why to enable Community Data Sharing. The `COMMUNITY_REGISTRATION_OPEN` env var still works as an override.
+
+### Fixed
+* Notification and VPN channel secrets encrypted before v0.10.0 now decrypt after upgrading, via a backward-compatible key-derivation fallback, so upgrading no longer requires re-entering them. They are re-encrypted under the stronger derivation the next time they are saved.
+
 ## [0.10.0] - 2026-06-05
 
 This release adds new-low price alerts with pluggable notification channels, CLI account recovery for multi user mode, and the full results of a security audit and remediation (PR #109).

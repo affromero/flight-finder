@@ -35,6 +35,18 @@ function getKey(): Buffer {
   });
 }
 
+function getLegacyKey(): Buffer {
+  const secret = process.env.ADMIN_SESSION_SECRET;
+  if (!secret) throw new Error('ADMIN_SESSION_SECRET is required to encrypt stored secrets');
+  return crypto.createHash('sha256').update(secret).digest();
+}
+
+function decryptWithKey(key: Buffer, iv: Buffer, tag: Buffer, encrypted: Buffer): string {
+  const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
+  decipher.setAuthTag(tag);
+  return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+}
+
 /** Encrypt a plaintext secret at rest. Returns hex-encoded iv:tag:ciphertext. */
 export function encryptSecret(plaintext: string): string {
   const key = getKey();
@@ -48,9 +60,9 @@ export function encryptSecret(plaintext: string): string {
 /**
  * Decrypt a hex-encoded iv:tag:ciphertext string produced by encryptSecret.
  * Returns null on any failure (malformed input, wrong key, or a failed auth-tag
- * check) so callers never crash on tampered or legacy ciphertext. Legacy values
- * encrypted under the old SHA-256 key derivation will no longer decrypt and
- * resolve to null, signalling the secret must be re-entered.
+ * check) so callers never crash on tampered ciphertext. Legacy values encrypted
+ * under the old SHA-256 key derivation decrypt through a fallback without
+ * requiring user re-entry.
  */
 export function decryptSecret(encoded: string): string | null {
   const parts = encoded.split(':');
@@ -61,10 +73,13 @@ export function decryptSecret(encoded: string): string | null {
     const encrypted = Buffer.from(parts[2]!, 'hex');
     if (iv.length !== IV_LENGTH) return null;
     if (tag.length !== TAG_LENGTH) return null;
-    const key = getKey();
-    const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
-    decipher.setAuthTag(tag);
-    return Buffer.concat([decipher.update(encrypted), decipher.final()]).toString('utf8');
+    try {
+      return decryptWithKey(getKey(), iv, tag, encrypted);
+    } catch {
+      // encryptSecret always writes the current scrypt format, so legacy
+      // ciphertext is lazily migrated the next time an admin saves it.
+      return decryptWithKey(getLegacyKey(), iv, tag, encrypted);
+    }
   } catch {
     return null;
   }

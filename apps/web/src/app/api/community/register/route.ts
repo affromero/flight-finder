@@ -38,8 +38,17 @@ async function checkGlobalCap(): Promise<LimitResult> {
 
 export async function POST(request: Request) {
   // Registration is an opt-in, admin-enabled feature. Off by default so a
-  // public deployment never mints keys unless the operator turns it on.
-  if (process.env.COMMUNITY_REGISTRATION_OPEN !== 'true') {
+  // public deployment never mints keys unless the operator turns it on, either
+  // from the admin UI (ExtractionConfig.communityRegistrationOpen) or the
+  // COMMUNITY_REGISTRATION_OPEN env override.
+  const config = await prisma.extractionConfig.findUnique({
+    where: { id: 'singleton' },
+    select: { communityRegistrationOpen: true },
+  });
+  const open =
+    config?.communityRegistrationOpen === true ||
+    process.env.COMMUNITY_REGISTRATION_OPEN === 'true';
+  if (!open) {
     return apiError('Community registration is disabled.', 403);
   }
 

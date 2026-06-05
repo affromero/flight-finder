@@ -1,15 +1,17 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
-const { mockCreate, mockIncr, mockExpire, mockGetClientIp } = vi.hoisted(() => ({
+const { mockCreate, mockIncr, mockExpire, mockGetClientIp, mockFindUnique } = vi.hoisted(() => ({
   mockCreate: vi.fn().mockResolvedValue({ id: 'key_1' }),
   mockIncr: vi.fn(),
   mockExpire: vi.fn().mockResolvedValue(1),
   mockGetClientIp: vi.fn().mockReturnValue('203.0.113.5'),
+  mockFindUnique: vi.fn().mockResolvedValue(null),
 }));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     communityApiKey: { create: mockCreate },
+    extractionConfig: { findUnique: mockFindUnique },
   },
 }));
 
@@ -37,6 +39,8 @@ describe('POST /api/community/register', () => {
     mockGetClientIp.mockReturnValue('203.0.113.5');
     // Per-IP and global counters both report well under their caps by default.
     mockIncr.mockResolvedValue(1);
+    // The admin toggle (DB flag) is off by default; the env override opens it.
+    mockFindUnique.mockResolvedValue(null);
     process.env.COMMUNITY_REGISTRATION_OPEN = 'true';
   });
 
@@ -67,6 +71,14 @@ describe('POST /api/community/register', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.apiKey).toMatch(/^ft_[0-9a-f]{64}$/);
+    expect(mockCreate).toHaveBeenCalledTimes(1);
+  });
+
+  it('mints a key when the admin toggle is on, even with the env override unset', async () => {
+    delete process.env.COMMUNITY_REGISTRATION_OPEN;
+    mockFindUnique.mockResolvedValue({ communityRegistrationOpen: true });
+    const res = await POST(makeRequest());
+    expect(res.status).toBe(200);
     expect(mockCreate).toHaveBeenCalledTimes(1);
   });
 
