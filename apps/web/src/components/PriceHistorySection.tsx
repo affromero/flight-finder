@@ -16,11 +16,15 @@ function flightKey(s: Snapshot): string {
 }
 
 function formatDateTime(iso: string): string {
+  // Pin the timezone so the server (UTC) and the client (the visitor's local
+  // zone) format the scrape timestamp identically. Without it the hour/minute
+  // differ between render passes and React reports a hydration mismatch (#418).
   return new Date(iso).toLocaleDateString('en-US', {
     month: 'short',
     day: 'numeric',
     hour: '2-digit',
     minute: '2-digit',
+    timeZone: 'UTC',
   });
 }
 
@@ -93,7 +97,7 @@ function FlightRow({
       <td className={styles.times}>{timesLabel(s)}</td>
       <td className={styles.price}>
         {currencySymbol(s.currency)}
-        {s.price.toLocaleString()}
+        {s.price.toLocaleString('en-US')}
       </td>
       <TrendCell current={s} previous={previous} />
       <td className={styles.stops}>{stopsLabel(s)}</td>
