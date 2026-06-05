@@ -55,9 +55,20 @@ function isFinitePositive(n: number): boolean {
   return Number.isFinite(n) && n >= 0;
 }
 
-function isValidDateString(s: string): boolean {
-  const d = new Date(s);
-  return !isNaN(d.getTime());
+/**
+ * Strict YYYY-MM-DD validation that round-trips the parsed parts, so an invalid
+ * calendar date like 2026-02-31 (which `new Date()` silently rolls over to March)
+ * and any non-date-only format are rejected before persistence.
+ */
+function isValidDateString(s: unknown): s is string {
+  if (typeof s !== 'string') return false;
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(s);
+  if (!m) return false;
+  const year = Number(m[1]);
+  const month = Number(m[2]);
+  const day = Number(m[3]);
+  const d = new Date(Date.UTC(year, month - 1, day));
+  return d.getUTCFullYear() === year && d.getUTCMonth() === month - 1 && d.getUTCDate() === day;
 }
 
 export async function POST(request: NextRequest) {
@@ -264,12 +275,11 @@ export async function POST(request: NextRequest) {
 
   // Validate vpnCountries entry lengths (already filtered to 2-char uppercase, no extra check needed)
 
+  if (!isValidDateString(dateFrom) || !isValidDateString(dateTo)) {
+    return apiError('Invalid date format (expected YYYY-MM-DD)', 400);
+  }
   const from = new Date(dateFrom + 'T00:00:00Z');
   const to = new Date(dateTo + 'T00:00:00Z');
-
-  if (isNaN(from.getTime()) || isNaN(to.getTime())) {
-    return apiError('Invalid date format', 400);
-  }
 
   const isOneWay = tripType === 'one_way';
   if (!isOneWay && from >= to) {
@@ -359,13 +369,15 @@ export async function POST(request: NextRequest) {
       await prisma.priceSnapshot.createMany({
         data: flights.map((f) => ({
           queryId: query.id,
-          travelDate: new Date(f.travelDate),
-          price: f.price,
+          travelDate: new Date(f.travelDate + 'T00:00:00Z'),
+          // Store the coerced numeric values (validated above), not the raw
+          // input, so a numeric string like "300" cannot reach Prisma as a string.
+          price: Number(f.price),
           currency: f.currency || 'USD',
           airline: f.airline,
           // safeHttpUrl drops non-http(s) URLs to prevent javascript:/data:/file: injection
           bookingUrl: safeHttpUrl(f.bookingUrl) || '',
-          stops: f.stops ?? 0,
+          stops: f.stops != null ? Number(f.stops) : 0,
           duration: f.duration ?? null,
           flightNumber: f.flightNumber ?? null,
         })),

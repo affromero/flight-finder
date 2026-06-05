@@ -564,6 +564,33 @@ describe('POST /api/queries', () => {
     expect(snapshotCall.data[0]!.bookingUrl).toBe(url);
   });
 
+  it('rejects an impossible calendar date (2026-02-31) with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, dateFrom: '2026-02-31' }));
+    expect(res.status).toBe(400);
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
+
+  it('stores a numeric-string price as a number, not a string', async () => {
+    const bodyWithStringPrice = {
+      ...validBody,
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: '300', airline: 'Delta', bookingUrl: null, stops: '1' },
+        ],
+      }],
+    };
+    const res = await POST(makeRequest(bodyWithStringPrice));
+    expect(res.status).toBe(201);
+    const snapshotCall = mockSnapshotCreateMany.mock.calls[0]![0] as {
+      data: Array<{ price: unknown; stops: unknown }>;
+    };
+    expect(snapshotCall.data[0]!.price).toBe(300);
+    expect(typeof snapshotCall.data[0]!.price).toBe('number');
+    expect(snapshotCall.data[0]!.stops).toBe(1);
+    expect(typeof snapshotCall.data[0]!.stops).toBe('number');
+  });
+
   // ---- Per-IP rate limit (Finding G) ----
 
   it('returns 429 when per-IP creation rate is exceeded', async () => {
