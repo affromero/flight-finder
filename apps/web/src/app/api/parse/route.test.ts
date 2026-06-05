@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockParseFlightQuery = vi.fn();
@@ -52,6 +52,11 @@ describe('POST /api/parse', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     allowRateLimit();
+    delete process.env.TRUSTED_FORWARDED_FOR;
+  });
+
+  afterEach(() => {
+    delete process.env.TRUSTED_FORWARDED_FOR;
   });
 
   // --- Existing validation tests ---
@@ -141,7 +146,7 @@ describe('POST /api/parse', () => {
     expect(res.status).toBe(200);
   });
 
-  it('uses x-forwarded-for as the rate-limit key', async () => {
+  it('uses x-forwarded-for as the rate-limit key when a proxy is trusted', async () => {
     mockRedis.incr.mockResolvedValue(31);
     mockRedis.ttl.mockResolvedValue(30);
 
@@ -151,6 +156,26 @@ describe('POST /api/parse', () => {
     expect(res.status).toBe(429);
     // The rate key must be keyed to the first forwarded IP
     expect(mockRedis.incr).toHaveBeenCalledWith('parse-rate:10.0.0.5');
+  });
+
+  it('collapses spoofed x-forwarded-for into one rate-limit bucket when no proxy is trusted', async () => {
+    process.env.TRUSTED_FORWARDED_FOR = 'false';
+    // Allow first two requests through, block nothing yet
+    mockRedis.incr.mockResolvedValue(1);
+    mockParseFlightQuery.mockResolvedValue({
+      response: { parsed: null, confidence: 'low', ambiguities: [], dateSpanDays: 0 },
+      usage: { inputTokens: 10, outputTokens: 5 },
+    });
+
+    await POST(makeRequest({ query: 'JFK to LAX June 15' }, { 'x-forwarded-for': '1.1.1.1' }));
+    await POST(makeRequest({ query: 'JFK to LAX June 15' }, { 'x-forwarded-for': '2.2.2.2' }));
+
+    // Both calls must have used the same Redis key, not one per spoofed IP
+    const keys = mockRedis.incr.mock.calls.map((c: unknown[]) => c[0] as string);
+    const distinct = new Set(keys);
+    expect(distinct.size).toBe(1);
+    expect(distinct.has('parse-rate:1.1.1.1')).toBe(false);
+    expect(distinct.has('parse-rate:2.2.2.2')).toBe(false);
   });
 
   // --- conversationHistory input validation ---

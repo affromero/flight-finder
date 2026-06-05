@@ -4,8 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { hashPassword } from '@/lib/password';
 import { invalidateMultiUserCache, isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
-import { verifySessionToken, getSessionToken } from '@/lib/admin-auth';
-import { requireAdminApi } from '@/lib/admin-guard';
+import { requireAdminApi, verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { disableMultiUserMode } from '@/lib/admin-recovery';
 
 const MIN_PASSWORD_LENGTH = 8;
@@ -74,8 +73,10 @@ export async function POST(request: NextRequest) {
   const isFirstBoot = existingUserCount === 0;
 
   if (!isFirstBoot) {
-    const token = await getSessionToken();
-    const adminSession = token ? verifySessionToken(token) : false;
+    // Revocation-aware admin check: a legacy admin cookie issued before the
+    // last admin password change (adminSessionsValidFrom) must not re-enable
+    // multi user mode, so verify HMAC + expiry + the DB revocation stamp.
+    const adminSession = await verifyAdminSessionRevocable();
     const userSession = await getCurrentUser();
     const isAdminCaller = adminSession || userSession?.isAdmin === true;
     if (!isAdminCaller) {

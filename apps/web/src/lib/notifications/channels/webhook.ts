@@ -27,6 +27,11 @@ export async function sendWebhook(
   }
   const init: FetchInit = { method: 'POST', headers, body: payload };
   if (dispatcher) init.dispatcher = dispatcher;
+  // Pinning only validates the INITIAL host. A public host could still 307/308
+  // redirect an untrusted channel to an internal target (localhost, the cloud
+  // metadata IP), and that redirect host is not re-checked. Reject any redirect
+  // for untrusted channels; trusted/global channels keep default following.
+  if (!opts.trusted) init.redirect = 'error';
   const res = await fetch(config.url, init);
   if (!res.ok) {
     const detail = await res.text().catch(() => '');

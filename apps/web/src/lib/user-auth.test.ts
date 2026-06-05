@@ -150,6 +150,38 @@ describe('getCurrentUser', () => {
     const { getCurrentUser } = await import('./user-auth');
     expect(await getCurrentUser()).toEqual(u);
   });
+
+  it('returns null when the user token exceeds the absolute max age (7 days)', async () => {
+    // Forge a token whose embedded timestamp is older than SESSION_MAX_AGE_MS.
+    // signPayload is the real Node HMAC so the signature is valid; only the
+    // age check should reject it.
+    const { signPayload } = await import('./admin-auth');
+    const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000;
+    const payload = `user:uid_old:${eightDaysAgo}`;
+    const token = `${payload}.${signPayload(payload)}`;
+    cookieStore.get.mockReturnValueOnce({ value: token });
+    // The DB lookup must never be reached when the token is expired.
+    const { prisma } = await import('@/lib/prisma');
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(null);
+    const { getCurrentUser } = await import('./user-auth');
+    expect(await getCurrentUser()).toBeNull();
+    // Confirm the DB was not queried (token rejected before hitting the DB).
+    expect(vi.mocked(prisma.user.findUnique)).not.toHaveBeenCalled();
+  });
+
+  it('accepts a user token that is just within the 7-day max age', async () => {
+    const { signPayload } = await import('./admin-auth');
+    // Six days and 23 hours old -- safely inside the 7-day window.
+    const sixDaysAgo = Date.now() - (7 * 24 * 60 * 60 * 1000 - 60_000);
+    const payload = `user:uid_fresh:${sixDaysAgo}`;
+    const token = `${payload}.${signPayload(payload)}`;
+    cookieStore.get.mockReturnValueOnce({ value: token });
+    const { prisma } = await import('@/lib/prisma');
+    const u = { id: 'uid_fresh', isAdmin: false, sessionsValidFrom: null };
+    vi.mocked(prisma.user.findUnique).mockResolvedValue(u as never);
+    const { getCurrentUser } = await import('./user-auth');
+    expect(await getCurrentUser()).toEqual(u);
+  });
 });
 
 describe('requireUser / requireAdminUser', () => {

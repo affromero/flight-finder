@@ -1,7 +1,7 @@
 import { timingSafeEqual } from 'node:crypto';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
-import { getSessionToken, verifySessionToken } from '@/lib/admin-auth';
+import { verifyAdminSessionRevocable } from '@/lib/admin-guard';
 
 export interface AuthResult {
   ok: boolean;
@@ -62,8 +62,10 @@ export async function authorizeMutation(
   }
 
   // hosted (non-self-hosted) — admin dashboard carries the legacy HMAC cookie.
-  const session = await getSessionToken();
-  if (session && verifySessionToken(session)) {
+  // Use the revocation-aware check so a token issued before the last admin
+  // password change (adminSessionsValidFrom) is rejected here too, not just by
+  // verifySessionToken's HMAC + expiry.
+  if (await verifyAdminSessionRevocable()) {
     return { ok: true };
   }
 

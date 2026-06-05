@@ -2,6 +2,10 @@ import crypto from 'crypto';
 
 const ALGORITHM = 'aes-256-gcm';
 const IV_LENGTH = 12;
+// AES-GCM authentication tag must be exactly 16 bytes (128 bits) to guarantee
+// full forgery resistance. Shorter tags accepted by Node's setAuthTag would
+// reduce the security margin; reject them before decryption begins.
+const TAG_LENGTH = 16;
 const KEY_LENGTH = 32;
 
 // Fixed application salt and domain-separation label for key derivation. These
@@ -56,6 +60,7 @@ export function decryptSecret(encoded: string): string | null {
     const tag = Buffer.from(parts[1]!, 'hex');
     const encrypted = Buffer.from(parts[2]!, 'hex');
     if (iv.length !== IV_LENGTH) return null;
+    if (tag.length !== TAG_LENGTH) return null;
     const key = getKey();
     const decipher = crypto.createDecipheriv(ALGORITHM, key, iv);
     decipher.setAuthTag(tag);

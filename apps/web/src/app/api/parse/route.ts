@@ -3,19 +3,11 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { parseFlightQuery } from '@/lib/scraper/parse-query';
 import { prisma } from '@/lib/prisma';
 import { redis } from '@/lib/redis';
+import { getClientIp } from '@/lib/trusted-ip';
 
 const PARSE_RATE_LIMIT = 30;        // max requests
 const PARSE_RATE_WINDOW_SECONDS = 60; // per 60 seconds
 const PARSE_HISTORY_MAX_ENTRIES = 12; // defensive server-side cap on history array length
-
-function getClientIp(request: NextRequest): string {
-  const forwarded = request.headers.get('x-forwarded-for');
-  return (
-    forwarded?.split(',')[0]?.trim() ||
-    request.headers.get('x-real-ip') ||
-    '127.0.0.1'
-  );
-}
 
 async function checkParseRateLimit(ip: string): Promise<{ limited: boolean; retryAfter: number }> {
   if (!redis) return { limited: false, retryAfter: 0 };

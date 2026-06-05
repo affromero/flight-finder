@@ -252,20 +252,28 @@ export async function pinnedPublicDispatcher(
 }
 
 /**
- * SMTP variant of the resolve-and-validate check. Rejects when `host` (or any
- * address it resolves to) is private, for untrusted per-user channels.
- * nodemailer manages its own sockets, so this validates rather than pins.
+ * Resolve an SMTP host and return the validated public IP to connect to, so the
+ * caller can PIN the socket to that address (passing it as the transport host)
+ * while keeping the original hostname for TLS identity. This closes the DNS
+ * rebinding gap (SSRF-5): nodemailer re-resolves the name otherwise, so a host
+ * that passed the check could resolve to an internal IP at connect time.
+ *
+ * Returns `null` when no pinning is needed: a trusted (admin/global) channel, or
+ * a literal IP that assertPublicHost already checked (there is no name to pin).
+ * Otherwise it rejects if `host` (or any address it resolves to) is private and
+ * returns the first validated address.
  */
-export async function assertResolvedPublicHost(host: string, opts: { trusted: boolean }): Promise<void> {
+export async function resolvePinnedPublicHost(host: string, opts: { trusted: boolean }): Promise<string | null> {
   assertPublicHost(host, opts);
-  if (opts.trusted) return;
+  if (opts.trusted) return null;
   const h = host.trim().replace(/^\[|\]$/g, '').toLowerCase();
-  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(':')) return; // literal IP already checked
+  if (/^\d{1,3}(\.\d{1,3}){3}$/.test(h) || h.includes(':')) return null; // literal IP already checked
   const resolved = await dnsLookup(h, { all: true });
   if (resolved.length === 0) throw new Error('SMTP host did not resolve');
   for (const r of resolved) {
     if (isPrivateHost(r.address)) throw new Error('SMTP host is not allowed');
   }
+  return resolved[0]!.address;
 }
 
 function isPrivateIPv4(octets: number[]): boolean {

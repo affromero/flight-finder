@@ -11,7 +11,7 @@ import { UpdateBanner } from '@/components/UpdateBanner';
 import { Footer } from '@/components/Footer';
 import { DemoGif } from '@/components/DemoGif';
 import { InstallCommand } from '@/components/InstallCommand';
-import { getSessionToken, verifySessionToken } from '@/lib/admin-auth';
+import { verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { safeJsonLd } from '@/app/q/[id]/safe-json-ld';
@@ -33,12 +33,9 @@ export default async function HomePage() {
     redirect('/login?next=/');
   }
 
-  const token = await getSessionToken();
   const isAdmin = multiUserEnabled
     ? Boolean(user?.isAdmin)
-    : token
-      ? verifySessionToken(token)
-      : false;
+    : await verifyAdminSessionRevocable();
 
   const jsonLd = {
     '@context': 'https://schema.org',

@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import styles from './page.module.css';
+import { sanitizeNext } from '@/lib/safe-next';
 
 interface Props {
   next: string | null;
@@ -40,8 +41,10 @@ export function LoginForm({ next }: Props) {
     const body = (await res.json().catch(() => null)) as LoginResponse | null;
 
     if (res.ok && body?.data?.user) {
-      const dest = next ?? (body.data.user.isAdmin ? '/admin' : '/account');
-      window.location.href = dest;
+      // Re-validate 'next' on the client to guard against a tampered prop or
+      // an unexpected DOM mutation. Only same-site relative paths are safe.
+      const safeDest = sanitizeNext(next) ?? (body.data.user.isAdmin ? '/admin' : '/account');
+      window.location.href = safeDest;
       return;
     }
 

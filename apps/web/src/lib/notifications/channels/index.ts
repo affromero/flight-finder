@@ -7,17 +7,20 @@ import { sendWebhook } from './webhook';
 
 /**
  * A channel owned by `userId: null` is admin/global and trusted with internal
- * hosts (a local ntfy server, a private SMTP relay). A channel with a non-null
+ * hosts (a local ntfy server, a private SMTP relay). A channel with any other
  * `userId` is per-user (multi-user mode) and untrusted, so its outbound
- * URLs/hosts are SSRF-checked at send time. A query owner can only ever attach
- * channels they own, so an absent owner id maps to the global/admin case.
+ * URLs/hosts are SSRF-checked at send time. Only an explicit `null` is trusted:
+ * a caller must commit to the owner, so loading a user-owned channel and
+ * omitting the id can never silently downgrade it to the trusted/global case.
  */
 function isTrustedOwner(channel: SendChannel): boolean {
-  return channel.userId == null;
+  return channel.userId === null;
 }
 
-/** A stored channel plus the optional owner id used to decide outbound trust. */
-export type SendChannel = StoredChannel & { userId?: string | null };
+/** A stored channel plus the owner id used to decide outbound trust. The id is
+ * required (null = global/admin, any string = untrusted per-user) so a caller
+ * can never accidentally omit it and bypass the SSRF checks. */
+export type SendChannel = StoredChannel & { userId: string | null };
 
 /** Decrypt the stored config and dispatch the message to the matching sender. */
 export async function sendToChannel(channel: SendChannel, message: ChannelMessage): Promise<void> {

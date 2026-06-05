@@ -10,31 +10,59 @@ import {
 } from '@/lib/admin-auth';
 
 /**
- * Authoritative (DB-backed) revocation check for the legacy admin HMAC
- * session. The Edge middleware verifies the cookie's HMAC and expiry but
- * cannot reach the database, so the "invalidate every admin session on
- * password change" guarantee lives here, mirroring how user sessions use
- * User.sessionsValidFrom in lib/user-auth.ts.
- *
- * Returns a 401 response when the caller presents an admin token that was
- * issued before ExtractionConfig.adminSessionsValidFrom. Returns null when
- * there is no admin token (e.g. a user-token caller in multi user mode) or
- * the admin token is still valid.
+ * Internal tri-state for the admin cookie: distinguishes "no admin cookie at
+ * all" (callers fall through to other auth) from "admin cookie present but
+ * revoked" (callers must reject). 'valid' means HMAC + 7-day expiry +
+ * adminSessionsValidFrom all pass.
  */
-async function rejectRevokedAdminToken(): Promise<NextResponse | null> {
+type AdminSessionState = 'absent' | 'revoked' | 'valid';
+
+async function readAdminSessionState(): Promise<AdminSessionState> {
   const token = await getSessionToken();
-  if (!token || !verifySessionToken(token)) return null;
+  // No admin HMAC cookie (no cookie, a forged signature, an expired token, or a
+  // user: token): treat as absent so callers can fall through to their other
+  // auth paths instead of returning a hard 401.
+  if (!token || !verifySessionToken(token)) return 'absent';
   const ts = parseAdminTokenTimestamp(token);
-  if (ts === null) return null;
+  if (ts === null) return 'absent';
 
   const config = await prisma.extractionConfig.findUnique({
     where: { id: 'singleton' },
     select: { adminSessionsValidFrom: true },
   });
   if (config?.adminSessionsValidFrom && ts < config.adminSessionsValidFrom.getTime()) {
-    return apiError('Unauthorized', 401);
+    return 'revoked';
   }
-  return null;
+  return 'valid';
+}
+
+/**
+ * Authoritative (DB-backed) admin session check used everywhere an admin HMAC
+ * cookie authorizes behavior. Verifies HMAC + 7-day expiry (verifySessionToken)
+ * AND that the token was not issued before ExtractionConfig.adminSessionsValidFrom
+ * (stamped on every admin password change). The Edge middleware can verify the
+ * HMAC and expiry but cannot reach the database, so the "invalidate every admin
+ * session on password change" guarantee lives here, mirroring how user sessions
+ * use User.sessionsValidFrom in lib/user-auth.ts.
+ *
+ * Returns true only when a valid, non-revoked admin token is present. Returns
+ * false when there is no admin cookie, the HMAC/expiry check fails, or the token
+ * predates the last password change. Use this instead of a bare
+ * verifySessionToken anywhere an admin cookie grants access.
+ */
+export async function verifyAdminSessionRevocable(): Promise<boolean> {
+  return (await readAdminSessionState()) === 'valid';
+}
+
+/**
+ * Authoritative (DB-backed) revocation check for the legacy admin HMAC
+ * session. Returns a 401 response when the caller presents an admin token that
+ * was issued before ExtractionConfig.adminSessionsValidFrom. Returns null when
+ * there is no admin token (e.g. a user-token caller in multi user mode) or
+ * the admin token is still valid.
+ */
+async function rejectRevokedAdminToken(): Promise<NextResponse | null> {
+  return (await readAdminSessionState()) === 'revoked' ? apiError('Unauthorized', 401) : null;
 }
 
 /**

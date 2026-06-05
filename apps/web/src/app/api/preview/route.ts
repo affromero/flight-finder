@@ -3,6 +3,7 @@ import type { Prisma } from '@prisma/client';
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { getClientIp } from '@/lib/trusted-ip';
 import {
   ACTIVE_PREVIEW_STATUSES,
   PREVIEW_ACTIVE_TIMEOUT_MS,
@@ -47,7 +48,6 @@ interface PreviewRunStore {
   update(args: { where: { id: string }; data: Record<string, unknown> }): Promise<PreviewRunRow>;
   findFirst(args: { where: Record<string, unknown>; orderBy: { createdAt: 'desc' } }): Promise<PreviewRunRow | null>;
   create(args: { data: Record<string, unknown> }): Promise<PreviewRunRow>;
-  count(args: { where: Record<string, unknown> }): Promise<number>;
 }
 
 /**
@@ -64,10 +64,6 @@ const PREVIEW_ADMISSION_CAP = (() => {
   if (!Number.isFinite(parsed) || parsed <= 0) return 3;
   return Math.min(parsed, 50);
 })();
-
-function getClientIp(request: NextRequest): string {
-  return request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() || 'unknown';
-}
 
 const previewRunStore = (prisma as unknown as { previewRun: PreviewRunStore }).previewRun;
 
@@ -145,11 +141,10 @@ async function updatePreviewRun(id: string, data: Record<string, unknown>) {
 interface BackgroundPreviewOptions {
   concurrency?: number;
   /**
-   * Client IP whose Redis admission slot this run holds. Present only when
-   * acquirePreviewAdmission reserved a slot; the slot is released exactly
-   * once when the run reaches a terminal state (completed or failed) so the
-   * client's concurrent quota frees up. Absent when admission fell back to
-   * the DB count gate (Redis unavailable), where there is no slot to free.
+   * Client IP whose Redis admission slot this run holds. Always present for an
+   * admitted run, since admission is now Redis only (no DB count fallback). The
+   * slot is released exactly once when the run reaches a terminal state
+   * (completed or failed) so the client's concurrent quota frees up.
    */
   releaseIp?: string;
 }
@@ -258,48 +253,35 @@ export async function POST(request: NextRequest) {
       ? Math.min(config.previewAdmissionCap, 50)
       : PREVIEW_ADMISSION_CAP;
 
-  // Audit finding M5: the old gate read previewRunStore.count then, outside
+  // Audit finding M5/B/F: the old gate read previewRunStore.count then, outside
   // any transaction, ran create. N concurrent requests all observed the
-  // pre-insert count and slipped past the cap. The Redis counter is an
-  // atomic admission gate: INCR returns a distinct value per concurrent
-  // request, so at most `admissionCap` of a burst are admitted. The slot is
-  // released in runPreviewInBackground when the run settles. If Redis is
-  // unavailable, fall back to the best effort DB count so the cap still
-  // degrades gracefully rather than disappearing. updatedAt freshness in
-  // that fallback filter means a stuck or zombie row does not block new
-  // submissions from the same IP.
-  let releaseIp: string | undefined;
-  if (clientIp !== 'unknown') {
-    const admission = await acquirePreviewAdmission(clientIp, admissionCap);
-    if (admission === 'rejected') {
-      return apiError(
-        `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
-        429,
-      );
-    }
-    if (admission === 'admitted') {
-      releaseIp = clientIp;
-    } else {
-      // Redis unavailable: best effort DB count gate. Non-atomic, so a
-      // tight concurrent burst can still slip a few past, but it preserves
-      // the cap under normal single-request-at-a-time load.
-      const freshSince = new Date(now.getTime() - PREVIEW_ACTIVE_TIMEOUT_MS);
-      const activeForIp = await previewRunStore.count({
-        where: {
-          clientIp,
-          status: { in: [...ACTIVE_PREVIEW_STATUSES] },
-          updatedAt: { gte: freshSince },
-        },
-      });
-      if (activeForIp >= admissionCap) {
-        return apiError(
-          `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
-          429,
-        );
-      }
-    }
+  // pre-insert count and slipped past the cap. The Redis counter is an atomic
+  // admission gate run as a single Lua script (INCR + cap + EXPIRE + overshoot
+  // rollback), so at most `admissionCap` of a burst are admitted and no partial
+  // failure can leak a slot. The slot is released in runPreviewInBackground
+  // when the run settles.
+  //
+  // The gate always runs, including for the 'unknown' bucket that getClientIp
+  // returns when no trusted proxy is asserted (TRUSTED_FORWARDED_FOR=false) or
+  // no forwarded header is present (audit finding B). Skipping it there would
+  // let a caller bypass the cap by simply omitting the header. All unknown-IP
+  // callers share one bucket, so the cap still binds them collectively.
+  //
+  // On any Redis problem the gate fails CLOSED (rejected): there is no DB count
+  // fallback, because that non atomic read then create reopens the TOCTOU race
+  // (audit finding F). A preview is a background scrape, so denying admission
+  // during a Redis outage is the safe default.
+  const admission = await acquirePreviewAdmission(clientIp, admissionCap);
+  if (admission === 'rejected') {
+    return apiError(
+      `Too many active previews for this client (cap ${admissionCap}). Wait for one to finish or try again later.`,
+      429,
+    );
   }
-
+  // Admission succeeded, so a Redis slot is reserved for clientIp. From here
+  // exactly one releasePreviewAdmission(clientIp) must run on every path: the
+  // background runner releases it when the run settles, and the create-failed
+  // path below releases it directly since that run never starts.
   let previewRun: PreviewRunRow;
   try {
     previewRun = await previewRunStore.create({
@@ -314,15 +296,13 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     // The row never persisted, so the background runner will never run to
     // release the reserved slot. Release it here to avoid leaking quota.
-    if (releaseIp) {
-      await releasePreviewAdmission(releaseIp);
-    }
+    await releasePreviewAdmission(clientIp);
     throw error;
   }
 
   void runPreviewInBackground(previewRun.id, payload, {
     concurrency: config?.previewConcurrency ?? undefined,
-    releaseIp,
+    releaseIp: clientIp,
   });
 
   return apiSuccess({

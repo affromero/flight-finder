@@ -29,7 +29,7 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-import { requireAdminApi } from './admin-guard';
+import { requireAdminApi, verifyAdminSessionRevocable } from './admin-guard';
 
 describe('requireAdminApi', () => {
   beforeEach(() => {
@@ -116,5 +116,58 @@ describe('requireAdminApi', () => {
 
     expect(await requireAdminApi()).toBeNull();
     expect(mockConfigFindUnique).not.toHaveBeenCalled();
+  });
+});
+
+describe('verifyAdminSessionRevocable', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockGetSessionToken.mockResolvedValue(undefined);
+    mockVerifySessionToken.mockReturnValue(false);
+    mockParseAdminTokenTimestamp.mockReturnValue(null);
+    mockConfigFindUnique.mockResolvedValue(null);
+  });
+
+  it('returns false when no admin cookie is present', async () => {
+    mockGetSessionToken.mockResolvedValue(undefined);
+    expect(await verifyAdminSessionRevocable()).toBe(false);
+    expect(mockConfigFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('returns false for a forged cookie that fails HMAC verification', async () => {
+    mockGetSessionToken.mockResolvedValue('admin:1.forged');
+    mockVerifySessionToken.mockReturnValue(false);
+    expect(await verifyAdminSessionRevocable()).toBe(false);
+    expect(mockConfigFindUnique).not.toHaveBeenCalled();
+  });
+
+  it('returns false for a token issued before adminSessionsValidFrom', async () => {
+    const issuedAt = 1_000;
+    mockGetSessionToken.mockResolvedValue('admin:1000.sig');
+    mockVerifySessionToken.mockReturnValue(true);
+    mockParseAdminTokenTimestamp.mockReturnValue(issuedAt);
+    mockConfigFindUnique.mockResolvedValue({
+      adminSessionsValidFrom: new Date(issuedAt + 5_000),
+    });
+    expect(await verifyAdminSessionRevocable()).toBe(false);
+  });
+
+  it('returns true for a token issued after adminSessionsValidFrom', async () => {
+    const issuedAt = 10_000;
+    mockGetSessionToken.mockResolvedValue('admin:10000.sig');
+    mockVerifySessionToken.mockReturnValue(true);
+    mockParseAdminTokenTimestamp.mockReturnValue(issuedAt);
+    mockConfigFindUnique.mockResolvedValue({
+      adminSessionsValidFrom: new Date(issuedAt - 5_000),
+    });
+    expect(await verifyAdminSessionRevocable()).toBe(true);
+  });
+
+  it('returns true when adminSessionsValidFrom is unset', async () => {
+    mockGetSessionToken.mockResolvedValue('admin:10000.sig');
+    mockVerifySessionToken.mockReturnValue(true);
+    mockParseAdminTokenTimestamp.mockReturnValue(10_000);
+    mockConfigFindUnique.mockResolvedValue({ adminSessionsValidFrom: null });
+    expect(await verifyAdminSessionRevocable()).toBe(true);
   });
 });

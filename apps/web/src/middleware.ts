@@ -107,8 +107,16 @@ export async function middleware(request: NextRequest) {
 
   // Skip tracking for self-hosted, admin pages, API routes, empty UAs
   if (!isSelfHosted && !pathname.startsWith('/admin') && !pathname.startsWith('/api/') && userAgent) {
-    const forwardedFor = request.headers.get('x-forwarded-for');
-    const ip = forwardedFor?.split(',')[0]?.trim() || request.headers.get('x-real-ip') || '127.0.0.1';
+    // When TRUSTED_FORWARDED_FOR=false there is no trusted proxy, so the
+    // x-forwarded-for header is attacker-controllable. Collapse to a constant
+    // rather than letting callers mint arbitrary analytics IP buckets.
+    // Mirrors the same guard in lib/trusted-ip.ts (which cannot be imported
+    // here because the Edge runtime does not support all Node.js modules).
+    const ip = process.env.TRUSTED_FORWARDED_FOR === 'false'
+      ? 'unknown'
+      : (request.headers.get('x-forwarded-for')?.split(',')[0]?.trim() ||
+         request.headers.get('x-real-ip') ||
+         '127.0.0.1');
 
     // Classify bot: UA match → 3, missing browser headers → 2, default → 1
     const bot = classifyBot(userAgent);

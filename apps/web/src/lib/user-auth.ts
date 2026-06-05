@@ -7,6 +7,17 @@ import {
   verifyPayload,
 } from '@/lib/admin-auth';
 
+// Absolute upper bound on how old a user session token may be, regardless of
+// whether the HMAC is valid and sessionsValidFrom has not advanced. Mirrors the
+// admin 7-day cookie maxAge so both token kinds share the same expiry policy.
+// Can be overridden via SESSION_MAX_AGE (seconds) for testing or tighter policy.
+const SESSION_MAX_AGE_MS = (() => {
+  const override = Number(process.env.SESSION_MAX_AGE);
+  return Number.isFinite(override) && override > 0
+    ? override * 1000
+    : 60 * 60 * 24 * 7 * 1000; // 7 days
+})();
+
 export type ParsedSession =
   | { kind: 'admin'; ts: number }
   | { kind: 'user'; userId: string; ts: number }
@@ -61,6 +72,10 @@ export async function getCurrentUser(): Promise<User | null> {
   if (!token) return null;
   const parsed = parseSession(token);
   if (!parsed || parsed.kind !== 'user') return null;
+  // Absolute max-age guard: reject tokens that are older than SESSION_MAX_AGE_MS
+  // even when the HMAC is valid. This prevents indefinite replay of a stolen or
+  // leaked cookie that was never explicitly revoked.
+  if (Date.now() - parsed.ts > SESSION_MAX_AGE_MS) return null;
   const user = await prisma.user.findUnique({ where: { id: parsed.userId } });
   if (!user) return null;
   // Revoke any session issued before the user's last password change/reset.

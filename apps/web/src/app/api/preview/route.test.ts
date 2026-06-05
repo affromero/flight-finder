@@ -1,16 +1,20 @@
 /**
- * Tests for POST /api/preview: admission cap (audit D2), deferred
- * cleanup on the request path (audit B4), and the existing request
- * hash deduplication. The route's actual runner work is delegated to
+ * Tests for POST /api/preview: the per IP admission cap (audit findings
+ * D2/B/F), deferred cleanup on the request path (audit B4), and the existing
+ * request hash deduplication. The route's actual runner work is delegated to
  * runPreviewInBackground; here we just verify the gate logic.
+ *
+ * Admission is now Redis only and fails CLOSED: the route always consults
+ * acquirePreviewAdmission (including for the shared 'unknown' bucket), and any
+ * Redis problem surfaces as 'rejected' rather than a non atomic DB count
+ * fallback. The DB count gate is gone, so there is no previewRun.count mock.
  */
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const {
   mockFindFirst,
   mockCreate,
-  mockCount,
   mockDeleteMany,
   mockUpdateMany,
   mockRunPreview,
@@ -22,7 +26,6 @@ const {
 } = vi.hoisted(() => ({
   mockFindFirst: vi.fn(),
   mockCreate: vi.fn(),
-  mockCount: vi.fn(),
   mockDeleteMany: vi.fn().mockResolvedValue({ count: 0 }),
   mockUpdateMany: vi.fn().mockResolvedValue({ count: 0 }),
   mockUpdate: vi.fn().mockResolvedValue({}),
@@ -38,7 +41,6 @@ vi.mock('@/lib/prisma', () => ({
     previewRun: {
       findFirst: mockFindFirst,
       create: mockCreate,
-      count: mockCount,
       deleteMany: mockDeleteMany,
       updateMany: mockUpdateMany,
       update: mockUpdate,
@@ -75,10 +77,11 @@ const validBody = {
   cabinClass: 'economy',
 };
 
+const originalTrustedForwardedFor = process.env.TRUSTED_FORWARDED_FOR;
+
 beforeEach(() => {
   mockFindFirst.mockReset();
   mockCreate.mockReset();
-  mockCount.mockReset();
   mockDeleteMany.mockClear();
   mockUpdateMany.mockClear();
   mockUpdate.mockClear();
@@ -87,21 +90,29 @@ beforeEach(() => {
   mockValidatePreviewPayload.mockReturnValue({ origins: [], destinations: [], isOneWay: false });
   mockAcquireAdmission.mockReset();
   mockReleaseAdmission.mockClear();
+  mockExtractionConfigFindFirst.mockReset();
+  mockExtractionConfigFindFirst.mockResolvedValue({ previewMaxCombos: 24 });
 
   mockFindFirst.mockResolvedValue(null);
-  mockCount.mockResolvedValue(0);
-  // Default to the Redis-unavailable path so the DB-count fallback gate is
-  // exercised by the legacy tests below. The atomic Redis gate gets its own
-  // describe block that overrides this.
-  mockAcquireAdmission.mockResolvedValue('unavailable');
+  // Default to the happy path: the atomic Redis gate admits. Individual tests
+  // override to 'rejected' to assert the cap and the fail-closed behavior.
+  mockAcquireAdmission.mockResolvedValue('admitted');
   mockCreate.mockImplementation(({ data }: { data: Record<string, unknown> }) =>
     Promise.resolve({ id: 'pr-1', expiresAt: new Date(Date.now() + 86_400_000), status: data.status, ...data }),
   );
 });
 
+afterEach(() => {
+  if (originalTrustedForwardedFor === undefined) {
+    delete process.env.TRUSTED_FORWARDED_FOR;
+  } else {
+    process.env.TRUSTED_FORWARDED_FOR = originalTrustedForwardedFor;
+  }
+});
+
 describe('POST /api/preview admission cap (audit D2)', () => {
-  it('rejects with 429 when the IP is at the admission cap', async () => {
-    mockCount.mockResolvedValue(3); // cap is 3 by default
+  it('rejects with 429 when the atomic gate is at the cap', async () => {
+    mockAcquireAdmission.mockResolvedValue('rejected');
 
     const res = await POST(makeRequest(validBody));
     expect(res.status).toBe(429);
@@ -110,8 +121,8 @@ describe('POST /api/preview admission cap (audit D2)', () => {
     expect(mockCreate).not.toHaveBeenCalled();
   });
 
-  it('admits when the IP count is below the cap', async () => {
-    mockCount.mockResolvedValue(2);
+  it('admits when the gate reserves a slot', async () => {
+    mockAcquireAdmission.mockResolvedValue('admitted');
 
     const res = await POST(makeRequest(validBody));
     expect(res.status).toBe(202);
@@ -119,16 +130,13 @@ describe('POST /api/preview admission cap (audit D2)', () => {
   });
 
   it('persists the clientIp on the new preview row', async () => {
-    mockCount.mockResolvedValue(0);
-
     await POST(makeRequest(validBody, '198.51.100.55'));
 
     const createCall = mockCreate.mock.calls[0]![0] as { data: { clientIp?: string } };
     expect(createCall.data.clientIp).toBe('198.51.100.55');
   });
 
-  it('uses the first hop of x-forwarded-for as the client IP', async () => {
-    mockCount.mockResolvedValue(0);
+  it('uses the first hop of x-forwarded-for as the client IP and the admission key', async () => {
     const req = new NextRequest('http://localhost/api/preview', {
       method: 'POST',
       body: JSON.stringify(validBody),
@@ -139,39 +147,13 @@ describe('POST /api/preview admission cap (audit D2)', () => {
 
     const createCall = mockCreate.mock.calls[0]![0] as { data: { clientIp?: string } };
     expect(createCall.data.clientIp).toBe('203.0.113.10');
-  });
-
-  it('counts active previews filtered by clientIp, ACTIVE statuses, and fresh updatedAt', async () => {
-    mockCount.mockResolvedValue(0);
-
-    await POST(makeRequest(validBody, '203.0.113.42'));
-
-    expect(mockCount).toHaveBeenCalledTimes(1);
-    const where = mockCount.mock.calls[0]![0].where as Record<string, unknown>;
-    expect(where.clientIp).toBe('203.0.113.42');
-    expect(where.status).toEqual({ in: ['pending', 'running'] });
-    const updatedAtFilter = where.updatedAt as { gte: Date };
-    expect(updatedAtFilter.gte).toBeInstanceOf(Date);
-    // Should be within the active window (now - 30 min).
-    expect(updatedAtFilter.gte.getTime()).toBeGreaterThan(Date.now() - 31 * 60 * 1000);
-  });
-
-  it('skips the admission count when x-forwarded-for is absent (unknown IP)', async () => {
-    const req = new NextRequest('http://localhost/api/preview', {
-      method: 'POST',
-      body: JSON.stringify(validBody),
-      headers: { 'Content-Type': 'application/json' },
-    });
-
-    const res = await POST(req);
-
-    expect(res.status).toBe(202);
-    expect(mockCount).not.toHaveBeenCalled();
+    // The gate keys on the same first-hop IP, not the spoofable downstream hops.
+    expect(mockAcquireAdmission).toHaveBeenCalledWith('203.0.113.10', 3);
   });
 });
 
 describe('POST /api/preview atomic admission gate (audit M5 TOCTOU)', () => {
-  it('rejects with 429 when the atomic Redis gate is at the cap, without ever reaching create or the DB count', async () => {
+  it('rejects with 429 when the atomic Redis gate is at the cap, without ever reaching create', async () => {
     mockAcquireAdmission.mockResolvedValue('rejected');
 
     const res = await POST(makeRequest(validBody));
@@ -180,9 +162,6 @@ describe('POST /api/preview atomic admission gate (audit M5 TOCTOU)', () => {
     const body = await res.json();
     expect(body.error).toMatch(/Too many active previews/i);
     expect(mockCreate).not.toHaveBeenCalled();
-    // The Redis gate is authoritative; the non-atomic DB count must not be
-    // the thing deciding admission once Redis answered.
-    expect(mockCount).not.toHaveBeenCalled();
   });
 
   it('consults the atomic gate with the configured admission cap', async () => {
@@ -194,14 +173,13 @@ describe('POST /api/preview atomic admission gate (audit M5 TOCTOU)', () => {
     expect(mockAcquireAdmission).toHaveBeenCalledWith('203.0.113.99', 5);
   });
 
-  it('admits via the atomic gate and skips the DB count entirely', async () => {
+  it('admits via the atomic gate', async () => {
     mockAcquireAdmission.mockResolvedValue('admitted');
 
     const res = await POST(makeRequest(validBody));
 
     expect(res.status).toBe(202);
     expect(mockCreate).toHaveBeenCalledTimes(1);
-    expect(mockCount).not.toHaveBeenCalled();
   });
 
   it('simulates a concurrent burst: only requests the atomic gate admits create rows', async () => {
@@ -239,20 +217,34 @@ describe('POST /api/preview atomic admission gate (audit M5 TOCTOU)', () => {
 
     expect(mockReleaseAdmission).toHaveBeenCalledWith('198.51.100.7');
   });
+});
 
-  it('does not reserve or release a slot when admission falls back to the DB count', async () => {
-    mockAcquireAdmission.mockResolvedValue('unavailable');
-    mockCount.mockResolvedValue(0);
+describe('POST /api/preview unknown bucket is gated (audit finding B)', () => {
+  it('runs the admission gate for the shared unknown bucket when no trusted proxy is asserted', async () => {
+    // TRUSTED_FORWARDED_FOR=false collapses every caller to the 'unknown'
+    // bucket. The gate MUST still run, otherwise omitting the header bypasses
+    // the cap entirely.
+    process.env.TRUSTED_FORWARDED_FOR = 'false';
+    mockAcquireAdmission.mockResolvedValue('admitted');
 
-    const res = await POST(makeRequest(validBody));
+    const req = new NextRequest('http://localhost/api/preview', {
+      method: 'POST',
+      body: JSON.stringify(validBody),
+      headers: { 'Content-Type': 'application/json', 'x-forwarded-for': '203.0.113.10' },
+    });
+
+    const res = await POST(req);
 
     expect(res.status).toBe(202);
-    expect(mockCount).toHaveBeenCalledTimes(1);
-    // No Redis slot was held, so nothing must be released for this run.
-    expect(mockReleaseAdmission).not.toHaveBeenCalled();
+    // All untrusted callers share one bucket: the key is the constant 'unknown'
+    // regardless of whatever x-forwarded-for they supply.
+    expect(mockAcquireAdmission).toHaveBeenCalledWith('unknown', 3);
   });
 
-  it('does not consult the atomic gate for an unknown client IP', async () => {
+  it('rejects with 429 once the shared unknown bucket hits the cap', async () => {
+    process.env.TRUSTED_FORWARDED_FOR = 'false';
+    mockAcquireAdmission.mockResolvedValue('rejected');
+
     const req = new NextRequest('http://localhost/api/preview', {
       method: 'POST',
       body: JSON.stringify(validBody),
@@ -261,8 +253,56 @@ describe('POST /api/preview atomic admission gate (audit M5 TOCTOU)', () => {
 
     const res = await POST(req);
 
-    expect(res.status).toBe(202);
-    expect(mockAcquireAdmission).not.toHaveBeenCalled();
+    expect(res.status).toBe(429);
+    expect(mockAcquireAdmission).toHaveBeenCalledWith('unknown', 3);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
+
+  it('a rotated x-forwarded-for cannot mint fresh buckets to bypass the cap', async () => {
+    // With no trusted proxy, every spoofed header collapses to 'unknown', so a
+    // burst that rotates the header still contends for the same capped bucket.
+    process.env.TRUSTED_FORWARDED_FOR = 'false';
+    const cap = 2;
+    let inFlight = 0;
+    mockAcquireAdmission.mockImplementation(async (ip: string) => {
+      expect(ip).toBe('unknown'); // every rotated header lands in one bucket
+      const current = ++inFlight;
+      if (current > cap) {
+        inFlight--;
+        return 'rejected';
+      }
+      return 'admitted';
+    });
+
+    const responses = await Promise.all(
+      Array.from({ length: 6 }, (_, i) =>
+        POST(new NextRequest('http://localhost/api/preview', {
+          method: 'POST',
+          body: JSON.stringify(validBody),
+          headers: { 'Content-Type': 'application/json', 'x-forwarded-for': `198.51.100.${i}` },
+        })),
+      ),
+    );
+
+    const admitted = responses.filter((r) => r.status === 202);
+    expect(admitted).toHaveLength(cap);
+    expect(mockCreate).toHaveBeenCalledTimes(cap);
+  });
+});
+
+describe('POST /api/preview fails closed when Redis is unavailable (audit finding F)', () => {
+  it('returns 429 (denies admission) rather than admitting via a DB count', async () => {
+    // acquirePreviewAdmission returns 'rejected' for any Redis problem (not
+    // configured or errored). The route must NOT create a run, and there is no
+    // DB-count fallback to reopen the TOCTOU race.
+    mockAcquireAdmission.mockResolvedValue('rejected');
+
+    const res = await POST(makeRequest(validBody));
+
+    expect(res.status).toBe(429);
+    const body = await res.json();
+    expect(body.error).toMatch(/Too many active previews/i);
+    expect(mockCreate).not.toHaveBeenCalled();
     expect(mockReleaseAdmission).not.toHaveBeenCalled();
   });
 });
@@ -279,7 +319,7 @@ describe('POST /api/preview deferred cleanup (audit B4)', () => {
     mockUpdateMany.mockImplementation(() => new Promise<{ count: number }>((resolve) => {
       pending.push(() => resolve({ count: 0 }));
     }));
-    mockCount.mockResolvedValue(0);
+    mockAcquireAdmission.mockResolvedValue('admitted');
 
     const res = await Promise.race([
       POST(makeRequest(validBody)),

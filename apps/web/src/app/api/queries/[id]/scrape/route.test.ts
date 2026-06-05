@@ -30,6 +30,7 @@ vi.mock('@/lib/prisma', () => {
     },
     extractionConfig: {
       findFirst: (...args: unknown[]) => mockExtractionFindFirst(...args),
+      findUnique: async () => null,
     },
   };
   return {
@@ -53,6 +54,7 @@ const mockVerifySessionToken = vi.fn().mockReturnValue(false);
 vi.mock('@/lib/admin-auth', () => ({
   getSessionToken: () => mockGetSessionToken(),
   verifySessionToken: (token: string) => mockVerifySessionToken(token),
+  parseAdminTokenTimestamp: () => 1000,
 }));
 
 const mockRedisSet = vi.fn();

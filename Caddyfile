@@ -15,7 +15,7 @@ flight-finder.org {
 		#   - style-src:  Plotly injects inline styles at runtime
 		# Future hardening: replace unsafe-inline with per-request nonces for
 		# script-src once the Next.js build supports nonce injection.
-		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
 		-Server
 	}
 
