@@ -1,9 +1,30 @@
 # Changelog
 
-## [Unreleased]
+## [0.10.0] - 2026-06-05
+
+This release adds new-low price alerts with pluggable notification channels, CLI account recovery for multi user mode, and the full results of a security audit and remediation (PR #109).
+
+### Security
+* **Full security audit remediation** (PR #109). Fixed a stored XSS on the public share and landing pages (unescaped JSON-LD). Hardened admin and user sessions with server-side token expiry, revocation on password change, and constant-time secret comparisons. Centralized client IP extraction so the login, parse, preview, and community rate limits can no longer be bypassed by spoofing `X-Forwarded-For`. Closed SSRF holes in notification channels: per-user webhook, ntfy, and SMTP targets are validated, resolved and pinned against DNS rebinding, and redirects are rejected. Locked down the agentic CLI extraction providers (Claude Code, Codex) so a prompt injection in a scraped page cannot run commands or read host files, and now sanitize and fence all scraped HTML as untrusted data for every provider. Bounded previously unbounded endpoints, gated `/api/alerts` and the analytics write endpoint, added a Content Security Policy and other security headers, and removed stray state and secrets from the git tree and the Docker build context.
 
 ### Added
-* **CLI account recovery for multi user mode** (#102): two recovery commands for a self hosted admin who is locked out. `flight-finder reset-password <username> <new-password>` sets a known password for any user; `flight-finder disable-accounts` turns multi user mode off and clears the stored admin credential, dropping the instance back to solo self hosted mode where no login is required. Both run inside the web container against the live database. Until now the only escape from a forgotten multi user password was hand editing Postgres. Reported by @garrynutter.
+* **New-low price alerts and notification channels** (#106): get notified when a tracked flight reaches a new low. Pluggable channels for Telegram, email, ntfy, and webhooks, managed from a new admin GUI, with configurable absolute and percentage drop thresholds. Also adds a pause/resume scraping toggle, GUI-configurable provider rate limits and preview limits, self-service password change, and a button to disable multi user mode. Reported by @garrynutter.
+* **CLI account recovery for multi user mode** (#102): two recovery commands for a self hosted admin who is locked out. `flight-finder reset-password <username> <new-password>` sets a known password for any user; `flight-finder disable-accounts` turns multi user mode off and clears the stored admin credential, dropping the instance back to solo self hosted mode where no login is required. Both run inside the web container against the live database. Reported by @garrynutter.
+* Ko-fi support links.
+
+### Changed
+* Community price-sharing registration is now OFF by default. Set `COMMUNITY_REGISTRATION_OPEN=true` to allow public key registration.
+* Scrape timestamps now render in each viewer's own local timezone.
+* Self-hosted instances use the global server theme, and the public tracker page is forced dynamic so theme and prices stay fresh (#89). Reported by @antoniods97.
+
+### Fixed
+* Analytics history now persists across container recreates instead of resetting.
+* The price history table and other timestamp displays no longer trigger a client hydration mismatch.
+
+### Upgrade notes
+* The database schema gained `ExtractionConfig.adminSessionsValidFrom`; `prisma db push` runs on deploy.
+* Notification and VPN channel secrets are now encrypted with a stronger key derivation, so existing secrets must be re-entered once after upgrading.
+* New env var `TRUSTED_FORWARDED_FOR`: set it to `false` if the app is not behind a trusted reverse proxy (the default trusts the proxy, which is correct behind the bundled Caddy).
 
 ## [0.9.5] - 2026-06-02
 

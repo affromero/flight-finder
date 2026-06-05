@@ -18,10 +18,10 @@
     "db:generate": "npx prisma generate --schema=apps/web/prisma/schema.prisma",
     "db:migrate": "npx prisma migrate deploy --schema=apps/web/prisma/schema.prisma"
   },
-"engines": {
+  "engines": {
     "node": ">=22"
   },
-  "version": "0.9.5",
+  "version": "0.10.0",
   "devDependencies": {
     "@copilotkit/llmock": "^1.3.1"
   }
