@@ -6,6 +6,13 @@ vi.mock('nodemailer', () => ({
   default: { createTransport: vi.fn(() => ({ sendMail: mockSendMail })) },
 }));
 
+// DNS boundary: lets tests drive what a hostname resolves to, so the resolve-and-
+// validate / pinning path (SSRF-5) can be exercised without real network lookups.
+const mockDnsLookup = vi.fn();
+vi.mock('node:dns/promises', () => ({
+  lookup: (...args: unknown[]) => mockDnsLookup(...args),
+}));
+
 import nodemailer from 'nodemailer';
 import { sendTelegram } from './telegram';
 import { sendNtfy } from './ntfy';
@@ -141,6 +148,22 @@ describe('sendWebhook', () => {
     ).rejects.toThrow(/credentials/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
+
+  it('blocks an untrusted webhook whose public hostname resolves to a private address', async () => {
+    // The literal-host check passes (hook.example looks public), but DNS resolves
+    // it to an internal IP, so the resolve-and-validate step must reject it.
+    mockDnsLookup.mockResolvedValue([{ address: '10.1.2.3', family: 4 }]);
+    await expect(
+      sendWebhook({ url: 'https://hook.example/x' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow(/not allowed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('sends an untrusted webhook when the public hostname resolves to a public address', async () => {
+    mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
+    await sendWebhook({ url: 'https://hook.example/x' }, MESSAGE, { trusted: false });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
 });
 
 describe('sendEmail', () => {
@@ -194,5 +217,13 @@ describe('sendEmail', () => {
     mockSendMail.mockResolvedValue({ messageId: '4' });
     await sendEmail({ host: '127.0.0.1', port: 25, secure: false, from: 'a@x', to: 'b@y' }, MESSAGE, { trusted: true });
     expect(mockSendMail).toHaveBeenCalledTimes(1);
+  });
+
+  it('blocks an untrusted channel whose public SMTP host resolves to a private address', async () => {
+    mockDnsLookup.mockResolvedValue([{ address: '10.1.2.3', family: 4 }]);
+    await expect(
+      sendEmail({ host: 'smtp.example', port: 587, secure: false, from: 'a@x', to: 'b@y' }, MESSAGE, { trusted: false }),
+    ).rejects.toThrow(/SMTP host is not allowed/);
+    expect(mockSendMail).not.toHaveBeenCalled();
   });
 });

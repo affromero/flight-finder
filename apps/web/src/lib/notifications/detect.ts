@@ -85,7 +85,10 @@ export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAl
   if (baselineCandidates.length === 0) return null;
   const baseline = Math.min(...baselineCandidates);
 
-  const drop = baseline - currentMin;
+  // Round to whole cents before comparing so IEEE-754 drift in the subtraction
+  // (for example 100.10 - 99.90 landing at 0.2000000000000028) cannot push a
+  // borderline drop just over or under the configured floor.
+  const drop = Math.round((baseline - currentMin) * 100) / 100;
   if (drop < floorAbs) return null;
   if (floorPct > 0 && drop / baseline < floorPct) return null;
 

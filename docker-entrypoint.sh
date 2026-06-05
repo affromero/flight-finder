@@ -117,16 +117,20 @@ if [ "$INSTALL_CLI_PROVIDERS" = "true" ]; then
   fi
 
 
-  # Install CLI providers (cached in cli-cache volume)
+  # Install CLI providers (cached in cli-cache volume). Versions are pinned so a
+  # runtime "latest" cannot pull an unreviewed release into the image. Bump these
+  # deliberately. Override at build/run time with CLAUDE_CODE_VERSION / CODEX_VERSION.
+  CLAUDE_CODE_VERSION="${CLAUDE_CODE_VERSION:-2.1.165}"
+  CODEX_VERSION="${CODEX_VERSION:-0.137.0}"
   if ! command -v claude >/dev/null 2>&1; then
-    echo "[setup] Installing Claude Code CLI..."
-    npm install -g @anthropic-ai/claude-code --prefer-offline --no-audit --no-fund 2>&1 | tail -1
+    echo "[setup] Installing Claude Code CLI (${CLAUDE_CODE_VERSION})..."
+    npm install -g "@anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}" --prefer-offline --no-audit --no-fund 2>&1 | tail -1
     command -v claude >/dev/null 2>&1 && echo "[setup] Claude Code CLI ready" || echo "[setup] WARNING: Claude Code CLI install failed"
   fi
 
   if ! command -v codex >/dev/null 2>&1; then
-    echo "[setup] Installing Codex CLI..."
-    npm install -g @openai/codex --prefer-offline --no-audit --no-fund 2>&1 | tail -1
+    echo "[setup] Installing Codex CLI (${CODEX_VERSION})..."
+    npm install -g "@openai/codex@${CODEX_VERSION}" --prefer-offline --no-audit --no-fund 2>&1 | tail -1
     command -v codex >/dev/null 2>&1 && echo "[setup] Codex CLI ready" || echo "[setup] WARNING: Codex CLI install failed"
   fi
 fi

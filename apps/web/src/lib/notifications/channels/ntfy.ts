@@ -1,5 +1,8 @@
+import type { Dispatcher } from 'undici';
 import type { ChannelMessage, NtfyConfig } from './types';
-import { assertPublicUrl } from './config';
+import { pinnedPublicDispatcher } from './config';
+
+type FetchInit = RequestInit & { dispatcher?: Dispatcher };
 
 export async function sendNtfy(
   config: NtfyConfig,
@@ -8,9 +11,11 @@ export async function sendNtfy(
 ): Promise<void> {
   const base = (config.server || 'https://ntfy.sh').replace(/\/+$/, '');
   // Untrusted (per-user) channels may not aim a custom ntfy server at internal
-  // hosts. The default ntfy.sh is public, so only check a custom base.
+  // hosts. The default ntfy.sh is public, so only check a custom base. For a
+  // custom host this resolves, validates, and pins the socket (rebind-safe).
+  let dispatcher: Dispatcher | undefined;
   if (base !== 'https://ntfy.sh') {
-    assertPublicUrl(base, { trusted: opts.trusted });
+    dispatcher = await pinnedPublicDispatcher(base, { trusted: opts.trusted });
   }
   const endpoint = `${base}/${encodeURIComponent(config.topic)}`;
   const headers: Record<string, string> = {
@@ -20,7 +25,9 @@ export async function sendNtfy(
   };
   if (message.url) headers.Click = message.url;
   if (config.token) headers.Authorization = `Bearer ${config.token}`;
-  const res = await fetch(endpoint, { method: 'POST', headers, body: message.body });
+  const init: FetchInit = { method: 'POST', headers, body: message.body };
+  if (dispatcher) init.dispatcher = dispatcher;
+  const res = await fetch(endpoint, init);
   if (!res.ok) {
     const detail = await res.text().catch(() => '');
     throw new Error(`ntfy ${res.status}: ${detail.slice(0, 200)}`);

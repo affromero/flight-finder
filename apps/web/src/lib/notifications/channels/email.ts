@@ -1,6 +1,6 @@
 import nodemailer from 'nodemailer';
 import type { ChannelMessage, EmailConfig } from './types';
-import { assertPublicHost } from './config';
+import { assertResolvedPublicHost } from './config';
 
 export async function sendEmail(
   config: EmailConfig,
@@ -8,7 +8,8 @@ export async function sendEmail(
   opts: { trusted: boolean } = { trusted: true },
 ): Promise<void> {
   // Untrusted (per-user) channels may not deliver via an internal SMTP host.
-  assertPublicHost(config.host, { trusted: opts.trusted });
+  // Resolves the host and rejects when it (or any resolved address) is private.
+  await assertResolvedPublicHost(config.host, { trusted: opts.trusted });
   const transport = nodemailer.createTransport({
     host: config.host,
     port: config.port,

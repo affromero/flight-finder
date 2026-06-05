@@ -69,18 +69,18 @@ jobs:
           mkdir -p ~/.ssh
           echo "${{ secrets.DEPLOY_KEY }}" > ~/.ssh/staging_key
           chmod 600 ~/.ssh/staging_key
-          # Prefer a pinned known_hosts entry when the DEPLOY_KNOWN_HOSTS secret
-          # is available. If it is not set, fall back to accept-new (trusts the
-          # host on first connection, rejects changed keys on subsequent ones).
-          # Upgrade path: run `ssh-keyscan <DEPLOY_HOST>` once, store the output
-          # as the DEPLOY_KNOWN_HOSTS repository secret, and remove the fallback.
+          # Pin the host key and verify strictly. Prefer the DEPLOY_KNOWN_HOSTS
+          # secret (an out-of-band pinned key, strongest). When it is not set,
+          # scan the key now and pin it for this run, which still rejects a key
+          # that changes mid-run. Either way StrictHostKeyChecking is "yes", so
+          # the connection is never made with host verification disabled.
           if [ -n "${{ secrets.DEPLOY_KNOWN_HOSTS }}" ]; then
             echo "${{ secrets.DEPLOY_KNOWN_HOSTS }}" >> ~/.ssh/known_hosts
-            chmod 600 ~/.ssh/known_hosts
-            STRICT_CHECKING="yes"
           else
-            STRICT_CHECKING="accept-new"
+            ssh-keyscan -H "${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/known_hosts 2>/dev/null
           fi
+          chmod 600 ~/.ssh/known_hosts
+          STRICT_CHECKING="yes"
           echo "Host fairtrail-prod" >> ~/.ssh/config
           echo "  HostName ${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/config
           echo "  User ${{ secrets.DEPLOY_USER }}" >> ~/.ssh/config
