@@ -75,7 +75,9 @@ export default async function AccountPage() {
     <main className={styles.root}>
       <header className={styles.header}>
         <div className={styles.identity}>
-          <Avatar slug={user.avatar} name={user.displayName || user.username} size={48} />
+          <Link href="/account/settings" className={styles.avatarLink} title="Change avatar">
+            <Avatar slug={user.avatar} name={user.displayName || user.username} size={48} />
+          </Link>
           <div>
             <h1 className={styles.title}>{user.displayName || user.username}</h1>
             <p className={styles.subtitle}>@{user.username}</p>

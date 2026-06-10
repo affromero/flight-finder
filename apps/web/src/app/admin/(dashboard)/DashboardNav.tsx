@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { ThemeToggle } from '@/components/ThemeToggle';
+import { ProfileMenu } from '@/components/ProfileMenu/ProfileMenu';
 import styles from './layout.module.css';
 
 const ALL_NAV_ITEMS = [
@@ -21,10 +22,12 @@ const USERS_NAV_ITEM = { href: '/admin/users', label: 'Users' };
 export function DashboardNav({
   isSelfHosted,
   multiUserEnabled = false,
+  user = null,
   children,
 }: {
   isSelfHosted: boolean;
   multiUserEnabled?: boolean;
+  user?: { username: string; displayName: string | null; avatar: string | null } | null;
   children: React.ReactNode;
 }) {
   const pathname = usePathname();
@@ -58,10 +61,14 @@ export function DashboardNav({
           ))}
         </div>
         <ThemeToggle />
-        {showLogout && (
-          <button className={styles.logout} onClick={handleLogout}>
-            Logout
-          </button>
+        {user ? (
+          <ProfileMenu user={user} />
+        ) : (
+          showLogout && (
+            <button className={styles.logout} onClick={handleLogout}>
+              Logout
+            </button>
+          )
         )}
       </nav>
       <main className={styles.main}>{children}</main>

@@ -16,11 +16,15 @@ const isSelfHosted = process.env.SELF_HOSTED === 'true';
 export default async function DashboardLayout({ children }: { children: React.ReactNode }) {
   const multiUserEnabled = await isMultiUserEnabled();
 
+  let currentUser: { username: string; displayName: string | null; avatar: string | null } | null =
+    null;
+
   // In multi user mode, every admin page requires a logged-in admin user.
   if (multiUserEnabled) {
     const user = await getCurrentUser();
     if (!user) redirect('/login?next=/admin');
     if (!user.isAdmin) redirect('/account');
+    currentUser = { username: user.username, displayName: user.displayName, avatar: user.avatar };
   } else if (!isSelfHosted) {
     // Hosted / legacy admin (non multi user): the Edge middleware already
     // verified the admin cookie's HMAC + 7-day expiry, but it cannot reach the
@@ -33,7 +37,7 @@ export default async function DashboardLayout({ children }: { children: React.Re
   }
 
   return (
-    <DashboardNav isSelfHosted={isSelfHosted} multiUserEnabled={multiUserEnabled}>
+    <DashboardNav isSelfHosted={isSelfHosted} multiUserEnabled={multiUserEnabled} user={currentUser}>
       {children}
     </DashboardNav>
   );

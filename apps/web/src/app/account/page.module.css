@@ -22,6 +22,18 @@
   gap: 0.875rem;
 }
 
+.avatarLink {
+  display: inline-flex;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  line-height: 0;
+  transition: border-color 0.12s ease;
+}
+
+.avatarLink:hover {
+  border-color: var(--accent);
+}
+
 .title {
   font-family: var(--font-display);
   font-size: 1.75rem;
