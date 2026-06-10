@@ -10,6 +10,11 @@ on:
   push:
     tags:
       - 'desktop-v*'
+  # Also build on a published GitHub release, so one release ships the web image
+  # (docker.yml) and the desktop installers together. Deploys (SSH) don't trigger
+  # this -- only releases do, since a 3-OS build + sign is too heavy per deploy.
+  release:
+    types: [published]
   workflow_dispatch:
 
 jobs:

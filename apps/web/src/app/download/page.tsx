@@ -26,6 +26,8 @@ const OS_CARDS: OsCard[] = [
   { os: 'Linux', label: 'Linux', patterns: [/\.AppImage$/i, /\.deb$/i, /\.rpm$/i] },
 ];
 
+const INSTALLER_RE = /\.(dmg|exe|msi|AppImage|deb|rpm)$/i;
+
 async function fetchDesktopRelease(): Promise<{ version: string; assets: GhAsset[] } | null> {
   try {
     const res = await fetch(
@@ -34,11 +36,13 @@ async function fetchDesktopRelease(): Promise<{ version: string; assets: GhAsset
     );
     if (!res.ok) return null;
     const releases = (await res.json()) as GhRelease[];
+    // Latest non-draft release that actually ships desktop installers -- works
+    // whether they came from a `desktop-v*` tag or a coupled `v*` release.
     const rel = releases.find(
-      (r) => typeof r.tag_name === 'string' && r.tag_name.startsWith('desktop-v') && !r.draft,
+      (r) => !r.draft && (r.assets ?? []).some((a) => INSTALLER_RE.test(a.name)),
     );
     if (!rel) return null;
-    return { version: rel.tag_name.replace(/^desktop-v/, ''), assets: rel.assets ?? [] };
+    return { version: rel.tag_name.replace(/^(desktop-)?v/, ''), assets: rel.assets ?? [] };
   } catch {
     return null;
   }
