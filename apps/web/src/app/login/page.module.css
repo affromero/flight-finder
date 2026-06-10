@@ -1,6 +1,7 @@
 .root {
   min-height: 100vh;
   display: flex;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 1.5rem;
@@ -11,7 +12,73 @@
   max-width: 360px;
   display: flex;
   flex-direction: column;
+  align-items: center;
   gap: 1rem;
+}
+
+.form .input,
+.form .button {
+  width: 100%;
+}
+
+.loading {
+  color: var(--text-secondary);
+  font-family: var(--font-mono);
+}
+
+.linkButton {
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.25rem;
+}
+
+.linkButton:hover {
+  text-decoration: underline;
+}
+
+.pickerTitle {
+  font-family: var(--font-display);
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--text);
+  text-align: center;
+  margin: 0 0 2rem;
+}
+
+.profiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 1.75rem;
+  max-width: 640px;
+  margin-bottom: 1.5rem;
+}
+
+.profile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.6rem;
+  padding: 0.5rem;
+  background: none;
+  border: 2px solid transparent;
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: transform 0.12s ease, border-color 0.12s ease;
+}
+
+.profile:hover {
+  transform: translateY(-3px);
+  border-color: var(--accent);
+}
+
+.profileName {
+  font-family: var(--font-display);
+  font-size: 0.95rem;
+  color: var(--text);
 }
 
 .title {
