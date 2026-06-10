@@ -7,6 +7,7 @@ import { groupQueries, type GroupableQuery } from '@/lib/query-grouping';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
 import { ForceScrapeButton } from '@/components/ForceScrapeButton';
+import { Avatar } from '@/components/Avatar/Avatar';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -73,9 +74,12 @@ export default async function AccountPage() {
   return (
     <main className={styles.root}>
       <header className={styles.header}>
-        <div>
-          <h1 className={styles.title}>{user.displayName || user.username}</h1>
-          <p className={styles.subtitle}>@{user.username}</p>
+        <div className={styles.identity}>
+          <Avatar slug={user.avatar} name={user.displayName || user.username} size={48} />
+          <div>
+            <h1 className={styles.title}>{user.displayName || user.username}</h1>
+            <p className={styles.subtitle}>@{user.username}</p>
+          </div>
         </div>
         <div className={styles.headerActions}>
           <Link href="/" className={styles.link}>Search</Link>

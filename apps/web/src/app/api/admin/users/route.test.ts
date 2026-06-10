@@ -115,4 +115,18 @@ describe('POST /api/admin/users', () => {
     expect(body.data.user.username).toBe('bob');
     expect(mockCreate).toHaveBeenCalled();
   });
+
+  it('passes a valid preset avatar slug to create', async () => {
+    const res = await POST(makePost({ username: 'bob', password: 'longenough', avatar: 'globe' }));
+    expect(res.status).toBe(201);
+    const args = mockCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.avatar).toBe('globe');
+  });
+
+  it('drops an unknown avatar slug to null', async () => {
+    const res = await POST(makePost({ username: 'bob', password: 'longenough', avatar: 'bogus' }));
+    expect(res.status).toBe(201);
+    const args = mockCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.avatar).toBeNull();
+  });
 });

@@ -38,6 +38,7 @@ export default async function AccountSettingsPage() {
         initial={{
           username: user.username,
           displayName: user.displayName,
+          avatar: user.avatar,
           defaultCurrency: user.defaultCurrency,
           defaultCountry: user.defaultCountry,
           preferredAirlines: user.preferredAirlines,

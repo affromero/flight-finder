@@ -3,6 +3,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './page.module.css';
 import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 
 interface SetupStatus {
   setupComplete: boolean;
@@ -30,6 +31,7 @@ export default function SetupPage() {
   const [multiUserUsername, setMultiUserUsername] = useState('');
   const [multiUserPassword, setMultiUserPassword] = useState('');
   const [multiUserDisplayName, setMultiUserDisplayName] = useState('');
+  const [multiUserAvatar, setMultiUserAvatar] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -160,6 +162,7 @@ export default function SetupPage() {
           adminUsername: username,
           adminPassword: multiUserPassword,
           displayName: multiUserDisplayName.trim() || null,
+          avatar: multiUserAvatar,
         }),
       });
       const muData = await muRes.json();
@@ -418,6 +421,12 @@ export default function SetupPage() {
                   value={multiUserPassword}
                   onChange={(e) => setMultiUserPassword(e.target.value)}
                   autoComplete="new-password"
+                />
+                <label className={styles.avatarLabel}>Profile avatar</label>
+                <AvatarPicker
+                  value={multiUserAvatar}
+                  onChange={setMultiUserAvatar}
+                  name={multiUserDisplayName || multiUserUsername}
                 />
               </>
             )}

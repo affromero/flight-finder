@@ -16,6 +16,12 @@
   gap: 1rem;
 }
 
+.identity {
+  display: flex;
+  align-items: center;
+  gap: 0.875rem;
+}
+
 .title {
   font-family: var(--font-display);
   font-size: 1.75rem;

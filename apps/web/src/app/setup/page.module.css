@@ -255,3 +255,10 @@
   composes: hint;
   color: var(--price-up);
 }
+
+.avatarLabel {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}

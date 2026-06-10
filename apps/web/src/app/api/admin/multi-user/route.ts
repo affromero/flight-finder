@@ -6,6 +6,7 @@ import { invalidateMultiUserCache, isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { requireAdminApi, verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { disableMultiUserMode } from '@/lib/admin-recovery';
+import { isPresetSlug } from '@/lib/avatars';
 
 const MIN_PASSWORD_LENGTH = 8;
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{2,32}$/;
@@ -14,6 +15,7 @@ interface ToggleBody {
   adminUsername?: unknown;
   adminPassword?: unknown;
   displayName?: unknown;
+  avatar?: unknown;
 }
 
 /**
@@ -93,6 +95,7 @@ export async function POST(request: NextRequest) {
     typeof body.displayName === 'string' && body.displayName.trim()
       ? body.displayName.trim()
       : null;
+  const avatar = isPresetSlug(body.avatar) ? body.avatar : null;
 
   if (!USERNAME_PATTERN.test(adminUsername)) {
     return apiError('Username must be 2 to 32 characters of letters, numbers, underscores, dots, or dashes', 400);
@@ -127,6 +130,7 @@ export async function POST(request: NextRequest) {
           displayName,
           passwordHash,
           isAdmin: true,
+          avatar,
         },
       });
 
@@ -152,6 +156,7 @@ export async function POST(request: NextRequest) {
         id: result.user.id,
         username: result.user.username,
         displayName: result.user.displayName,
+        avatar: result.user.avatar,
         isAdmin: result.user.isAdmin,
       },
       backfillCount: result.backfillCount,

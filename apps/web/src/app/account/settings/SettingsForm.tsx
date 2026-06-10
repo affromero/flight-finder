@@ -2,11 +2,13 @@
 
 import { useState } from 'react';
 import { ALL_AGGREGATORS, AGGREGATOR_LABEL, EXPERIMENTAL_AGGREGATORS, type Aggregator } from '@/lib/aggregators';
+import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import styles from './page.module.css';
 
 interface Preferences {
   username: string;
   displayName: string | null;
+  avatar: string | null;
   defaultCurrency: string | null;
   defaultCountry: string | null;
   preferredAirlines: string[];
@@ -33,6 +35,7 @@ export function SettingsForm({
   adminEnabledAggregators: string[];
 }) {
   const [displayName, setDisplayName] = useState(initial.displayName ?? '');
+  const [avatar, setAvatar] = useState<string | null>(initial.avatar);
   const [defaultCurrency, setDefaultCurrency] = useState(initial.defaultCurrency ?? '');
   const [defaultCountry, setDefaultCountry] = useState(initial.defaultCountry ?? '');
   const [preferredAirlines, setPreferredAirlines] = useState(
@@ -91,6 +94,7 @@ export function SettingsForm({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         displayName: displayName.trim() || null,
+        avatar,
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
         preferredAirlines: airlines,
@@ -122,6 +126,11 @@ export function SettingsForm({
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
         />
+      </div>
+
+      <div className={styles.field}>
+        <label className={styles.label}>Profile avatar</label>
+        <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || initial.username} />
       </div>
 
       <div className={styles.field}>
