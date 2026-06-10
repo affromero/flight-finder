@@ -201,32 +201,32 @@ export default function SettingsPage() {
             Pick the interface theme Flight Finder should use across this instance for all users and browsers.
           </p>
 
-          <div className={styles.themeGrid}>
-            {THEME_OPTIONS.map((option) => (
+          {(() => {
+            const pickTheme = async (option: (typeof THEME_OPTIONS)[number]) => {
+              setTheme(option.id);
+              applyTheme(option.id);
+              // Persist immediately so the choice survives a reload (on
+              // self-hosted the server theme wins), instead of waiting for Save.
+              setThemeMessage(`Saving ${option.label}…`);
+              try {
+                const res = await fetch('/api/admin/config', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ theme: option.id }),
+                });
+                const data = await res.json();
+                setThemeMessage(data.ok ? `Theme saved: ${option.label}` : (data.error || 'Failed to save theme'));
+                if (data.ok) setConfig(data.data);
+              } catch {
+                setThemeMessage('Failed to save theme');
+              }
+            };
+            const card = (option: (typeof THEME_OPTIONS)[number]) => (
               <button
                 key={option.id}
                 type="button"
                 className={`${styles.themeCard} ${theme === option.id ? styles.themeCardSelected : ''}`}
-                onClick={async () => {
-                  setTheme(option.id);
-                  applyTheme(option.id);
-                  // Persist immediately so the choice survives a reload (on
-                  // self-hosted the server theme wins), instead of waiting for
-                  // the main Save button.
-                  setThemeMessage(`Saving ${option.label}…`);
-                  try {
-                    const res = await fetch('/api/admin/config', {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ theme: option.id }),
-                    });
-                    const data = await res.json();
-                    setThemeMessage(data.ok ? `Theme saved: ${option.label}` : (data.error || 'Failed to save theme'));
-                    if (data.ok) setConfig(data.data);
-                  } catch {
-                    setThemeMessage('Failed to save theme');
-                  }
-                }}
+                onClick={() => pickTheme(option)}
               >
                 <span
                   className={styles.themeSwatch}
@@ -234,11 +234,22 @@ export default function SettingsPage() {
                   aria-hidden="true"
                 />
                 <span className={styles.themeCardName}>{option.label}</span>
-                <span className={styles.themeCardMeta}>{option.mode === 'light' ? 'Light' : 'Dark'}</span>
                 <span className={styles.themeCardDesc}>{option.description}</span>
               </button>
-            ))}
-          </div>
+            );
+            return (
+              <>
+                <h3 className={styles.themeGroupTitle}>Light</h3>
+                <div className={styles.themeGrid}>
+                  {THEME_OPTIONS.filter((o) => o.mode === 'light').map(card)}
+                </div>
+                <h3 className={styles.themeGroupTitle}>Dark</h3>
+                <div className={styles.themeGrid}>
+                  {THEME_OPTIONS.filter((o) => o.mode === 'dark').map(card)}
+                </div>
+              </>
+            );
+          })()}
 
           {themeMessage && <span className={styles.message}>{themeMessage}</span>}
         </div>

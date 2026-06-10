@@ -421,9 +421,16 @@ export default function ConfigPage() {
               applyTheme(nextTheme);
             }}
           >
-            {THEME_OPTIONS.map((option) => (
-              <option key={option.id} value={option.id}>{option.label}</option>
-            ))}
+            <optgroup label="Light">
+              {THEME_OPTIONS.filter((o) => o.mode === 'light').map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </optgroup>
+            <optgroup label="Dark">
+              {THEME_OPTIONS.filter((o) => o.mode === 'dark').map((option) => (
+                <option key={option.id} value={option.id}>{option.label}</option>
+              ))}
+            </optgroup>
           </select>
         </div>
 
