@@ -3,6 +3,7 @@
 import type { CSSProperties } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, CLI_PROVIDERS } from '@/lib/scraper/ai-registry';
 import { THEME_OPTIONS, applyTheme, type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
@@ -206,10 +207,25 @@ export default function SettingsPage() {
                 key={option.id}
                 type="button"
                 className={`${styles.themeCard} ${theme === option.id ? styles.themeCardSelected : ''}`}
-                onClick={() => {
+                onClick={async () => {
                   setTheme(option.id);
                   applyTheme(option.id);
-                  setThemeMessage(`Theme will be saved as ${option.label}`);
+                  // Persist immediately so the choice survives a reload (on
+                  // self-hosted the server theme wins), instead of waiting for
+                  // the main Save button.
+                  setThemeMessage(`Saving ${option.label}…`);
+                  try {
+                    const res = await fetch('/api/admin/config', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ theme: option.id }),
+                    });
+                    const data = await res.json();
+                    setThemeMessage(data.ok ? `Theme saved: ${option.label}` : (data.error || 'Failed to save theme'));
+                    if (data.ok) setConfig(data.data);
+                  } catch {
+                    setThemeMessage('Failed to save theme');
+                  }
                 }}
               >
                 <span
@@ -747,6 +763,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [avatar, setAvatar] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -776,6 +793,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
         adminUsername: adminUsername.trim(),
         adminPassword,
         displayName: displayName.trim() || null,
+        avatar,
       }),
     });
 
@@ -843,6 +861,8 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
             minLength={8}
             required
           />
+          <label className={styles.toggleHint}>Your avatar</label>
+          <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || adminUsername} />
           {error && <p className={styles.error}>{error}</p>}
           <button
             type="submit"
