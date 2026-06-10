@@ -1,0 +1,81 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Flight Finder</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="head">
+        <img src="flight-finder-mark.svg" alt="" class="mark" width="44" height="44" />
+        <h1>Flight Finder</h1>
+        <p class="tagline">The price trail airlines don't show you.</p>
+      </header>
+
+      <!-- First-launch mode chooser -->
+      <section id="chooser" class="chooser" hidden>
+        <button class="card" id="choose-host">
+          <span class="card-title">Run it on this computer</span>
+          <span class="card-desc">
+            Start a self-hosted Flight Finder here with Docker. Others on your
+            network can connect to it.
+          </span>
+        </button>
+        <button class="card" id="choose-client">
+          <span class="card-title">Connect to an instance</span>
+          <span class="card-desc">
+            Open a Flight Finder running on your VPS in its own window.
+          </span>
+        </button>
+      </section>
+
+      <!-- Host mode -->
+      <section id="host" class="view" hidden>
+        <div class="status">
+          <span id="dot" class="dot dot-idle" aria-hidden="true"></span>
+          <span id="status-text">Checking…</span>
+        </div>
+
+        <div id="host-actions" class="actions" hidden>
+          <button id="install" class="btn btn-primary" hidden>Install &amp; start</button>
+          <button id="start" class="btn btn-primary" hidden>Start</button>
+          <button id="stop" class="btn btn-ghost" hidden>Stop</button>
+          <button id="open" class="btn btn-secondary" hidden>Open</button>
+        </div>
+
+        <div id="needs-docker" class="notice" hidden>
+          Docker isn't available. Install Docker Desktop (or Podman) and start it,
+          then reopen this app.
+          <a href="https://docs.docker.com/desktop/" target="_blank" rel="noreferrer">Get Docker</a>
+        </div>
+
+        <button class="link switch" data-switch>Switch mode</button>
+      </section>
+
+      <!-- Client mode -->
+      <section id="client" class="view" hidden>
+        <label class="field-label" for="server-url">Your Flight Finder URL</label>
+        <input
+          id="server-url"
+          class="input"
+          type="url"
+          inputmode="url"
+          autocomplete="url"
+          placeholder="https://flights.yourdomain.org"
+        />
+        <p class="hint">
+          Use the https URL of your instance. For the install-on-your-phone
+          experience the URL must be https — a domain with Caddy, or a Tailscale
+          or Cloudflare tunnel.
+        </p>
+        <button id="connect" class="btn btn-primary">Connect</button>
+        <p id="client-error" class="error" hidden></p>
+
+        <button class="link switch" data-switch>Switch mode</button>
+      </section>
+    </main>
+    <script src="main.js"></script>
+  </body>
+</html>
