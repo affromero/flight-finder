@@ -52,8 +52,9 @@ npm run build       # produce an installer for the current OS
 - **Source** lives here; the desktop app is **excluded from the npm workspaces**
   and from `npm run ci` (it is a Rust/Cargo build driven by the release
   workflow, not root CI).
-- Versioned independently from the web app under `desktop-v*` tags, so a desktop
-  release never collides with the `vX.Y.Z` tags that drive the web/GHCR release.
+- Shares the web app's version number (locked across all packages), tagged
+  `desktop-v*` so a desktop release uses a distinct tag prefix from the `vX.Y.Z`
+  web/GHCR release and never collides.
 - Code signing / notarization (Apple Developer ID, Windows Authenticode) needs
   certificates added as the Tauri signing secrets documented at
   https://tauri.app/distribute/ before enabling signed release builds.

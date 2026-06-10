@@ -18,9 +18,9 @@
 ## Monorepo
 
 npm workspaces: `@flight-finder/web` (`apps/web/`), `@flight-finder/cli` (`packages/cli/`).
-Root `package.json` proxies common scripts to `@flight-finder/web`.
+Root `package.json` proxies common scripts to `@flight-finder/web`. `apps/desktop/` is a Tauri (Rust) launcher: deliberately NOT an npm workspace member and excluded from `npm run ci`; it is built only by `.github/workflows/desktop-release.yml`.
 
-**Versioning:** the release version of record is `apps/web/package.json` (git tags `vX.Y.Z` track it). The root `package.json` version is not published, but release tooling reads it, so bump it to match `apps/web` on every release (`/create-release` must update both, plus the lockfile). `packages/cli` is versioned independently.
+**Versioning (locked):** `apps/web`, the root `package.json`, `packages/cli`, and `apps/desktop` all carry the SAME version number. `apps/web/package.json` is the source of truth; git tags `vX.Y.Z` track the web release and `desktop-vX.Y.Z` tags the desktop build at the same number (distinct prefixes, no collision). `/create-release` must bump all of them to the new version — `apps/web/package.json`, root `package.json`, `packages/cli/package.json`, and `apps/desktop` (its `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`) — and regenerate both lockfiles (`package-lock.json` and `apps/desktop/src-tauri/Cargo.lock`).
 
 ## Environment Variables
 
@@ -206,7 +206,7 @@ All four tests must pass before tagging a release:
 
 If any fails, fix the issue and re-run. Do NOT tag without all four passing.
 
-The release commit must bump both `apps/web/package.json` and the root `package.json` to the new version (and regenerate `package-lock.json`) so the root version stays accurate for tooling that reads it.
+The release commit must bump every package to the same new version — `apps/web/package.json`, the root `package.json`, `packages/cli/package.json`, and `apps/desktop` (`package.json`, `src-tauri/Cargo.toml`, `src-tauri/tauri.conf.json`) — and regenerate both lockfiles (`package-lock.json` and `apps/desktop/src-tauri/Cargo.lock`), so every version stays accurate for tooling that reads them.
 
 The runtime-matrix harness (`cli-runtime-test.sh`) is what catches the
 "works on docker, broken on podman" class of bug (issues #62, #72). It
