@@ -14,13 +14,29 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { adminPassword, provider, model, communitySharing, customBaseUrl } = body as {
+  const { adminPassword, provider, model, communitySharing, customBaseUrl, publicBaseUrl } = body as {
     adminPassword: string;
     provider: string;
     model: string;
     communitySharing?: boolean;
     customBaseUrl?: string | null;
+    publicBaseUrl?: string | null;
   };
+
+  // Optional public URL the user plans to reach the instance at (for /connect's
+  // QR and notification deep links). Validate it's a real http(s) URL or null.
+  let normalizedPublicBaseUrl: string | null = null;
+  if (typeof publicBaseUrl === 'string' && publicBaseUrl.trim()) {
+    try {
+      const u = new URL(publicBaseUrl.trim());
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') {
+        return apiError('publicBaseUrl must be an http(s) URL', 400);
+      }
+      normalizedPublicBaseUrl = u.toString().replace(/\/+$/, '');
+    } catch {
+      return apiError('publicBaseUrl must be a valid URL', 400);
+    }
+  }
 
   const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
@@ -57,6 +73,7 @@ export async function POST(request: Request) {
       communitySharing: communitySharing && communityApiKey !== null,
       communityApiKey,
       customBaseUrl: customBaseUrl || null,
+      publicBaseUrl: normalizedPublicBaseUrl,
     },
     update: {
       provider,
@@ -65,6 +82,7 @@ export async function POST(request: Request) {
       communitySharing: communitySharing && communityApiKey !== null,
       communityApiKey,
       customBaseUrl: customBaseUrl || null,
+      publicBaseUrl: normalizedPublicBaseUrl,
     },
   });
 

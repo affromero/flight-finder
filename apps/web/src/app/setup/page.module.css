@@ -262,3 +262,15 @@
   color: var(--text-secondary);
   margin-top: 0.25rem;
 }
+
+.reachList {
+  margin: 0.75rem 0 0;
+  padding-left: 1.1rem;
+  color: var(--text-secondary);
+  font-size: 0.82rem;
+  line-height: 1.6;
+}
+
+.reachList strong {
+  color: var(--text);
+}

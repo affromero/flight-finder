@@ -32,6 +32,7 @@ export default function SetupPage() {
   const [multiUserPassword, setMultiUserPassword] = useState('');
   const [multiUserDisplayName, setMultiUserDisplayName] = useState('');
   const [multiUserAvatar, setMultiUserAvatar] = useState<string | null>(null);
+  const [publicBaseUrl, setPublicBaseUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -132,13 +133,27 @@ export default function SetupPage() {
       return;
     }
 
-    // Final step: complete setup (hosted: step 2, self hosted: step 3)
+    if (step === 3 && status?.isSelfHosted) {
+      // Validate the account fields here before moving to the reach step, so
+      // bad credentials are caught before the final submit.
+      if (enableMultiUser) {
+        const username = multiUserUsername.trim();
+        if (!username || multiUserPassword.length < 8) {
+          setError('Username required and password must be at least 8 characters');
+          return;
+        }
+      }
+      setStep(4);
+      return;
+    }
+
+    // Final step: complete setup (hosted: step 2, self hosted: step 4)
     const effectiveModel = customModel.trim() || model;
     setLoading(true);
     const res = await fetch('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, communitySharing, customBaseUrl: customBaseUrl.trim() || null }),
+      body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, communitySharing, customBaseUrl: customBaseUrl.trim() || null, publicBaseUrl: publicBaseUrl.trim() || null }),
     });
 
     if (!res.ok) {
@@ -201,9 +216,10 @@ export default function SetupPage() {
     'Choose your LLM provider',
     'Join the community',
     'Multi user mode (optional)',
+    'Use it on other devices',
   ];
 
-  const isFinalStep = isSelfHosted ? step === 3 : step === 2;
+  const isFinalStep = isSelfHosted ? step === 4 : step === 2;
   const submitLabel = loading
     ? 'Setting up...'
     : isFinalStep
@@ -230,6 +246,8 @@ export default function SetupPage() {
             <>
               <span className={styles.stepDivider}>/</span>
               <span className={`${styles.step} ${step >= 3 ? styles.active : ''}`}>3. Accounts</span>
+              <span className={styles.stepDivider}>/</span>
+              <span className={`${styles.step} ${step >= 4 ? styles.active : ''}`}>4. Reach</span>
             </>
           )}
         </div>
@@ -432,6 +450,40 @@ export default function SetupPage() {
             )}
             <p className={styles.communityHint}>
               You can enable this later from the admin Settings page.
+            </p>
+          </div>
+        )}
+
+        {step === 4 && isSelfHosted && (
+          <div className={styles.fields}>
+            <div className={styles.communityCard}>
+              <h3 className={styles.communityTitle}>Use it on your phone or share it?</h3>
+              <p className={styles.communityText}>
+                Flight Finder runs on this machine. To open it on a phone (and
+                install it as an app) or let other people connect, expose it over
+                https. You pick how when you install or from the desktop app:
+              </p>
+              <ul className={styles.reachList}>
+                <li><strong>This computer only</strong> — the default; nothing is exposed.</li>
+                <li><strong>Local network</strong> — other devices on your WiFi (http).</li>
+                <li><strong>Tailscale</strong> — a private https URL, no public exposure.</li>
+                <li><strong>Cloudflare tunnel</strong> — a quick public https URL, no account.</li>
+                <li><strong>Domain + Caddy</strong> — a permanent https URL on your own domain.</li>
+              </ul>
+            </div>
+            <label className={styles.avatarLabel} htmlFor="publicBaseUrl">Public URL (optional)</label>
+            <input
+              id="publicBaseUrl"
+              type="url"
+              className={styles.input}
+              placeholder="https://flights.yourdomain.org"
+              value={publicBaseUrl}
+              onChange={(e) => setPublicBaseUrl(e.target.value)}
+            />
+            <p className={styles.communityHint}>
+              If you already have a domain, tunnel, or tailnet URL, paste it so the
+              QR code and price alerts use it. Change it later anytime; see the
+              phone steps at /connect.
             </p>
           </div>
         )}
