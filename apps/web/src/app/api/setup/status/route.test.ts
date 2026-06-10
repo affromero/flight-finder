@@ -69,7 +69,7 @@ describe('GET /api/setup/status -- information disclosure', () => {
 
   it('returns setupComplete=true when SELF_HOSTED and provider is configured', async () => {
     process.env.SELF_HOSTED = 'true';
-    mockFindFirst.mockResolvedValue({ id: 'singleton', provider: 'ollama' });
+    mockFindFirst.mockResolvedValue({ id: 'singleton', provider: 'ollama', adminPasswordHash: 'self-hosted' });
     const res = await GET();
     const body = await res.json();
     expect(body.setupComplete).toBe(true);
@@ -108,7 +108,7 @@ describe('GET /api/setup/status -- information disclosure', () => {
 
   it('stops exposing provider detection once setup is complete (self-hosted)', async () => {
     process.env.SELF_HOSTED = 'true';
-    mockFindFirst.mockResolvedValue({ id: 'singleton', provider: 'ollama' });
+    mockFindFirst.mockResolvedValue({ id: 'singleton', provider: 'ollama', adminPasswordHash: 'self-hosted' });
     const res = await GET();
     const body = await res.json();
     expect(body).not.toHaveProperty('detectedProviders');

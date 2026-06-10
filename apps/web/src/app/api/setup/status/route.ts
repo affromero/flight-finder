@@ -7,9 +7,12 @@ export async function GET() {
   });
 
   const isSelfHosted = process.env.SELF_HOSTED === 'true';
-  const setupComplete = isSelfHosted
-    ? Boolean(config?.provider)
-    : Boolean(config?.adminPasswordHash);
+  // Setup is complete once the explicit setup flow has run -- it always sets
+  // adminPasswordHash ('self-hosted' sentinel on self-hosted). Do NOT key off
+  // provider: it is a NOT NULL column with a default ("anthropic"), so any
+  // config row (e.g. one created by the admin-config GET upsert before setup)
+  // would otherwise look complete and wrongly skip the wizard / hide detection.
+  const setupComplete = Boolean(config?.adminPasswordHash);
 
   // Once setup is complete the instance is configured and may be publicly
   // reachable, so expose only the two booleans the setup wizard and
