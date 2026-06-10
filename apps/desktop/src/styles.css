@@ -17,6 +17,13 @@
   box-sizing: border-box;
 }
 
+/* `.view`/`.chooser` set display:flex, which would otherwise win over the UA
+   `[hidden] { display: none }` rule (author class beats UA), leaving every
+   view visible at once. Force hidden to win so view switching works. */
+[hidden] {
+  display: none !important;
+}
+
 html,
 body {
   margin: 0;
