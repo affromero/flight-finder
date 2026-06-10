@@ -136,8 +136,8 @@ export default function SetupPage() {
     if (step === 3 && status?.isSelfHosted) {
       // Validate the account fields here before moving to the reach step, so
       // bad credentials are caught before the final submit.
-      if (enableMultiUser && multiUserPassword.length < 8) {
-        setError('Password must be at least 8 characters');
+      if (enableMultiUser && multiUserPassword && multiUserPassword.length < 8) {
+        setError('Password must be at least 8 characters (or leave it blank)');
         return;
       }
       setStep(4);
@@ -162,8 +162,8 @@ export default function SetupPage() {
 
     if (status?.isSelfHosted && enableMultiUser) {
       const username = multiUserUsername.trim();
-      if (multiUserPassword.length < 8) {
-        setError('Password must be at least 8 characters');
+      if (multiUserPassword && multiUserPassword.length < 8) {
+        setError('Password must be at least 8 characters (or leave it blank)');
         setLoading(false);
         return;
       }
@@ -432,11 +432,16 @@ export default function SetupPage() {
                 <input
                   type="password"
                   className={styles.input}
-                  placeholder="Admin password (8+ chars)"
+                  placeholder="Admin password (optional — leave blank for no password)"
                   value={multiUserPassword}
                   onChange={(e) => setMultiUserPassword(e.target.value)}
                   autoComplete="new-password"
                 />
+                <p className={styles.communityHint}>
+                  Leave the password blank for a Netflix-style household: everyone just
+                  taps their face to sign in. Add a password only if this instance will
+                  be reachable from the public internet.
+                </p>
                 <label className={styles.avatarLabel}>Profile avatar</label>
                 <AvatarPicker
                   value={multiUserAvatar}

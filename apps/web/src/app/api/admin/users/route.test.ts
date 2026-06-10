@@ -137,9 +137,11 @@ describe('POST /api/admin/users', () => {
     expect(args.data.passwordHash).toBeNull();
   });
 
-  it('requires a password for admins (no passwordless admin)', async () => {
+  it('allows a passwordless admin (self-hosted is already open)', async () => {
     const res = await POST(makePost({ username: 'boss', isAdmin: true }));
-    expect(res.status).toBe(400);
-    expect(mockCreate).not.toHaveBeenCalled();
+    expect(res.status).toBe(201);
+    const args = mockCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.passwordHash).toBeNull();
+    expect(args.data.isAdmin).toBe(true);
   });
 });

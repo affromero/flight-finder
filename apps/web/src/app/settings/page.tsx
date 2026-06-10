@@ -853,13 +853,15 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
           <input
             type="password"
             className={styles.input}
-            placeholder="Admin password (8+ chars)"
+            placeholder="Admin password (optional — blank = no password)"
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
             autoComplete="new-password"
-            minLength={8}
-            required
           />
+          <p className={styles.toggleHint}>
+            Leave blank for a Netflix-style household where everyone taps to sign in. Add
+            a password only if this instance is reachable from the public internet.
+          </p>
           <label className={styles.toggleHint}>Your avatar</label>
           <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || adminUsername} />
           {error && <p className={styles.error}>{error}</p>}

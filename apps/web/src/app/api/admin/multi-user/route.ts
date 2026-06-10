@@ -102,11 +102,12 @@ export async function POST(request: NextRequest) {
   if (!USERNAME_PATTERN.test(adminUsername)) {
     return apiError('Username must be 2 to 32 characters of letters, numbers, underscores, dots, or dashes', 400);
   }
-  if (adminPassword.length < MIN_PASSWORD_LENGTH) {
+  // Password is optional (passwordless instance). A given one must be strong.
+  if (adminPassword && adminPassword.length < MIN_PASSWORD_LENGTH) {
     return apiError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400);
   }
 
-  const passwordHash = await hashPassword(adminPassword);
+  const passwordHash = adminPassword ? await hashPassword(adminPassword) : null;
 
   let result;
   try {

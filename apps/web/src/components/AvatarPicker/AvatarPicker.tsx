@@ -14,7 +14,7 @@ interface AvatarPickerProps {
 }
 
 /** A grid of preset avatars plus an initials option, for account/admin/setup. */
-export function AvatarPicker({ value, onChange, name, size = 44 }: AvatarPickerProps) {
+export function AvatarPicker({ value, onChange, name, size = 72 }: AvatarPickerProps) {
   return (
     <div className={styles.root} role="radiogroup" aria-label="Choose a profile avatar">
       <button
