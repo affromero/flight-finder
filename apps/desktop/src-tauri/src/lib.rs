@@ -52,6 +52,17 @@ fn augmented_path() -> String {
     parts.join(":")
 }
 
+/// An OS-appropriate hint for installing a command-line tool the user is missing.
+fn install_hint(tool: &str) -> String {
+    if cfg!(target_os = "macos") {
+        format!("install it with: brew install {tool}")
+    } else if cfg!(target_os = "windows") {
+        format!("install it with: winget install {tool} (or see its downloads page)")
+    } else {
+        format!("install {tool} with your package manager (apt/dnf/pacman) or its downloads page")
+    }
+}
+
 /// Resolve a binary to an absolute path using the augmented PATH.
 fn which(name: &str) -> Option<String> {
     for dir in augmented_path().split(':') {
@@ -194,9 +205,8 @@ fn lan_url(port: u16) -> Option<String> {
 /// file (not a pipe) so cloudflared never blocks on a full stderr buffer.
 #[tauri::command]
 fn start_tunnel(app: tauri::AppHandle, port: u16) -> Result<String, String> {
-    let cloudflared = which("cloudflared").ok_or(
-        "cloudflared isn't installed. Install it (macOS: brew install cloudflared) and try again.",
-    )?;
+    let cloudflared = which("cloudflared")
+        .ok_or_else(|| format!("cloudflared isn't installed -- {}, then try again.", install_hint("cloudflared")))?;
 
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;

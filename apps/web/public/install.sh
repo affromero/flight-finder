@@ -952,7 +952,13 @@ case "$REACH_CHOICE" in
       cloudflared tunnel --url "http://localhost:${HOST_PORT}" || warn "Tunnel exited."
     else
       warn "cloudflared isn't installed."
-      printf "  ${DIM}Install it (macOS: ${RESET}${BOLD}brew install cloudflared${RESET}${DIM}; Linux: Cloudflare docs), then:${RESET}\n"
+      if [ "$OS" = "macos" ]; then
+        printf "  ${DIM}Install it: ${RESET}${BOLD}brew install cloudflared${RESET}${DIM}, then:${RESET}\n"
+      elif [ "$DISTRO_FAMILY" = "arch" ]; then
+        printf "  ${DIM}Install it: ${RESET}${BOLD}sudo pacman -S cloudflared${RESET}${DIM}, then:${RESET}\n"
+      else
+        printf "  ${DIM}Install it (see ${RESET}${UNDERLINE}https://developers.cloudflare.com/cloudflare-one/connections/connect-networks/downloads/${RESET}${DIM}), then:${RESET}\n"
+      fi
       printf "    ${BOLD}cloudflared tunnel --url http://localhost:${HOST_PORT}${RESET}\n"
     fi
     ;;
@@ -961,7 +967,11 @@ case "$REACH_CHOICE" in
     if command -v tailscale &>/dev/null; then
       printf "  ${DIM}Run:${RESET} ${BOLD}tailscale serve ${HOST_PORT}${RESET} ${DIM}(or ${RESET}${BOLD}tailscale funnel ${HOST_PORT}${RESET}${DIM} to expose publicly).${RESET}\n"
     else
-      printf "  ${DIM}Install Tailscale here and on your phone (https://tailscale.com/download), then:${RESET}\n"
+      if [ "$OS" = "macos" ]; then
+        printf "  ${DIM}Install Tailscale: ${RESET}${BOLD}brew install tailscale${RESET}${DIM} (and the app on your phone), then:${RESET}\n"
+      else
+        printf "  ${DIM}Install Tailscale: ${RESET}${BOLD}curl -fsSL https://tailscale.com/install.sh | sh${RESET}${DIM} (and the app on your phone), then:${RESET}\n"
+      fi
       printf "    ${BOLD}tailscale serve ${HOST_PORT}${RESET}\n"
     fi
     ;;
