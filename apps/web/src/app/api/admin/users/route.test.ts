@@ -129,4 +129,17 @@ describe('POST /api/admin/users', () => {
     const args = mockCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
     expect(args.data.avatar).toBeNull();
   });
+
+  it('creates a passwordless member when no password is given', async () => {
+    const res = await POST(makePost({ username: 'guest1' }));
+    expect(res.status).toBe(201);
+    const args = mockCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.passwordHash).toBeNull();
+  });
+
+  it('requires a password for admins (no passwordless admin)', async () => {
+    const res = await POST(makePost({ username: 'boss', isAdmin: true }));
+    expect(res.status).toBe(400);
+    expect(mockCreate).not.toHaveBeenCalled();
+  });
 });

@@ -24,8 +24,9 @@ export async function POST(request: NextRequest) {
   const username = typeof body?.username === 'string' ? body.username.trim() : '';
   const password = typeof body?.password === 'string' ? body.password : '';
 
-  if (!username || !password) {
-    return apiError('Missing username or password', 400);
+  // Password is optional: passwordless members (passwordHash null) tap to sign in.
+  if (!username) {
+    return apiError('Missing username', 400);
   }
 
   const ip = getClientIp(request);
@@ -52,10 +53,14 @@ export async function POST(request: NextRequest) {
     return apiError('Invalid username or password', 401);
   }
 
-  const ok = await verifyHashedPassword(password, user.passwordHash);
-  if (!ok) {
-    await incrementAuthFailure(rateKey);
-    return apiError('Invalid username or password', 401);
+  // Passwordless members (passwordHash null) sign in directly; everyone with a
+  // password must present a valid one.
+  if (user.passwordHash !== null) {
+    const ok = await verifyHashedPassword(password, user.passwordHash);
+    if (!ok) {
+      await incrementAuthFailure(rateKey);
+      return apiError('Invalid username or password', 401);
+    }
   }
 
   await clearAuthFailures(rateKey);

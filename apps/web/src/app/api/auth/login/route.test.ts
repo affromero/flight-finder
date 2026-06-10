@@ -79,9 +79,18 @@ describe('POST /api/auth/login', () => {
     expect(res.status).toBe(404);
   });
 
-  it('rejects missing fields with 400', async () => {
-    const res = await POST(makeRequest({ username: 'alice' }));
+  it('rejects a missing username with 400 (password is optional)', async () => {
+    const res = await POST(makeRequest({ password: 'x' }));
     expect(res.status).toBe(400);
+  });
+
+  it('signs in a passwordless member without checking a password', async () => {
+    mockFindUnique.mockResolvedValue({ id: 'u9', username: 'guest1', passwordHash: null, isAdmin: false, displayName: 'Guest 1' });
+    mockCreateUserSessionToken.mockReturnValue('tok');
+    const res = await POST(makeRequest({ username: 'guest1', password: '' }));
+    expect(res.status).toBe(200);
+    expect(mockVerifyHashed).not.toHaveBeenCalled();
+    expect(mockSetSessionCookie).toHaveBeenCalledWith('tok');
   });
 
   it('rejects unknown user with 401 and bumps failure counter', async () => {

@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { Avatar } from '@/components/Avatar/Avatar';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
+import { FLIGHT_AVATARS } from '@/lib/avatars';
 import styles from './page.module.css';
 
 interface UserRow {
@@ -67,6 +68,21 @@ export function UsersClient({ initialUsers }: Props) {
     }
   };
 
+  // One-tap passwordless member with a generic name and an auto-assigned avatar.
+  const handleQuickAddGuest = async () => {
+    const taken = new Set(users.map((u) => u.username));
+    let n = 1;
+    while (taken.has(`guest${n}`)) n += 1;
+    const avatar = FLIGHT_AVATARS[(users.length) % FLIGHT_AVATARS.length]!.slug;
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `guest${n}`, displayName: `Guest ${n}`, password: '', avatar }),
+    });
+    if (res.ok) await refresh();
+    else alert((await res.json()).error || 'Failed to add guest');
+  };
+
   const handleDelete = async (id: string, username: string) => {
     if (!confirm(`Delete user ${username}? Their trackers will become unowned.`)) return;
     const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
@@ -127,6 +143,10 @@ export function UsersClient({ initialUsers }: Props) {
       )}
 
       <AddUserForm onCreated={refresh} />
+
+      <button type="button" className={styles.action} onClick={handleQuickAddGuest}>
+        + Add a guest (no password)
+      </button>
 
       <div className={styles.list}>
         {users.length === 0 ? (
@@ -239,12 +259,12 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
         <input
           className={styles.input}
           type="password"
-          placeholder="Password (8+ chars)"
+          placeholder={isAdmin ? 'Password (8+ chars)' : 'Password (optional)'}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
-          minLength={8}
-          required
+          minLength={isAdmin ? 8 : undefined}
+          required={isAdmin}
         />
         <label className={styles.checkboxLabel}>
           <input
@@ -256,6 +276,11 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
         </label>
       </div>
       <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || username} />
+      <p className={styles.rowMeta}>
+        Leave the password blank for a tap-to-sign-in member. Anyone who can reach this
+        instance can sign in as a passwordless member, so add a password if it&apos;s public.
+        Admins always need a password.
+      </p>
       {error && <p className={styles.error}>{error}</p>}
       <button type="submit" className={styles.primaryButton} disabled={submitting}>
         {submitting ? 'Adding...' : 'Add user'}

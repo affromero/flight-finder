@@ -56,14 +56,19 @@ export async function POST(request: NextRequest) {
   if (!USERNAME_PATTERN.test(username)) {
     return apiError('Username must be 2 to 32 characters of letters, numbers, underscores, dots, or dashes', 400);
   }
-  if (password.length < MIN_PASSWORD_LENGTH) {
+  // Members can be passwordless (tap-to-sign-in). A given password must still be
+  // strong, and admins must always have one so the instance can't be taken over.
+  if (password && password.length < MIN_PASSWORD_LENGTH) {
     return apiError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400);
+  }
+  if (isAdmin && !password) {
+    return apiError('Admins must have a password', 400);
   }
 
   const existing = await prisma.user.findUnique({ where: { username }, select: { id: true } });
   if (existing) return apiError('Username already taken', 409);
 
-  const passwordHash = await hashPassword(password);
+  const passwordHash = password ? await hashPassword(password) : null;
   const user = await prisma.user.create({
     data: { username, displayName, passwordHash, isAdmin, avatar },
     select: { id: true, username: true, displayName: true, avatar: true, isAdmin: true, createdAt: true },

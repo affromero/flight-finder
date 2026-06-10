@@ -14,9 +14,17 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   if (!(await isMultiUserEnabled())) return apiError('Not found', 404);
 
-  const profiles = await prisma.user.findMany({
+  const users = await prisma.user.findMany({
     orderBy: [{ isAdmin: 'desc' }, { username: 'asc' }],
-    select: { id: true, username: true, displayName: true, avatar: true },
+    select: { id: true, username: true, displayName: true, avatar: true, passwordHash: true },
   });
+  // passwordHash is read only to derive hasPassword -- it never leaves the server.
+  const profiles = users.map((u) => ({
+    id: u.id,
+    username: u.username,
+    displayName: u.displayName,
+    avatar: u.avatar,
+    hasPassword: u.passwordHash !== null,
+  }));
   return apiSuccess({ profiles });
 }

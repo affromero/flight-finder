@@ -14,6 +14,7 @@ interface Profile {
   username: string;
   displayName: string | null;
   avatar: string | null;
+  hasPassword: boolean;
 }
 
 interface LoginResponse {
@@ -176,8 +177,10 @@ export function LoginForm({ next }: Props) {
               type="button"
               className={styles.profile}
               onClick={() => {
-                setSelected(p);
                 setError('');
+                // Passwordless members tap straight in; the rest get a password screen.
+                if (p.hasPassword) setSelected(p);
+                else submit(p.username);
               }}
             >
               <Avatar slug={p.avatar} name={name} size={104} />

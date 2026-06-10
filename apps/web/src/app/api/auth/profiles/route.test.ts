@@ -28,7 +28,7 @@ describe('GET /api/auth/profiles', () => {
   it('returns the profile list when multi user mode is on', async () => {
     mockIsMultiUserEnabled.mockResolvedValue(true);
     mockFindMany.mockResolvedValue([
-      { id: 'u1', username: 'andres', displayName: 'Andres', avatar: 'globe' },
+      { id: 'u1', username: 'andres', displayName: 'Andres', avatar: 'globe', passwordHash: 'h' },
     ]);
     const res = await GET();
     expect(res.status).toBe(200);
@@ -37,13 +37,18 @@ describe('GET /api/auth/profiles', () => {
     expect(body.data.profiles[0].avatar).toBe('globe');
   });
 
-  it('selects only safe fields -- never the password hash', async () => {
+  it('derives hasPassword and never leaks the hash in the response', async () => {
     mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockFindMany.mockResolvedValue([]);
-    await GET();
-    const select = (mockFindMany.mock.calls[0]![0] as { select: Record<string, unknown> }).select;
-    expect(select.passwordHash).toBeUndefined();
-    expect(select.id).toBe(true);
-    expect(select.avatar).toBe(true);
+    mockFindMany.mockResolvedValue([
+      { id: 'u1', username: 'a', displayName: 'A', avatar: null, passwordHash: 'secrethash' },
+      { id: 'u2', username: 'b', displayName: 'B', avatar: 'globe', passwordHash: null },
+    ]);
+    const res = await GET();
+    const body = await res.json();
+    expect(body.data.profiles[0].hasPassword).toBe(true);
+    expect(body.data.profiles[1].hasPassword).toBe(false);
+    const str = JSON.stringify(body);
+    expect(str).not.toContain('passwordHash');
+    expect(str).not.toContain('secrethash');
   });
 });

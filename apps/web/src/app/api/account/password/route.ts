@@ -42,10 +42,14 @@ export async function POST(request: NextRequest) {
     return apiError(`New password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400);
   }
 
-  const valid = await verifyHashedPassword(currentPassword, user.passwordHash);
-  if (!valid) {
-    await incrementAuthFailure(rlKey);
-    return apiError('Current password is incorrect', 403);
+  // A passwordless member has no current password to verify -- this is them
+  // setting one for the first time. Everyone else must present the current one.
+  if (user.passwordHash !== null) {
+    const valid = await verifyHashedPassword(currentPassword, user.passwordHash);
+    if (!valid) {
+      await incrementAuthFailure(rlKey);
+      return apiError('Current password is incorrect', 403);
+    }
   }
 
   const passwordHash = await hashPassword(newPassword);
