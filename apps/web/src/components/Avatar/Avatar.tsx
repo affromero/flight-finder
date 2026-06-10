@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, type CSSProperties } from 'react';
+import { useState, useEffect, useRef, type CSSProperties } from 'react';
 import { avatarImagePath, getAvatar } from '@/lib/avatars';
 import styles from './Avatar.module.css';
 
@@ -29,9 +29,21 @@ function initialsOf(name: string | null | undefined): string {
  */
 export function Avatar({ slug, name, size = 40, className }: AvatarProps) {
   const [imgFailed, setImgFailed] = useState(false);
+  const imgRef = useRef<HTMLImageElement>(null);
   const preset = getAvatar(slug);
   const imgPath = avatarImagePath(slug);
   const label = preset?.name ?? name ?? 'avatar';
+
+  // The image is server-rendered, so a 404 (e.g. the preset PNGs aren't
+  // generated yet) can fire before React hydrates and attaches onError. Catch
+  // that already-failed case on mount so we fall back to the emoji tile instead
+  // of leaving a broken image.
+  useEffect(() => {
+    const img = imgRef.current;
+    if (img && img.complete && img.naturalWidth === 0) {
+      setImgFailed(true);
+    }
+  }, [imgPath]);
 
   const style = {
     width: size,
@@ -45,6 +57,7 @@ export function Avatar({ slug, name, size = 40, className }: AvatarProps) {
       <span className={`${styles.root} ${className ?? ''}`} style={style}>
         {/* Static public asset with an onError emoji fallback; next/image cannot express that. */}
         <img
+          ref={imgRef}
           src={imgPath}
           alt={label}
           className={styles.img}
