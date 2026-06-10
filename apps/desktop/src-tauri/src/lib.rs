@@ -27,24 +27,62 @@ fn install_dir() -> PathBuf {
     PathBuf::from(home).join(".flight-finder")
 }
 
-/// Prefer the docker CLI, fall back to podman -- the installer supports both.
-fn container_cmd() -> Option<&'static str> {
-    for cmd in ["docker", "podman"] {
-        let ok = Command::new(cmd)
-            .arg("--version")
-            .output()
-            .map(|o| o.status.success())
-            .unwrap_or(false);
-        if ok {
-            return Some(cmd);
+/// macOS (and Linux) GUI apps launched from Finder/the dock do NOT inherit the
+/// shell PATH -- they get a minimal one (e.g. /usr/bin:/bin:/usr/sbin:/sbin), so
+/// docker/podman/cloudflared installed in /usr/local/bin or /opt/homebrew/bin
+/// are invisible. Build a PATH that includes the common install locations and
+/// apply it to every spawned command.
+fn augmented_path() -> String {
+    let mut parts: Vec<String> = [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    if let Ok(existing) = std::env::var("PATH") {
+        if !existing.is_empty() {
+            parts.push(existing);
+        }
+    }
+    parts.join(":")
+}
+
+/// Resolve a binary to an absolute path using the augmented PATH.
+fn which(name: &str) -> Option<String> {
+    for dir in augmented_path().split(':') {
+        if dir.is_empty() {
+            continue;
+        }
+        let candidate = std::path::Path::new(dir).join(name);
+        if candidate.is_file() {
+            return Some(candidate.to_string_lossy().into_owned());
         }
     }
     None
 }
 
+/// A Command with the augmented PATH applied, so the spawned process and its
+/// children (the docker compose plugin, curl, etc.) resolve correctly.
+fn command(program: &str) -> Command {
+    let mut c = Command::new(program);
+    c.env("PATH", augmented_path());
+    c
+}
+
+/// Prefer the docker CLI, fall back to podman -- the installer supports both.
+/// Returns the absolute path so it works without the shell PATH.
+fn container_cmd() -> Option<String> {
+    which("docker").or_else(|| which("podman"))
+}
+
 /// Run `<docker|podman> compose <args>` inside the install dir.
 fn compose(cmd: &str, args: &[&str]) -> std::io::Result<std::process::Output> {
-    Command::new(cmd)
+    command(cmd)
         .arg("compose")
         .args(args)
         .current_dir(install_dir())
@@ -68,7 +106,7 @@ fn installed() -> bool {
 fn install_stack() -> Result<String, String> {
     let script =
         "curl -fsSL https://flight-finder.org/install.sh | FLIGHT_FINDER_YES=1 FLIGHT_FINDER_OPEN_BROWSER=0 bash";
-    let out = Command::new("bash")
+    let out = command("/bin/bash")
         .arg("-lc")
         .arg(script)
         .output()
@@ -83,7 +121,7 @@ fn install_stack() -> Result<String, String> {
 #[tauri::command]
 fn start_stack() -> Result<String, String> {
     let cmd = container_cmd().ok_or("Docker or Podman is required.")?;
-    let out = compose(cmd, &["up", "-d"]).map_err(|e| e.to_string())?;
+    let out = compose(&cmd, &["up", "-d"]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok("started".into())
     } else {
@@ -94,7 +132,7 @@ fn start_stack() -> Result<String, String> {
 #[tauri::command]
 fn stop_stack() -> Result<String, String> {
     let cmd = container_cmd().ok_or("Docker or Podman is required.")?;
-    let out = compose(cmd, &["down"]).map_err(|e| e.to_string())?;
+    let out = compose(&cmd, &["down"]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok("stopped".into())
     } else {
@@ -156,17 +194,9 @@ fn lan_url(port: u16) -> Option<String> {
 /// file (not a pipe) so cloudflared never blocks on a full stderr buffer.
 #[tauri::command]
 fn start_tunnel(app: tauri::AppHandle, port: u16) -> Result<String, String> {
-    let installed = Command::new("cloudflared")
-        .arg("--version")
-        .output()
-        .map(|o| o.status.success())
-        .unwrap_or(false);
-    if !installed {
-        return Err(
-            "cloudflared isn't installed. Install it (macOS: brew install cloudflared) and try again."
-                .into(),
-        );
-    }
+    let cloudflared = which("cloudflared").ok_or(
+        "cloudflared isn't installed. Install it (macOS: brew install cloudflared) and try again.",
+    )?;
 
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -175,7 +205,7 @@ fn start_tunnel(app: tauri::AppHandle, port: u16) -> Result<String, String> {
     let out = fs::File::create(&log_path).map_err(|e| e.to_string())?;
     let err = out.try_clone().map_err(|e| e.to_string())?;
 
-    Command::new("cloudflared")
+    command(&cloudflared)
         .args([
             "tunnel",
             "--protocol",
@@ -210,7 +240,7 @@ fn start_tunnel(app: tauri::AppHandle, port: u16) -> Result<String, String> {
 /// Stop any quick tunnel this app started.
 #[tauri::command]
 fn stop_tunnel() -> Result<(), String> {
-    let _ = Command::new("pkill").args(["-f", "cloudflared tunnel"]).output();
+    let _ = command("pkill").args(["-f", "cloudflared tunnel"]).output();
     Ok(())
 }
 
