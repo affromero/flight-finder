@@ -58,6 +58,27 @@ Once it finishes:
 2. Or run `flight-finder search "NYC to Tokyo in July under $800"`
 3. Flight Finder starts tracking prices immediately
 
+### Prefer not to touch the terminal?
+
+There is a **desktop app** (macOS, Windows, Linux) at [flight-finder.org/download](https://flight-finder.org/download). Open it and pick one of two modes:
+
+- **Run it on this computer** -- it brings up the same Docker stack with one click (Docker required) and opens the app.
+- **Connect to an instance** -- point it at a Flight Finder running on your VPS and it opens in its own window.
+
+It is a thin launcher over the same installer described above; the source lives in `apps/desktop`.
+
+### Reach it from a phone
+
+Phones connect through the browser: open your instance URL and **Add to Home Screen** to install it as an app (it is a PWA). Visit **`/connect`** on your instance for a QR code and step-by-step iOS/Android instructions.
+
+Installing on a phone needs an **https** URL (service workers require a secure context). On a VPS, pick one:
+
+- **Domain + auto HTTPS** (permanent): point a domain at the server and put [Caddy](https://caddyfile.com) in front. A ready Caddyfile lives at the repo root; it reverse-proxies `localhost:3003` and provisions Let's Encrypt TLS automatically. Replace the site address with your domain.
+- **Tailscale** (private, no domain): install Tailscale on the VPS and your phone, then `tailscale serve 3003` for private https on your tailnet (or `tailscale funnel 3003` to expose it publicly).
+- **Cloudflare quick tunnel** (throwaway): `cloudflared tunnel --url http://localhost:3003` prints a temporary `https://…trycloudflare.com` URL, no account needed. The installer offers to start one for you at the end.
+
+Multiple people connect to one instance with multi user mode (see the Multi user mode section below): each gets their own login, trackers, and a flight-themed profile avatar.
+
 ## Why Flight Finder?
 
 Airlines change flight prices hundreds of times a day. They use dynamic pricing to maximize what you pay. **No one shows you the price trend because the companies with the data profit from hiding it.**

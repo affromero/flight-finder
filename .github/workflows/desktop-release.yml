@@ -1,0 +1,79 @@
+name: Desktop Release
+
+# Builds the Tauri desktop launcher for macOS, Windows, and Linux and attaches
+# the installers to a GitHub Release. Triggered by a `desktop-v*` tag so it never
+# collides with the `vX.Y.Z` tags that drive the web/GHCR release.
+#
+#   git tag desktop-v0.1.0 && git push origin desktop-v0.1.0
+
+on:
+  push:
+    tags:
+      - 'desktop-v*'
+  workflow_dispatch:
+
+jobs:
+  build:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: macos-latest
+            args: '--target universal-apple-darwin'
+          - platform: ubuntu-22.04
+            args: ''
+          - platform: windows-latest
+            args: ''
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux build dependencies
+        if: matrix.platform == 'ubuntu-22.04'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y \
+            libwebkit2gtk-4.1-dev \
+            libappindicator3-dev \
+            librsvg2-dev \
+            patchelf
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.platform == 'macos-latest' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./apps/desktop/src-tauri -> target
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install launcher deps and generate icons
+        working-directory: apps/desktop
+        run: |
+          npm install
+          npm run icon
+
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Add these secrets to produce SIGNED / NOTARIZED builds (see
+          # apps/desktop/README.md and https://tauri.app/distribute/):
+          #   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
+          #            APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
+          #   Windows: handled by your Authenticode setup
+          #   Updater: TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+        with:
+          projectPath: apps/desktop
+          tagName: ${{ github.ref_name }}
+          releaseName: Flight Finder Desktop ${{ github.ref_name }}
+          releaseBody: |
+            Flight Finder desktop launcher. Download the installer for your OS below,
+            open it, and choose "Run it on this computer" or "Connect to an instance".
+          releaseDraft: false
+          prerelease: false
+          args: ${{ matrix.args }}

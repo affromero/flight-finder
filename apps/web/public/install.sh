@@ -902,3 +902,36 @@ if [ "$FLIGHT_FINDER_OPEN_BROWSER" = "1" ]; then
     xdg-open "http://localhost:${HOST_PORT}" >/dev/null 2>&1 &
   fi
 fi
+
+# ---------------------------------------------------------------------------
+# 11. Reach it from your phone or other devices (optional)
+# ---------------------------------------------------------------------------
+# Installing the app on a phone home screen needs an https URL (service workers
+# only run in a secure context), so we point at /connect for instructions and
+# offer the lowest-friction ways to expose this instance over https.
+printf "  ${BOLD}Use it on your phone?${RESET}\n"
+printf "  ${DIM}Open ${RESET}${BOLD}http://localhost:${HOST_PORT}/connect${RESET}${DIM} for a QR code and step-by-step\n"
+printf "  instructions to add Flight Finder to a phone home screen.${RESET}\n"
+echo ""
+printf "  ${DIM}To reach this instance from outside this network (phones need https to\n"
+printf "  install it as an app):${RESET}\n"
+printf "    ${DIM}Domain + auto HTTPS:${RESET}  point a domain here, run Caddy ${DIM}(README: \"Reach it from a phone\")${RESET}\n"
+printf "    ${DIM}Private mesh:${RESET}         ${BOLD}tailscale serve ${HOST_PORT}${RESET} ${DIM}(install the Tailscale app on your phone)${RESET}\n"
+printf "    ${DIM}Quick public URL:${RESET}     ${BOLD}cloudflared tunnel --url http://localhost:${HOST_PORT}${RESET}\n"
+echo ""
+
+WANT_TUNNEL="n"
+if [ "${FLIGHT_FINDER_YES:-}" != "1" ]; then
+  printf "  Open a secure public URL now with a Cloudflare quick tunnel (no account)? [y/N] "
+  read -r WANT_TUNNEL < /dev/tty
+fi
+if [ "$WANT_TUNNEL" = "y" ] || [ "$WANT_TUNNEL" = "Y" ]; then
+  if command -v cloudflared &>/dev/null; then
+    info "Starting a secure tunnel — copy the https://<name>.trycloudflare.com URL. Ctrl+C to stop."
+    cloudflared tunnel --url "http://localhost:${HOST_PORT}" || warn "Tunnel exited."
+  else
+    warn "cloudflared isn't installed."
+    printf "  ${DIM}Install it (macOS: ${RESET}${BOLD}brew install cloudflared${RESET}${DIM}), then run:${RESET}\n"
+    printf "    ${BOLD}cloudflared tunnel --url http://localhost:${HOST_PORT}${RESET}\n"
+  fi
+fi

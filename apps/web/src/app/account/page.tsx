@@ -83,6 +83,7 @@ export default async function AccountPage() {
         </div>
         <div className={styles.headerActions}>
           <Link href="/" className={styles.link}>Search</Link>
+          <Link href="/connect" className={styles.link}>Connect a device</Link>
           <Link href="/account/settings" className={styles.link}>Settings</Link>
           {user.isAdmin && <Link href="/admin" className={styles.link}>Admin</Link>}
           <LogoutButton />
