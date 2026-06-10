@@ -30,6 +30,7 @@ interface Config {
   groqRpm: number | null;
   previewConcurrency: number | null;
   previewAdmissionCap: number | null;
+  isSelfHosted: boolean;
 }
 
 const AGGREGATOR_OPTIONS = [
@@ -633,32 +634,38 @@ export default function ConfigPage() {
           </div>
         </div>
 
-        <div className={styles.toggleRow}>
-          <button
-            type="button"
-            className={`${styles.toggle} ${config.communityRegistrationOpen ? styles.toggleOn : ''}`}
-            onClick={async () => {
-              const newValue = !config.communityRegistrationOpen;
-              const res = await fetch('/api/admin/config', {
-                method: 'PATCH',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ communityRegistrationOpen: newValue }),
-              });
-              const data = await res.json();
-              if (data.ok) setConfig(data.data);
-            }}
-          >
-            <span className={styles.toggleKnob} />
-          </button>
-          <div>
-            <span className={styles.toggleLabel}>
-              {config.communityRegistrationOpen ? 'Accepting new contributors' : 'Registration closed'}
-            </span>
-            <p className={styles.toggleHint}>
-              Let other Flight Finder instances register with this one to contribute their data. Off by default, for when you run a shared hub. New registrations are rate limited and globally capped.
-            </p>
+        {/* Hub side: only the hosted flight-finder.org instance accepts
+            registrations from other instances, so hide this on self-hosted. */}
+        {!config.isSelfHosted && (
+          <div className={styles.toggleRow}>
+            <button
+              type="button"
+              className={`${styles.toggle} ${config.communityRegistrationOpen ? styles.toggleOn : ''}`}
+              onClick={async () => {
+                const newValue = !config.communityRegistrationOpen;
+                const res = await fetch('/api/admin/config', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ communityRegistrationOpen: newValue }),
+                });
+                const data = await res.json();
+                if (data.ok) setConfig(data.data);
+              }}
+            >
+              <span className={styles.toggleKnob} />
+            </button>
+            <div>
+              <span className={styles.toggleLabel}>
+                Run a hub: {config.communityRegistrationOpen ? 'accepting contributors' : 'closed'}
+              </span>
+              <p className={styles.toggleHint}>
+                Lets other Flight Finder instances register with this one and send their
+                anonymized data here. Only relevant for the central hub. New registrations
+                are rate limited and globally capped.
+              </p>
+            </div>
           </div>
-        </div>
+        )}
 
         {config.communityApiKey && (
           <div className={styles.field}>
