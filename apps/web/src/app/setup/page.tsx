@@ -6,10 +6,14 @@ import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry
 
 interface SetupStatus {
   setupComplete: boolean;
-  isSelfHosted: boolean;
-  detectedProviders: string[];
-  currentProvider: string | null;
-  currentModel: string | null;
+  needsSetup?: boolean;
+  // The fields below are returned only while setup is incomplete (first-run).
+  // Once the instance is configured, /api/setup/status returns just the two
+  // booleans above, so treat these as optional and default them.
+  isSelfHosted?: boolean;
+  detectedProviders?: string[];
+  currentProvider?: string | null;
+  currentModel?: string | null;
 }
 
 export default function SetupPage() {
@@ -75,8 +79,9 @@ export default function SetupPage() {
         if (data.isSelfHosted) {
           setStep(1);
         }
-        if (data.detectedProviders.length > 0) {
-          const defaultProvider = data.detectedProviders[0]!;
+        const detected = data.detectedProviders ?? [];
+        if (detected.length > 0) {
+          const defaultProvider = detected[0]!;
           setProvider(defaultProvider);
           const providerConfig = EXTRACTION_PROVIDERS[defaultProvider];
           if (providerConfig?.models[0]) {
@@ -84,6 +89,9 @@ export default function SetupPage() {
           }
           fetchLocalModels(defaultProvider);
         }
+      })
+      .catch(() => {
+        setError('Could not load setup status. Refresh to try again.');
       });
   }, [fetchLocalModels]);
 
@@ -173,17 +181,18 @@ export default function SetupPage() {
     return (
       <main className={styles.root}>
         <div className={styles.card}>
-          <p className={styles.loading}>Loading...</p>
+          {error ? <p className={styles.error}>{error}</p> : <p className={styles.loading}>Loading...</p>}
         </div>
       </main>
     );
   }
 
   const CLI_PROVIDERS = new Set(['claude-code', 'codex']);
-  const hasCliProvider = status.detectedProviders.some((p) => CLI_PROVIDERS.has(p));
+  const detectedProviders = status.detectedProviders ?? [];
+  const hasCliProvider = detectedProviders.some((p) => CLI_PROVIDERS.has(p));
 
   const providerEntries = Object.entries(EXTRACTION_PROVIDERS);
-  const isSelfHosted = status.isSelfHosted;
+  const isSelfHosted = status.isSelfHosted ?? false;
   const subtitles = [
     'Set your admin password',
     'Choose your LLM provider',
@@ -251,7 +260,7 @@ export default function SetupPage() {
             )}
             <div className={styles.providers}>
               {providerEntries.map(([key, config]) => {
-                const detected = status.detectedProviders.includes(key);
+                const detected = detectedProviders.includes(key);
                 return (
                   <button
                     key={key}
