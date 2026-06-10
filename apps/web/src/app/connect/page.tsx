@@ -3,6 +3,7 @@ import { headers } from 'next/headers';
 import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
 import { CopyButton } from './CopyButton';
+import { ShareButtons } from './ShareButtons';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -68,6 +69,7 @@ export default async function ConnectPage() {
         {/* Server-rendered QR of the instance URL; encodes our own trusted value. */}
         <div className={styles.qr} dangerouslySetInnerHTML={{ __html: qrSvg }} />
         <p className={styles.qrHint}>Scan with your phone camera to open it.</p>
+        <ShareButtons url={url} />
       </section>
 
       <section className={styles.steps}>

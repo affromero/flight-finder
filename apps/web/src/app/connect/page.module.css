@@ -111,6 +111,44 @@
   margin: 0;
 }
 
+.share {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 0.5rem;
+  margin-top: 0.25rem;
+}
+
+.shareBtn,
+.shareNative {
+  padding: 0.45rem 0.95rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.shareBtn {
+  background: var(--surface);
+  color: var(--text);
+}
+
+.shareBtn:hover {
+  border-color: var(--accent);
+}
+
+.shareNative {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.shareNative:hover {
+  filter: brightness(1.08);
+}
+
 .steps {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
