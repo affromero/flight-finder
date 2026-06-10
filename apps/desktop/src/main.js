@@ -52,6 +52,8 @@ const host = {
   stop: $('stop'),
   open: $('open'),
   needsDocker: $('needs-docker'),
+  reach: $('reach'),
+  reachInfo: $('reach-info'),
 };
 
 function setStatus(state, text) {
@@ -66,6 +68,7 @@ async function refreshHost() {
   ]);
   host.needsDocker.hidden = hasDocker;
   host.actions.hidden = !hasDocker;
+  host.reach.hidden = true; // re-shown below only when the stack is healthy
   if (!hasDocker) return setStatus('idle', 'Docker not found');
 
   if (!isInstalled) {
@@ -79,6 +82,8 @@ async function refreshHost() {
 
   host.install.hidden = true;
   const healthy = await invoke('is_healthy', { port: HOST_PORT });
+  // The reach choices only make sense once the instance is actually up.
+  host.reach.hidden = !healthy;
   if (healthy) {
     setStatus('up', 'Running');
     host.start.hidden = true;
@@ -140,6 +145,45 @@ host.stop.addEventListener('click', async () => {
 });
 
 host.open.addEventListener('click', () => invoke('open_app', { port: HOST_PORT }));
+
+// Reachability: consent-first. "This computer only" is the default; nothing is
+// exposed unless the user picks LAN or a public tunnel.
+function selectReach(choice) {
+  document.querySelectorAll('.reach-opt').forEach((b) => {
+    b.classList.toggle('reach-active', b.dataset.reach === choice);
+  });
+}
+
+document.querySelector('[data-reach="local"]').addEventListener('click', async () => {
+  selectReach('local');
+  await invoke('stop_tunnel').catch(() => {});
+  host.reachInfo.textContent = 'Only this computer can reach it.';
+});
+
+document.querySelector('[data-reach="lan"]').addEventListener('click', async () => {
+  selectReach('lan');
+  await invoke('stop_tunnel').catch(() => {});
+  const url = await invoke('lan_url', { port: HOST_PORT });
+  host.reachInfo.textContent = url
+    ? `On your WiFi: ${url} — opens on other devices, but http so it can't be installed as an app.`
+    : 'Could not determine your local network address.';
+});
+
+document.querySelector('[data-reach="public"]').addEventListener('click', async () => {
+  const ok = window.confirm(
+    'This opens a temporary PUBLIC https URL to this computer. Anyone with the link can reach it until you stop it or close the app. Continue?',
+  );
+  if (!ok) return;
+  selectReach('public');
+  host.reachInfo.textContent = 'Opening a public link…';
+  try {
+    const url = await invoke('start_tunnel', { port: HOST_PORT });
+    host.reachInfo.textContent = `Public link: ${url} — open it on your phone, then Add to Home Screen. Pick "This computer only" to close it.`;
+  } catch (e) {
+    selectReach('local');
+    host.reachInfo.textContent = String(e);
+  }
+});
 
 // ---- Client mode ----
 const client = { url: $('server-url'), connect: $('connect'), error: $('client-error') };

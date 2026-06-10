@@ -904,34 +904,73 @@ if [ "$FLIGHT_FINDER_OPEN_BROWSER" = "1" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 11. Reach it from your phone or other devices (optional)
+# 11. Reachability — who can reach this instance? (consent-first; default none)
 # ---------------------------------------------------------------------------
-# Installing the app on a phone home screen needs an https URL (service workers
-# only run in a secure context), so we point at /connect for instructions and
-# offer the lowest-friction ways to expose this instance over https.
-printf "  ${BOLD}Use it on your phone?${RESET}\n"
-printf "  ${DIM}Open ${RESET}${BOLD}http://localhost:${HOST_PORT}/connect${RESET}${DIM} for a QR code and step-by-step\n"
-printf "  instructions to add Flight Finder to a phone home screen.${RESET}\n"
-echo ""
-printf "  ${DIM}To reach this instance from outside this network (phones need https to\n"
-printf "  install it as an app):${RESET}\n"
-printf "    ${DIM}Domain + auto HTTPS:${RESET}  point a domain here, run Caddy ${DIM}(README: \"Reach it from a phone\")${RESET}\n"
-printf "    ${DIM}Private mesh:${RESET}         ${BOLD}tailscale serve ${HOST_PORT}${RESET} ${DIM}(install the Tailscale app on your phone)${RESET}\n"
-printf "    ${DIM}Quick public URL:${RESET}     ${BOLD}cloudflared tunnel --url http://localhost:${HOST_PORT}${RESET}\n"
+# Nothing here exposes the instance unless you explicitly pick it; the default
+# and the non-interactive path keep it to this computer only. Installing the app
+# on a phone home screen needs an https URL (service workers only run in a secure
+# context); /connect shows the QR + add-to-home-screen steps.
+printf "  ${BOLD}Who should be able to reach Flight Finder?${RESET}\n"
+printf "    ${DIM}1)${RESET} This computer only            ${DIM}(default — nothing is exposed)${RESET}\n"
+printf "    ${DIM}2)${RESET} Other devices on this network ${DIM}(prints the LAN URL; http only)${RESET}\n"
+printf "    ${DIM}3)${RESET} A public URL via Cloudflare   ${DIM}(temporary tunnel, no account)${RESET}\n"
+printf "    ${DIM}4)${RESET} Tailscale                     ${DIM}(private mesh; needs the Tailscale app)${RESET}\n"
+printf "    ${DIM}5)${RESET} Skip / decide later\n"
 echo ""
 
-WANT_TUNNEL="n"
-if [ "${FLIGHT_FINDER_YES:-}" != "1" ]; then
-  printf "  Open a secure public URL now with a Cloudflare quick tunnel (no account)? [y/N] "
-  read -r WANT_TUNNEL < /dev/tty
-fi
-if [ "$WANT_TUNNEL" = "y" ] || [ "$WANT_TUNNEL" = "Y" ]; then
-  if command -v cloudflared &>/dev/null; then
-    info "Starting a secure tunnel — copy the https://<name>.trycloudflare.com URL. Ctrl+C to stop."
-    cloudflared tunnel --url "http://localhost:${HOST_PORT}" || warn "Tunnel exited."
+# Best-effort LAN IP for option 2.
+lan_ip() {
+  if [ "$OS" = "macos" ]; then
+    ipconfig getifaddr en0 2>/dev/null || ipconfig getifaddr en1 2>/dev/null || true
   else
-    warn "cloudflared isn't installed."
-    printf "  ${DIM}Install it (macOS: ${RESET}${BOLD}brew install cloudflared${RESET}${DIM}), then run:${RESET}\n"
-    printf "    ${BOLD}cloudflared tunnel --url http://localhost:${HOST_PORT}${RESET}\n"
+    hostname -I 2>/dev/null | awk '{print $1}' || true
   fi
+}
+
+REACH_CHOICE="1"
+if [ "${FLIGHT_FINDER_YES:-}" != "1" ]; then
+  read -rp "  Choose [1-5, default 1]: " REACH_CHOICE < /dev/tty
 fi
+REACH_CHOICE="${REACH_CHOICE:-1}"
+
+case "$REACH_CHOICE" in
+  2)
+    LAN_IP="$(lan_ip)"
+    if [ -n "$LAN_IP" ]; then
+      ok "On your network at: ${BOLD}http://${LAN_IP}:${HOST_PORT}${RESET}"
+      printf "  ${DIM}Open that on a phone on the same WiFi. It is http, so the phone can view\n"
+      printf "  it but cannot install it as an app — use option 3 or 4 for that.${RESET}\n"
+    else
+      warn "Could not determine your LAN IP — check your system network settings."
+    fi
+    ;;
+  3)
+    printf "  ${DIM}This opens a temporary ${RESET}${BOLD}public${RESET}${DIM} https URL to this machine. Anyone with\n"
+    printf "  the URL can reach it; it goes away when you stop the tunnel.${RESET}\n"
+    if command -v cloudflared &>/dev/null; then
+      info "Starting a Cloudflare quick tunnel — copy the https URL, Ctrl+C to stop."
+      cloudflared tunnel --url "http://localhost:${HOST_PORT}" || warn "Tunnel exited."
+    else
+      warn "cloudflared isn't installed."
+      printf "  ${DIM}Install it (macOS: ${RESET}${BOLD}brew install cloudflared${RESET}${DIM}; Linux: Cloudflare docs), then:${RESET}\n"
+      printf "    ${BOLD}cloudflared tunnel --url http://localhost:${HOST_PORT}${RESET}\n"
+    fi
+    ;;
+  4)
+    printf "  ${DIM}Tailscale gives a private https URL on your tailnet (no public exposure).${RESET}\n"
+    if command -v tailscale &>/dev/null; then
+      printf "  ${DIM}Run:${RESET} ${BOLD}tailscale serve ${HOST_PORT}${RESET} ${DIM}(or ${RESET}${BOLD}tailscale funnel ${HOST_PORT}${RESET}${DIM} to expose publicly).${RESET}\n"
+    else
+      printf "  ${DIM}Install Tailscale here and on your phone (https://tailscale.com/download), then:${RESET}\n"
+      printf "    ${BOLD}tailscale serve ${HOST_PORT}${RESET}\n"
+    fi
+    ;;
+  5)
+    printf "  ${DIM}Skipped — set it up anytime.${RESET}\n"
+    ;;
+  *)
+    printf "  ${DIM}This computer only. To reach it elsewhere later, re-run the installer.${RESET}\n"
+    ;;
+esac
+echo ""
+printf "  ${DIM}Phone steps + a QR code: ${RESET}${BOLD}http://localhost:${HOST_PORT}/connect${RESET}\n"

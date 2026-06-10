@@ -235,6 +235,54 @@ body {
   color: var(--alert);
 }
 
+.reach {
+  border-top: 1px solid var(--border);
+  padding-top: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reach-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.reach-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.reach-opt {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.reach-opt:hover {
+  border-color: var(--accent);
+}
+
+.reach-active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.reach-info {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--secondary);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
 .link {
   margin-top: auto;
   align-self: flex-start;

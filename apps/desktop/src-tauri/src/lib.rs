@@ -14,7 +14,9 @@
 
 use std::fs;
 use std::path::PathBuf;
-use std::process::Command;
+use std::process::{Command, Stdio};
+use std::thread;
+use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
 /// Default install directory used by install.sh (`~/.flight-finder`).
@@ -113,6 +115,106 @@ fn open_app(port: u16) -> Result<(), String> {
 }
 
 // --------------------------------------------------------------------------
+// Reachability (Host mode): consent-first. Nothing here exposes the instance
+// unless the user explicitly picks it in the UI.
+// --------------------------------------------------------------------------
+
+/// The instance's URL on the local network, for same-WiFi devices.
+#[tauri::command]
+fn lan_url(port: u16) -> Option<String> {
+    let ip = if cfg!(target_os = "macos") {
+        ["en0", "en1"].iter().find_map(|iface| {
+            Command::new("ipconfig")
+                .args(["getifaddr", iface])
+                .output()
+                .ok()
+                .filter(|o| o.status.success())
+                .map(|o| String::from_utf8_lossy(&o.stdout).trim().to_string())
+                .filter(|s| !s.is_empty())
+        })
+    } else if cfg!(target_os = "windows") {
+        None
+    } else {
+        Command::new("hostname")
+            .arg("-I")
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| {
+                String::from_utf8_lossy(&o.stdout)
+                    .split_whitespace()
+                    .next()
+                    .map(|s| s.to_string())
+            })
+    };
+    ip.map(|ip| format!("http://{ip}:{port}"))
+}
+
+/// Start a Cloudflare quick tunnel and return its public https URL. This exposes
+/// the instance to the public internet, so the UI calls it only on an explicit
+/// user action (a button behind a clear warning). Output is written to a log
+/// file (not a pipe) so cloudflared never blocks on a full stderr buffer.
+#[tauri::command]
+fn start_tunnel(app: tauri::AppHandle, port: u16) -> Result<String, String> {
+    let installed = Command::new("cloudflared")
+        .arg("--version")
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false);
+    if !installed {
+        return Err(
+            "cloudflared isn't installed. Install it (macOS: brew install cloudflared) and try again."
+                .into(),
+        );
+    }
+
+    let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let log_path = dir.join("tunnel.log");
+    let _ = fs::remove_file(&log_path);
+    let out = fs::File::create(&log_path).map_err(|e| e.to_string())?;
+    let err = out.try_clone().map_err(|e| e.to_string())?;
+
+    Command::new("cloudflared")
+        .args([
+            "tunnel",
+            "--protocol",
+            "http2",
+            "--url",
+            &format!("http://localhost:{port}"),
+        ])
+        .stdout(Stdio::from(out))
+        .stderr(Stdio::from(err))
+        .spawn()
+        .map_err(|e| e.to_string())?;
+
+    // Poll the log for the assigned URL (cloudflared prints it within seconds).
+    for _ in 0..40 {
+        thread::sleep(Duration::from_millis(500));
+        if let Ok(content) = fs::read_to_string(&log_path) {
+            if let Some(idx) = content.find("https://") {
+                let url: String = content[idx..]
+                    .chars()
+                    .take_while(|c| !c.is_whitespace())
+                    .collect();
+                if url.contains("trycloudflare.com") {
+                    return Ok(url);
+                }
+            }
+        }
+    }
+    let _ = stop_tunnel();
+    Err("The tunnel did not report a URL in time. Check your network and try again.".into())
+}
+
+/// Stop any quick tunnel this app started.
+#[tauri::command]
+fn stop_tunnel() -> Result<(), String> {
+    let _ = Command::new("pkill").args(["-f", "cloudflared tunnel"]).output();
+    Ok(())
+}
+
+// --------------------------------------------------------------------------
 // Client mode: remember a server URL and open it in its own native window.
 // --------------------------------------------------------------------------
 
@@ -182,6 +284,9 @@ pub fn run() {
             stop_stack,
             is_healthy,
             open_app,
+            lan_url,
+            start_tunnel,
+            stop_tunnel,
             save_server,
             load_server,
             open_client
