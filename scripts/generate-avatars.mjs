@@ -29,11 +29,12 @@ mkdirSync(OUT, { recursive: true });
 // Altitude design system: vintage travel poster, Pan Am / French Line ocean
 // liner heritage. Deep teal and warm cream with a scarlet alert accent.
 const STYLE =
-  'Vintage mid-century travel poster illustration, Pan Am and French Line ocean liner heritage. ' +
-  'Centered subject, square composition, gallery quality, confident screen-print texture. ' +
-  'Warm cream paper background color #faf6ed. Deep teal #1a4a52 with muted gold #d4a574 accents ' +
-  'and an occasional scarlet #c1272d highlight. Refined and elegant. Suitable as a profile ' +
-  'avatar. No text, no words, no letters, no logos.';
+  'Vintage mid-century travel poster illustration, Pan Am and French Line ocean liner heritage, ' +
+  'bold screen-print texture. A single centered icon filling most of the frame, on a solid warm ' +
+  'cream #faf6ed background that extends all the way to every edge with NO border and NO frame ' +
+  '(it will be cropped into a circle, so keep the subject centered and the background full-bleed). ' +
+  'Deep teal #1a4a52 with muted gold #d4a574 accents and an occasional scarlet #c1272d highlight. ' +
+  'Refined, elegant, simple. No text, no words, no letters, no logos.';
 
 const SUBJECTS = [
   ['paper-plane', 'a folded paper airplane in flight'],
