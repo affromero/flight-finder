@@ -89,7 +89,9 @@ export async function POST(request: NextRequest) {
   const body = (await request.json().catch(() => null)) as ToggleBody | null;
   if (!body) return apiError('Invalid JSON body', 400);
 
-  const adminUsername = typeof body.adminUsername === 'string' ? body.adminUsername.trim() : '';
+  // Default to "admin" when no username is given.
+  const adminUsername =
+    (typeof body.adminUsername === 'string' && body.adminUsername.trim()) || 'admin';
   const adminPassword = typeof body.adminPassword === 'string' ? body.adminPassword : '';
   const displayName =
     typeof body.displayName === 'string' && body.displayName.trim()

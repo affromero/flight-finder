@@ -27,11 +27,16 @@ export function getThemeFromDom(): ThemeId {
   return isThemeId(current) ? current : 'default';
 }
 
+export const THEME_CHANGE_EVENT = 'ft-theme-change';
+
 export function applyTheme(theme: ThemeId) {
   if (typeof document === 'undefined') return;
   const mode = getThemeMode(theme);
   document.documentElement.setAttribute('data-theme', theme);
   document.documentElement.setAttribute('data-theme-mode', mode);
+  // Broadcast so other controls (the nav light/dark toggle) stay in sync when
+  // the theme is changed elsewhere (e.g. the Settings appearance picker).
+  document.dispatchEvent(new CustomEvent(THEME_CHANGE_EVENT, { detail: theme }));
 }
 
 export function isLightTheme(theme: ThemeId) {

@@ -1,8 +1,8 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import styles from './ThemeToggle.module.css';
-import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isLightTheme, isThemeId, resolveInitialTheme, type ThemeId } from '@/lib/theme';
+import { applyTheme, getThemeFromDom, getThemeMode, isLightTheme, isThemeId, resolveInitialTheme, THEME_CHANGE_EVENT, type ThemeId } from '@/lib/theme';
 
 const LOCAL_THEME_KEY = 'ft-theme';
 
@@ -40,7 +40,16 @@ function writeLocalTheme(theme: ThemeId) {
 export function ThemeToggle() {
   const [theme, setTheme] = useState<ThemeId>('default');
   const [lastDarkTheme, setLastDarkTheme] = useState<ThemeId>('default');
+  const [lastLightTheme, setLastLightTheme] = useState<ThemeId>('basic-light');
   const [saving, setSaving] = useState(false);
+
+  // Remember the user's last chosen theme per mode, so the toggle flips between
+  // their preferred dark and light themes -- not a hardcoded pair.
+  const remember = useCallback((t: ThemeId) => {
+    setTheme(t);
+    if (isLightTheme(t)) setLastLightTheme(t);
+    else setLastDarkTheme(t);
+  }, []);
 
   useEffect(() => {
     // Hosted: prefer the per-browser preference so a visitor's toggle sticks
@@ -52,17 +61,26 @@ export function ThemeToggle() {
       localTheme: readLocalTheme(),
       domTheme: getThemeFromDom(),
     });
-    setTheme(resolved);
-    setLastDarkTheme(isLightTheme(resolved) ? 'default' : resolved);
+    remember(resolved);
     applyTheme(resolved);
-  }, []);
+  }, [remember]);
+
+  // Stay in sync when the theme changes elsewhere (the Settings appearance
+  // picker), so toggling afterwards respects the chosen theme.
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const t = (e as CustomEvent<ThemeId>).detail;
+      if (isThemeId(t)) remember(t);
+    };
+    document.addEventListener(THEME_CHANGE_EVENT, onChange);
+    return () => document.removeEventListener(THEME_CHANGE_EVENT, onChange);
+  }, [remember]);
 
   const toggle = async () => {
     if (saving) return;
-    const next: ThemeId = getNextToggleTheme(theme, lastDarkTheme);
-    const nextDarkTheme = isLightTheme(theme) ? next : theme;
-    setTheme(next);
-    setLastDarkTheme(nextDarkTheme);
+    const next: ThemeId = isLightTheme(theme) ? lastDarkTheme : lastLightTheme;
+    const prev = theme;
+    remember(next);
     applyTheme(next);
     writeLocalTheme(next);
     setSaving(true);
@@ -80,10 +98,9 @@ export function ThemeToggle() {
       }
       const data = await res.json();
       if (!data.ok) {
-        setTheme(theme);
-        setLastDarkTheme(lastDarkTheme);
-        applyTheme(theme);
-        writeLocalTheme(theme);
+        remember(prev);
+        applyTheme(prev);
+        writeLocalTheme(prev);
       }
     } catch {
       // Network error: keep the locally applied theme.

@@ -136,12 +136,9 @@ export default function SetupPage() {
     if (step === 3 && status?.isSelfHosted) {
       // Validate the account fields here before moving to the reach step, so
       // bad credentials are caught before the final submit.
-      if (enableMultiUser) {
-        const username = multiUserUsername.trim();
-        if (!username || multiUserPassword.length < 8) {
-          setError('Username required and password must be at least 8 characters');
-          return;
-        }
+      if (enableMultiUser && multiUserPassword.length < 8) {
+        setError('Password must be at least 8 characters');
+        return;
       }
       setStep(4);
       return;
@@ -165,8 +162,8 @@ export default function SetupPage() {
 
     if (status?.isSelfHosted && enableMultiUser) {
       const username = multiUserUsername.trim();
-      if (!username || multiUserPassword.length < 8) {
-        setError('Username required and password must be at least 8 characters');
+      if (multiUserPassword.length < 8) {
+        setError('Password must be at least 8 characters');
         setLoading(false);
         return;
       }
@@ -420,7 +417,7 @@ export default function SetupPage() {
                 <input
                   type="text"
                   className={styles.input}
-                  placeholder="Admin username"
+                  placeholder="Admin username (defaults to admin)"
                   value={multiUserUsername}
                   onChange={(e) => setMultiUserUsername(e.target.value)}
                   autoComplete="username"

@@ -838,11 +838,10 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
           <input
             type="text"
             className={styles.input}
-            placeholder="Admin username"
+            placeholder="Admin username (defaults to admin)"
             value={adminUsername}
             onChange={(e) => setAdminUsername(e.target.value)}
             autoComplete="username"
-            required
           />
           <input
             type="text"
