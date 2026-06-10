@@ -44,6 +44,12 @@ fn augmented_path() -> String {
     .iter()
     .map(|s| s.to_string())
     .collect();
+    // Docker Desktop / Rancher Desktop install their CLI under the home dir on
+    // some setups, which is in none of the standard dirs above.
+    if let Ok(home) = std::env::var("HOME") {
+        parts.push(format!("{home}/.docker/bin"));
+        parts.push(format!("{home}/.rd/bin"));
+    }
     if let Ok(existing) = std::env::var("PATH") {
         if !existing.is_empty() {
             parts.push(existing);

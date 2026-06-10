@@ -148,20 +148,30 @@ host.open.addEventListener('click', () => invoke('open_app', { port: HOST_PORT }
 
 // Reachability: consent-first. "This computer only" is the default; nothing is
 // exposed unless the user picks LAN or a public tunnel.
+const reachConfirm = $('reach-confirm');
+const reachStop = $('reach-stop');
+
 function selectReach(choice) {
   document.querySelectorAll('.reach-opt').forEach((b) => {
     b.classList.toggle('reach-active', b.dataset.reach === choice);
   });
 }
 
+function hideReachButtons() {
+  reachConfirm.hidden = true;
+  reachStop.hidden = true;
+}
+
 document.querySelector('[data-reach="local"]').addEventListener('click', async () => {
   selectReach('local');
+  hideReachButtons();
   await invoke('stop_tunnel').catch(() => {});
   host.reachInfo.textContent = 'Only this computer can reach it.';
 });
 
 document.querySelector('[data-reach="lan"]').addEventListener('click', async () => {
   selectReach('lan');
+  hideReachButtons();
   await invoke('stop_tunnel').catch(() => {});
   const url = await invoke('lan_url', { port: HOST_PORT });
   host.reachInfo.textContent = url
@@ -169,20 +179,33 @@ document.querySelector('[data-reach="lan"]').addEventListener('click', async () 
     : 'Could not determine your local network address.';
 });
 
-document.querySelector('[data-reach="public"]').addEventListener('click', async () => {
-  const ok = window.confirm(
-    'This opens a temporary PUBLIC https URL to this computer. Anyone with the link can reach it until you stop it or close the app. Continue?',
-  );
-  if (!ok) return;
+// Two-step, in-app consent (Tauri's webview has no window.confirm).
+document.querySelector('[data-reach="public"]').addEventListener('click', () => {
   selectReach('public');
+  reachStop.hidden = true;
+  reachConfirm.hidden = false;
+  host.reachInfo.textContent =
+    'Opens a temporary PUBLIC https URL to this computer — anyone with the link can reach it until you stop it. Click "Open public link" to confirm.';
+});
+
+reachConfirm.addEventListener('click', async () => {
+  reachConfirm.hidden = true;
   host.reachInfo.textContent = 'Opening a public link…';
   try {
     const url = await invoke('start_tunnel', { port: HOST_PORT });
-    host.reachInfo.textContent = `Public link: ${url} — open it on your phone, then Add to Home Screen. Pick "This computer only" to close it.`;
+    host.reachInfo.textContent = `Public link: ${url} — open it on your phone, then Add to Home Screen.`;
+    reachStop.hidden = false;
   } catch (e) {
     selectReach('local');
     host.reachInfo.textContent = String(e);
   }
+});
+
+reachStop.addEventListener('click', async () => {
+  await invoke('stop_tunnel').catch(() => {});
+  selectReach('local');
+  hideReachButtons();
+  host.reachInfo.textContent = 'Public link stopped. Only this computer can reach it.';
 });
 
 // ---- Client mode ----
