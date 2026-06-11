@@ -435,28 +435,3 @@
   }
 }
 
-.welcomeLine {
-  font-size: 0.8125rem;
-  color: var(--text-secondary);
-  margin-bottom: 0.5rem;
-}
-
-.welcomeLink {
-  color: var(--accent);
-  text-decoration: underline;
-}
-
-.welcomeButton {
-  font-family: inherit;
-  font-size: inherit;
-  color: var(--muted);
-  background: none;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  text-decoration: underline;
-}
-
-.welcomeButton:hover {
-  color: var(--text);
-}

@@ -30,6 +30,7 @@ export default async function AccountSettingsPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
+          Your account
         </Link>
         <h1 className={styles.title}>Account settings</h1>
       </header>
@@ -39,6 +40,7 @@ export default async function AccountSettingsPage() {
           username: user.username,
           displayName: user.displayName,
           avatar: user.avatar,
+          theme: user.theme,
           defaultCurrency: user.defaultCurrency,
           defaultCountry: user.defaultCountry,
           preferredAirlines: user.preferredAirlines,

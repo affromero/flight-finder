@@ -8,6 +8,8 @@ import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
 import { ForceScrapeButton } from '@/components/ForceScrapeButton';
 import { Avatar } from '@/components/Avatar/Avatar';
+import { ThemeToggle } from '@/components/ThemeToggle';
+import { ProfileMenu } from '@/components/ProfileMenu/ProfileMenu';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -84,11 +86,15 @@ export default async function AccountPage() {
           </div>
         </div>
         <div className={styles.headerActions}>
-          <Link href="/" className={styles.link}>Search</Link>
-          <Link href="/connect" className={styles.link}>Connect a device</Link>
-          <Link href="/account/settings" className={styles.link}>Settings</Link>
-          {user.isAdmin && <Link href="/admin" className={styles.link}>Admin</Link>}
-          <LogoutButton />
+          <ThemeToggle />
+          <ProfileMenu
+            user={{
+              username: user.username,
+              displayName: user.displayName,
+              avatar: user.avatar,
+              isAdmin: user.isAdmin,
+            }}
+          />
         </div>
       </header>
 
@@ -147,10 +153,3 @@ export default async function AccountPage() {
   );
 }
 
-function LogoutButton() {
-  return (
-    <form action="/api/auth/logout" method="POST">
-      <button type="submit" className={styles.logout}>Logout</button>
-    </form>
-  );
-}

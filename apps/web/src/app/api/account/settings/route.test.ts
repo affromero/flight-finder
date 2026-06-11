@@ -49,7 +49,7 @@ describe('GET /api/account/settings', () => {
 
   it('returns the user preferences', async () => {
     mockGetCurrentUser.mockResolvedValue({
-      id: 'u1', username: 'alice', displayName: 'Alice', avatar: 'globe',
+      id: 'u1', username: 'alice', displayName: 'Alice', avatar: 'globe', theme: 'tron-dark',
       defaultCurrency: 'USD', defaultCountry: 'US',
       preferredAirlines: ['Delta'], preferredAggregators: ['google_flights', 'skyscanner'],
       cabinClass: 'economy',
@@ -59,6 +59,7 @@ describe('GET /api/account/settings', () => {
     const body = await res.json();
     expect(body.data.defaultCurrency).toBe('USD');
     expect(body.data.avatar).toBe('globe');
+    expect(body.data.theme).toBe('tron-dark');
     expect(body.data.preferredAggregators).toEqual(['google_flights', 'skyscanner']);
   });
 });
@@ -154,5 +155,25 @@ describe('PATCH /api/account/settings', () => {
     expect(res.status).toBe(200);
     const args = mockUpdate.mock.calls[0]![0] as { data: Record<string, unknown> };
     expect(args.data.avatar).toBeNull();
+  });
+
+  it('accepts a valid personal theme id', async () => {
+    const res = await PATCH(makePatch({ theme: 'tron-dark' }));
+    expect(res.status).toBe(200);
+    const args = mockUpdate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.theme).toBe('tron-dark');
+  });
+
+  it('rejects an unknown theme id with 400', async () => {
+    const res = await PATCH(makePatch({ theme: 'not-a-real-theme' }));
+    expect(res.status).toBe(400);
+    expect(mockUpdate).not.toHaveBeenCalled();
+  });
+
+  it('clears the personal theme via null (revert to instance default)', async () => {
+    const res = await PATCH(makePatch({ theme: null }));
+    expect(res.status).toBe(200);
+    const args = mockUpdate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.theme).toBeNull();
   });
 });

@@ -11,6 +11,7 @@ import { UpdateBanner } from '@/components/UpdateBanner';
 import { Footer } from '@/components/Footer';
 import { DemoGif } from '@/components/DemoGif';
 import { InstallCommand } from '@/components/InstallCommand';
+import { ProfileMenu } from '@/components/ProfileMenu/ProfileMenu';
 import { verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
@@ -61,28 +62,39 @@ export default async function HomePage() {
         dangerouslySetInnerHTML={{ __html: safeJsonLd(jsonLd) }}
       />
       <div className={styles.topBar}>
-        {isSelfHosted ? (
-          <Link href="/settings" className={styles.adminLink} title="Settings">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-              <path
-                d="M6.5 1.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.3a5.5 5.5 0 0 1 1.654.685l.212-.212a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1 0 1.061l-.212.212A5.5 5.5 0 0 1 14 6.5h.25a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75H14a5.5 5.5 0 0 1-.685 1.654l.212.212a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 0 1-1.061 0l-.212-.212A5.5 5.5 0 0 1 9.5 14v.25a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75V14a5.5 5.5 0 0 1-1.654-.685l-.212.212a.75.75 0 0 1-1.06 0l-1.061-1.06a.75.75 0 0 1 0-1.061l.212-.212A5.5 5.5 0 0 1 2 9.5h-.25a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 .75-.75H2a5.5 5.5 0 0 1 .685-1.654l-.212-.212a.75.75 0 0 1 0-1.06l1.06-1.061a.75.75 0 0 1 1.061 0l.212.212A5.5 5.5 0 0 1 6.5 2.05v-.3ZM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"
-                fill="currentColor"
-              />
-            </svg>
-          </Link>
-        ) : (
-          isAdmin && (
-            <Link href="/admin" className={styles.adminLink} title="Admin Panel">
+        {!(multiUserEnabled && user) &&
+          (isSelfHosted ? (
+            <Link href="/settings" className={styles.adminLink} title="Settings">
               <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                 <path
-                  d="M8 1.5a1.25 1.25 0 0 1 1.177.824l.963 2.681 2.825.213a1.25 1.25 0 0 1 .712 2.19l-2.142 1.818.658 2.77a1.25 1.25 0 0 1-1.863 1.354L8 11.885 5.67 13.35a1.25 1.25 0 0 1-1.863-1.354l.658-2.77-2.142-1.818a1.25 1.25 0 0 1 .712-2.19l2.825-.213.963-2.681A1.25 1.25 0 0 1 8 1.5Z"
+                  d="M6.5 1.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.3a5.5 5.5 0 0 1 1.654.685l.212-.212a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1 0 1.061l-.212.212A5.5 5.5 0 0 1 14 6.5h.25a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75H14a5.5 5.5 0 0 1-.685 1.654l.212.212a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 0 1-1.061 0l-.212-.212A5.5 5.5 0 0 1 9.5 14v.25a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75V14a5.5 5.5 0 0 1-1.654-.685l-.212.212a.75.75 0 0 1-1.06 0l-1.061-1.06a.75.75 0 0 1 0-1.061l.212-.212A5.5 5.5 0 0 1 2 9.5h-.25a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 .75-.75H2a5.5 5.5 0 0 1 .685-1.654l-.212-.212a.75.75 0 0 1 0-1.06l1.06-1.061a.75.75 0 0 1 1.061 0l.212.212A5.5 5.5 0 0 1 6.5 2.05v-.3ZM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z"
                   fill="currentColor"
                 />
               </svg>
             </Link>
-          )
-        )}
+          ) : (
+            isAdmin && (
+              <Link href="/admin" className={styles.adminLink} title="Admin Panel">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <path
+                    d="M8 1.5a1.25 1.25 0 0 1 1.177.824l.963 2.681 2.825.213a1.25 1.25 0 0 1 .712 2.19l-2.142 1.818.658 2.77a1.25 1.25 0 0 1-1.863 1.354L8 11.885 5.67 13.35a1.25 1.25 0 0 1-1.863-1.354l.658-2.77-2.142-1.818a1.25 1.25 0 0 1 .712-2.19l2.825-.213.963-2.681A1.25 1.25 0 0 1 8 1.5Z"
+                    fill="currentColor"
+                  />
+                </svg>
+              </Link>
+            )
+          ))}
         <ThemeToggle />
+        {multiUserEnabled && user && (
+          <ProfileMenu
+            user={{
+              username: user.username,
+              displayName: user.displayName,
+              avatar: user.avatar,
+              isAdmin: user.isAdmin,
+            }}
+          />
+        )}
       </div>
       <div className={styles.hero}>
         <h1 className={styles.title}><Link href="/">Flight Finder</Link></h1>
@@ -99,16 +111,6 @@ export default async function HomePage() {
         )}
         {isSelfHosted ? (
           <>
-            {multiUserEnabled && user && (
-              <p className={styles.welcomeLine}>
-                Signed in as <strong>{user.displayName || user.username}</strong>{' '}
-                <Link href="/account" className={styles.welcomeLink}>account</Link>
-                {' / '}
-                <form action="/api/auth/logout" method="POST" style={{ display: 'inline' }}>
-                  <button type="submit" className={styles.welcomeButton}>logout</button>
-                </form>
-              </p>
-            )}
             <SearchBar />
             <UpdateBanner />
             <PriceAlerts />

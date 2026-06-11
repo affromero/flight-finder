@@ -1,8 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useEffect, useState } from 'react';
 import styles from './ThemeToggle.module.css';
-import { applyTheme, getThemeFromDom, getThemeMode, isLightTheme, isThemeId, resolveInitialTheme, THEME_CHANGE_EVENT, type ThemeId } from '@/lib/theme';
+import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isThemeId, resolveInitialTheme, THEME_CHANGE_EVENT, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 
 const LOCAL_THEME_KEY = 'ft-theme';
 
@@ -11,11 +11,18 @@ declare global {
     // Set by the theme bootstrap in the root layout. True on self hosted
     // instances, where the global server theme wins over per browser localStorage.
     __ftSelfHosted?: boolean;
+    // True when a multi user member is logged in: the theme is their personal
+    // setting (User.theme), saved per user instead of as the instance default.
+    __ftPerUserTheme?: boolean;
   }
 }
 
 function isSelfHostedClient(): boolean {
   return typeof window !== 'undefined' && window.__ftSelfHosted === true;
+}
+
+function isPerUserThemeClient(): boolean {
+  return typeof window !== 'undefined' && window.__ftPerUserTheme === true;
 }
 
 function readLocalTheme(): ThemeId | null {
@@ -38,18 +45,8 @@ function writeLocalTheme(theme: ThemeId) {
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<ThemeId>('default');
-  const [lastDarkTheme, setLastDarkTheme] = useState<ThemeId>('default');
-  const [lastLightTheme, setLastLightTheme] = useState<ThemeId>('basic-light');
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [saving, setSaving] = useState(false);
-
-  // Remember the user's last chosen theme per mode, so the toggle flips between
-  // their preferred dark and light themes -- not a hardcoded pair.
-  const remember = useCallback((t: ThemeId) => {
-    setTheme(t);
-    if (isLightTheme(t)) setLastLightTheme(t);
-    else setLastDarkTheme(t);
-  }, []);
 
   useEffect(() => {
     // Hosted: prefer the per-browser preference so a visitor's toggle sticks
@@ -61,32 +58,37 @@ export function ThemeToggle() {
       localTheme: readLocalTheme(),
       domTheme: getThemeFromDom(),
     });
-    remember(resolved);
+    setTheme(resolved);
     applyTheme(resolved);
-  }, [remember]);
+  }, []);
 
-  // Stay in sync when the theme changes elsewhere (the Settings appearance
-  // picker), so toggling afterwards respects the chosen theme.
+  // Stay in sync when the theme changes elsewhere (the appearance picker), so
+  // the toggle flips within whatever family is now selected.
   useEffect(() => {
     const onChange = (e: Event) => {
       const t = (e as CustomEvent<ThemeId>).detail;
-      if (isThemeId(t)) remember(t);
+      if (isThemeId(t)) setTheme(t);
     };
     document.addEventListener(THEME_CHANGE_EVENT, onChange);
     return () => document.removeEventListener(THEME_CHANGE_EVENT, onChange);
-  }, [remember]);
+  }, []);
 
   const toggle = async () => {
     if (saving) return;
-    const next: ThemeId = isLightTheme(theme) ? lastDarkTheme : lastLightTheme;
+    // Flip light<->dark within the current family (keeps the colour identity).
+    const next = getNextToggleTheme(theme);
     const prev = theme;
-    remember(next);
+    setTheme(next);
     applyTheme(next);
     writeLocalTheme(next);
     setSaving(true);
 
     try {
-      const res = await fetch('/api/admin/config', {
+      // Logged-in members save their personal theme (User.theme); otherwise the
+      // toggle writes the instance default (admin/self-hosted-solo) or, for an
+      // anonymous hosted visitor, just localStorage.
+      const endpoint = isPerUserThemeClient() ? '/api/account/settings' : '/api/admin/config';
+      const res = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ theme: next }),
@@ -98,7 +100,7 @@ export function ThemeToggle() {
       }
       const data = await res.json();
       if (!data.ok) {
-        remember(prev);
+        setTheme(prev);
         applyTheme(prev);
         writeLocalTheme(prev);
       }

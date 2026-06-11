@@ -6,7 +6,12 @@ import { Avatar } from '@/components/Avatar/Avatar';
 import styles from './ProfileMenu.module.css';
 
 interface ProfileMenuProps {
-  user: { username: string; displayName: string | null; avatar: string | null };
+  user: {
+    username: string;
+    displayName: string | null;
+    avatar: string | null;
+    isAdmin?: boolean;
+  };
 }
 
 /**
@@ -60,9 +65,30 @@ export function ProfileMenu({ user }: ProfileMenuProps) {
               <span className={styles.handle}>@{user.username}</span>
             </div>
           </div>
-          <Link href="/account/settings" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
-            Account &amp; avatar
+          <Link href="/account" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
+            Your trackers
           </Link>
+          <Link href="/account/settings" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
+            Account &amp; appearance
+          </Link>
+          <Link href="/connect" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
+            Connect a device
+          </Link>
+          {user.isAdmin && (
+            <>
+              <div className={styles.divider} role="separator" />
+              <Link href="/settings" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
+                Instance settings
+              </Link>
+              <Link href="/admin/users" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
+                Manage household
+              </Link>
+              <Link href="/admin" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
+                Admin dashboard
+              </Link>
+            </>
+          )}
+          <div className={styles.divider} role="separator" />
           <button className={styles.item} role="menuitem" onClick={() => logout('/login')}>
             Switch user
           </button>

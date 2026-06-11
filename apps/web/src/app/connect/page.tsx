@@ -1,7 +1,10 @@
+import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
 import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
+import { getCurrentUser } from '@/lib/user-auth';
+import { Avatar } from '@/components/Avatar/Avatar';
 import { CopyButton } from './CopyButton';
 import { ShareButtons } from './ShareButtons';
 import styles from './page.module.css';
@@ -30,10 +33,13 @@ export default async function ConnectPage() {
   if (process.env.SELF_HOSTED !== 'true') notFound();
 
   const url = await resolveInstanceUrl();
+  const user = await getCurrentUser();
   const isSecure = url.startsWith('https://');
+  // High error correction so the avatar badge in the center stays scannable.
   const qrSvg = await QRCode.toString(url, {
     type: 'svg',
     margin: 1,
+    errorCorrectionLevel: 'H',
     color: { dark: '#031820', light: '#faf6ed' },
   });
 
@@ -57,17 +63,28 @@ export default async function ConnectPage() {
 
       {!isSecure && (
         <div className={styles.warn}>
-          This URL is not <strong>https</strong>. Phones can open it, but they
-          cannot install it as an app and the connection is not encrypted. Put
-          the instance behind https first: a domain with Caddy, or a Tailscale or
-          Cloudflare tunnel. See the README section &ldquo;Reach it from a
-          phone&rdquo;.
+          <p className={styles.warnText}>
+            This URL is not <strong>https</strong>, so phones can open it but
+            can&apos;t install it as an app and the connection isn&apos;t
+            encrypted. Turn this machine into a proper host with a domain (Caddy)
+            or a Tailscale / Cloudflare tunnel.
+          </p>
+          <Link href="/settings#reach" className={styles.warnAction}>
+            Set up secure access →
+          </Link>
         </div>
       )}
 
       <section className={styles.qrCard}>
         {/* Server-rendered QR of the instance URL; encodes our own trusted value. */}
-        <div className={styles.qr} dangerouslySetInnerHTML={{ __html: qrSvg }} />
+        <div className={styles.qrWrap}>
+          <div className={styles.qr} dangerouslySetInnerHTML={{ __html: qrSvg }} />
+          {user?.avatar && (
+            <span className={styles.qrLogo}>
+              <Avatar slug={user.avatar} name={user.displayName || user.username} size={46} />
+            </span>
+          )}
+        </div>
         <p className={styles.qrHint}>Scan with your phone camera to open it.</p>
         <ShareButtons url={url} />
       </section>

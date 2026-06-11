@@ -15,15 +15,19 @@
 }
 
 .backLink {
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  justify-content: center;
-  width: 32px;
+  gap: 0.35rem;
   height: 32px;
+  padding: 0 0.7rem;
   color: var(--muted);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   text-decoration: none;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .backLink:hover {
@@ -90,6 +94,72 @@
 .success {
   font-size: 0.8125rem;
   color: var(--accent);
+}
+
+.themeGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.themeGroupTitle {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin: 1rem 0 0.5rem;
+}
+
+.themeGroupTitle:first-of-type {
+  margin-top: 0;
+}
+
+.themeCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.875rem;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s, transform 0.2s, background 0.2s;
+}
+
+.themeCard:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.themeCardSelected {
+  border-color: var(--accent);
+  background: var(--elevated);
+}
+
+.themeSwatch {
+  width: 100%;
+  height: 0.625rem;
+  border-radius: 999px;
+  background:
+    linear-gradient(90deg, var(--theme-swatch-accent), color-mix(in srgb, var(--theme-swatch-accent) 45%, #ffffff)),
+    var(--theme-swatch-accent);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--theme-swatch-accent) 30%, transparent);
+  margin-bottom: 0.25rem;
+}
+
+.themeCardName {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.themeCardDesc {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.45;
 }
 
 .button {

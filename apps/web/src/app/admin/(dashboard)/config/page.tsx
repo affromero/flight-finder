@@ -2,7 +2,8 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
-import { THEME_OPTIONS, applyTheme, type ThemeId } from '@/lib/theme';
+import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
+import { isThemeId, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
 
 interface Config {
@@ -52,7 +53,7 @@ export default function ConfigPage() {
   const [maxFlightsPerDate, setMaxFlightsPerDate] = useState(10);
   const [maxTrackedPerRoute, setMaxTrackedPerRoute] = useState(10);
   const [previewMaxCombos, setPreviewMaxCombos] = useState(24);
-  const [theme, setTheme] = useState<ThemeId>('default');
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [defaultCurrency, setDefaultCurrency] = useState('');
   const [defaultCountry, setDefaultCountry] = useState('');
   const [defaultSearchMethod, setDefaultSearchMethod] = useState<'ai' | 'manual'>('ai');
@@ -116,8 +117,7 @@ export default function ConfigPage() {
           setMaxFlightsPerDate(d.data.maxFlightsPerDate ?? 10);
           setMaxTrackedPerRoute(d.data.maxTrackedPerRoute ?? 10);
           setPreviewMaxCombos(d.data.previewMaxCombos ?? 24);
-          setTheme(d.data.theme || 'default');
-          applyTheme(d.data.theme || 'default');
+          setTheme(isThemeId(d.data.theme) ? d.data.theme : DEFAULT_THEME);
           setDefaultCurrency(d.data.defaultCurrency || '');
           setDefaultCountry(d.data.defaultCountry || '');
           setDefaultSearchMethod(d.data.defaultSearchMethod === 'manual' ? 'manual' : 'ai');
@@ -411,27 +411,8 @@ export default function ConfigPage() {
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Theme</label>
-          <select
-            className={styles.select}
-            value={theme}
-            onChange={(e) => {
-              const nextTheme = e.target.value as ThemeId;
-              setTheme(nextTheme);
-              applyTheme(nextTheme);
-            }}
-          >
-            <optgroup label="Light">
-              {THEME_OPTIONS.filter((o) => o.mode === 'light').map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </optgroup>
-            <optgroup label="Dark">
-              {THEME_OPTIONS.filter((o) => o.mode === 'dark').map((option) => (
-                <option key={option.id} value={option.id}>{option.label}</option>
-              ))}
-            </optgroup>
-          </select>
+          <label className={styles.label}>Theme (instance default)</label>
+          <ThemePicker value={theme} onSelect={(id) => setTheme(id)} />
         </div>
 
         <div className={styles.field}>
@@ -687,11 +668,17 @@ export default function ConfigPage() {
       <div className={styles.info}>
         <h2 className={styles.infoTitle}>Provider Details</h2>
         <p className={styles.infoText}>
-          <strong>Env key:</strong>{' '}
-          <code className={styles.code}>{providerConfig?.envKey ?? 'N/A'}</code>
+          <strong>API key:</strong>{' '}
+          {providerConfig?.envKey ? (
+            <>
+              read from <code className={styles.code}>{providerConfig.envKey}</code>
+            </>
+          ) : (
+            'not required — this provider signs in through its local CLI, no API key needed'
+          )}
         </p>
         <p className={styles.infoText}>
-          <strong>Available models:</strong> {models.length}
+          <strong>Models available:</strong> {models.length}
         </p>
       </div>
     </div>

@@ -86,6 +86,12 @@
   background: var(--surface);
 }
 
+.divider {
+  height: 1px;
+  margin: 0.3rem 0.2rem;
+  background: var(--border);
+}
+
 .danger {
   color: var(--price-up);
 }

@@ -74,6 +74,10 @@
 }
 
 .warn {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.6rem;
   padding: 0.85rem 1rem;
   border-radius: var(--radius-md);
   border: 1px solid var(--price-up);
@@ -83,11 +87,47 @@
   line-height: 1.5;
 }
 
+.warnText {
+  margin: 0;
+}
+
+.warnAction {
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 0.85rem;
+  color: var(--accent);
+  text-decoration: none;
+  padding: 0.4rem 0.8rem;
+  border: 1px solid var(--accent);
+  border-radius: var(--radius-md);
+}
+
+.warnAction:hover {
+  background: var(--accent);
+  color: var(--bg);
+}
+
 .qrCard {
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: 0.75rem;
+}
+
+.qrWrap {
+  position: relative;
+  line-height: 0;
+}
+
+.qrLogo {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  display: inline-flex;
+  padding: 3px;
+  background: #faf6ed;
+  border-radius: 50%;
 }
 
 .qr {

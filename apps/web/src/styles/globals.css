@@ -40,8 +40,16 @@
   --warning: #d4a574;
 }
 
+/* ============================================
+   Theme families. Each family (altitude, midnight, cyberpunk, tron, autumn,
+   solar) has a matching -light and -dark palette built from the same accent
+   identity, so the light/dark toggle flips within the chosen family rather
+   than swapping to a generic shared light/dark. See lib/theme.ts.
+   ============================================ */
+
+/* --- Altitude: deep teal + warm cream (the signature theme, default) --- */
 :root,
-[data-theme='default'] {
+[data-theme='altitude-dark'] {
   color-scheme: dark;
 
   --bg: #031820;
@@ -93,7 +101,7 @@
   }
 }
 
-[data-theme='basic-light'] {
+[data-theme='altitude-light'] {
   color-scheme: light;
 
   --bg: #faf6ed;
@@ -116,7 +124,8 @@
   --page-overlay: none;
 }
 
-[data-theme='basic-dark'] {
+/* --- Midnight: neutral blue, no glow --- */
+[data-theme='midnight-dark'] {
   color-scheme: dark;
 
   --bg: #0e1117;
@@ -137,7 +146,31 @@
   --page-overlay: none;
 }
 
-[data-theme='cyberpunk'] {
+[data-theme='midnight-light'] {
+  color-scheme: light;
+
+  --bg: #f6f8fc;
+  --surface: #eef2f9;
+  --elevated: #e3e9f4;
+  --border: #cdd7e6;
+
+  --accent: #2563eb;
+  --accent-dim: #93c5fd;
+  --accent-glow: rgba(37, 99, 235, 0.08);
+  --accent-hover: #1d4ed8;
+
+  --text: #0e1117;
+  --text-secondary: #3a4859;
+  --muted: #6b7280;
+
+  --price-up: #c1272d;
+  --price-down: #059669;
+  --page-gradient: linear-gradient(180deg, rgba(37, 99, 235, 0.06), transparent 32%);
+  --page-overlay: none;
+}
+
+/* --- Cyberpunk: hot pink neon --- */
+[data-theme='cyberpunk-dark'] {
   color-scheme: dark;
 
   --bg: #0d0212;
@@ -162,7 +195,33 @@
   --page-overlay: linear-gradient(135deg, rgba(255, 79, 216, 0.03), transparent 45%);
 }
 
-[data-theme='tron'] {
+[data-theme='cyberpunk-light'] {
+  color-scheme: light;
+
+  --bg: #fdf2fb;
+  --surface: #fbe6f6;
+  --elevated: #f6d6ef;
+  --border: #e9a8d8;
+
+  --accent: #c0208e;
+  --accent-dim: #f0a0d8;
+  --accent-glow: rgba(192, 32, 142, 0.10);
+  --accent-hover: #9c1773;
+
+  --text: #2a0820;
+  --text-secondary: #7a3a66;
+  --muted: #a86a96;
+
+  --price-up: #c1272d;
+  --price-down: #0f9d6b;
+  --page-gradient:
+    radial-gradient(circle at top left, rgba(192, 32, 142, 0.12), transparent 30%),
+    radial-gradient(circle at top right, rgba(0, 150, 199, 0.08), transparent 24%);
+  --page-overlay: none;
+}
+
+/* --- Tron: grid-lit cyan --- */
+[data-theme='tron-dark'] {
   color-scheme: dark;
 
   --bg: #03131d;
@@ -187,7 +246,33 @@
     linear-gradient(90deg, rgba(0, 217, 255, 0.03) 1px, transparent 1px);
 }
 
-[data-theme='autumn'] {
+[data-theme='tron-light'] {
+  color-scheme: light;
+
+  --bg: #eef9fc;
+  --surface: #e0f3f8;
+  --elevated: #cfeaf2;
+  --border: #a6d4e0;
+
+  --accent: #0e7490;
+  --accent-dim: #7dd3e8;
+  --accent-glow: rgba(14, 116, 144, 0.10);
+  --accent-hover: #0a5a72;
+
+  --text: #052330;
+  --text-secondary: #356577;
+  --muted: #5c9fb2;
+
+  --price-up: #c1272d;
+  --price-down: #0f9d6b;
+  --page-gradient: radial-gradient(circle at top, rgba(14, 116, 144, 0.10), transparent 34%);
+  --page-overlay:
+    linear-gradient(rgba(14, 116, 144, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(14, 116, 144, 0.04) 1px, transparent 1px);
+}
+
+/* --- Autumn: warm amber cabin lighting --- */
+[data-theme='autumn-light'] {
   color-scheme: light;
 
   --bg: #f7efe3;
@@ -212,7 +297,33 @@
   --page-overlay: none;
 }
 
-[data-theme='solar-red'] {
+[data-theme='autumn-dark'] {
+  color-scheme: dark;
+
+  --bg: #17120a;
+  --surface: #221a0e;
+  --elevated: #2f2414;
+  --border: #4a3a20;
+
+  --accent: #e08a3c;
+  --accent-dim: #7c4a12;
+  --accent-glow: rgba(224, 138, 60, 0.14);
+  --accent-hover: #f3a85c;
+
+  --text: #fbe9d2;
+  --text-secondary: #cfae86;
+  --muted: #9d7a5b;
+
+  --price-up: #f97316;
+  --price-down: #4ade80;
+  --page-gradient:
+    radial-gradient(circle at top, rgba(224, 138, 60, 0.14), transparent 34%),
+    linear-gradient(180deg, rgba(124, 74, 18, 0.12), transparent 44%);
+  --page-overlay: none;
+}
+
+/* --- Solar: burnt red dusk --- */
+[data-theme='solar-dark'] {
   color-scheme: dark;
 
   --bg: #18070a;
@@ -233,6 +344,31 @@
     radial-gradient(circle at top, rgba(255, 107, 87, 0.16), transparent 34%),
     linear-gradient(180deg, rgba(255, 189, 89, 0.08), transparent 42%);
   --page-overlay: linear-gradient(135deg, rgba(255, 107, 87, 0.04), transparent 50%);
+}
+
+[data-theme='solar-light'] {
+  color-scheme: light;
+
+  --bg: #fdf3f1;
+  --surface: #fbe7e3;
+  --elevated: #f6d6d0;
+  --border: #e9aaa0;
+
+  --accent: #c1272d;
+  --accent-dim: #f0a59c;
+  --accent-glow: rgba(193, 39, 45, 0.10);
+  --accent-hover: #9c1a1f;
+
+  --text: #2a0a08;
+  --text-secondary: #7a3a34;
+  --muted: #a86a64;
+
+  --price-up: #b91c1c;
+  --price-down: #2f855a;
+  --page-gradient:
+    radial-gradient(circle at top, rgba(193, 39, 45, 0.10), transparent 34%),
+    linear-gradient(180deg, rgba(255, 189, 89, 0.10), transparent 42%);
+  --page-overlay: none;
 }
 
 *,

@@ -172,6 +172,23 @@ describe('PATCH /api/admin/config — notification settings (issue #106)', () =>
     const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
     expect(data.update.publicBaseUrl).toBeNull();
   });
+
+  it('accepts a valid family theme id as the instance default', async () => {
+    const res = await PATCH(patchRequest({ theme: 'tron-light' }));
+    expect(res.status).toBe(200);
+    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
+    expect(data.update.theme).toBe('tron-light');
+  });
+
+  it('rejects a legacy flat theme id (must be family-mode now)', async () => {
+    const res = await PATCH(patchRequest({ theme: 'basic-dark' }));
+    expect(res.status).toBe(400);
+  });
+
+  it('rejects an unknown theme id', async () => {
+    const res = await PATCH(patchRequest({ theme: 'not-a-theme' }));
+    expect(res.status).toBe(400);
+  });
 });
 
 describe('PATCH /api/admin/config — perf knobs (issue #106 gaps 2 & 4)', () => {

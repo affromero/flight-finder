@@ -1,8 +1,11 @@
 import type { Metadata, Viewport } from 'next';
 import '@/styles/globals.css';
 import { ClientBeacon } from '@/components/analytics/ClientBeacon';
+import { HomeBrand } from '@/components/HomeBrand/HomeBrand';
 import { prisma } from '@/lib/prisma';
-import { THEME_OPTIONS, getThemeMode, isThemeId } from '@/lib/theme';
+import { isMultiUserEnabled } from '@/lib/multi-user';
+import { getCurrentUser } from '@/lib/user-auth';
+import { THEME_OPTIONS, getThemeMode, isThemeId, DEFAULT_THEME } from '@/lib/theme';
 
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
@@ -98,15 +101,36 @@ export default async function RootLayout({
     where: { id: 'singleton' },
     select: { theme: true },
   }).catch(() => null);
-  const theme = isThemeId(config?.theme) ? config.theme : 'default';
+  let theme = isThemeId(config?.theme) ? config.theme : DEFAULT_THEME;
+
+  // Per-user theme: in multi user mode a logged-in member's personal theme
+  // overrides the instance default. Rendered into <html data-theme> so the
+  // server (DOM) value wins on self hosted, where localStorage is ignored.
+  let perUserTheme = false;
+  try {
+    if (await isMultiUserEnabled()) {
+      const user = await getCurrentUser();
+      if (user) {
+        perUserTheme = true;
+        if (isThemeId(user.theme)) theme = user.theme;
+      }
+    }
+  } catch {
+    // A transient DB error must not break the layout on every page; fall back
+    // to the instance default theme and treat the visitor as non-personalized.
+    perUserTheme = false;
+  }
+  const perUserScript = `window.__ftPerUserTheme = ${perUserTheme};`;
 
   return (
     <html lang="en" suppressHydrationWarning data-theme={theme} data-theme-mode={getThemeMode(theme)}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
+        <script dangerouslySetInnerHTML={{ __html: perUserScript }} />
         <script dangerouslySetInnerHTML={{ __html: swScript }} />
       </head>
       <body>
+        <HomeBrand />
         {children}
         {!isSelfHosted && <ClientBeacon />}
       </body>

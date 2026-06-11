@@ -5,6 +5,7 @@ import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { isPresetSlug } from '@/lib/avatars';
+import { isThemeId } from '@/lib/theme';
 
 async function requireUser() {
   if (!(await isMultiUserEnabled())) return { ok: false as const, status: 404 };
@@ -22,6 +23,7 @@ export async function GET() {
     username: user.username,
     displayName: user.displayName,
     avatar: user.avatar,
+    theme: user.theme,
     defaultCurrency: user.defaultCurrency,
     defaultCountry: user.defaultCountry,
     preferredAirlines: user.preferredAirlines,
@@ -52,6 +54,15 @@ export async function PATCH(request: NextRequest) {
       return apiError('avatar must be a known preset slug or null', 400);
     }
     data.avatar = body.avatar;
+  }
+
+  if (body.theme === null) {
+    data.theme = null;
+  } else if (typeof body.theme === 'string') {
+    if (!isThemeId(body.theme)) {
+      return apiError('theme must be a valid theme id or null', 400);
+    }
+    data.theme = body.theme;
   }
 
   if (body.defaultCurrency === null) {
@@ -111,6 +122,7 @@ export async function PATCH(request: NextRequest) {
       username: true,
       displayName: true,
       avatar: true,
+      theme: true,
       defaultCurrency: true,
       defaultCountry: true,
       preferredAirlines: true,
