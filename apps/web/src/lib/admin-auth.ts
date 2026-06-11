@@ -1,4 +1,4 @@
-import { cookies } from 'next/headers';
+import { cookies, headers } from 'next/headers';
 import { createHmac, timingSafeEqual } from 'crypto';
 import { prisma } from '@/lib/prisma';
 import { verifyHashedPassword } from '@/lib/password';
@@ -96,11 +96,32 @@ export async function verifyPassword(
   }
 }
 
+/**
+ * Whether the cookie should carry the Secure attribute. Keyed off the actual
+ * request protocol, NOT NODE_ENV: a self-hosted instance runs NODE_ENV=production
+ * but is commonly reached over plain http (http://localhost, a LAN IP). Marking
+ * the session cookie Secure there breaks login in browsers that don't treat
+ * http://localhost as a secure context -- Safari drops the cookie, so the login
+ * 200s but every subsequent request is anonymous and bounces back to /login.
+ * Behind an https reverse proxy (Caddy) x-forwarded-proto is "https" and the
+ * cookie is correctly marked Secure.
+ */
+async function requestIsHttps(): Promise<boolean> {
+  try {
+    const h = await headers();
+    const proto = h.get('x-forwarded-proto');
+    if (proto) return proto.split(',')[0]!.trim() === 'https';
+  } catch {
+    // No request scope (e.g. a unit test): fall through to non-secure.
+  }
+  return false;
+}
+
 export async function setSessionCookie(token: string): Promise<void> {
   const jar = await cookies();
   jar.set(SESSION_COOKIE, token, {
     httpOnly: true,
-    secure: process.env.NODE_ENV === 'production',
+    secure: await requestIsHttps(),
     sameSite: 'lax',
     maxAge: SESSION_MAX_AGE,
     path: '/',

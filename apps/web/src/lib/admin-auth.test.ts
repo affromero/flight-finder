@@ -5,6 +5,7 @@ import {
   verifyPassword,
   signPayload,
   parseAdminTokenTimestamp,
+  setSessionCookie,
 } from './admin-auth';
 import { hashPassword } from './password';
 
@@ -16,6 +17,13 @@ function signedAdminToken(issuedAtMs: number): string {
   return `${payload}.${signPayload(payload)}`;
 }
 
+// Mutable state the next/headers mock reads, so each test can vary the request
+// protocol and inspect the cookie that was set.
+const { mockCookieSet, headerState } = vi.hoisted(() => ({
+  mockCookieSet: vi.fn(),
+  headerState: { proto: null as string | null },
+}));
+
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     extractionConfig: {
@@ -24,14 +32,54 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-// Mock next/headers since admin-auth imports cookies (used by set/get/clear cookie fns)
+// Mock next/headers since admin-auth imports cookies + headers (set/get/clear
+// cookie fns, and the request-protocol check that drives the Secure flag).
 vi.mock('next/headers', () => ({
   cookies: vi.fn().mockResolvedValue({
     get: vi.fn(),
-    set: vi.fn(),
+    set: mockCookieSet,
     delete: vi.fn(),
   }),
+  headers: vi.fn().mockResolvedValue({
+    get: (key: string) => (key === 'x-forwarded-proto' ? headerState.proto : null),
+  }),
 }));
+
+// Regression: the session cookie's Secure attribute must follow the actual
+// request protocol, not NODE_ENV. A self-hosted instance runs in production but
+// is commonly reached over http://localhost or a LAN IP, where a Secure cookie
+// is silently dropped by Safari -- login 200s, then every request is anonymous
+// and bounces back to /login.
+describe('setSessionCookie -- Secure flag follows request protocol', () => {
+  beforeEach(() => {
+    mockCookieSet.mockClear();
+    headerState.proto = null;
+  });
+
+  it('omits Secure on a plain http request (no x-forwarded-proto)', async () => {
+    headerState.proto = null;
+    await setSessionCookie('tok');
+    expect(mockCookieSet).toHaveBeenCalledWith('ft-session', 'tok', expect.objectContaining({ secure: false, httpOnly: true }));
+  });
+
+  it('omits Secure when behind an http proxy', async () => {
+    headerState.proto = 'http';
+    await setSessionCookie('tok');
+    expect(mockCookieSet.mock.calls[0]![2]).toMatchObject({ secure: false });
+  });
+
+  it('sets Secure when the request is https (behind an https proxy)', async () => {
+    headerState.proto = 'https';
+    await setSessionCookie('tok');
+    expect(mockCookieSet.mock.calls[0]![2]).toMatchObject({ secure: true });
+  });
+
+  it('uses the first proto when the header is a comma list', async () => {
+    headerState.proto = 'https, http';
+    await setSessionCookie('tok');
+    expect(mockCookieSet.mock.calls[0]![2]).toMatchObject({ secure: true });
+  });
+});
 
 describe('createSessionToken', () => {
   it('returns payload.signature format', () => {
