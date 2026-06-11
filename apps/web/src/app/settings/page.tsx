@@ -5,7 +5,7 @@ import Link from 'next/link';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
 import { ReachGuide } from '@/components/ReachGuide/ReachGuide';
-import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, CLI_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { PROVIDER_METADATA, LOCAL_PROVIDERS, CLI_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { isThemeId, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
 
@@ -116,7 +116,7 @@ export default function SettingsPage() {
           setVpnProvider(d.data.vpnProvider || 'none');
           setVpnCountries(d.data.vpnCountries || []);
           setHasVpnCode(d.data.hasVpnActivationCode || false);
-          const pc = EXTRACTION_PROVIDERS[d.data.provider];
+          const pc = PROVIDER_METADATA[d.data.provider];
           const knownModel = pc?.models.find((m) => m.id === d.data.model);
           if (knownModel) {
             setModel(d.data.model);
@@ -139,14 +139,14 @@ export default function SettingsPage() {
     }
   }, [config]);
 
-  const providerConfig = EXTRACTION_PROVIDERS[provider];
+  const providerConfig = PROVIDER_METADATA[provider];
   const models = providerConfig?.models ?? [];
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
     setCustomModel('');
-    setCustomBaseUrl(EXTRACTION_PROVIDERS[newProvider]?.defaultBaseUrl ?? '');
-    const newModels = EXTRACTION_PROVIDERS[newProvider]?.models ?? [];
+    setCustomBaseUrl(PROVIDER_METADATA[newProvider]?.defaultBaseUrl ?? '');
+    const newModels = PROVIDER_METADATA[newProvider]?.models ?? [];
     if (newModels.length > 0) {
       setModel(newModels[0]!.id);
     } else {
@@ -299,7 +299,7 @@ export default function SettingsPage() {
           <div className={styles.field}>
             <label className={styles.label}>Provider</label>
             <div className={styles.providerGrid}>
-              {Object.entries(EXTRACTION_PROVIDERS).map(([key, p]) => {
+              {Object.entries(PROVIDER_METADATA).map(([key, p]) => {
                 const detected = detectedProviders.includes(key);
                 const isCli = !!CLI_PROVIDERS[key];
                 const isLocal = LOCAL_PROVIDERS.has(key);

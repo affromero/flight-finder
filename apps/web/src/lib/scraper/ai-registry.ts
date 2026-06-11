@@ -1,5 +1,20 @@
 import type Anthropic from '@anthropic-ai/sdk';
 
+import {
+  PROVIDER_METADATA,
+  CLI_PROVIDERS,
+  LOCAL_PROVIDERS,
+  type ModelInfo,
+  type ProviderMeta,
+} from './provider-metadata';
+
+// Client-safe metadata lives in provider-metadata.ts so the settings/setup/admin
+// client pages can render the provider UI without pulling this module (and the
+// LLM SDKs its extractors import) into the client bundle. Re-exported here so
+// existing server-side imports of these symbols keep resolving from ai-registry.
+export { CLI_PROVIDERS, LOCAL_PROVIDERS };
+export type { ModelInfo, ProviderMeta };
+
 /**
  * Per-LLM-call timeout in ms. Without this, Gemini's SDK has no default
  * request timeout and a hung call sits forever, which is what was happening
@@ -19,13 +34,6 @@ export interface ExtractionUsage {
 export interface ExtractionResult {
   content: string;
   usage: ExtractionUsage;
-}
-
-interface ModelInfo {
-  id: string;
-  name: string;
-  costPer1kInput: number;
-  costPer1kOutput: number;
 }
 
 export interface ExtractOptions {
@@ -48,13 +56,7 @@ export interface ExtractOptions {
   timeoutMs?: number;
 }
 
-interface ProviderConfig {
-  displayName: string;
-  envKey?: string;
-  models: ModelInfo[];
-  allowCustomModel?: boolean;
-  allowCustomBaseUrl?: boolean;
-  defaultBaseUrl?: string;
+interface ProviderConfig extends ProviderMeta {
   extract: (
     apiKey: string,
     model: string,
@@ -86,22 +88,7 @@ export function ensureV1Suffix(url: string): string {
 
 export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
   anthropic: {
-    displayName: 'Anthropic',
-    envKey: 'ANTHROPIC_API_KEY',
-    models: [
-      {
-        id: 'claude-haiku-4-5-20251001',
-        name: 'Claude Haiku 4.5',
-        costPer1kInput: 0.001,
-        costPer1kOutput: 0.005,
-      },
-      {
-        id: 'claude-sonnet-4-6-20250514',
-        name: 'Claude Sonnet 4.6',
-        costPer1kInput: 0.003,
-        costPer1kOutput: 0.015,
-      },
-    ],
+    ...PROVIDER_METADATA.anthropic!,
     extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
       // Dynamic import like the other providers (openai, google): a static
       // import makes Turbopack resolve the externalized SDK at build time, which
@@ -134,18 +121,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
   openai: {
-    displayName: 'OpenAI',
-    envKey: 'OPENAI_API_KEY',
-    allowCustomModel: true,
-    allowCustomBaseUrl: true,
-    models: [
-      {
-        id: 'gpt-4.1-mini',
-        name: 'GPT-4.1 Mini',
-        costPer1kInput: 0.0004,
-        costPer1kOutput: 0.0016,
-      },
-    ],
+    ...PROVIDER_METADATA.openai!,
     extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
       const client = new OpenAI({
@@ -177,12 +153,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
   ollama: {
-    displayName: 'Ollama',
-    envKey: undefined,
-    allowCustomModel: true,
-    allowCustomBaseUrl: true,
-    defaultBaseUrl: 'http://localhost:11434/v1',
-    models: [],
+    ...PROVIDER_METADATA.ollama!,
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
       const rawBaseURL = options?.baseUrl
@@ -215,12 +186,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
   llamacpp: {
-    displayName: 'llama.cpp',
-    envKey: undefined,
-    allowCustomModel: true,
-    allowCustomBaseUrl: true,
-    defaultBaseUrl: 'http://localhost:8080/v1',
-    models: [],
+    ...PROVIDER_METADATA.llamacpp!,
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
       const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8080');
@@ -250,12 +216,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
   vllm: {
-    displayName: 'vLLM',
-    envKey: undefined,
-    allowCustomModel: true,
-    allowCustomBaseUrl: true,
-    defaultBaseUrl: 'http://localhost:8000/v1',
-    models: [],
+    ...PROVIDER_METADATA.vllm!,
     extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
       const { default: OpenAI } = await import('openai');
       const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8000');
@@ -285,17 +246,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
   google: {
-    displayName: 'Google',
-    envKey: 'GOOGLE_AI_API_KEY',
-    allowCustomModel: true,
-    models: [
-      {
-        id: 'gemini-2.5-flash',
-        name: 'Gemini 2.5 Flash',
-        costPer1kInput: 0.00015,
-        costPer1kOutput: 0.0035,
-      },
-    ],
+    ...PROVIDER_METADATA.google!,
     extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
       const { GoogleGenerativeAI } = await import('@google/generative-ai');
       const genAI = new GoogleGenerativeAI(apiKey);
@@ -324,12 +275,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
   'claude-code': {
-    displayName: 'Claude Code (Max)',
-    envKey: undefined,
-    models: [
-      { id: 'sonnet', name: 'Claude Sonnet (via CLI)', costPer1kInput: 0, costPer1kOutput: 0 },
-      { id: 'opus', name: 'Claude Opus (via CLI)', costPer1kInput: 0, costPer1kOutput: 0 },
-    ],
+    ...PROVIDER_METADATA['claude-code']!,
     extract: async (_apiKey, model, systemPrompt, userPrompt) => {
       const { spawn } = await import(/* webpackIgnore: true */ 'child_process');
 
@@ -389,11 +335,7 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
   codex: {
-    displayName: 'OpenAI Codex (CLI)',
-    envKey: undefined,
-    models: [
-      { id: 'codex', name: 'Codex CLI', costPer1kInput: 0, costPer1kOutput: 0 },
-    ],
+    ...PROVIDER_METADATA.codex!,
     extract: async (_apiKey, _model, systemPrompt, userPrompt) => {
       const { spawn } = await import(/* webpackIgnore: true */ 'child_process');
 
@@ -459,13 +401,6 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
     },
   },
 };
-
-export const CLI_PROVIDERS: Record<string, string> = {
-  'claude-code': 'claude',
-  codex: 'codex',
-};
-
-export const LOCAL_PROVIDERS = new Set(['ollama', 'llamacpp', 'vllm']);
 
 /** Check that a CLI provider has auth configured, not just the binary installed */
 async function hasCliAuth(provider: string): Promise<boolean> {

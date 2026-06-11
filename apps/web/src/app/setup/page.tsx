@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import styles from './page.module.css';
-import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { PROVIDER_METADATA, LOCAL_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 
 interface SetupStatus {
@@ -86,7 +86,7 @@ export default function SetupPage() {
         if (detected.length > 0) {
           const defaultProvider = detected[0]!;
           setProvider(defaultProvider);
-          const providerConfig = EXTRACTION_PROVIDERS[defaultProvider];
+          const providerConfig = PROVIDER_METADATA[defaultProvider];
           if (providerConfig?.models[0]) {
             setModel(providerConfig.models[0].id);
           }
@@ -118,7 +118,7 @@ export default function SetupPage() {
       const effective = customModel.trim() || model;
       if (!provider || !effective) {
         const hint = LOCAL_PROVIDERS.has(provider) && localModelsError
-          ? 'Could not reach ' + EXTRACTION_PROVIDERS[provider]?.displayName + ' — type a model ID manually'
+          ? 'Could not reach ' + PROVIDER_METADATA[provider]?.displayName + ' — type a model ID manually'
           : 'Select a provider and model';
         setError(hint);
         return;
@@ -206,7 +206,7 @@ export default function SetupPage() {
   const detectedProviders = status.detectedProviders ?? [];
   const hasCliProvider = detectedProviders.some((p) => CLI_PROVIDERS.has(p));
 
-  const providerEntries = Object.entries(EXTRACTION_PROVIDERS);
+  const providerEntries = Object.entries(PROVIDER_METADATA);
   const isSelfHosted = status.isSelfHosted ?? false;
   const subtitles = [
     'Set your admin password',
@@ -311,15 +311,15 @@ export default function SetupPage() {
               })}
             </div>
 
-            {provider && EXTRACTION_PROVIDERS[provider] && (
+            {provider && PROVIDER_METADATA[provider] && (
               <>
-                {EXTRACTION_PROVIDERS[provider]!.models.length > 0 && (
+                {PROVIDER_METADATA[provider]!.models.length > 0 && (
                   <select
                     className={styles.input}
                     value={model}
                     onChange={(e) => setModel(e.target.value)}
                   >
-                    {EXTRACTION_PROVIDERS[provider]!.models.map((m) => (
+                    {PROVIDER_METADATA[provider]!.models.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
                         {m.costPer1kInput === 0 ? ' (free)' : ` ($${m.costPer1kInput}/1k in)`}
@@ -327,7 +327,7 @@ export default function SetupPage() {
                     ))}
                   </select>
                 )}
-                {EXTRACTION_PROVIDERS[provider]!.models.length === 0 && localModels.length > 0 && (
+                {PROVIDER_METADATA[provider]!.models.length === 0 && localModels.length > 0 && (
                   <select
                     className={styles.input}
                     value={model}
@@ -340,13 +340,13 @@ export default function SetupPage() {
                     ))}
                   </select>
                 )}
-                {EXTRACTION_PROVIDERS[provider]!.models.length === 0 && localModelsLoading && (
+                {PROVIDER_METADATA[provider]!.models.length === 0 && localModelsLoading && (
                   <span className={styles.hint}>Fetching models...</span>
                 )}
-                {EXTRACTION_PROVIDERS[provider]!.models.length === 0 && localModelsError && (
+                {PROVIDER_METADATA[provider]!.models.length === 0 && localModelsError && (
                   <span className={styles.hintError}>{localModelsError}</span>
                 )}
-                {EXTRACTION_PROVIDERS[provider]!.allowCustomModel && (
+                {PROVIDER_METADATA[provider]!.allowCustomModel && (
                   <input
                     type="text"
                     className={styles.input}
@@ -357,11 +357,11 @@ export default function SetupPage() {
                     onChange={(e) => setCustomModel(e.target.value)}
                   />
                 )}
-                {EXTRACTION_PROVIDERS[provider]!.allowCustomBaseUrl && (
+                {PROVIDER_METADATA[provider]!.allowCustomBaseUrl && (
                   <input
                     type="url"
                     className={styles.input}
-                    placeholder={EXTRACTION_PROVIDERS[provider]!.defaultBaseUrl || 'https://...'}
+                    placeholder={PROVIDER_METADATA[provider]!.defaultBaseUrl || 'https://...'}
                     value={customBaseUrl}
                     onChange={(e) => setCustomBaseUrl(e.target.value)}
                   />
