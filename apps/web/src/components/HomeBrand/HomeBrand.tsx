@@ -24,8 +24,8 @@ export function HomeBrand() {
 
   return (
     <Link href="/" className={styles.root} aria-label="Flight Finder home">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true">
-        <path d="M21.5 12 3 4l3 8-3 8 18.5-8Z" />
+      <svg width="16" height="16" viewBox="95 2 58 58" fill="currentColor" aria-hidden="true">
+        <path d="m103.3 13.4 3.6-3.1 24.3 5 8.3-9.2c1.7-1.8 5-2.4 7.5-2.8-0.2 2.6-0.4 5.8-2 7.7l-8.4 9.9 5 22.8-3.3 4.6-10.5-19.3-10.4 10.4 2 8.5-3.7 4.7-4.5-12.3-12.3-4.2 3.3-3.1 10 1.4 10-10.3z" />
       </svg>
       <span className={styles.word}>Flight Finder</span>
     </Link>
