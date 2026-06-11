@@ -91,8 +91,6 @@ COPY --from=proddeps --chown=node:node /app/node_modules/redis-errors ./node_mod
 COPY --from=proddeps --chown=node:node /app/node_modules/denque ./node_modules/denque
 COPY --from=proddeps --chown=node:node /app/node_modules/standard-as-callback ./node_modules/standard-as-callback
 COPY --from=proddeps --chown=node:node /app/node_modules/cluster-key-slot ./node_modules/cluster-key-slot
-COPY --from=proddeps --chown=node:node /app/node_modules/lodash.defaults ./node_modules/lodash.defaults
-COPY --from=proddeps --chown=node:node /app/node_modules/lodash.isarguments ./node_modules/lodash.isarguments
 COPY --from=proddeps --chown=node:node /app/node_modules/debug ./node_modules/debug
 COPY --from=proddeps --chown=node:node /app/node_modules/ms ./node_modules/ms
 COPY --from=proddeps --chown=node:node /app/node_modules/ua-parser-js ./node_modules/ua-parser-js
