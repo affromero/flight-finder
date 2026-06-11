@@ -117,7 +117,7 @@ async function getRoutes(): Promise<RouteInfo[]> {
   try {
     gotLock = (await redis.set(LOCK_KEY, '1', 'EX', LOCK_TTL, 'NX')) === 'OK';
   } catch {
-    gotLock = false;
+    // A Redis error means we did not get the lock; fall through to polling.
   }
 
   if (!gotLock) {
