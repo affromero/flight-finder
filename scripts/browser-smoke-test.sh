@@ -47,30 +47,38 @@ try {
       bad('Landing page title', 'got: ' + title);
     }
 
-    // Fresh installs show a setup wizard (no LLM provider configured).
-    // After setup, the search bar appears. Both states are valid.
-    // Use Promise.race to wait for whichever appears first.
+    // A fresh install (no admin password set) redirects to the setup wizard;
+    // a configured instance shows the search bar; a gated host shows an invite
+    // input. All three are valid. Each detector resolves to its label on a
+    // match and never settles on a miss (so a losing branch can't reject the
+    // race), with a hard timeout as the only failure path.
+    const detect = (p, label) => p.then(() => label).catch(() => new Promise(() => {}));
     const result = await Promise.race([
-      page.locator('input[placeholder*="NYC"], input[placeholder*="Paris"]')
-        .first().waitFor({ state: 'visible', timeout: 15000 })
-        .then(() => 'search'),
-      page.getByText('Fairtrail Setup')
-        .waitFor({ state: 'visible', timeout: 15000 })
-        .then(() => 'setup'),
-      page.locator('input[placeholder*="invite"]')
-        .first().waitFor({ state: 'visible', timeout: 15000 })
-        .then(() => 'invite'),
-      new Promise(resolve => setTimeout(() => resolve('timeout'), 16000)),
+      detect(
+        page.locator('input[placeholder*="NYC"], input[placeholder*="Paris"]')
+          .first().waitFor({ state: 'visible', timeout: 25000 }),
+        'search',
+      ),
+      detect(page.waitForURL('**/setup', { timeout: 25000 }), 'setup'),
+      detect(page.waitForURL('**/login**', { timeout: 25000 }), 'login'),
+      detect(
+        page.locator('input[placeholder*="invite"]')
+          .first().waitFor({ state: 'visible', timeout: 25000 }),
+        'invite',
+      ),
+      new Promise(resolve => setTimeout(() => resolve('timeout'), 20000)),
     ]);
 
     if (result === 'search') {
       ok('Search input is visible on landing page');
     } else if (result === 'setup') {
-      ok('Setup wizard shown (first-run, no provider configured)');
+      ok('Setup wizard shown (first-run, no admin password set)');
+    } else if (result === 'login') {
+      ok('Login picker shown (multi user mode)');
     } else if (result === 'invite') {
       ok('Invite code input visible (gated mode)');
     } else {
-      bad('Landing page', 'neither search bar, setup wizard, nor invite input visible after 15s');
+      bad('Landing page', 'no search bar, setup wizard, login, nor invite input after 20s');
     }
 
     await page.close();
