@@ -1,4 +1,4 @@
-import Anthropic from '@anthropic-ai/sdk';
+import type Anthropic from '@anthropic-ai/sdk';
 
 /**
  * Per-LLM-call timeout in ms. Without this, Gemini's SDK has no default
@@ -103,7 +103,12 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
       },
     ],
     extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
-      const client = new Anthropic({ apiKey });
+      // Dynamic import like the other providers (openai, google): a static
+      // import makes Turbopack resolve the externalized SDK at build time, which
+      // fails in the monorepo Docker install where npm hoists it to the
+      // workspace, not the root. The type-only import above keeps Anthropic.* types.
+      const { default: AnthropicSdk } = await import('@anthropic-ai/sdk');
+      const client = new AnthropicSdk({ apiKey });
       const response = await client.messages.create(
         {
           model,

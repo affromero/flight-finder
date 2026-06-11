@@ -302,7 +302,7 @@ export async function parseFlightQuery(
     console.error(
       `[parse-query] FAIL json_parse_error provider=${provider} model=${model} length=${jsonMatch[0].length} err=${msg} preview=${preview}`,
     );
-    throw new Error('Failed to parse LLM response as JSON');
+    throw new Error('Failed to parse LLM response as JSON', { cause: err });
   }
 
   // Handle both old format (flat ParsedFlightQuery) and new format (with confidence envelope)
