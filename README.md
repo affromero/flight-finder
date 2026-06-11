@@ -218,38 +218,15 @@ Avoid models under 1B (TinyLlama, etc.) and older generations (Llama 3.x, Qwen 2
 
 ## How It Works
 
-```
-You type: "SFO to Tokyo sometime in July +/- 5 days"
-                        |
-                        v
-              +------------------+
-              |   LLM Parser     |  Extracts origin, destination,
-              |  (Claude/GPT)    |  date range, flexibility
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |   Playwright     |  Navigates Google Flights
-              |   (headless)     |  with your exact query
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |  LLM Extractor   |  Reads the page, extracts
-              |  (configurable)  |  structured price data
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |   PostgreSQL     |  Stores price snapshots
-              |   + Prisma      |  with timestamps
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |  Plotly.js       |  Interactive chart at
-              |  /q/[id]        |  a shareable public URL
-              +------------------+
+```mermaid
+flowchart TD
+    U["You type:<br/>SFO to Tokyo sometime in July, +/- 5 days"]
+    U --> P["LLM parser<br/>(Claude / GPT / local)"]
+    P -->|"origin, destination, date range, flexibility"| N["Playwright<br/>(headless Chromium)"]
+    N -->|"navigates Google Flights, captures the page"| X["LLM extractor<br/>(configurable provider)"]
+    X -->|"structured prices + booking links"| DB[("PostgreSQL + Prisma<br/>price snapshots over time")]
+    DB --> C["Plotly.js chart at /q/id<br/>a shareable public URL"]
+    CRON["Cron, every 3h"] -.->|"re-scrapes every active query"| N
 ```
 
 The built-in cron runs on a configurable interval (default: every 3h). Each run captures prices across all active queries and the chart pages update automatically.
