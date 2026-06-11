@@ -1,0 +1,57 @@
+version: 2
+updates:
+  # Web and CLI workspaces (the root lockfile covers both).
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    groups:
+      npm:
+        patterns:
+          - '*'
+  # Desktop launcher (deliberately not an npm workspace member).
+  - package-ecosystem: npm
+    directory: /apps/desktop
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    groups:
+      desktop-npm:
+        patterns:
+          - '*'
+  # Tauri (Rust) dependencies for the desktop app.
+  - package-ecosystem: cargo
+    directory: /apps/desktop/src-tauri
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    groups:
+      tauri:
+        patterns:
+          - '*'
+  # Production container base image.
+  - package-ecosystem: docker
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+  # CI, docker, and desktop release workflows.
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    cooldown:
+      default-days: 7
+    open-pull-requests-limit: 10
+    groups:
+      actions:
+        patterns:
+          - '*'
