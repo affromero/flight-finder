@@ -1,11 +1,23 @@
 # Changelog
 
-## [Unreleased]
+## [0.11.0] - 2026-06-10
+
+Install Flight Finder without ever touching a terminal, and run it for a whole household: a native desktop app, passwordless profiles like Netflix, a personal theme per person, and a guided way to reach it from a phone.
 
 ### Added
+* **No-terminal desktop app.** A native launcher (macOS `.dmg`, Windows `.exe`, Linux `.AppImage`) that, on first run, either runs the stack on this computer (Host mode) or connects to an existing instance (Client mode), each in its own window. Installers build automatically on every published release and are linked from a new `/download` page.
+* **Households without passwords.** In multi user mode a member can be passwordless: the login screen becomes a "Who's using Flight Finder?" picker where each person taps their face to sign in, Netflix style, and guests can be quick-added with generic names. Each member keeps their own trackers, a flight-themed profile avatar, and preferences.
+* **Personal theme families.** Six colour families (Altitude, Midnight, Cyberpunk, Tron, Autumn, Solar), each with a matching light and dark palette. Pick a family once and the light/dark toggle flips within it; members keep a personal theme while admins set the instance default.
+* **Reach it from a phone, guided.** An interactive guide in Instance settings (same Wi-Fi, Tailscale, Cloudflare quick and named tunnels, or your own domain) walks the OS-specific commands, and `/connect` shows a QR code carrying the member avatar plus native share buttons. The installer offers a consent-first reachability choice that defaults to no exposure.
+* **Unified navigation.** One avatar menu on every page (your trackers, account & appearance, connect a device, and admin destinations) plus a persistent Flight Finder home logo, replacing the old per-page button toolbars.
 * **Admin toggle for accepting community registrations.** The hub-side control that lets other instances register to contribute their data is now an admin toggle in Settings (default off, opt-in), next to a clearer explainer of why to enable Community Data Sharing. The `COMMUNITY_REGISTRATION_OPEN` env var still works as an override.
+* Flight-themed profile avatars (generated art with an emoji fallback), maskable PWA icons for a proper Android home-screen install, and OS-aware hints for any tool you need to install.
 
 ### Fixed
+* Fresh self-hosted instances now show the setup wizard again: setup-complete keys on whether an admin password has been set, not on the provider column's NOT NULL default.
+* The session cookie's `Secure` flag now follows the actual request protocol instead of `NODE_ENV`, so Safari can sign in over `http://localhost` or a LAN IP (a Secure cookie was silently dropped there, bouncing every request back to `/login`).
+* The service worker no longer caches the HTML shell, so a redeploy is picked up on the next load instead of serving a stale page.
+* Instance settings now renders dynamically, so a member's personal theme is correct on that page too rather than showing a statically-baked default.
 * Notification and VPN channel secrets encrypted before v0.10.0 now decrypt after upgrading, via a backward-compatible key-derivation fallback, so upgrading no longer requires re-entering them. They are re-encrypted under the stronger derivation the next time they are saved.
 
 ## [0.10.0] - 2026-06-05
