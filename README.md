@@ -8,6 +8,8 @@ Track flight prices over time. Self-hosted. Open source. Bring your own LLM.
 
 [![GitHub Release](https://img.shields.io/github/v/release/affromero/flight-finder)](https://github.com/affromero/flight-finder/releases/latest)
 [![CI](https://img.shields.io/github/actions/workflow/status/affromero/flight-finder/ci.yml?label=CI)](https://github.com/affromero/flight-finder/actions/workflows/ci.yml)
+[![OpenSSF Scorecard](https://img.shields.io/ossf-scorecard/github.com/affromero/flight-finder?label=scorecard)](https://scorecard.dev/viewer/?uri=github.com/affromero/flight-finder)
+[![Gitleaks](https://img.shields.io/github/actions/workflow/status/affromero/flight-finder/gitleaks.yml?branch=main&label=gitleaks&logo=github)](https://github.com/affromero/flight-finder/actions/workflows/gitleaks.yml)
 [![Docker](https://img.shields.io/badge/Docker-deployed-2496ED?logo=docker&logoColor=white)](https://github.com/affromero/flight-finder/pkgs/container/flight-finder)
 [![License: MIT](https://img.shields.io/github/license/affromero/flight-finder)](https://github.com/affromero/flight-finder/blob/main/LICENSE)
 [![TypeScript](https://img.shields.io/badge/TypeScript-strict-blue)](https://www.typescriptlang.org/)
