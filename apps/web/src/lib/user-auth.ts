@@ -1,5 +1,5 @@
 import { cookies } from 'next/headers';
-import type { User } from '@prisma/client';
+import type { User } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import {
   SESSION_COOKIE,

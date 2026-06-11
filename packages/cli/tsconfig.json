@@ -4,6 +4,7 @@
     "jsx": "react-jsx",
     "noEmit": true,
     "paths": {
+      "@/generated/*": ["../../apps/web/src/generated/*"],
       "@/*": ["./src/*"]
     },
     "types": ["node"]

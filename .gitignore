@@ -27,3 +27,6 @@ next-env.d.ts
 .vercel
 .turbo
 default.profraw
+
+# Prisma 7 generated client (run `prisma generate`)
+apps/web/src/generated/

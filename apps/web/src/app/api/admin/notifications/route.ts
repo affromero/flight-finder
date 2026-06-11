@@ -1,5 +1,5 @@
 import { NextRequest } from 'next/server';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { requireAdminApi } from '@/lib/admin-guard';

@@ -1,5 +1,5 @@
 import { createHash } from 'crypto';
-import type { Prisma } from '@prisma/client';
+import type { Prisma } from '@/generated/prisma/client';
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
