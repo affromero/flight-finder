@@ -71,13 +71,15 @@ It is a thin launcher over the same installer described above; the source lives 
 
 Phones connect through the browser: open your instance URL and **Add to Home Screen** to install it as an app (it is a PWA). Visit **`/connect`** on your instance for a QR code and step-by-step iOS/Android instructions.
 
+Admins also get an interactive reach guide in **Instance settings -> Reach it from other devices**: pick a method (Wi-Fi, Tailscale, Cloudflare, your own domain) and it walks the OS-specific steps, then takes the resulting URL.
+
 Installing on a phone needs an **https** URL (service workers require a secure context). On a VPS, pick one:
 
 - **Domain + auto HTTPS** (permanent): point a domain at the server and put [Caddy](https://caddyfile.com) in front. A ready Caddyfile lives at the repo root; it reverse-proxies `localhost:3003` and provisions Let's Encrypt TLS automatically. Replace the site address with your domain.
 - **Tailscale** (private, no domain): install Tailscale on the VPS and your phone, then `tailscale serve 3003` for private https on your tailnet (or `tailscale funnel 3003` to expose it publicly).
 - **Cloudflare quick tunnel** (throwaway): `cloudflared tunnel --url http://localhost:3003` prints a temporary `https://…trycloudflare.com` URL, no account needed. The installer offers to start one for you at the end.
 
-Multiple people connect to one instance with multi user mode (see the Multi user mode section below): each gets their own login, trackers, and a flight-themed profile avatar.
+Multiple people connect to one instance with multi user mode (see the Multi user mode section below): each gets their own login (or a passwordless tap-to-sign-in face), trackers, profile avatar, and personal light/dark theme.
 
 ## Why Flight Finder?
 
@@ -377,9 +379,17 @@ Once enabled, Flight Finder behaves like a normal multi-account app:
 - `/login` replaces the password-only admin form — same page for admins
   and non-admins (post-login redirect picks `/admin` vs `/account` based
   on the user's role)
-- Each user has `/account` showing only their own trackers
+- Each user has `/account` showing only their own trackers, reached from
+  an avatar menu in the top-right that is the same on every page
 - Each user has `/account/settings` for currency, country, preferred
-  airlines, and cabin class defaults
+  airlines, cabin class, and a **personal theme**. Themes come as colour
+  families (Altitude, Midnight, Cyberpunk, Tron, Autumn, Solar), each with
+  a matching light and dark palette; the toggle flips within the chosen
+  family. Members override the admin's instance default with their own.
+- Members can be **passwordless**: leave their password blank and the
+  `/login` screen becomes a "Who's using Flight Finder?" picker where each
+  person taps their face to sign in, Netflix style. Add a password only if
+  the instance is exposed to the public internet.
 - You (admin) get a new `/admin/users` page to add household members,
   reset their passwords, promote them to admin, or delete them
 - The landing search bar is gated on a session — anonymous `POST
