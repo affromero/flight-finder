@@ -23,6 +23,16 @@
   border-color: var(--accent);
 }
 
+/* The real logo mark (plane + price trail + mountain) as a rounded tile. Uses
+   the same icon.svg the favicon does, so the brand and the tab icon match. */
+.mark {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  background: url('/icon.svg') center / contain no-repeat;
+  border-radius: 4px;
+}
+
 /* Keep the icon visible but drop the wordmark on very narrow screens so it
    never collides with page headers. */
 @media (max-width: 520px) {
