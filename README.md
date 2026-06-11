@@ -73,11 +73,20 @@ Phones connect through the browser: open your instance URL and **Add to Home Scr
 
 Admins also get an interactive reach guide in **Instance settings -> Reach it from other devices**: pick a method (Wi-Fi, Tailscale, Cloudflare, your own domain) and it walks the OS-specific steps, then takes the resulting URL.
 
-Installing on a phone needs an **https** URL (service workers require a secure context). On a VPS, pick one:
+Every option below is a terminal command, so a headless VPS can both run **and** expose Flight Finder over SSH with no GUI. Opening the URL on a phone needs an **https** one (service workers require a secure context); the LAN option is http and can be opened in the browser but not installed as an app. Pick one:
 
+- **Same network** (http, quickest): find the machine's IP (`hostname -I | awk '{print $1}'` on Linux, `ipconfig getifaddr en0` on macOS) and open `http://<that-ip>:3003` on a phone on the same Wi-Fi.
+- **Tailscale** (private https, no domain): install Tailscale on the VPS and your phone, then `tailscale serve 3003` for private https on your tailnet (or `tailscale funnel 3003` to expose it publicly).
+- **Cloudflare tunnel** (public https): a throwaway URL with no account is `cloudflared tunnel --url http://localhost:3003` (prints a temporary `https://…trycloudflare.com`). For a **permanent** URL on a domain you've added to Cloudflare:
+  ```bash
+  cloudflared tunnel login
+  cloudflared tunnel create flight-finder
+  cloudflared tunnel route dns flight-finder flights.yourdomain.com
+  cloudflared tunnel run --url http://localhost:3003 flight-finder
+  ```
 - **Domain + auto HTTPS** (permanent): point a domain at the server and put [Caddy](https://caddyfile.com) in front. A ready Caddyfile lives at the repo root; it reverse-proxies `localhost:3003` and provisions Let's Encrypt TLS automatically. Replace the site address with your domain.
-- **Tailscale** (private, no domain): install Tailscale on the VPS and your phone, then `tailscale serve 3003` for private https on your tailnet (or `tailscale funnel 3003` to expose it publicly).
-- **Cloudflare quick tunnel** (throwaway): `cloudflared tunnel --url http://localhost:3003` prints a temporary `https://…trycloudflare.com` URL, no account needed. The installer offers to start one for you at the end.
+
+The installer offers to start the Cloudflare quick tunnel for you at the end, and these same methods are walked step by step in **Instance settings -> Reach it from other devices** inside the app.
 
 Multiple people connect to one instance with multi user mode (see the Multi user mode section below): each gets their own login (or a passwordless tap-to-sign-in face), trackers, profile avatar, and personal light/dark theme.
 
