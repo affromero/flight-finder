@@ -1,6 +1,8 @@
 version: 2
 updates:
   # Web and CLI workspaces (the root lockfile covers both).
+  # Minor and patch are batched; majors come as individual PRs so each framework
+  # upgrade (Next, Prisma, TypeScript, ESLint) is a deliberate migration.
   - package-ecosystem: npm
     directory: /
     schedule:
@@ -12,6 +14,9 @@ updates:
       npm:
         patterns:
           - '*'
+        update-types:
+          - minor
+          - patch
   # Desktop launcher (deliberately not an npm workspace member).
   - package-ecosystem: npm
     directory: /apps/desktop
@@ -24,6 +29,9 @@ updates:
       desktop-npm:
         patterns:
           - '*'
+        update-types:
+          - minor
+          - patch
   # Tauri (Rust) dependencies for the desktop app.
   - package-ecosystem: cargo
     directory: /apps/desktop/src-tauri
