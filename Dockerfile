@@ -1,4 +1,4 @@
-FROM docker.io/library/node:22-alpine AS deps
+FROM docker.io/library/node:26-alpine AS deps
 RUN apk add --no-cache libc6-compat openssl python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -9,7 +9,7 @@ RUN npm ci --loglevel=error
 RUN npx prisma generate --schema=apps/web/prisma/schema.prisma
 
 # Production-only deps (no devDependencies)
-FROM docker.io/library/node:22-alpine AS proddeps
+FROM docker.io/library/node:26-alpine AS proddeps
 RUN apk add --no-cache libc6-compat openssl python3 make g++
 WORKDIR /app
 COPY package.json package-lock.json ./
@@ -26,12 +26,12 @@ RUN npx prisma generate --schema=apps/web/prisma/schema.prisma
 # the full dependency closure and the alpine engine binaries are bundled, then
 # copy the whole tree into the runner. Pinned to the v6 major that matches the
 # schema (Prisma 7 dropped `url = env(...)`).
-FROM docker.io/library/node:22-alpine AS prismacli
+FROM docker.io/library/node:26-alpine AS prismacli
 RUN apk add --no-cache openssl
 WORKDIR /pcli
 RUN npm install --no-save --no-package-lock prisma@6
 
-FROM docker.io/library/node:22-alpine AS builder
+FROM docker.io/library/node:26-alpine AS builder
 RUN apk add --no-cache libc6-compat openssl python3 make g++
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
@@ -46,7 +46,7 @@ ENV NEXT_PUBLIC_COMMIT_SHA=${COMMIT_SHA}
 RUN npm run build --workspace=@flight-finder/web
 RUN npm run build --workspace=@flight-finder/cli
 
-FROM docker.io/library/node:22-alpine AS runner
+FROM docker.io/library/node:26-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl chromium curl
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
