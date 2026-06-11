@@ -1,0 +1,10 @@
+# Rust build output
+src-tauri/target/
+
+# Tauri-generated schemas and platform scaffolding
+src-tauri/gen/
+
+# Icons generated from ../web/public/icon.svg by `npm run icon`
+src-tauri/icons/
+
+node_modules/

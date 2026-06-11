@@ -58,6 +58,38 @@ Once it finishes:
 2. Or run `flight-finder search "NYC to Tokyo in July under $800"`
 3. Flight Finder starts tracking prices immediately
 
+### Prefer not to touch the terminal?
+
+There is a **desktop app** (macOS, Windows, Linux) at [flight-finder.org/download](https://flight-finder.org/download). Open it and pick one of two modes:
+
+- **Run it on this computer** -- it brings up the same Docker stack with one click (Docker required) and opens the app.
+- **Connect to an instance** -- point it at a Flight Finder running on your VPS and it opens in its own window.
+
+It is a thin launcher over the same installer described above; the source lives in `apps/desktop`.
+
+### Reach it from a phone
+
+Phones connect through the browser: open your instance URL and **Add to Home Screen** to install it as an app (it is a PWA). Visit **`/connect`** on your instance for a QR code and step-by-step iOS/Android instructions.
+
+Admins also get an interactive reach guide in **Instance settings -> Reach it from other devices**: pick a method (Wi-Fi, Tailscale, Cloudflare, your own domain) and it walks the OS-specific steps, then takes the resulting URL.
+
+Every option below is a terminal command, so a headless VPS can both run **and** expose Flight Finder over SSH with no GUI. Opening the URL on a phone needs an **https** one (service workers require a secure context); the LAN option is http and can be opened in the browser but not installed as an app. Pick one:
+
+- **Same network** (http, quickest): find the machine's IP (`hostname -I | awk '{print $1}'` on Linux, `ipconfig getifaddr en0` on macOS) and open `http://<that-ip>:3003` on a phone on the same Wi-Fi.
+- **Tailscale** (private https, no domain): install Tailscale on the VPS and your phone, then `tailscale serve 3003` for private https on your tailnet (or `tailscale funnel 3003` to expose it publicly).
+- **Cloudflare tunnel** (public https): a throwaway URL with no account is `cloudflared tunnel --url http://localhost:3003` (prints a temporary `https://…trycloudflare.com`). For a **permanent** URL on a domain you've added to Cloudflare:
+  ```bash
+  cloudflared tunnel login
+  cloudflared tunnel create flight-finder
+  cloudflared tunnel route dns flight-finder flights.yourdomain.com
+  cloudflared tunnel run --url http://localhost:3003 flight-finder
+  ```
+- **Domain + auto HTTPS** (permanent): point a domain at the server and put [Caddy](https://caddyfile.com) in front. A ready Caddyfile lives at the repo root; it reverse-proxies `localhost:3003` and provisions Let's Encrypt TLS automatically. Replace the site address with your domain.
+
+The installer offers to start the Cloudflare quick tunnel for you at the end, and these same methods are walked step by step in **Instance settings -> Reach it from other devices** inside the app.
+
+Multiple people connect to one instance with multi user mode (see the Multi user mode section below): each gets their own login (or a passwordless tap-to-sign-in face), trackers, profile avatar, and personal light/dark theme.
+
 ## Why Flight Finder?
 
 Airlines change flight prices hundreds of times a day. They use dynamic pricing to maximize what you pay. **No one shows you the price trend because the companies with the data profit from hiding it.**
@@ -195,38 +227,15 @@ Avoid models under 1B (TinyLlama, etc.) and older generations (Llama 3.x, Qwen 2
 
 ## How It Works
 
-```
-You type: "SFO to Tokyo sometime in July +/- 5 days"
-                        |
-                        v
-              +------------------+
-              |   LLM Parser     |  Extracts origin, destination,
-              |  (Claude/GPT)    |  date range, flexibility
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |   Playwright     |  Navigates Google Flights
-              |   (headless)     |  with your exact query
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |  LLM Extractor   |  Reads the page, extracts
-              |  (configurable)  |  structured price data
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |   PostgreSQL     |  Stores price snapshots
-              |   + Prisma      |  with timestamps
-              +--------+---------+
-                       |
-                       v
-              +------------------+
-              |  Plotly.js       |  Interactive chart at
-              |  /q/[id]        |  a shareable public URL
-              +------------------+
+```mermaid
+flowchart TD
+    U["You type:<br/>SFO to Tokyo sometime in July, +/- 5 days"]
+    U --> P["LLM parser<br/>(Claude / GPT / local)"]
+    P -->|"origin, destination, date range, flexibility"| N["Playwright<br/>(headless Chromium)"]
+    N -->|"navigates Google Flights, captures the page"| X["LLM extractor<br/>(configurable provider)"]
+    X -->|"structured prices + booking links"| DB[("PostgreSQL + Prisma<br/>price snapshots over time")]
+    DB --> C["Plotly.js chart at /q/id<br/>a shareable public URL"]
+    CRON["Cron, every 3h"] -.->|"re-scrapes every active query"| N
 ```
 
 The built-in cron runs on a configurable interval (default: every 3h). Each run captures prices across all active queries and the chart pages update automatically.
@@ -356,9 +365,17 @@ Once enabled, Flight Finder behaves like a normal multi-account app:
 - `/login` replaces the password-only admin form — same page for admins
   and non-admins (post-login redirect picks `/admin` vs `/account` based
   on the user's role)
-- Each user has `/account` showing only their own trackers
+- Each user has `/account` showing only their own trackers, reached from
+  an avatar menu in the top-right that is the same on every page
 - Each user has `/account/settings` for currency, country, preferred
-  airlines, and cabin class defaults
+  airlines, cabin class, and a **personal theme**. Themes come as colour
+  families (Altitude, Midnight, Cyberpunk, Tron, Autumn, Solar), each with
+  a matching light and dark palette; the toggle flips within the chosen
+  family. Members override the admin's instance default with their own.
+- Members can be **passwordless**: leave their password blank and the
+  `/login` screen becomes a "Who's using Flight Finder?" picker where each
+  person taps their face to sign in, Netflix style. Add a password only if
+  the instance is exposed to the public internet.
 - You (admin) get a new `/admin/users` page to add household members,
   reset their passwords, promote them to admin, or delete them
 - The landing search bar is gated on a session — anonymous `POST

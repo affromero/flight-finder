@@ -1,0 +1,15 @@
+{
+  "name": "@flight-finder/desktop",
+  "version": "0.10.0",
+  "private": true,
+  "description": "Flight Finder desktop launcher — run a self-hosted instance or connect to one, no terminal",
+  "scripts": {
+    "tauri": "tauri",
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "icon": "tauri icon ../web/public/icon.svg"
+  },
+  "devDependencies": {
+    "@tauri-apps/cli": "^2"
+  }
+}

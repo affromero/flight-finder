@@ -1,0 +1,32 @@
+.root {
+  position: fixed;
+  top: 0.85rem;
+  left: 1rem;
+  z-index: 60;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  padding: 0.35rem 0.7rem;
+  font-family: var(--font-display);
+  font-size: 0.9rem;
+  font-weight: 700;
+  color: var(--accent);
+  text-decoration: none;
+  background: color-mix(in srgb, var(--surface) 80%, transparent);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(6px);
+  transition: border-color 0.12s ease, color 0.12s ease;
+}
+
+.root:hover {
+  border-color: var(--accent);
+}
+
+/* Keep the icon visible but drop the wordmark on very narrow screens so it
+   never collides with page headers. */
+@media (max-width: 520px) {
+  .word {
+    display: none;
+  }
+}

@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import styles from './ThemeToggle.module.css';
-import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isLightTheme, isThemeId, resolveInitialTheme, type ThemeId } from '@/lib/theme';
+import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isThemeId, resolveInitialTheme, THEME_CHANGE_EVENT, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 
 const LOCAL_THEME_KEY = 'ft-theme';
 
@@ -11,11 +11,18 @@ declare global {
     // Set by the theme bootstrap in the root layout. True on self hosted
     // instances, where the global server theme wins over per browser localStorage.
     __ftSelfHosted?: boolean;
+    // True when a multi user member is logged in: the theme is their personal
+    // setting (User.theme), saved per user instead of as the instance default.
+    __ftPerUserTheme?: boolean;
   }
 }
 
 function isSelfHostedClient(): boolean {
   return typeof window !== 'undefined' && window.__ftSelfHosted === true;
+}
+
+function isPerUserThemeClient(): boolean {
+  return typeof window !== 'undefined' && window.__ftPerUserTheme === true;
 }
 
 function readLocalTheme(): ThemeId | null {
@@ -38,8 +45,7 @@ function writeLocalTheme(theme: ThemeId) {
 }
 
 export function ThemeToggle() {
-  const [theme, setTheme] = useState<ThemeId>('default');
-  const [lastDarkTheme, setLastDarkTheme] = useState<ThemeId>('default');
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
@@ -53,22 +59,36 @@ export function ThemeToggle() {
       domTheme: getThemeFromDom(),
     });
     setTheme(resolved);
-    setLastDarkTheme(isLightTheme(resolved) ? 'default' : resolved);
     applyTheme(resolved);
+  }, []);
+
+  // Stay in sync when the theme changes elsewhere (the appearance picker), so
+  // the toggle flips within whatever family is now selected.
+  useEffect(() => {
+    const onChange = (e: Event) => {
+      const t = (e as CustomEvent<ThemeId>).detail;
+      if (isThemeId(t)) setTheme(t);
+    };
+    document.addEventListener(THEME_CHANGE_EVENT, onChange);
+    return () => document.removeEventListener(THEME_CHANGE_EVENT, onChange);
   }, []);
 
   const toggle = async () => {
     if (saving) return;
-    const next: ThemeId = getNextToggleTheme(theme, lastDarkTheme);
-    const nextDarkTheme = isLightTheme(theme) ? next : theme;
+    // Flip light<->dark within the current family (keeps the colour identity).
+    const next = getNextToggleTheme(theme);
+    const prev = theme;
     setTheme(next);
-    setLastDarkTheme(nextDarkTheme);
     applyTheme(next);
     writeLocalTheme(next);
     setSaving(true);
 
     try {
-      const res = await fetch('/api/admin/config', {
+      // Logged-in members save their personal theme (User.theme); otherwise the
+      // toggle writes the instance default (admin/self-hosted-solo) or, for an
+      // anonymous hosted visitor, just localStorage.
+      const endpoint = isPerUserThemeClient() ? '/api/account/settings' : '/api/admin/config';
+      const res = await fetch(endpoint, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ theme: next }),
@@ -80,10 +100,9 @@ export function ThemeToggle() {
       }
       const data = await res.json();
       if (!data.ok) {
-        setTheme(theme);
-        setLastDarkTheme(lastDarkTheme);
-        applyTheme(theme);
-        writeLocalTheme(theme);
+        setTheme(prev);
+        applyTheme(prev);
+        writeLocalTheme(prev);
       }
     } catch {
       // Network error: keep the locally applied theme.

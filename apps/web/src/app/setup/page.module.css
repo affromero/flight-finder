@@ -255,3 +255,39 @@
   composes: hint;
   color: var(--price-up);
 }
+
+.avatarLabel {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  margin-top: 0.25rem;
+}
+
+.choiceRow {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.choice {
+  flex: 1;
+  padding: 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--elevated);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.choice:hover {
+  border-color: var(--accent);
+}
+
+.choice.choiceActive {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
+}

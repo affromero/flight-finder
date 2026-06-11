@@ -1,0 +1,33 @@
+.root {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  overflow: hidden;
+  flex-shrink: 0;
+  line-height: 1;
+  vertical-align: middle;
+  user-select: none;
+}
+
+.img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.tile {
+  background: var(--avatar-hue, #1a4a52);
+  box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.12), inset 0 -30% 40% -20% rgba(0, 0, 0, 0.25);
+  color: #faf6ed;
+}
+
+.emoji {
+  font-size: 0.95em;
+}
+
+.initials {
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}

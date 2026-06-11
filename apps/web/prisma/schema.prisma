@@ -142,9 +142,11 @@ model User {
   id                String   @id @default(cuid())
   username          String   @unique
   displayName       String?
-  passwordHash      String
+  passwordHash      String?  // null = passwordless member (taps to sign in); admins always have one
   sessionsValidFrom DateTime? // sessions issued before this instant are revoked (set on password change/reset)
   isAdmin           Boolean  @default(false)
+  avatar            String?  // preset avatar slug (see lib/avatars.ts); null falls back to initials
+  theme             String?  // personal theme id (see lib/theme.ts); null falls back to ExtractionConfig.theme
   defaultCurrency   String?  // override; null falls back to ExtractionConfig.defaultCurrency
   defaultCountry    String?  // override; null falls back to ExtractionConfig.defaultCountry
   preferredAirlines    String[] @default([])

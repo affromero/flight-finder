@@ -1,12 +1,16 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { Avatar } from '@/components/Avatar/Avatar';
+import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
+import { FLIGHT_AVATARS } from '@/lib/avatars';
 import styles from './page.module.css';
 
 interface UserRow {
   id: string;
   username: string;
   displayName: string | null;
+  avatar: string | null;
   isAdmin: boolean;
   createdAt: string;
   queryCount: number;
@@ -45,6 +49,7 @@ export function UsersClient({ initialUsers }: Props) {
         id: string;
         username: string;
         displayName: string | null;
+        avatar: string | null;
         isAdmin: boolean;
         createdAt: string;
         _count: { queries: number };
@@ -54,12 +59,28 @@ export function UsersClient({ initialUsers }: Props) {
           id: u.id,
           username: u.username,
           displayName: u.displayName,
+          avatar: u.avatar,
           isAdmin: u.isAdmin,
           createdAt: u.createdAt,
           queryCount: u._count.queries,
         })),
       );
     }
+  };
+
+  // One-tap passwordless member with a generic name and an auto-assigned avatar.
+  const handleQuickAddGuest = async () => {
+    const taken = new Set(users.map((u) => u.username));
+    let n = 1;
+    while (taken.has(`guest${n}`)) n += 1;
+    const avatar = FLIGHT_AVATARS[(users.length) % FLIGHT_AVATARS.length]!.slug;
+    const res = await fetch('/api/admin/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: `guest${n}`, displayName: `Guest ${n}`, password: '', avatar }),
+    });
+    if (res.ok) await refresh();
+    else alert((await res.json()).error || 'Failed to add guest');
   };
 
   const handleDelete = async (id: string, username: string) => {
@@ -123,19 +144,26 @@ export function UsersClient({ initialUsers }: Props) {
 
       <AddUserForm onCreated={refresh} />
 
+      <button type="button" className={styles.action} onClick={handleQuickAddGuest}>
+        + Add a guest (no password)
+      </button>
+
       <div className={styles.list}>
         {users.length === 0 ? (
           <p className={styles.empty}>No users yet.</p>
         ) : (
           users.map((u) => (
             <div key={u.id} className={styles.row}>
-              <div>
-                <div className={styles.rowName}>
-                  {u.displayName || u.username}
-                  {u.isAdmin && <span className={styles.adminBadge}>admin</span>}
-                </div>
-                <div className={styles.rowMeta}>
-                  @{u.username} {' '} {u.queryCount} tracker{u.queryCount === 1 ? '' : 's'}
+              <div className={styles.rowUser}>
+                <Avatar slug={u.avatar} name={u.displayName || u.username} size={36} />
+                <div>
+                  <div className={styles.rowName}>
+                    {u.displayName || u.username}
+                    {u.isAdmin && <span className={styles.adminBadge}>admin</span>}
+                  </div>
+                  <div className={styles.rowMeta}>
+                    @{u.username} {' '} {u.queryCount} tracker{u.queryCount === 1 ? '' : 's'}
+                  </div>
                 </div>
               </div>
               <div className={styles.rowActions}>
@@ -172,6 +200,7 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
   const [isAdmin, setIsAdmin] = useState(false);
+  const [avatar, setAvatar] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -188,6 +217,7 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
         displayName: displayName.trim() || null,
         password,
         isAdmin,
+        avatar,
       }),
     });
 
@@ -203,6 +233,7 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
     setDisplayName('');
     setPassword('');
     setIsAdmin(false);
+    setAvatar(null);
     await onCreated();
   };
 
@@ -228,12 +259,12 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
         <input
           className={styles.input}
           type="password"
-          placeholder="Password (8+ chars)"
+          placeholder={isAdmin ? 'Password (8+ chars)' : 'Password (optional)'}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
-          minLength={8}
-          required
+          minLength={isAdmin ? 8 : undefined}
+          required={isAdmin}
         />
         <label className={styles.checkboxLabel}>
           <input
@@ -244,6 +275,12 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
           Admin
         </label>
       </div>
+      <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || username} />
+      <p className={styles.rowMeta}>
+        Leave the password blank for a tap-to-sign-in member. Anyone who can reach this
+        instance can sign in as a passwordless member, so add a password if it&apos;s public.
+        Admins always need a password.
+      </p>
       {error && <p className={styles.error}>{error}</p>}
       <button type="submit" className={styles.primaryButton} disabled={submitting}>
         {submitting ? 'Adding...' : 'Add user'}

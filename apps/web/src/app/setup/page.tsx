@@ -3,13 +3,18 @@
 import { useState, useEffect, useCallback } from 'react';
 import styles from './page.module.css';
 import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 
 interface SetupStatus {
   setupComplete: boolean;
-  isSelfHosted: boolean;
-  detectedProviders: string[];
-  currentProvider: string | null;
-  currentModel: string | null;
+  needsSetup?: boolean;
+  // The fields below are returned only while setup is incomplete (first-run).
+  // Once the instance is configured, /api/setup/status returns just the two
+  // booleans above, so treat these as optional and default them.
+  isSelfHosted?: boolean;
+  detectedProviders?: string[];
+  currentProvider?: string | null;
+  currentModel?: string | null;
 }
 
 export default function SetupPage() {
@@ -26,6 +31,8 @@ export default function SetupPage() {
   const [multiUserUsername, setMultiUserUsername] = useState('');
   const [multiUserPassword, setMultiUserPassword] = useState('');
   const [multiUserDisplayName, setMultiUserDisplayName] = useState('');
+  const [multiUserAvatar, setMultiUserAvatar] = useState<string | null>(null);
+  const [publicBaseUrl, setPublicBaseUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
@@ -75,8 +82,9 @@ export default function SetupPage() {
         if (data.isSelfHosted) {
           setStep(1);
         }
-        if (data.detectedProviders.length > 0) {
-          const defaultProvider = data.detectedProviders[0]!;
+        const detected = data.detectedProviders ?? [];
+        if (detected.length > 0) {
+          const defaultProvider = detected[0]!;
           setProvider(defaultProvider);
           const providerConfig = EXTRACTION_PROVIDERS[defaultProvider];
           if (providerConfig?.models[0]) {
@@ -84,6 +92,9 @@ export default function SetupPage() {
           }
           fetchLocalModels(defaultProvider);
         }
+      })
+      .catch(() => {
+        setError('Could not load setup status. Refresh to try again.');
       });
   }, [fetchLocalModels]);
 
@@ -122,13 +133,24 @@ export default function SetupPage() {
       return;
     }
 
-    // Final step: complete setup (hosted: step 2, self hosted: step 3)
+    if (step === 3 && status?.isSelfHosted) {
+      // Validate the account fields here before moving to the reach step, so
+      // bad credentials are caught before the final submit.
+      if (enableMultiUser && multiUserPassword && multiUserPassword.length < 8) {
+        setError('Password must be at least 8 characters (or leave it blank)');
+        return;
+      }
+      setStep(4);
+      return;
+    }
+
+    // Final step: complete setup (hosted: step 2, self hosted: step 4)
     const effectiveModel = customModel.trim() || model;
     setLoading(true);
     const res = await fetch('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, communitySharing, customBaseUrl: customBaseUrl.trim() || null }),
+      body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, communitySharing, customBaseUrl: customBaseUrl.trim() || null, publicBaseUrl: publicBaseUrl.trim() || null }),
     });
 
     if (!res.ok) {
@@ -140,8 +162,8 @@ export default function SetupPage() {
 
     if (status?.isSelfHosted && enableMultiUser) {
       const username = multiUserUsername.trim();
-      if (!username || multiUserPassword.length < 8) {
-        setError('Username required and password must be at least 8 characters');
+      if (multiUserPassword && multiUserPassword.length < 8) {
+        setError('Password must be at least 8 characters (or leave it blank)');
         setLoading(false);
         return;
       }
@@ -152,6 +174,7 @@ export default function SetupPage() {
           adminUsername: username,
           adminPassword: multiUserPassword,
           displayName: multiUserDisplayName.trim() || null,
+          avatar: multiUserAvatar,
         }),
       });
       const muData = await muRes.json();
@@ -173,25 +196,27 @@ export default function SetupPage() {
     return (
       <main className={styles.root}>
         <div className={styles.card}>
-          <p className={styles.loading}>Loading...</p>
+          {error ? <p className={styles.error}>{error}</p> : <p className={styles.loading}>Loading...</p>}
         </div>
       </main>
     );
   }
 
   const CLI_PROVIDERS = new Set(['claude-code', 'codex']);
-  const hasCliProvider = status.detectedProviders.some((p) => CLI_PROVIDERS.has(p));
+  const detectedProviders = status.detectedProviders ?? [];
+  const hasCliProvider = detectedProviders.some((p) => CLI_PROVIDERS.has(p));
 
   const providerEntries = Object.entries(EXTRACTION_PROVIDERS);
-  const isSelfHosted = status.isSelfHosted;
+  const isSelfHosted = status.isSelfHosted ?? false;
   const subtitles = [
     'Set your admin password',
     'Choose your LLM provider',
     'Join the community',
     'Multi user mode (optional)',
+    'Use it on other devices',
   ];
 
-  const isFinalStep = isSelfHosted ? step === 3 : step === 2;
+  const isFinalStep = isSelfHosted ? step === 4 : step === 2;
   const submitLabel = loading
     ? 'Setting up...'
     : isFinalStep
@@ -218,6 +243,8 @@ export default function SetupPage() {
             <>
               <span className={styles.stepDivider}>/</span>
               <span className={`${styles.step} ${step >= 3 ? styles.active : ''}`}>3. Accounts</span>
+              <span className={styles.stepDivider}>/</span>
+              <span className={`${styles.step} ${step >= 4 ? styles.active : ''}`}>4. Reach</span>
             </>
           )}
         </div>
@@ -251,7 +278,7 @@ export default function SetupPage() {
             )}
             <div className={styles.providers}>
               {providerEntries.map(([key, config]) => {
-                const detected = status.detectedProviders.includes(key);
+                const detected = detectedProviders.includes(key);
                 return (
                   <button
                     key={key}
@@ -370,27 +397,35 @@ export default function SetupPage() {
         {step === 3 && isSelfHosted && (
           <div className={styles.fields}>
             <div className={styles.communityCard}>
-              <h3 className={styles.communityTitle}>
-                Run Flight Finder for a household?
-              </h3>
+              <h3 className={styles.communityTitle}>Who uses this?</h3>
+              <div className={styles.choiceRow}>
+                <button
+                  type="button"
+                  className={`${styles.choice} ${!enableMultiUser ? styles.choiceActive : ''}`}
+                  onClick={() => setEnableMultiUser(false)}
+                >
+                  Just me
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.choice} ${enableMultiUser ? styles.choiceActive : ''}`}
+                  onClick={() => setEnableMultiUser(true)}
+                >
+                  A household
+                </button>
+              </div>
               <p className={styles.communityText}>
-                Multi user mode lets each member of your household have their own
-                trackers and preferences. You stay admin and create accounts for
-                them. Skip this if you&apos;re the only user.
+                {enableMultiUser
+                  ? 'Each person gets their own profile, trackers, and preferences — they pick their face to sign in.'
+                  : 'You can add a household later from Settings.'}
               </p>
-              <button
-                className={`${styles.communityToggle} ${enableMultiUser ? styles.communityActive : ''}`}
-                onClick={() => setEnableMultiUser(!enableMultiUser)}
-              >
-                {enableMultiUser ? 'Enabled' : 'Skip'}
-              </button>
             </div>
             {enableMultiUser && (
               <>
                 <input
                   type="text"
                   className={styles.input}
-                  placeholder="Admin username"
+                  placeholder="Admin username (defaults to admin)"
                   value={multiUserUsername}
                   onChange={(e) => setMultiUserUsername(e.target.value)}
                   autoComplete="username"
@@ -405,15 +440,50 @@ export default function SetupPage() {
                 <input
                   type="password"
                   className={styles.input}
-                  placeholder="Admin password (8+ chars)"
+                  placeholder="Admin password (optional — leave blank for no password)"
                   value={multiUserPassword}
                   onChange={(e) => setMultiUserPassword(e.target.value)}
                   autoComplete="new-password"
                 />
+                <p className={styles.communityHint}>
+                  Leave the password blank for a Netflix-style household: everyone just
+                  taps their face to sign in. Add a password only if this instance will
+                  be reachable from the public internet.
+                </p>
+                <label className={styles.avatarLabel}>Profile avatar</label>
+                <AvatarPicker
+                  value={multiUserAvatar}
+                  onChange={setMultiUserAvatar}
+                  name={multiUserDisplayName || multiUserUsername}
+                />
               </>
             )}
+          </div>
+        )}
+
+        {step === 4 && isSelfHosted && (
+          <div className={styles.fields}>
+            <div className={styles.communityCard}>
+              <h3 className={styles.communityTitle}>Use it on your phone?</h3>
+              <p className={styles.communityText}>
+                It runs on this machine and nothing is exposed by default. To open
+                it on a phone or share it, you&apos;ll pick how (WiFi, Tailscale,
+                Cloudflare, or your own domain) when you install or from the desktop
+                app. Step-by-step guide at <strong>/connect</strong>.
+              </p>
+            </div>
+            <label className={styles.avatarLabel} htmlFor="publicBaseUrl">Already have a URL? (optional)</label>
+            <input
+              id="publicBaseUrl"
+              type="url"
+              className={styles.input}
+              placeholder="https://flights.yourdomain.org"
+              value={publicBaseUrl}
+              onChange={(e) => setPublicBaseUrl(e.target.value)}
+            />
             <p className={styles.communityHint}>
-              You can enable this later from the admin Settings page.
+              Paste a domain, tunnel, or tailnet URL so QR codes and price alerts
+              use it. Change it anytime.
             </p>
           </div>
         )}

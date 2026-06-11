@@ -141,6 +141,12 @@
   border-radius: var(--radius-lg);
 }
 
+.rowUser {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
 .rowName {
   display: inline-flex;
   align-items: center;

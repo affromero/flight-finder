@@ -1,10 +1,12 @@
 'use client';
 
-import type { CSSProperties } from 'react';
 import { useState, useEffect, useCallback } from 'react';
 import Link from 'next/link';
+import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
+import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
+import { ReachGuide } from '@/components/ReachGuide/ReachGuide';
 import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, CLI_PROVIDERS } from '@/lib/scraper/ai-registry';
-import { THEME_OPTIONS, applyTheme, type ThemeId } from '@/lib/theme';
+import { isThemeId, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
 
 interface Config {
@@ -16,6 +18,7 @@ interface Config {
   communityRegistrationOpen: boolean;
   communityApiKey: string | null;
   customBaseUrl: string | null;
+  publicBaseUrl: string | null;
   theme: ThemeId;
   defaultCurrency: string | null;
   defaultCountry: string | null;
@@ -34,6 +37,9 @@ export default function SettingsPage() {
   const [customModel, setCustomModel] = useState('');
   const [scrapeInterval, setScrapeInterval] = useState(3);
   const [customBaseUrl, setCustomBaseUrl] = useState('');
+  const [publicBaseUrl, setPublicBaseUrl] = useState('');
+  const [reachSaving, setReachSaving] = useState(false);
+  const [reachMessage, setReachMessage] = useState('');
   const [defaultCurrency, setDefaultCurrency] = useState('');
   const [defaultCountry, setDefaultCountry] = useState('');
   const [defaultSearchMethod, setDefaultSearchMethod] = useState<'ai' | 'manual'>('ai');
@@ -50,7 +56,7 @@ export default function SettingsPage() {
   const [providerKeySaving, setProviderKeySaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
-  const [theme, setTheme] = useState<ThemeId>('default');
+  const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [themeMessage, setThemeMessage] = useState('');
 
   const [localModels, setLocalModels] = useState<{ id: string; name: string; size: string }[]>([]);
@@ -102,8 +108,8 @@ export default function SettingsPage() {
           setProvider(d.data.provider);
           setScrapeInterval(d.data.scrapeInterval);
           setCustomBaseUrl(d.data.customBaseUrl || '');
-          setTheme(d.data.theme || 'default');
-          applyTheme(d.data.theme || 'default');
+          setPublicBaseUrl(d.data.publicBaseUrl || '');
+          setTheme(isThemeId(d.data.theme) ? d.data.theme : DEFAULT_THEME);
           setDefaultCurrency(d.data.defaultCurrency || '');
           setDefaultCountry(d.data.defaultCountry || '');
           setDefaultSearchMethod(d.data.defaultSearchMethod === 'manual' ? 'manual' : 'ai');
@@ -123,6 +129,15 @@ export default function SettingsPage() {
         }
       });
   }, [fetchLocalModels]);
+
+  // The #reach section renders only after config loads, so a /settings#reach
+  // deep link (from the connect page) can't scroll to it on first paint. Scroll
+  // once config is in.
+  useEffect(() => {
+    if (config && typeof window !== 'undefined' && window.location.hash === '#reach') {
+      document.getElementById('reach')?.scrollIntoView({ behavior: 'smooth' });
+    }
+  }, [config]);
 
   const providerConfig = EXTRACTION_PROVIDERS[provider];
   const models = providerConfig?.models ?? [];
@@ -197,35 +212,86 @@ export default function SettingsPage() {
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>Appearance</h2>
           <p className={styles.toggleHint}>
-            Pick the interface theme Flight Finder should use across this instance for all users and browsers.
+            The default theme for this instance. Each signed-in member can override
+            it with their own in Account settings.
           </p>
 
-          <div className={styles.themeGrid}>
-            {THEME_OPTIONS.map((option) => (
-              <button
-                key={option.id}
-                type="button"
-                className={`${styles.themeCard} ${theme === option.id ? styles.themeCardSelected : ''}`}
-                onClick={() => {
-                  setTheme(option.id);
-                  applyTheme(option.id);
-                  setThemeMessage(`Theme will be saved as ${option.label}`);
-                }}
-              >
-                <span
-                  className={styles.themeSwatch}
-                  style={{ '--theme-swatch-accent': option.accent } as CSSProperties}
-                  aria-hidden="true"
-                />
-                <span className={styles.themeCardName}>{option.label}</span>
-                <span className={styles.themeCardMeta}>{option.mode === 'light' ? 'Light' : 'Dark'}</span>
-                <span className={styles.themeCardDesc}>{option.description}</span>
-              </button>
-            ))}
-          </div>
+          <ThemePicker
+            value={theme}
+            onSelect={async (id) => {
+              setTheme(id);
+              setThemeMessage('Saving…');
+              try {
+                const res = await fetch('/api/admin/config', {
+                  method: 'PATCH',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ theme: id }),
+                });
+                const data = await res.json();
+                setThemeMessage(data.ok ? 'Saved' : (data.error || 'Failed to save theme'));
+                if (data.ok) setConfig(data.data);
+              } catch {
+                setThemeMessage('Failed to save theme');
+              }
+            }}
+          />
 
           {themeMessage && <span className={styles.message}>{themeMessage}</span>}
         </div>
+
+        {config.isSelfHosted && (
+          <div className={styles.section} id="reach">
+            <h2 className={styles.sectionTitle}>Reach it from other devices</h2>
+            <p className={styles.toggleHint}>
+              Flight Finder runs on this machine. Pick how you want to reach it from
+              a phone or share it with the household, follow the steps, then paste
+              the resulting URL below so QR codes and price-alert links use it.
+            </p>
+            <ReachGuide />
+            <div className={styles.field}>
+              <label className={styles.label} htmlFor="publicBaseUrl">Public URL</label>
+              <input
+                id="publicBaseUrl"
+                type="url"
+                className={styles.input}
+                placeholder="https://flights.yourdomain.org"
+                value={publicBaseUrl}
+                onChange={(e) => setPublicBaseUrl(e.target.value)}
+              />
+              <span className={styles.toggleHint}>
+                Leave empty to use the address each device connects on.
+              </span>
+            </div>
+            <div className={styles.reachActions}>
+              <button
+                type="button"
+                className={styles.button}
+                disabled={reachSaving}
+                onClick={async () => {
+                  setReachSaving(true);
+                  setReachMessage('');
+                  try {
+                    const res = await fetch('/api/admin/config', {
+                      method: 'PATCH',
+                      headers: { 'Content-Type': 'application/json' },
+                      body: JSON.stringify({ publicBaseUrl: publicBaseUrl.trim() || null }),
+                    });
+                    const data = await res.json();
+                    setReachMessage(data.ok ? 'Saved' : (data.error || 'Failed to save'));
+                  } catch {
+                    setReachMessage('Failed to save');
+                  } finally {
+                    setReachSaving(false);
+                  }
+                }}
+              >
+                {reachSaving ? 'Saving…' : 'Save URL'}
+              </button>
+              <Link href="/connect" className={styles.secondaryLink}>Phone setup &amp; QR →</Link>
+              {reachMessage && <span className={styles.message}>{reachMessage}</span>}
+            </div>
+          </div>
+        )}
 
         <div className={styles.section}>
           <h2 className={styles.sectionTitle}>Extraction</h2>
@@ -677,32 +743,38 @@ export default function SettingsPage() {
             </div>
           </div>
 
-          <div className={styles.toggleRow}>
-            <button
-              type="button"
-              className={`${styles.toggle} ${config.communityRegistrationOpen ? styles.toggleOn : ''}`}
-              onClick={async () => {
-                const newValue = !config.communityRegistrationOpen;
-                const res = await fetch('/api/admin/config', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ communityRegistrationOpen: newValue }),
-                });
-                const data = await res.json();
-                if (data.ok) setConfig(data.data);
-              }}
-            >
-              <span className={styles.toggleKnob} />
-            </button>
-            <div>
-              <span className={styles.toggleLabel}>
-                {config.communityRegistrationOpen ? 'Accepting new contributors' : 'Registration closed'}
-              </span>
-              <p className={styles.toggleHint}>
-                Let other Flight Finder instances register with this one to contribute their data. Off by default, for when you run a shared hub. New registrations are rate limited and globally capped.
-              </p>
+          {/* Hub side: only the hosted flight-finder.org instance accepts
+              registrations, so hide this on self-hosted. */}
+          {!config.isSelfHosted && (
+            <div className={styles.toggleRow}>
+              <button
+                type="button"
+                className={`${styles.toggle} ${config.communityRegistrationOpen ? styles.toggleOn : ''}`}
+                onClick={async () => {
+                  const newValue = !config.communityRegistrationOpen;
+                  const res = await fetch('/api/admin/config', {
+                    method: 'PATCH',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ communityRegistrationOpen: newValue }),
+                  });
+                  const data = await res.json();
+                  if (data.ok) setConfig(data.data);
+                }}
+              >
+                <span className={styles.toggleKnob} />
+              </button>
+              <div>
+                <span className={styles.toggleLabel}>
+                  Run a hub: {config.communityRegistrationOpen ? 'accepting contributors' : 'closed'}
+                </span>
+                <p className={styles.toggleHint}>
+                  Lets other Flight Finder instances register with this one and send their
+                  anonymized data here. Only relevant for the central hub. New registrations
+                  are rate limited and globally capped.
+                </p>
+              </div>
             </div>
-          </div>
+          )}
 
           {config.communityApiKey && (
             <div className={styles.field}>
@@ -741,6 +813,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
   const [displayName, setDisplayName] = useState('');
+  const [avatar, setAvatar] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -770,6 +843,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
         adminUsername: adminUsername.trim(),
         adminPassword,
         displayName: displayName.trim() || null,
+        avatar,
       }),
     });
 
@@ -814,11 +888,10 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
           <input
             type="text"
             className={styles.input}
-            placeholder="Admin username"
+            placeholder="Admin username (defaults to admin)"
             value={adminUsername}
             onChange={(e) => setAdminUsername(e.target.value)}
             autoComplete="username"
-            required
           />
           <input
             type="text"
@@ -830,13 +903,17 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
           <input
             type="password"
             className={styles.input}
-            placeholder="Admin password (8+ chars)"
+            placeholder="Admin password (optional — blank = no password)"
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
             autoComplete="new-password"
-            minLength={8}
-            required
           />
+          <p className={styles.toggleHint}>
+            Leave blank for a Netflix-style household where everyone taps to sign in. Add
+            a password only if this instance is reachable from the public internet.
+          </p>
+          <label className={styles.toggleHint}>Your avatar</label>
+          <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || adminUsername} />
           {error && <p className={styles.error}>{error}</p>}
           <button
             type="submit"

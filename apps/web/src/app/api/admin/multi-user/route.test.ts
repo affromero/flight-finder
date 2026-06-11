@@ -133,6 +133,7 @@ describe('POST /api/admin/multi-user', () => {
         displayName: 'Admin',
         passwordHash: 'hashed:secret',
         isAdmin: true,
+        avatar: null,
       },
     });
     expect(mockConfigUpsert).toHaveBeenCalled();
@@ -141,6 +142,24 @@ describe('POST /api/admin/multi-user', () => {
       data: { userId: 'user_1' },
     });
     expect(mockInvalidateCache).toHaveBeenCalled();
+  });
+
+  it('threads a valid preset avatar into the first admin', async () => {
+    const res = await POST(
+      makeRequest({ adminUsername: 'admin', adminPassword: 'longenough', avatar: 'compass' }),
+    );
+    expect(res.status).toBe(201);
+    const args = mockUserCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.avatar).toBe('compass');
+  });
+
+  it('drops an unknown avatar slug to null on the first admin', async () => {
+    const res = await POST(
+      makeRequest({ adminUsername: 'admin', adminPassword: 'longenough', avatar: 'bogus' }),
+    );
+    expect(res.status).toBe(201);
+    const args = mockUserCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
+    expect(args.data.avatar).toBeNull();
   });
 
   it('accepts a legacy admin session as authorization', async () => {

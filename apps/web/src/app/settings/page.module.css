@@ -74,6 +74,19 @@
   gap: 0.75rem;
 }
 
+.themeGroupTitle {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--accent);
+  margin: 1rem 0 0.5rem;
+}
+
+.themeGroupTitle:first-of-type {
+  margin-top: 0.25rem;
+}
+
 .themeCard {
   display: flex;
   flex-direction: column;
@@ -711,4 +724,24 @@
 
 .link:hover {
   opacity: 0.85;
+}
+
+.reachActions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  margin-top: 0.5rem;
+}
+
+.secondaryLink {
+  font-family: var(--font-display);
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.secondaryLink:hover {
+  text-decoration: underline;
 }

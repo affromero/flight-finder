@@ -1,0 +1,299 @@
+/* Flight Finder launcher — Altitude palette (dark). System fonts keep the
+   bundle tiny; the launcher is a small utility window, not the product UI. */
+:root {
+  --bg: #031820;
+  --surface: #072530;
+  --elevated: #0e3640;
+  --border: #1a4a52;
+  --accent: #80a8a5;
+  --accent-strong: #bcd2cf;
+  --text: #ecdfc0;
+  --secondary: #d4a574;
+  --alert: #c1272d;
+  --ok: #4a9d6b;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+/* `.view`/`.chooser` set display:flex, which would otherwise win over the UA
+   `[hidden] { display: none }` rule (author class beats UA), leaving every
+   view visible at once. Force hidden to win so view switching works. */
+[hidden] {
+  display: none !important;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+.app {
+  height: 100vh;
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  padding: 1.75rem 1.5rem;
+}
+
+.head {
+  text-align: center;
+}
+
+.mark {
+  display: block;
+  margin: 0 auto 0.5rem;
+}
+
+.head h1 {
+  margin: 0;
+  font-size: 1.4rem;
+  letter-spacing: 0.01em;
+}
+
+.tagline {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+  color: var(--accent);
+}
+
+/* Mode chooser */
+.chooser {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+}
+
+.card {
+  text-align: left;
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 1rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  background: var(--surface);
+  color: var(--text);
+  cursor: pointer;
+  transition: border-color 0.12s ease, transform 0.12s ease, background 0.12s ease;
+}
+
+.card:hover {
+  border-color: var(--accent);
+  background: var(--elevated);
+  transform: translateY(-1px);
+}
+
+.card-title {
+  font-size: 1rem;
+  font-weight: 600;
+}
+
+.card-desc {
+  font-size: 0.82rem;
+  color: var(--secondary);
+  line-height: 1.4;
+}
+
+/* Views */
+.view {
+  display: flex;
+  flex-direction: column;
+  gap: 0.875rem;
+  flex: 1;
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  font-size: 0.95rem;
+}
+
+.dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.dot-idle {
+  background: var(--secondary);
+}
+
+.dot-working {
+  background: var(--secondary);
+  animation: pulse 1s ease-in-out infinite;
+}
+
+.dot-up {
+  background: var(--ok);
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: filter 0.12s ease;
+}
+
+.btn:hover {
+  filter: brightness(1.08);
+}
+
+.btn:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.btn-secondary {
+  background: var(--elevated);
+  color: var(--text);
+}
+
+.btn-ghost {
+  background: transparent;
+  color: var(--text);
+}
+
+.field-label {
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.input {
+  width: 100%;
+  padding: 0.7rem 0.85rem;
+  border-radius: 10px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.95rem;
+}
+
+.input:focus {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+.hint {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--secondary);
+  line-height: 1.45;
+}
+
+.notice {
+  font-size: 0.82rem;
+  color: var(--text);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 0.85rem;
+  line-height: 1.45;
+}
+
+.notice a {
+  color: var(--accent-strong);
+}
+
+.error {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--alert);
+}
+
+.reach {
+  border-top: 1px solid var(--border);
+  padding-top: 0.875rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.reach-label {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--accent);
+}
+
+.reach-opts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.reach-opt {
+  padding: 0.4rem 0.7rem;
+  border-radius: 999px;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.reach-opt:hover {
+  border-color: var(--accent);
+}
+
+.reach-active {
+  background: var(--accent);
+  color: var(--bg);
+  border-color: var(--accent);
+}
+
+.reach-info {
+  margin: 0;
+  font-size: 0.78rem;
+  color: var(--secondary);
+  line-height: 1.45;
+  overflow-wrap: anywhere;
+}
+
+.link {
+  margin-top: auto;
+  align-self: flex-start;
+  background: none;
+  border: none;
+  color: var(--accent);
+  font-size: 0.8rem;
+  cursor: pointer;
+  padding: 0.25rem 0;
+}
+
+.link:hover {
+  text-decoration: underline;
+}

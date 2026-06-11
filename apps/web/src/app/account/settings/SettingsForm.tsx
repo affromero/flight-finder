@@ -2,11 +2,16 @@
 
 import { useState } from 'react';
 import { ALL_AGGREGATORS, AGGREGATOR_LABEL, EXPERIMENTAL_AGGREGATORS, type Aggregator } from '@/lib/aggregators';
+import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
+import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
+import { type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
 
 interface Preferences {
   username: string;
   displayName: string | null;
+  avatar: string | null;
+  theme: string | null;
   defaultCurrency: string | null;
   defaultCountry: string | null;
   preferredAirlines: string[];
@@ -33,6 +38,7 @@ export function SettingsForm({
   adminEnabledAggregators: string[];
 }) {
   const [displayName, setDisplayName] = useState(initial.displayName ?? '');
+  const [avatar, setAvatar] = useState<string | null>(initial.avatar);
   const [defaultCurrency, setDefaultCurrency] = useState(initial.defaultCurrency ?? '');
   const [defaultCountry, setDefaultCountry] = useState(initial.defaultCountry ?? '');
   const [preferredAirlines, setPreferredAirlines] = useState(
@@ -91,6 +97,7 @@ export function SettingsForm({
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         displayName: displayName.trim() || null,
+        avatar,
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
         preferredAirlines: airlines,
@@ -122,6 +129,11 @@ export function SettingsForm({
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
         />
+      </div>
+
+      <div className={styles.field}>
+        <label className={styles.label}>Profile avatar</label>
+        <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || initial.username} />
       </div>
 
       <div className={styles.field}>
@@ -236,8 +248,60 @@ export function SettingsForm({
         {saving ? 'Saving...' : 'Save'}
       </button>
     </form>
+    <AppearanceSection initialTheme={initial.theme} />
     <PasswordSection />
     </>
+  );
+}
+
+function AppearanceSection({ initialTheme }: { initialTheme: string | null }) {
+  const [theme, setTheme] = useState<string | null>(initialTheme);
+  const [message, setMessage] = useState('');
+
+  const persist = async (id: ThemeId | null) => {
+    setMessage('Saving…');
+    try {
+      const res = await fetch('/api/account/settings', {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ theme: id }),
+      });
+      const data = await res.json();
+      setMessage(data.ok ? 'Saved' : (data.error || 'Failed to save theme'));
+      return data.ok as boolean;
+    } catch {
+      setMessage('Failed to save theme');
+      return false;
+    }
+  };
+
+  return (
+    <section className={styles.form}>
+      <div className={styles.field}>
+        <label className={styles.label}>Appearance</label>
+        <p className={styles.themeCardDesc}>
+          Your personal colour. The light/dark toggle in the top bar flips between
+          this family&apos;s light and dark palettes.
+        </p>
+        <ThemePicker
+          value={theme}
+          onSelect={(id) => {
+            setTheme(id);
+            persist(id);
+          }}
+          defaultOption={{
+            active: theme === null,
+            onSelect: async () => {
+              setTheme(null);
+              // Clear personal theme, then reload so the server re-renders the
+              // instance default into <html>.
+              if (await persist(null)) window.location.reload();
+            },
+          }}
+        />
+        {message && <p className={styles.success}>{message}</p>}
+      </div>
+    </section>
   );
 }
 

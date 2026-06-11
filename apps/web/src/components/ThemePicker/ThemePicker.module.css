@@ -1,0 +1,118 @@
+.root {
+  display: flex;
+  flex-direction: column;
+  gap: 0.9rem;
+}
+
+.modeSwitch {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 3px;
+  gap: 3px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+}
+
+.modeBtn {
+  padding: 0.4rem 1rem;
+  font-family: var(--font-display);
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--muted);
+  background: none;
+  border: none;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.modeBtnActive {
+  color: var(--bg);
+  background: var(--accent);
+}
+
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(160px, 1fr));
+  gap: 0.75rem;
+}
+
+.card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.875rem;
+  background: var(--surface);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.2s, transform 0.2s, background 0.2s;
+}
+
+.card:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.cardActive {
+  border-color: var(--accent);
+  background: var(--elevated);
+}
+
+/* Split swatch: light accent on the left half, dark accent on the right, so
+   both palettes of the family are visible at a glance. */
+.swatch {
+  width: 100%;
+  height: 0.85rem;
+  border-radius: 999px;
+  background: linear-gradient(90deg, var(--la) 0 50%, var(--da) 50% 100%);
+  box-shadow: inset 0 0 0 1px rgba(127, 127, 127, 0.25);
+}
+
+.swatchCaption {
+  display: flex;
+  justify-content: space-between;
+  font-family: var(--font-mono);
+  font-size: 0.6rem;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: 0.15rem;
+}
+
+.name {
+  font-family: var(--font-display);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
+.desc {
+  font-size: 0.75rem;
+  color: var(--muted);
+  line-height: 1.4;
+}
+
+.defaultBtn {
+  align-self: flex-start;
+  padding: 0.4rem 0.2rem;
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--muted);
+  background: none;
+  border: none;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.defaultBtn:hover {
+  color: var(--accent);
+}
+
+.defaultActive {
+  color: var(--accent);
+  text-decoration: none;
+  cursor: default;
+}
