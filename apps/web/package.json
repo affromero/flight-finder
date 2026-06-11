@@ -17,7 +17,7 @@
     "@google/generative-ai": "^0.24.1",
     "@prisma/client": "^6.4.1",
     "better-sqlite3": "^12.6.2",
-    "geoip-lite": "^1.4.10",
+    "geoip-lite": "^2.0.2",
     "ioredis": "^5.11.1",
     "next": "^15.2.3",
     "nodemailer": "^8.0.10",
