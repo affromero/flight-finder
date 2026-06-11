@@ -1,5 +1,8 @@
-const CACHE_NAME = 'flight-finder-v1';
-const SHELL_URLS = ['/', '/icon.svg'];
+const CACHE_NAME = 'flight-finder-v2';
+// Only the icon is precached. The HTML document ('/') is intentionally NOT
+// cached: caching it risks serving a stale shell (old bundle refs, old theme)
+// after a redeploy. Pages and assets go through the network-first handler below.
+const SHELL_URLS = ['/icon.svg'];
 
 self.addEventListener('install', (event) => {
   event.waitUntil(
@@ -30,8 +33,9 @@ self.addEventListener('fetch', (event) => {
   event.respondWith(
     fetch(request)
       .then((response) => {
-        // Cache successful page/asset responses
-        if (response.ok && (url.pathname === '/' || url.pathname.startsWith('/_next/'))) {
+        // Cache only hashed static assets (immutable across deploys). The HTML
+        // document is never cached so a redeploy is picked up on next load.
+        if (response.ok && url.pathname.startsWith('/_next/')) {
           const clone = response.clone();
           caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
         }
