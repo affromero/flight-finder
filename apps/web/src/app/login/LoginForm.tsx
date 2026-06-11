@@ -167,7 +167,9 @@ export function LoginForm({ next }: Props) {
   // Profile picker ("Who's using Flight Finder?").
   return (
     <main className={styles.root}>
-      <h1 className={styles.pickerTitle}>Who&apos;s using Flight Finder?</h1>
+      <h1 className={styles.pickerTitle}>
+        {loading ? 'Signing in…' : "Who's using Flight Finder?"}
+      </h1>
       <div className={styles.profiles}>
         {profiles.map((p) => {
           const name = p.displayName || p.username;
@@ -176,6 +178,7 @@ export function LoginForm({ next }: Props) {
               key={p.id}
               type="button"
               className={styles.profile}
+              disabled={loading}
               onClick={() => {
                 setError('');
                 // Passwordless members tap straight in; the rest get a password screen.
@@ -189,7 +192,13 @@ export function LoginForm({ next }: Props) {
           );
         })}
       </div>
-      <button type="button" className={styles.linkButton} onClick={() => setManual(true)}>
+      {error && <p className={styles.error}>{error}</p>}
+      <button
+        type="button"
+        className={styles.linkButton}
+        disabled={loading}
+        onClick={() => setManual(true)}
+      >
         Sign in with a username instead
       </button>
     </main>
