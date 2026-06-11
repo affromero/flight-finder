@@ -397,20 +397,28 @@ export default function SetupPage() {
         {step === 3 && isSelfHosted && (
           <div className={styles.fields}>
             <div className={styles.communityCard}>
-              <h3 className={styles.communityTitle}>
-                Run Flight Finder for a household?
-              </h3>
+              <h3 className={styles.communityTitle}>Who uses this?</h3>
+              <div className={styles.choiceRow}>
+                <button
+                  type="button"
+                  className={`${styles.choice} ${!enableMultiUser ? styles.choiceActive : ''}`}
+                  onClick={() => setEnableMultiUser(false)}
+                >
+                  Just me
+                </button>
+                <button
+                  type="button"
+                  className={`${styles.choice} ${enableMultiUser ? styles.choiceActive : ''}`}
+                  onClick={() => setEnableMultiUser(true)}
+                >
+                  A household
+                </button>
+              </div>
               <p className={styles.communityText}>
-                Multi user mode lets each member of your household have their own
-                trackers and preferences. You stay admin and create accounts for
-                them. Skip this if you&apos;re the only user.
+                {enableMultiUser
+                  ? 'Each person gets their own profile, trackers, and preferences — they pick their face to sign in.'
+                  : 'You can add a household later from Settings.'}
               </p>
-              <button
-                className={`${styles.communityToggle} ${enableMultiUser ? styles.communityActive : ''}`}
-                onClick={() => setEnableMultiUser(!enableMultiUser)}
-              >
-                {enableMultiUser ? 'Enabled' : 'Skip'}
-              </button>
             </div>
             {enableMultiUser && (
               <>
@@ -450,30 +458,21 @@ export default function SetupPage() {
                 />
               </>
             )}
-            <p className={styles.communityHint}>
-              You can enable this later from the admin Settings page.
-            </p>
           </div>
         )}
 
         {step === 4 && isSelfHosted && (
           <div className={styles.fields}>
             <div className={styles.communityCard}>
-              <h3 className={styles.communityTitle}>Use it on your phone or share it?</h3>
+              <h3 className={styles.communityTitle}>Use it on your phone?</h3>
               <p className={styles.communityText}>
-                Flight Finder runs on this machine. To open it on a phone (and
-                install it as an app) or let other people connect, expose it over
-                https. You pick how when you install or from the desktop app:
+                It runs on this machine and nothing is exposed by default. To open
+                it on a phone or share it, you&apos;ll pick how (WiFi, Tailscale,
+                Cloudflare, or your own domain) when you install or from the desktop
+                app. Step-by-step guide at <strong>/connect</strong>.
               </p>
-              <ul className={styles.reachList}>
-                <li><strong>This computer only</strong> — the default; nothing is exposed.</li>
-                <li><strong>Local network</strong> — other devices on your WiFi (http).</li>
-                <li><strong>Tailscale</strong> — a private https URL, no public exposure.</li>
-                <li><strong>Cloudflare tunnel</strong> — a quick public https URL, no account.</li>
-                <li><strong>Domain + Caddy</strong> — a permanent https URL on your own domain.</li>
-              </ul>
             </div>
-            <label className={styles.avatarLabel} htmlFor="publicBaseUrl">Public URL (optional)</label>
+            <label className={styles.avatarLabel} htmlFor="publicBaseUrl">Already have a URL? (optional)</label>
             <input
               id="publicBaseUrl"
               type="url"
@@ -483,9 +482,8 @@ export default function SetupPage() {
               onChange={(e) => setPublicBaseUrl(e.target.value)}
             />
             <p className={styles.communityHint}>
-              If you already have a domain, tunnel, or tailnet URL, paste it so the
-              QR code and price alerts use it. Change it later anytime; see the
-              phone steps at /connect.
+              Paste a domain, tunnel, or tailnet URL so QR codes and price alerts
+              use it. Change it anytime.
             </p>
           </div>
         )}

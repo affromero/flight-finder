@@ -263,14 +263,31 @@
   margin-top: 0.25rem;
 }
 
-.reachList {
-  margin: 0.75rem 0 0;
-  padding-left: 1.1rem;
-  color: var(--text-secondary);
-  font-size: 0.82rem;
-  line-height: 1.6;
+.choiceRow {
+  display: flex;
+  gap: 0.5rem;
 }
 
-.reachList strong {
-  color: var(--text);
+.choice {
+  flex: 1;
+  padding: 0.75rem;
+  font-family: var(--font-display);
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--text-muted);
+  background: var(--elevated);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.choice:hover {
+  border-color: var(--accent);
+}
+
+.choice.choiceActive {
+  color: var(--bg);
+  background: var(--accent);
+  border-color: var(--accent);
 }
