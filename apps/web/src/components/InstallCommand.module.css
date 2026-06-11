@@ -54,3 +54,19 @@
   text-align: center;
   line-height: 1.5;
 }
+
+.desktopLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--accent);
+  text-decoration: none;
+  transition: gap 0.15s ease, opacity 0.15s ease;
+}
+
+.desktopLink:hover {
+  gap: 0.5rem;
+  text-decoration: underline;
+}

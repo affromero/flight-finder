@@ -6,7 +6,6 @@ COPY apps/web/package.json apps/web/
 COPY packages/cli/package.json packages/cli/
 COPY apps/web/prisma ./apps/web/prisma/
 RUN npm ci --loglevel=error
-RUN npx prisma generate --schema=apps/web/prisma/schema.prisma
 
 # Production-only deps (no devDependencies)
 FROM docker.io/library/node:26-alpine AS proddeps
@@ -17,7 +16,6 @@ COPY apps/web/package.json apps/web/
 COPY packages/cli/package.json packages/cli/
 COPY apps/web/prisma ./apps/web/prisma/
 RUN npm ci --omit=dev --loglevel=error
-RUN npx prisma generate --schema=apps/web/prisma/schema.prisma
 
 # Stage the externalized packages (serverExternalPackages) and the transitive
 # deps the Next standalone trace omits. Resolve each from wherever npm hoisted
@@ -37,13 +35,15 @@ RUN set -e; cd /app; mkdir -p /ext; \
 # The CLI is a devDependency, so it is absent from the lean runtime
 # node_modules, and fetching it with npx at container start round-trips the
 # registry and fails in restricted networks. Install it in isolation here so
-# the full dependency closure and the alpine engine binaries are bundled, then
-# copy the whole tree into the runner. Pinned to the v6 major that matches the
-# schema (Prisma 7 dropped `url = env(...)`).
+# the full dependency closure is bundled, then copy the whole tree into the
+# runner. Pinned to the v7 major that matches the schema. The entrypoint invokes
+# this CLI with explicit --schema/--url flags (no prisma.config.ts at runtime),
+# and v7's client is Rust-free (WASM query compiler), so there is no engine
+# binary to match the alpine target.
 FROM docker.io/library/node:26-alpine AS prismacli
 RUN apk add --no-cache openssl
 WORKDIR /pcli
-RUN npm install --no-save --no-package-lock prisma@6
+RUN npm install --no-save --no-package-lock prisma@7
 
 FROM docker.io/library/node:26-alpine AS builder
 RUN apk add --no-cache libc6-compat openssl python3 make g++
@@ -53,6 +53,11 @@ COPY --from=deps /app/node_modules ./node_modules
 # (workspace local). Without this, the CLI build fails with `tsup: not found`.
 COPY --from=deps /app/packages/cli/node_modules ./packages/cli/node_modules
 COPY . .
+# Prisma 7 generates its client into apps/web/src/generated (gitignored), so
+# regenerate it from the copied source before the builds compile it into the
+# Next standalone output and the CLI bundle. prisma.config.ts is present here and
+# `prisma` is installed (devDeps), so the config loads; no DATABASE_URL needed.
+RUN npx prisma generate --schema=apps/web/prisma/schema.prisma
 ARG COMMIT_SHA=unknown
 ENV NEXT_TELEMETRY_DISABLED=1
 ENV NODE_ENV=production
@@ -88,9 +93,11 @@ COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.nex
 COPY --from=builder /app/apps/web/public ./public
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
-# Prisma schema + generated client (for migrations in entrypoint)
+# Prisma schema (the entrypoint db push reads it). The generated client and its
+# @prisma/client runtime (WASM query compiler) come in via the Next standalone
+# trace; @prisma is copied too so the runtime adapter (@prisma/adapter-pg) and
+# client are guaranteed present. v7 has no node_modules/.prisma engine dir.
 COPY --from=builder --chown=node:node /app/apps/web/prisma ./apps/web/prisma
-COPY --from=proddeps --chown=node:node /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=proddeps --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
 
 # Self-contained Prisma CLI for the entrypoint schema push (db push). Calling

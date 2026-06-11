@@ -58,10 +58,10 @@ fi
 echo "[setup] Waiting for database..."
 RETRIES=30
 until node -e "
-  const { PrismaClient } = require('./node_modules/.prisma/client');
-  const p = new PrismaClient();
-  p.\$queryRaw\`SELECT 1\`.then(() => { p.\$disconnect(); process.exit(0); })
-    .catch(() => { p.\$disconnect(); process.exit(1); });
+  const { Client } = require('pg');
+  const c = new Client({ connectionString: process.env.DATABASE_URL });
+  c.connect().then(() => c.query('SELECT 1')).then(() => c.end()).then(() => process.exit(0))
+    .catch(() => { try { c.end(); } catch (_e) {} process.exit(1); });
 " 2>/dev/null; do
   RETRIES=$((RETRIES - 1))
   if [ "$RETRIES" -le 0 ]; then
@@ -78,9 +78,15 @@ echo "[setup] Database is ready"
 # registry and failed when it could not resolve the CLI. Run it directly and
 # honor the exit code so a failed push halts startup instead of masking the
 # error behind a misleading "Schema ready".
+#
+# Prisma 7 notes: --skip-generate is gone (db push no longer generates), and the
+# schema's datasource has no url, so we pass it with --url. We deliberately do
+# NOT ship prisma.config.ts to the runtime image: loading it needs `prisma` on
+# the runtime node_modules (it is a devDependency, omitted from the lean image),
+# so the entrypoint drives the CLI with explicit --schema/--url flags instead.
 echo "[setup] Applying database schema..."
 if node /app/prisma-cli/node_modules/prisma/build/index.js db push \
-     --schema=apps/web/prisma/schema.prisma --skip-generate; then
+     --schema=apps/web/prisma/schema.prisma --url="$DATABASE_URL"; then
   echo "[setup] Schema ready"
 else
   echo "[setup] ERROR: database schema push failed" >&2

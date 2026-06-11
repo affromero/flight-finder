@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { PROVIDER_METADATA, LOCAL_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
 import { isThemeId, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
@@ -131,7 +131,7 @@ export default function ConfigPage() {
           setGroqRpm(String(d.data.groqRpm ?? ''));
           setPreviewConcurrency(String(d.data.previewConcurrency ?? ''));
           setPreviewAdmissionCap(String(d.data.previewAdmissionCap ?? ''));
-          const pc = EXTRACTION_PROVIDERS[d.data.provider];
+          const pc = PROVIDER_METADATA[d.data.provider];
           const knownModel = pc?.models.find((m) => m.id === d.data.model);
           if (knownModel) {
             setModel(d.data.model);
@@ -145,14 +145,14 @@ export default function ConfigPage() {
       });
   }, [fetchLocalModels]);
 
-  const providerConfig = EXTRACTION_PROVIDERS[provider];
+  const providerConfig = PROVIDER_METADATA[provider];
   const models = providerConfig?.models ?? [];
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
     setCustomModel('');
-    setCustomBaseUrl(EXTRACTION_PROVIDERS[newProvider]?.defaultBaseUrl ?? '');
-    const newModels = EXTRACTION_PROVIDERS[newProvider]?.models ?? [];
+    setCustomBaseUrl(PROVIDER_METADATA[newProvider]?.defaultBaseUrl ?? '');
+    const newModels = PROVIDER_METADATA[newProvider]?.models ?? [];
     if (newModels.length > 0) {
       setModel(newModels[0]!.id);
     } else {
@@ -252,7 +252,7 @@ export default function ConfigPage() {
             value={provider}
             onChange={(e) => handleProviderChange(e.target.value)}
           >
-            {Object.entries(EXTRACTION_PROVIDERS).map(([key, p]) => (
+            {Object.entries(PROVIDER_METADATA).map(([key, p]) => (
               <option key={key} value={key}>{p.displayName}</option>
             ))}
           </select>
