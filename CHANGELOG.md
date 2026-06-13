@@ -1,5 +1,21 @@
 # Changelog
 
+## [0.12.0] - 2026-06-13
+
+Reliable price extraction across every model, a platform refresh (Next.js 16, Prisma 7), and clearer bug reports.
+
+### Fixed
+* **Searches no longer all end in "Flights exist but none matched your filters."** The extractor compared each price exactly as the model returned it, so a model that wrote the price as a string with a currency symbol or a thousands separator ("$189", "1,189") had every row thrown out and the whole search collapsed. Prices are now read from any common format (currency symbols, and both US and EU grouping and decimals), the JSON reader copes with reasoning blocks, code fences, wrapper objects, and stray text around the array, and a row is dropped only when it truly has no price or airline. This mostly affected smaller and local models. (reported by @Darth-Ness)
+* The Claude Code extraction provider no longer inherits a stray `ANTHROPIC_BASE_URL` or auth token from the host, which could quietly point it at the wrong endpoint and fail every extraction.
+
+### Changed
+* **Platform upgrade.** Next.js 16, Prisma 7 (a lighter, Rust-free database client), TypeScript 6, ESLint 10, Vitest 4.1, Plotly 3, and a Node 26 base image, with dependency updates now grouped per ecosystem and given a cooldown before they land.
+* The app uses the real Flight Finder logo for its icons, favicon, and on-page brand mark.
+
+### Added
+* Structured GitHub issue forms for bug reports and feature requests, so a report carries the version, deployment, provider, model, and logs needed to reproduce it.
+* Secret scanning in CI to catch accidentally committed credentials.
+
 ## [0.11.0] - 2026-06-10
 
 Install Flight Finder without ever touching a terminal, and run it for a whole household: a native desktop app, passwordless profiles like Netflix, a personal theme per person, and a guided way to reach it from a phone.
