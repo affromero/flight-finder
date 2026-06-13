@@ -1,0 +1,117 @@
+name: Bug report
+description: Report something broken so it can be reproduced and fixed
+title: "[Bug]: "
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the report. Flight Finder extracts prices with an LLM, so the **version**, **provider**, and **model** fields below matter a lot. Most "no results" or wrong-price bugs come down to which model you run and how its output is shaped, so please fill those in. The **Logs** field is the single most useful thing for extraction bugs.
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: What went wrong, and what did you expect instead?
+      placeholder: |
+        e.g. Every search ends in "Flights exist but none matched your filters", even for routes I know have flights. I expected a price chart.
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Include the exact search query, route, and dates if relevant.
+      placeholder: |
+        1. Search "JFK to LAX, June 15 to June 22"
+        2. Click "Track this flight"
+        3. ...
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: "Shown in the page footer, or run: curl -s http://localhost:3003/api/version"
+      placeholder: e.g. 0.11.0
+    validations:
+      required: true
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: How are you running it?
+      options:
+        - Self-hosted (Docker Compose)
+        - Self-hosted (CLI / flight-finder-cli)
+        - Desktop app (Tauri)
+        - Local dev (npm run dev)
+        - Other (describe in "What happened?")
+    validations:
+      required: true
+  - type: dropdown
+    id: provider
+    attributes:
+      label: Extraction provider
+      description: Found in Admin > Config (or your setup wizard choice). Critical for extraction bugs.
+      options:
+        - Anthropic (API key)
+        - OpenAI (API key)
+        - Google Gemini (API key)
+        - Claude Code (Max subscription, CLI)
+        - OpenAI Codex (CLI)
+        - Ollama (local)
+        - llama.cpp (local)
+        - vLLM (local)
+        - Not sure
+    validations:
+      required: true
+  - type: input
+    id: model
+    attributes:
+      label: Model ID
+      description: The exact model configured (Admin > Config). Small/local models are the most common cause of extraction issues.
+      placeholder: e.g. claude-haiku-4-5-20251001, gpt-4.1-mini, gemini-2.5-flash, qwen3:8b, llama3.1:8b
+    validations:
+      required: false
+  - type: input
+    id: os
+    attributes:
+      label: OS and architecture
+      placeholder: e.g. Ubuntu 24.04 x86_64, macOS 15 arm64, Windows 11
+    validations:
+      required: false
+  - type: input
+    id: browser
+    attributes:
+      label: Browser (for UI / display issues)
+      placeholder: e.g. Firefox 128, Chrome 126, Safari 18
+    validations:
+      required: false
+  - type: dropdown
+    id: multi-user
+    attributes:
+      label: Multi-user mode enabled?
+      options:
+        - "No"
+        - "Yes"
+        - Not sure
+    validations:
+      required: false
+  - type: textarea
+    id: logs
+    attributes:
+      label: Logs
+      description: |
+        For extraction or "no results" bugs this is the most useful field. Paste the server logs around the failure, especially the lines starting with `[extract]`, `[scrape]`, `[preview]`, or `[navigate]`. The extractor logs the failure reason, e.g. `[extract] FAIL all_filtered_out ...`.
+        - Docker: `docker compose -f docker-compose.prod.yml logs --tail=150 web`
+      render: shell
+    validations:
+      required: false
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Before submitting
+      options:
+        - label: I updated to the latest version and the problem still happens
+          required: false
+        - label: I searched existing issues and did not find a duplicate
+          required: false
