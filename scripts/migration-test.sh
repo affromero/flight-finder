@@ -11,6 +11,7 @@ set -euo pipefail
 REPO_ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 INSTALLER="$REPO_ROOT/apps/web/public/install.sh"
 WRAPPER="$REPO_ROOT/apps/web/public/flight-finder-cli"
+LEGACY_SHIM="$REPO_ROOT/apps/web/public/fairtrail-cli"
 
 PASS=0
 FAIL=0
@@ -51,6 +52,15 @@ assert_grep 'FLIGHT_FINDER_SILENCE_RENAME'                     "$WRAPPER"   "wra
 assert_grep '_FF_INVOKED_AS="\$\(basename "\$0"\)"'            "$WRAPPER"   "wrapper detects invocation name for deprecation notice"
 assert_grep '^cmd_migrate\(\)'                                 "$WRAPPER"   "wrapper defines cmd_migrate function"
 assert_grep 'migrate\)[[:space:]]+cmd_migrate'                 "$WRAPPER"   "wrapper dispatches migrate subcommand"
+
+# Legacy /fairtrail-cli shim: a pre-rename `fairtrail update` re-fetches this
+# file, so it must prompt to migrate instead of being the old stale CLI (#139).
+if [ -f "$LEGACY_SHIM" ]; then pass "legacy fairtrail-cli shim is served from public/"; else fail "legacy fairtrail-cli shim is served from public/"; fi
+assert_grep 'renamed at v0\.9\.0'                              "$LEGACY_SHIM" "legacy shim states Fairtrail was renamed to Flight Finder"
+assert_grep 'curl -fsSL https://flight-finder\.org/install\.sh \| bash' "$LEGACY_SHIM" "legacy shim points at the install one-liner"
+assert_grep 'Migrate now\?'                                    "$LEGACY_SHIM" "legacy shim prompts to migrate when interactive"
+assert_grep '\[ -t 0 \] && \[ -t 1 \]'                         "$LEGACY_SHIM" "legacy shim only prompts on a real terminal"
+if bash -n "$LEGACY_SHIM" 2>/dev/null; then pass "legacy shim is valid bash"; else fail "legacy shim is valid bash"; fi
 
 echo ""
 if [ $FAIL -eq 0 ]; then
