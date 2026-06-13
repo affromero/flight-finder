@@ -771,6 +771,38 @@ describe('CLI provider lockdown (Finding 4)', () => {
     expect(args).not.toContain('--allow-dangerously-skip-permissions');
   });
 
+  it('claude-code spawns without the API key or any host endpoint/token override (#139 follow-up)', async () => {
+    const proc = createFakeProc();
+    mockSpawn.mockReturnValue(proc);
+    const saved = {
+      key: process.env.ANTHROPIC_API_KEY,
+      base: process.env.ANTHROPIC_BASE_URL,
+      token: process.env.ANTHROPIC_AUTH_TOKEN,
+    };
+    // Simulate a host (or the test harness) that redirects Anthropic traffic.
+    process.env.ANTHROPIC_API_KEY = 'sk-ant-host';
+    process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:19876/v1';
+    process.env.ANTHROPIC_AUTH_TOKEN = 'host-token';
+    try {
+      const done = EXTRACTION_PROVIDERS['claude-code']!.extract('', 'sonnet', 'system', 'page');
+      await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
+      proc.stdout!.emit('data', Buffer.from('[]'));
+      proc.emit('close', 0);
+      await done;
+
+      const opts = mockSpawn.mock.calls[0]![2] as { env: NodeJS.ProcessEnv };
+      expect(opts.env.ANTHROPIC_API_KEY).toBeUndefined();
+      expect(opts.env.ANTHROPIC_BASE_URL).toBeUndefined();
+      expect(opts.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
+      // PATH and other host env still pass through.
+      expect(opts.env.PATH).toBeDefined();
+    } finally {
+      if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved.key;
+      if (saved.base === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = saved.base;
+      if (saved.token === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN; else process.env.ANTHROPIC_AUTH_TOKEN = saved.token;
+    }
+  });
+
   it('codex runs with the read-only sandbox, never danger-full-access', async () => {
     const proc = createFakeProc();
     mockSpawn.mockReturnValue(proc);
