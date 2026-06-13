@@ -1,0 +1,49 @@
+#!/usr/bin/env bash
+# ============================================================================
+# Fairtrail -> Flight Finder migration prompt (deprecated CLI shim)
+# ============================================================================
+# Fairtrail was renamed to Flight Finder at v0.9.0. Installs from before the
+# rename run a `fairtrail` binary whose `update` command re-fetches THIS file
+# (from https://fairtrail.org/fairtrail-cli, which now redirects to
+# https://flight-finder.org/fairtrail-cli) and then re-pulls
+# ghcr.io/affromero/fairtrail:latest. That image is frozen at the rename, so
+# `fairtrail update` silently never advances and the user is stranded on the
+# old version (issue #139: a 0.8.0 user could not get the extraction fix).
+#
+# Serving this shim at the legacy URL turns that dead-end into an action: the
+# stale `fairtrail update` overwrites its own binary with this prompt, so the
+# next `fairtrail` invocation offers to migrate (re-runs the installer, which
+# auto-detects ~/.fairtrail, renames the database, reuses the volume, and
+# installs the latest Flight Finder, keeping `fairtrail` as an alias).
+# ============================================================================
+set -euo pipefail
+
+BOLD=$'\033[1m'; CYAN=$'\033[0;36m'; YELLOW=$'\033[0;33m'; GREEN=$'\033[0;32m'; RESET=$'\033[0m'
+ONELINER="curl -fsSL https://flight-finder.org/install.sh | bash"
+
+printf '%b\n' "${YELLOW}${BOLD}!${RESET} Fairtrail is now ${BOLD}Flight Finder${RESET} (renamed at v0.9.0)."
+printf '%b\n' "Your install predates the rename and can no longer update in place: new releases ship"
+printf '%b\n' "under a different image and command, so ${BOLD}fairtrail update${RESET} keeps re-pulling the frozen"
+printf '%b\n' "pre-rename image and never advances."
+printf '\n'
+printf '%b\n' "Migrating keeps all your data. It renames the database, reuses the existing volume, and"
+printf '%b\n' "installs the latest Flight Finder, leaving ${BOLD}fairtrail${RESET} working as an alias."
+printf '\n'
+
+# Only prompt when attached to a real terminal; in a pipe or script, print the
+# command and exit cleanly so nothing hangs on a missing stdin.
+if [ -t 0 ] && [ -t 1 ]; then
+  printf '%b' "${CYAN}${BOLD}Migrate now?${RESET} [Y/n] "
+  read -r reply || reply=""
+  case "${reply:-Y}" in
+    [Nn]*)
+      printf '%b\n' "When you are ready, run:\n  ${BOLD}${ONELINER}${RESET}"
+      exit 0
+      ;;
+  esac
+  printf '%b\n' "${GREEN}${BOLD}>${RESET} Migrating..."
+  exec bash -c "$(curl -fsSL https://flight-finder.org/install.sh)"
+fi
+
+printf '%b\n' "To migrate, run:\n  ${BOLD}${ONELINER}${RESET}"
+exit 0
