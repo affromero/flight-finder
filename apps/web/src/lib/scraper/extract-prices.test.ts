@@ -30,7 +30,7 @@ vi.mock('./ai-registry', () => ({
 
 process.env.ANTHROPIC_API_KEY = 'test-key';
 
-import { extractPrices, sanitizeScrapedHtml } from './extract-prices';
+import { extractPrices, sanitizeScrapedHtml, coercePrice, coerceStops, extractJsonArray, type QueryFilters } from './extract-prices';
 
 describe('sanitizeScrapedHtml (Finding 4: untrusted scraped input)', () => {
   it('strips scripts, styles, comments, noscript, and svg while keeping visible price text', () => {
@@ -411,5 +411,204 @@ describe('extractPrices configOverride (audit A4)', () => {
     await extractPrices('page content', 'https://flights.google.com', '2026-06-15');
 
     expect(findFirstSpy).toHaveBeenCalledTimes(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Issue #139: "All searches end in 'Flights exist but none matched your
+// filters'". Real models (especially small local ones) drift from the exact
+// JSON shape the prompt asks for. The old pipeline compared raw strings with
+// `> 0` and used a greedy `/\[[\s\S]*\]/`, so a single deviation emptied every
+// result into all_filtered_out / json_parse_error. These tests pin the
+// observed real-world shapes (captured live from ollama qwen3 and the claude
+// CLI) so they can never silently break extraction again.
+// ---------------------------------------------------------------------------
+
+describe('coercePrice (issue #139 — string/symbol/grouped prices)', () => {
+  it('passes through positive numbers', () => {
+    expect(coercePrice(189)).toBe(189);
+    expect(coercePrice(189.5)).toBe(189.5);
+  });
+  it('rejects zero, negatives, NaN, Infinity', () => {
+    expect(coercePrice(0)).toBe(0);
+    expect(coercePrice(-5)).toBe(0);
+    expect(coercePrice(NaN)).toBe(0);
+    expect(coercePrice(Infinity)).toBe(0);
+  });
+  it('strips a currency symbol', () => {
+    expect(coercePrice('$189')).toBe(189);
+    expect(coercePrice('£1234')).toBe(1234);
+    expect(coercePrice('€450')).toBe(450);
+  });
+  it('strips US thousands grouping with and without decimals', () => {
+    expect(coercePrice('1,189')).toBe(1189);
+    expect(coercePrice('$1,189.50')).toBe(1189.5);
+    expect(coercePrice('USD 1,189')).toBe(1189);
+  });
+  it('handles EU grouping/decimal ("1.189,50")', () => {
+    expect(coercePrice('1.189,50')).toBe(1189.5);
+    expect(coercePrice('189,90 €')).toBe(189.9);
+  });
+  it('returns 0 for non-numeric junk and non-strings', () => {
+    expect(coercePrice('free')).toBe(0);
+    expect(coercePrice(null)).toBe(0);
+    expect(coercePrice(undefined)).toBe(0);
+    expect(coercePrice({})).toBe(0);
+    expect(coercePrice(['$1'])).toBe(0);
+  });
+});
+
+describe('coerceStops (issue #139 — loose stop types)', () => {
+  it('passes through non-negative integers', () => {
+    expect(coerceStops(0)).toBe(0);
+    expect(coerceStops(2)).toBe(2);
+  });
+  it('reads stop counts from strings', () => {
+    expect(coerceStops('Nonstop')).toBe(0);
+    expect(coerceStops('non-stop')).toBe(0);
+    expect(coerceStops('Direct')).toBe(0);
+    expect(coerceStops('1 stop')).toBe(1);
+    expect(coerceStops('2 stops')).toBe(2);
+  });
+  it('defaults junk and wrong types to 0 (never drops the flight)', () => {
+    expect(coerceStops(['JFK - LAX'])).toBe(0);
+    expect(coerceStops(null)).toBe(0);
+    expect(coerceStops('layover')).toBe(0);
+    expect(coerceStops(-1)).toBe(0);
+  });
+});
+
+describe('extractJsonArray (issue #139 — wrappers around the array)', () => {
+  it('reads a bare array', () => {
+    const r = extractJsonArray('[{"a":1}]');
+    expect(r.ok && r.value).toEqual([{ a: 1 }]);
+  });
+  it('reads an array inside a ```json markdown fence', () => {
+    const r = extractJsonArray('```json\n[{"a":1}]\n```');
+    expect(r.ok && r.value).toEqual([{ a: 1 }]);
+  });
+  it('reads an array after a reasoning <think> block that contains brackets', () => {
+    const r = extractJsonArray('<think>I should return [a list] of items [1,2]</think>\n[{"price":189}]');
+    expect(r.ok && r.value).toEqual([{ price: 189 }]);
+  });
+  it('skips a stray prose bracket and finds the real array', () => {
+    const r = extractJsonArray('Here are the results [see note]: [{"price":189}] hope this helps');
+    expect(r.ok && r.value).toEqual([{ price: 189 }]);
+  });
+  it('finds the array nested in a wrapper object', () => {
+    const r = extractJsonArray('{"flights": [{"price":189}], "count": 1}');
+    expect(r.ok && r.value).toEqual([{ price: 189 }]);
+  });
+  it('ignores brackets inside string values', () => {
+    const r = extractJsonArray('[{"airline":"Spirit [LCC]","price":98}]');
+    expect(r.ok && r.value).toEqual([{ airline: 'Spirit [LCC]', price: 98 }]);
+  });
+  it('reports no_json_in_response when there is no array at all', () => {
+    const r = extractJsonArray('I could not find any flights.');
+    expect(r).toEqual({ ok: false, reason: 'no_json_in_response' });
+  });
+  it('reports json_parse_error when a bracket exists but nothing parses', () => {
+    const r = extractJsonArray('[{"price": invalid}]');
+    expect(r).toEqual({ ok: false, reason: 'json_parse_error' });
+  });
+});
+
+describe('extractPrices end-to-end shape robustness (issue #139)', () => {
+  beforeEach(() => mockExtract.mockReset());
+
+  const NO_FILTERS: QueryFilters = { maxPrice: null, maxStops: null, maxDurationHours: null, preferredAirlines: [], timePreference: 'any', cabinClass: 'economy' };
+
+  async function run(content: string) {
+    mockExtract.mockResolvedValue({ content, usage: { inputTokens: 100, outputTokens: 50 } });
+    return extractPrices('page', 'https://flights.google.com', '2026-06-15', { ...NO_FILTERS }, 10, true, 'google_flights', 'USD');
+  }
+
+  it('recovers flights when EVERY price is a "$"-prefixed string (the exact #139 failure)', async () => {
+    const result = await run(JSON.stringify([
+      { travelDate: '2026-06-15', price: '$189', currency: 'USD', airline: 'Delta', stops: 0, duration: '6h 15m' },
+      { travelDate: '2026-06-15', price: '$98', currency: 'USD', airline: 'Spirit', stops: 1, duration: '9h 45m' },
+    ]));
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices).toHaveLength(2);
+    expect(result.prices.map((p) => p.price).sort((a, b) => a - b)).toEqual([98, 189]);
+  });
+
+  it('recovers flights when prices use thousands separators ("1,189")', async () => {
+    const result = await run(JSON.stringify([
+      { price: '1,189', airline: 'BA', currency: 'USD', duration: '8h' },
+      { price: '$2,450.00', airline: 'United', currency: 'USD', duration: '11h' },
+    ]));
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices.map((p) => p.price).sort((a, b) => a - b)).toEqual([1189, 2450]);
+  });
+
+  it('keeps a flight whose stops field is an array (qwen3 shape)', async () => {
+    const result = await run(JSON.stringify([
+      { price: 189, airline: 'Delta', currency: 'USD', stops: ['JFK - LAX'], duration: '6h 15m' },
+    ]));
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices).toHaveLength(1);
+    expect(result.prices[0]!.stops).toBe(0);
+  });
+
+  it('extracts from a ```json markdown fence (claude CLI shape)', async () => {
+    const result = await run('```json\n' + JSON.stringify([
+      { price: 205, airline: 'Alaska Airlines', currency: 'USD', stops: 0, duration: '6h 15m' },
+    ]) + '\n```');
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices).toHaveLength(1);
+    expect(result.prices[0]!.airline).toBe('Alaska Airlines');
+  });
+
+  it('extracts after a reasoning <think> block containing brackets', async () => {
+    const result = await run('<think>The cheapest options are [Spirit, Delta]. I will format as [...]</think>\n' + JSON.stringify([
+      { price: 98, airline: 'Spirit', currency: 'USD', stops: 1, duration: '9h 45m' },
+    ]));
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices).toHaveLength(1);
+    expect(result.prices[0]!.price).toBe(98);
+  });
+
+  it('extracts when the array is wrapped in an object and trailed by prose', async () => {
+    const result = await run('{"flights": [{"price": 172, "airline": "United", "currency": "USD", "stops": 1, "duration": "8h 30m"}]} — found 1 flight');
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices).toHaveLength(1);
+    expect(result.prices[0]!.price).toBe(172);
+  });
+
+  it('trims whitespace-padded airline names', async () => {
+    const result = await run(JSON.stringify([
+      { price: 189, airline: '  Delta  ', currency: 'USD', stops: 0, duration: '6h' },
+    ]));
+    expect(result.prices).toHaveLength(1);
+    expect(result.prices[0]!.airline).toBe('Delta');
+  });
+
+  it('keeps valid rows and drops only the genuinely broken ones', async () => {
+    const result = await run(JSON.stringify([
+      { price: '$189', airline: 'Delta', currency: 'USD', stops: 0, duration: '6h' },
+      { price: 0, airline: 'Ghost', currency: 'USD', stops: 0, duration: '6h' },
+      { price: 'free', airline: 'Scam', currency: 'USD', stops: 0, duration: '6h' },
+      { price: 245, airline: '', currency: 'USD', stops: 0, duration: '6h' },
+      { price: 98, airline: 'Spirit', currency: 'USD', stops: 1, duration: '9h' },
+    ]));
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices.map((p) => p.airline).sort()).toEqual(['Delta', 'Spirit']);
+  });
+
+  it('still reports all_filtered_out only when nothing is genuinely usable', async () => {
+    const result = await run(JSON.stringify([
+      { price: 0, airline: 'A', currency: 'USD', stops: 0 },
+      { price: 'free', airline: 'B', currency: 'USD', stops: 0 },
+      { price: 200, airline: '', currency: 'USD', stops: 0 },
+    ]));
+    expect(result.prices).toEqual([]);
+    expect(result.failureReason).toBe('all_filtered_out');
+  });
+
+  it('reports all_filtered_out for an array of non-objects', async () => {
+    const result = await run('["Delta $189", "Spirit $98"]');
+    expect(result.prices).toEqual([]);
+    expect(result.failureReason).toBe('all_filtered_out');
   });
 });
