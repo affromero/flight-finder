@@ -170,6 +170,136 @@ export interface ExtractionResult {
 }
 
 /**
+ * Find the index of the ']' that closes the '[' at `start`, ignoring brackets
+ * that appear inside JSON string literals. Returns -1 when unbalanced.
+ */
+function matchingArrayEnd(text: string, start: number): number {
+  let depth = 0;
+  let inStr = false;
+  let escaped = false;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i]!;
+    if (inStr) {
+      if (escaped) escaped = false;
+      else if (ch === '\\') escaped = true;
+      else if (ch === '"') inStr = false;
+      continue;
+    }
+    if (ch === '"') inStr = true;
+    else if (ch === '[') depth++;
+    else if (ch === ']' && --depth === 0) return i;
+  }
+  return -1;
+}
+
+/**
+ * Robustly pull the JSON array of flights out of a model's raw text.
+ *
+ * Real models (especially small local ones and reasoning models) wrap the
+ * answer in ways a naive `/\[[\s\S]*\]/` cannot survive:
+ *  - markdown code fences (```json ... ```)
+ *  - <think>...</think> reasoning blocks that themselves contain brackets
+ *  - a prose sentence before/after the array, sometimes with stray brackets
+ *  - the array nested inside a wrapper object ({"flights": [...]})
+ *
+ * The greedy regex matched from the FIRST '[' to the LAST ']', so any stray
+ * bracket in the prose produced invalid JSON and a hard failure. Instead we
+ * strip reasoning blocks, then scan every '[' and return the first balanced
+ * substring that actually parses into an array. Issue #139.
+ */
+export function extractJsonArray(
+  content: string,
+): { ok: true; value: unknown[] } | { ok: false; reason: 'no_json_in_response' | 'json_parse_error' } {
+  const text = content.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  let sawBracket = false;
+  for (let start = text.indexOf('['); start !== -1; start = text.indexOf('[', start + 1)) {
+    sawBracket = true;
+    const end = matchingArrayEnd(text, start);
+    if (end === -1) continue;
+    try {
+      const parsed: unknown = JSON.parse(text.slice(start, end + 1));
+      if (Array.isArray(parsed)) return { ok: true, value: parsed };
+    } catch {
+      // Not a valid array at this '['; try the next one.
+    }
+  }
+  return { ok: false, reason: sawBracket ? 'json_parse_error' : 'no_json_in_response' };
+}
+
+/**
+ * Coerce whatever the model put in `price` into a positive number, or 0 when
+ * it is unusable. Models frequently ignore the "number, no symbols" rule and
+ * emit "$189", "1,189", "USD 1,189.50", or "1.189,50" (EU). The old code
+ * compared these strings directly with `> 0`, which is NaN for anything with a
+ * symbol or grouping separator, so every row was dropped -> all_filtered_out
+ * on every search. Issue #139.
+ */
+export function coercePrice(value: unknown): number {
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : 0;
+  if (typeof value !== 'string') return 0;
+  let s = value.replace(/[^0-9.,]/g, '');
+  if (!s) return 0;
+  const lastComma = s.lastIndexOf(',');
+  const lastDot = s.lastIndexOf('.');
+  if (lastComma !== -1 && lastDot !== -1) {
+    // Both separators present: the rightmost is the decimal point, the other
+    // is the thousands grouping. "1,189.50" (US) vs "1.189,50" (EU).
+    s = lastComma > lastDot ? s.replace(/\./g, '').replace(',', '.') : s.replace(/,/g, '');
+  } else if (lastComma !== -1) {
+    // Only commas: 1-2 trailing digits reads as a decimal ("189,5"); otherwise
+    // it is thousands grouping ("1,189").
+    s = s.length - lastComma - 1 <= 2 ? s.replace(',', '.') : s.replace(/,/g, '');
+  }
+  const n = parseFloat(s);
+  return Number.isFinite(n) && n > 0 ? n : 0;
+}
+
+/** Coerce `stops` into a non-negative integer. Accepts numbers, "1 stop",
+ * "Nonstop"/"Direct", or junk (-> 0). Not part of the validity gate, but keeps
+ * the stored data clean when a model types it loosely. */
+export function coerceStops(value: unknown): number {
+  if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.trunc(value));
+  if (typeof value === 'string') {
+    if (/non[\s-]?stop|direct/i.test(value)) return 0;
+    const m = value.match(/\d+/);
+    return m ? parseInt(m[0]!, 10) : 0;
+  }
+  return 0;
+}
+
+function coerceSeatsLeft(value: unknown): number | null {
+  if (typeof value === 'number' && Number.isFinite(value)) return value;
+  if (typeof value === 'string') {
+    const m = value.match(/\d+/);
+    if (m) return parseInt(m[0]!, 10);
+  }
+  return null;
+}
+
+/**
+ * Normalize one raw model entry into a fully typed PriceData. Every field is
+ * defended against the wrong type (e.g. qwen3 emits `stops` as an array), so a
+ * single loosely-typed field can never silently drop a real flight.
+ */
+function normalizeEntry(entry: unknown, travelDateFallback: string, currency: string | null): PriceData | null {
+  if (typeof entry !== 'object' || entry === null) return null;
+  const e = entry as Record<string, unknown>;
+  return {
+    travelDate: typeof e.travelDate === 'string' && e.travelDate ? e.travelDate : travelDateFallback,
+    price: coercePrice(e.price),
+    currency: typeof e.currency === 'string' && e.currency ? e.currency : (currency ?? 'USD'),
+    airline: typeof e.airline === 'string' ? e.airline.trim() : '',
+    bookingUrl: typeof e.bookingUrl === 'string' ? e.bookingUrl : '',
+    stops: coerceStops(e.stops),
+    duration: typeof e.duration === 'string' ? e.duration : null,
+    departureTime: typeof e.departureTime === 'string' ? e.departureTime : null,
+    arrivalTime: typeof e.arrivalTime === 'string' ? e.arrivalTime : null,
+    seatsLeft: coerceSeatsLeft(e.seatsLeft),
+    flightNumber: typeof e.flightNumber === 'string' ? e.flightNumber : null,
+  };
+}
+
+/**
  * Slim subset of ExtractionConfig that extractPrices needs. Allows callers
  * (preview-runner, run-scrape) to read the config once up front and pass
  * it through every per-attempt call, instead of extractPrices hitting the
@@ -268,39 +398,35 @@ ${UNTRUSTED_CLOSE}`;
     return { prices: [], usage: { inputTokens: 0, outputTokens: 0 }, failureReason: 'llm_error' };
   }
 
-  const jsonMatch = result.content.match(/\[[\s\S]*\]/);
-  if (!jsonMatch) {
-    console.log(`[extract] FAIL no_json_in_response — LLM returned no parseable JSON`);
-    return { prices: [], usage: result.usage, failureReason: 'no_json_in_response' };
+  const parsed = extractJsonArray(result.content);
+  if (!parsed.ok) {
+    if (parsed.reason === 'no_json_in_response') {
+      console.log(`[extract] FAIL no_json_in_response — LLM returned no parseable JSON`);
+    } else {
+      console.error(`[extract] FAIL json_parse_error — found '[' but no balanced array parsed; preview=${result.content.slice(0, 200)}`);
+    }
+    return { prices: [], usage: result.usage, failureReason: parsed.reason };
   }
 
-  let raw: PriceData[];
-  try {
-    raw = JSON.parse(jsonMatch[0]) as PriceData[];
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const preview = jsonMatch[0].slice(0, 200);
-    console.error(`[extract] FAIL json_parse_error length=${jsonMatch[0].length} err=${msg} preview=${preview}`);
-    return { prices: [], usage: result.usage, failureReason: 'json_parse_error' };
-  }
-
-  if (raw.length === 0) {
+  if (parsed.value.length === 0) {
     console.log(`[extract] FAIL empty_extraction — LLM returned [] (${result.usage.inputTokens} input tokens)`);
     return { prices: [], usage: result.usage, failureReason: 'empty_extraction' };
   }
 
-  // Coerce null bookingUrl to empty string (LLMs frequently return null)
-  for (const p of raw) {
-    if (!p.bookingUrl) p.bookingUrl = '';
-  }
+  // Normalize every entry into a fully typed PriceData, defending each field
+  // against the wrong type. This is what stops loosely-formatted model output
+  // (string prices like "$189", `stops` as an array, etc.) from silently
+  // emptying the result set. Issue #139.
+  const raw = parsed.value
+    .map((entry) => normalizeEntry(entry, travelDateFallback, currency))
+    .filter((p): p is PriceData => p !== null);
 
-  // Filter out obviously invalid entries
-  const validPrices = raw.filter(
-    (p) => p.price > 0 && p.airline && p.airline.length > 0
-  );
+  // Filter out invalid entries: a usable flight needs a positive price and an
+  // airline name. coercePrice has already turned "$189"/"1,189" into numbers.
+  const validPrices = raw.filter((p) => p.price > 0 && p.airline.length > 0);
 
   if (validPrices.length === 0) {
-    console.log(`[extract] FAIL all_filtered_out — ${raw.length} raw results all invalid`);
+    console.log(`[extract] FAIL all_filtered_out — ${parsed.value.length} raw results all invalid (no positive price + airline after normalization)`);
     return { prices: [], usage: result.usage, failureReason: 'all_filtered_out' };
   }
 
