@@ -62,6 +62,30 @@ export async function GET(request: NextRequest) {
     })
   );
 
+  // --- Check 2b: Playwright can actually launch a browser ---
+  // The version check above only proves the binary exists. This drives the real
+  // scraper launch path (launchBrowser -> import('playwright') -> chromium.launch),
+  // which loads playwright-core/browsers.json and the system chromium. It is the
+  // guard that would have caught the standalone build dropping browsers.json,
+  // which the version check and the fixture-based extraction check both miss.
+  checks.push(
+    await runCheck('browser_launch', async () => {
+      const { launchBrowser } = await import('@/lib/scraper/browser');
+      const browser = await launchBrowser();
+      try {
+        const page = await browser.newPage();
+        await page.setContent('<h1>flight-finder smoke</h1>');
+        const text = await page.textContent('h1');
+        if (text !== 'flight-finder smoke') {
+          throw new Error(`unexpected rendered text: ${text}`);
+        }
+        return `Launched ${browser.version()} and rendered a page`;
+      } finally {
+        await browser.close();
+      }
+    })
+  );
+
   // --- Check 3: Extraction pipeline with fixture ---
   let testQueryId: string | null = null;
 
