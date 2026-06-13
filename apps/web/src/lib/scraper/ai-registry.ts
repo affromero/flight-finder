@@ -283,7 +283,14 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
 
       const result = await new Promise<string>((resolve, reject) => {
         const env = { ...process.env };
+        // Force the CLI onto its own Max-subscription auth. Drop the API key AND
+        // any inherited base-URL / auth-token override that would otherwise
+        // redirect the spawned `claude` at a different endpoint (a host proxy,
+        // or a test harness's mock server). A stray ANTHROPIC_BASE_URL silently
+        // breaks extraction with an llm_error. Issue #139 follow-up.
         delete env.ANTHROPIC_API_KEY;
+        delete env.ANTHROPIC_AUTH_TOKEN;
+        delete env.ANTHROPIC_BASE_URL;
         // Extraction is pure text-in / JSON-out and needs no agentic capability.
         // The input is adversarial scraped HTML, so run the agent locked down:
         // deny every tool (overrides any pre-approval in the host's

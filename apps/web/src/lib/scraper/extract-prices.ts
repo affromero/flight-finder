@@ -212,17 +212,30 @@ export function extractJsonArray(
 ): { ok: true; value: unknown[] } | { ok: false; reason: 'no_json_in_response' | 'json_parse_error' } {
   const text = content.replace(/<think>[\s\S]*?<\/think>/gi, '');
   let sawBracket = false;
+  let firstArray: unknown[] | null = null;
   for (let start = text.indexOf('['); start !== -1; start = text.indexOf('[', start + 1)) {
     sawBracket = true;
     const end = matchingArrayEnd(text, start);
     if (end === -1) continue;
+    let parsed: unknown;
     try {
-      const parsed: unknown = JSON.parse(text.slice(start, end + 1));
-      if (Array.isArray(parsed)) return { ok: true, value: parsed };
+      parsed = JSON.parse(text.slice(start, end + 1));
     } catch {
-      // Not a valid array at this '['; try the next one.
+      continue; // not valid JSON at this '['; try the next one
     }
+    if (!Array.isArray(parsed)) continue;
+    // Prefer the first array that holds object rows. A model can emit a header
+    // or prose array (["price","airline"], or a reasoning list) before the real
+    // flight array; returning that scalar array would drop every real row.
+    // Issue #139 / PR #140 review finding 1.
+    if (parsed.some((el) => typeof el === 'object' && el !== null)) {
+      return { ok: true, value: parsed };
+    }
+    if (firstArray === null) firstArray = parsed;
   }
+  // No object array found. Fall back to the first array seen, which keeps `[]`
+  // as empty_extraction and a pure scalar array as all_filtered_out downstream.
+  if (firstArray !== null) return { ok: true, value: firstArray };
   return { ok: false, reason: sawBracket ? 'json_parse_error' : 'no_json_in_response' };
 }
 
@@ -249,6 +262,13 @@ export function coercePrice(value: unknown): number {
     // Only commas: 1-2 trailing digits reads as a decimal ("189,5"); otherwise
     // it is thousands grouping ("1,189").
     s = s.length - lastComma - 1 <= 2 ? s.replace(',', '.') : s.replace(/,/g, '');
+  } else if (lastDot !== -1) {
+    // Only dots. Multiple dots are thousands grouping ("1.234.567"). A single
+    // dot with exactly 3 trailing digits is also grouping ("1.234" -> 1234):
+    // currency decimals use 1-2 places, so 3 places means grouping. Treating it
+    // as a decimal would record a fake ultra-cheap fare. PR #140 review finding 2.
+    const dotCount = (s.match(/\./g) ?? []).length;
+    if (dotCount > 1 || s.length - lastDot - 1 === 3) s = s.replace(/\./g, '');
   }
   const n = parseFloat(s);
   return Number.isFinite(n) && n > 0 ? n : 0;
@@ -261,8 +281,14 @@ export function coerceStops(value: unknown): number {
   if (typeof value === 'number' && Number.isFinite(value)) return Math.max(0, Math.trunc(value));
   if (typeof value === 'string') {
     if (/non[\s-]?stop|direct/i.test(value)) return 0;
-    const m = value.match(/\d+/);
-    return m ? parseInt(m[0]!, 10) : 0;
+    // Read a stop-specific phrase ("1 stop", "2 stops") rather than any digit,
+    // so "Flight 123" or "AA123" is not misread as 123 stops. PR #140 review
+    // finding 4.
+    const phrase = value.match(/(\d+)\s*stops?/i);
+    if (phrase) return parseInt(phrase[1]!, 10);
+    // A bare numeric string ("2") is a stop count; anything else is unknown.
+    const trimmed = value.trim();
+    return /^\d+$/.test(trimmed) ? parseInt(trimmed, 10) : 0;
   }
   return 0;
 }

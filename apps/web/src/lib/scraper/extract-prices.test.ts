@@ -449,6 +449,18 @@ describe('coercePrice (issue #139 — string/symbol/grouped prices)', () => {
     expect(coercePrice('1.189,50')).toBe(1189.5);
     expect(coercePrice('189,90 €')).toBe(189.9);
   });
+  it('treats a lone dot with 3 trailing digits as thousands grouping (PR #140 review)', () => {
+    // 3 places after a lone dot is grouping, not a decimal — currency uses 1-2
+    // places. Misreading "1.234" as 1.234 would record a fake ultra-cheap fare.
+    expect(coercePrice('1.234')).toBe(1234);
+    expect(coercePrice('12.500')).toBe(12500);
+    expect(coercePrice('1.234.567')).toBe(1234567);
+  });
+  it('keeps a lone dot with 1-2 trailing digits as a decimal', () => {
+    expect(coercePrice('189.00')).toBe(189);
+    expect(coercePrice('189.9')).toBe(189.9);
+    expect(coercePrice('1234.50')).toBe(1234.5);
+  });
   it('returns 0 for non-numeric junk and non-strings', () => {
     expect(coercePrice('free')).toBe(0);
     expect(coercePrice(null)).toBe(0);
@@ -469,6 +481,14 @@ describe('coerceStops (issue #139 — loose stop types)', () => {
     expect(coerceStops('Direct')).toBe(0);
     expect(coerceStops('1 stop')).toBe(1);
     expect(coerceStops('2 stops')).toBe(2);
+  });
+  it('reads a bare numeric string as a stop count', () => {
+    expect(coerceStops('2')).toBe(2);
+    expect(coerceStops(' 0 ')).toBe(0);
+  });
+  it('does not read an unrelated number as stops (PR #140 review)', () => {
+    expect(coerceStops('Flight 123')).toBe(0);
+    expect(coerceStops('AA123 nonstop')).toBe(0);
   });
   it('defaults junk and wrong types to 0 (never drops the flight)', () => {
     expect(coerceStops(['JFK - LAX'])).toBe(0);
@@ -498,6 +518,14 @@ describe('extractJsonArray (issue #139 — wrappers around the array)', () => {
   it('finds the array nested in a wrapper object', () => {
     const r = extractJsonArray('{"flights": [{"price":189}], "count": 1}');
     expect(r.ok && r.value).toEqual([{ price: 189 }]);
+  });
+  it('prefers a later object array over an earlier scalar/header array (PR #140 review)', () => {
+    const r = extractJsonArray('Columns: ["price","airline"]\n[{"price":189,"airline":"Delta"}]');
+    expect(r.ok && r.value).toEqual([{ price: 189, airline: 'Delta' }]);
+  });
+  it('falls back to a scalar array only when no object array exists', () => {
+    const r = extractJsonArray('["Delta","Spirit"]');
+    expect(r.ok && r.value).toEqual(['Delta', 'Spirit']);
   });
   it('ignores brackets inside string values', () => {
     const r = extractJsonArray('[{"airline":"Spirit [LCC]","price":98}]');
@@ -610,5 +638,14 @@ describe('extractPrices end-to-end shape robustness (issue #139)', () => {
     const result = await run('["Delta $189", "Spirit $98"]');
     expect(result.prices).toEqual([]);
     expect(result.failureReason).toBe('all_filtered_out');
+  });
+
+  it('recovers flights when a header/prose array precedes the real flight array', async () => {
+    const result = await run('Columns: ["price","airline","stops"]\n' + JSON.stringify([
+      { price: 189, airline: 'Delta', currency: 'USD', stops: 0, duration: '6h 15m' },
+      { price: 98, airline: 'Spirit', currency: 'USD', stops: 1, duration: '9h 45m' },
+    ]));
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices.map((p) => p.airline).sort()).toEqual(['Delta', 'Spirit']);
   });
 });
