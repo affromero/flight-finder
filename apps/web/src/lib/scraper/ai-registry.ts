@@ -433,7 +433,13 @@ export async function isLocalProviderReachable(provider: string): Promise<boolea
   const config = EXTRACTION_PROVIDERS[provider];
   if (!config) return false;
 
-  const baseUrl = config.defaultBaseUrl?.replace(/\/v1\/?$/, '') ?? '';
+  // Source the base URL the way extraction does, so the status probe agrees
+  // with what a real extract call would hit. For Ollama that means honouring
+  // OLLAMA_HOST (install.sh sets it to host.docker.internal in Docker); probing
+  // the localhost default would falsely report "unreachable" inside a container
+  // even though extraction works. Issue #139 follow-up.
+  const envBase = provider === 'ollama' ? process.env.OLLAMA_HOST : undefined;
+  const baseUrl = (envBase || config.defaultBaseUrl || '').replace(/\/v1\/?$/, '');
   const endpoint = provider === 'ollama'
     ? `${baseUrl || 'http://localhost:11434'}/api/tags`
     : `${baseUrl || 'http://localhost:8000'}/v1/models`;
