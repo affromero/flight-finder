@@ -286,7 +286,10 @@ export default function SetupPage() {
                     onClick={() => {
                       setProvider(key);
                       setCustomModel('');
-                      setCustomBaseUrl(config.defaultBaseUrl ?? '');
+                      // Empty so the default is a placeholder, not a saved value.
+                      // A persisted localhost would override the OLLAMA_HOST env
+                      // (host.docker.internal) and break Ollama in Docker. #139.
+                      setCustomBaseUrl('');
                       if (config.models[0]) setModel(config.models[0].id);
                       else setModel('');
                       fetchLocalModels(key);

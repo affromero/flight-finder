@@ -700,6 +700,23 @@ describe('ai-registry', () => {
         expect.any(Object)
       );
     });
+
+    it('probes OLLAMA_HOST for ollama instead of localhost (Docker; #139)', async () => {
+      const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+      vi.stubGlobal('fetch', mockFetch);
+      const prev = process.env.OLLAMA_HOST;
+      process.env.OLLAMA_HOST = 'http://host.docker.internal:11434';
+      try {
+        await isLocalProviderReachable('ollama');
+        expect(mockFetch).toHaveBeenCalledWith(
+          'http://host.docker.internal:11434/api/tags',
+          expect.any(Object)
+        );
+      } finally {
+        if (prev === undefined) delete process.env.OLLAMA_HOST;
+        else process.env.OLLAMA_HOST = prev;
+      }
+    });
   });
 });
 

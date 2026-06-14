@@ -151,7 +151,11 @@ export default function ConfigPage() {
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
     setCustomModel('');
-    setCustomBaseUrl(PROVIDER_METADATA[newProvider]?.defaultBaseUrl ?? '');
+    // Leave the base URL empty so the default is only a placeholder, not a saved
+    // value. Persisting the localhost default would be stored as customBaseUrl,
+    // which overrides the OLLAMA_HOST env that install.sh sets to
+    // host.docker.internal, breaking Ollama in Docker. Issue #139 follow-up.
+    setCustomBaseUrl('');
     const newModels = PROVIDER_METADATA[newProvider]?.models ?? [];
     if (newModels.length > 0) {
       setModel(newModels[0]!.id);
