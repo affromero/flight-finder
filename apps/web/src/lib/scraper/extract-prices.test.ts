@@ -30,7 +30,7 @@ vi.mock('./ai-registry', () => ({
 
 process.env.ANTHROPIC_API_KEY = 'test-key';
 
-import { extractPrices, sanitizeScrapedHtml, coercePrice, coerceStops, extractJsonArray, type QueryFilters } from './extract-prices';
+import { extractPrices, sanitizeScrapedHtml, coercePrice, coerceStops, extractJsonArray, readField, type QueryFilters } from './extract-prices';
 
 describe('sanitizeScrapedHtml (Finding 4: untrusted scraped input)', () => {
   it('strips scripts, styles, comments, noscript, and svg while keeping visible price text', () => {
@@ -541,6 +541,33 @@ describe('extractJsonArray (issue #139 — wrappers around the array)', () => {
   });
 });
 
+describe('readField (issue #139 — typo/aliased keys)', () => {
+  it('returns the exact key when present', () => {
+    expect(readField({ airline: 'Delta' }, 'airline')).toBe('Delta');
+  });
+  it('matches a single-character key typo (gemma3n emits airliine)', () => {
+    expect(readField({ airliine: 'Delta' }, 'airline')).toBe('Delta');
+  });
+  it('matches a case/separator variant', () => {
+    expect(readField({ Airline: 'Delta' }, 'airline')).toBe('Delta');
+    expect(readField({ flight_number: 'DL 12' }, 'flightNumber')).toBe('DL 12');
+  });
+  it('falls back to an explicit alias before fuzzy matching', () => {
+    expect(readField({ carrier: 'Delta' }, 'airline', ['carrier'])).toBe('Delta');
+    expect(readField({ cost: 189 }, 'price', ['cost', 'fare'])).toBe(189);
+  });
+  it('prefers the exact key over a typo when both exist', () => {
+    expect(readField({ airline: 'Delta', airliine: 'WRONG' }, 'airline')).toBe('Delta');
+  });
+  it('returns undefined when nothing is close', () => {
+    expect(readField({ destination: 'LAX' }, 'airline')).toBeUndefined();
+  });
+  it('does not cross-map distinct fields (price stays separate from stops)', () => {
+    // 'stops' is far from 'price'; a stops key must not satisfy a price read.
+    expect(readField({ stops: 1 }, 'price')).toBeUndefined();
+  });
+});
+
 describe('extractPrices end-to-end shape robustness (issue #139)', () => {
   beforeEach(() => mockExtract.mockReset());
 
@@ -647,5 +674,19 @@ describe('extractPrices end-to-end shape robustness (issue #139)', () => {
     ]));
     expect(result.failureReason).toBeUndefined();
     expect(result.prices.map((p) => p.airline).sort()).toEqual(['Delta', 'Spirit']);
+  });
+
+  it('recovers flights when the model misspells the airline key (gemma3n:e2b emits "airliine")', async () => {
+    // Exact shape captured from gemma3n:e2b: valid prices, every other key
+    // correct, but the airline key is consistently typo'd. Pre-fix this dropped
+    // every row as all_filtered_out. Issue #139.
+    const result = await run(JSON.stringify([
+      { travelDate: '2026-06-15', price: 189, currency: 'USD', airliine: 'Delta', stops: 0, duration: '6h 15m' },
+      { travelDate: '2026-06-15', price: 98, currency: 'USD', airliine: 'Spirit', stops: 1, duration: '9h 45m' },
+    ]));
+    expect(result.failureReason).toBeUndefined();
+    expect(result.prices).toHaveLength(2);
+    expect(result.prices.map((p) => p.airline).sort()).toEqual(['Delta', 'Spirit']);
+    expect(result.prices.map((p) => p.price).sort((a, b) => a - b)).toEqual([98, 189]);
   });
 });
