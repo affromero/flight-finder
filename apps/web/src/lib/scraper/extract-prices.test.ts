@@ -566,6 +566,18 @@ describe('readField (issue #139 — typo/aliased keys)', () => {
     // 'stops' is far from 'price'; a stops key must not satisfy a price read.
     expect(readField({ stops: 1 }, 'price')).toBeUndefined();
   });
+  it('never cross-maps one canonical field key to another (locks the edit-distance-1 safety)', () => {
+    // Every canonical field name must stay >1 edit from every other, or the
+    // fuzzy match could grab the wrong value. This guards the invariant if a
+    // near-duplicate field name is ever added (Codex review of PR #146).
+    const canonical = ['travelDate', 'price', 'currency', 'airline', 'bookingUrl', 'stops', 'duration', 'departureTime', 'arrivalTime', 'seatsLeft', 'flightNumber'];
+    for (const a of canonical) {
+      for (const b of canonical) {
+        if (a === b) continue;
+        expect(readField({ [a]: 'X' }, b)).toBeUndefined();
+      }
+    }
+  });
 });
 
 describe('extractPrices end-to-end shape robustness (issue #139)', () => {
