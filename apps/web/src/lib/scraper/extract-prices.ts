@@ -302,26 +302,81 @@ function coerceSeatsLeft(value: unknown): number | null {
   return null;
 }
 
+/** Levenshtein distance between two short strings, with an early-exit when the
+ * lengths differ by more than 2. Only used to match field-name keys, so the
+ * naive table is fine. */
+function editDistance(a: string, b: string): number {
+  const m = a.length;
+  const n = b.length;
+  if (Math.abs(m - n) > 2) return 99;
+  const row = Array.from({ length: n + 1 }, (_, j) => j);
+  for (let i = 1; i <= m; i++) {
+    let diag = row[0]!;
+    row[0] = i;
+    for (let j = 1; j <= n; j++) {
+      const tmp = row[j]!;
+      row[j] = Math.min(row[j]! + 1, row[j - 1]! + 1, diag + (a[i - 1] === b[j - 1] ? 0 : 1));
+      diag = tmp;
+    }
+  }
+  return row[n]!;
+}
+
+/**
+ * Read a field from a loosely-typed model row, tolerating misspelled or aliased
+ * keys. A small model otherwise drops an otherwise-perfect row over a single
+ * typo: gemma3n:e2b consistently emits "airliine" for "airline", so the airline
+ * read returned undefined and every row failed the validity gate (#139).
+ *
+ * Resolution order: exact key, then explicit aliases, then any key whose
+ * letters/digits-only lowercased form is within edit distance 1 of the
+ * canonical name. Distance 1 only catches single-character typos and cannot
+ * cross-map our fields, since no two canonical names are within 2 edits.
+ */
+export function readField(e: Record<string, unknown>, canonical: string, aliases: string[] = []): unknown {
+  if (e[canonical] !== undefined) return e[canonical];
+  for (const alias of aliases) {
+    if (e[alias] !== undefined) return e[alias];
+  }
+  const target = canonical.toLowerCase();
+  for (const key of Object.keys(e)) {
+    const norm = key.toLowerCase().replace(/[^a-z0-9]/g, '');
+    if (editDistance(norm, target) <= 1) return e[key];
+  }
+  return undefined;
+}
+
 /**
  * Normalize one raw model entry into a fully typed PriceData. Every field is
- * defended against the wrong type (e.g. qwen3 emits `stops` as an array), so a
- * single loosely-typed field can never silently drop a real flight.
+ * read tolerantly (typo'd or aliased keys, see readField) and defended against
+ * the wrong type (e.g. qwen3 emits `stops` as an array), so neither a key
+ * misspelling nor a loosely-typed value can silently drop a real flight.
  */
 function normalizeEntry(entry: unknown, travelDateFallback: string, currency: string | null): PriceData | null {
   if (typeof entry !== 'object' || entry === null) return null;
   const e = entry as Record<string, unknown>;
+
+  const travelDate = readField(e, 'travelDate', ['date', 'departDate']);
+  const currencyVal = readField(e, 'currency');
+  const airline = readField(e, 'airline', ['carrier', 'airlineName', 'airline_name']);
+  const bookingUrl = readField(e, 'bookingUrl', ['url', 'link', 'bookingLink']);
+  const duration = readField(e, 'duration');
+  const departureTime = readField(e, 'departureTime', ['departure', 'departTime']);
+  const arrivalTime = readField(e, 'arrivalTime', ['arrival', 'arriveTime']);
+  const flightNumber = readField(e, 'flightNumber', ['flightNo', 'flight']);
+
   return {
-    travelDate: typeof e.travelDate === 'string' && e.travelDate ? e.travelDate : travelDateFallback,
-    price: coercePrice(e.price),
-    currency: typeof e.currency === 'string' && e.currency ? e.currency : (currency ?? 'USD'),
-    airline: typeof e.airline === 'string' ? e.airline.trim() : '',
-    bookingUrl: typeof e.bookingUrl === 'string' ? e.bookingUrl : '',
-    stops: coerceStops(e.stops),
-    duration: typeof e.duration === 'string' ? e.duration : null,
-    departureTime: typeof e.departureTime === 'string' ? e.departureTime : null,
-    arrivalTime: typeof e.arrivalTime === 'string' ? e.arrivalTime : null,
-    seatsLeft: coerceSeatsLeft(e.seatsLeft),
-    flightNumber: typeof e.flightNumber === 'string' ? e.flightNumber : null,
+    travelDate: typeof travelDate === 'string' && travelDate ? travelDate : travelDateFallback,
+    price: coercePrice(readField(e, 'price', ['cost', 'fare', 'totalPrice'])),
+    currency: typeof currencyVal === 'string' && currencyVal ? currencyVal : (currency ?? 'USD'),
+    airline: typeof airline === 'string' ? airline.trim() : '',
+    bookingUrl: typeof bookingUrl === 'string' ? bookingUrl : '',
+    stops: coerceStops(readField(e, 'stops', ['stopCount', 'numStops'])),
+    duration: typeof duration === 'string' ? duration : null,
+    departureTime: typeof departureTime === 'string' ? departureTime : null,
+    arrivalTime: typeof arrivalTime === 'string' ? arrivalTime : null,
+    seatsLeft: coerceSeatsLeft(readField(e, 'seatsLeft', ['seats', 'seatsRemaining'])),
+    flightNumber: typeof flightNumber === 'string' ? flightNumber : null,
   };
 }
 
