@@ -10,7 +10,7 @@ jobs:
   ci:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
       - uses: actions/setup-node@v6
         with:
           node-version: 22
@@ -30,14 +30,14 @@ jobs:
   install-smoke:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
       - run: docker build -f scripts/Dockerfile.install-test -t flight-finder-install-test .
       - run: docker run --rm flight-finder-install-test
 
   integration:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
       - run: docker build -t flight-finder-test:latest .
       - run: bash scripts/docker-integration-test.sh --no-build --keep-alive
       - name: Browser smoke tests
@@ -63,7 +63,7 @@ jobs:
       group: staging-host
       cancel-in-progress: false
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v6.0.3
       - name: Setup SSH
         run: |
           mkdir -p ~/.ssh
