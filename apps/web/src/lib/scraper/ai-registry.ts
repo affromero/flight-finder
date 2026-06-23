@@ -7,6 +7,8 @@ import {
   type ModelInfo,
   type ProviderMeta,
 } from './provider-metadata';
+import { prisma } from '@/lib/prisma';
+import { decryptSecret } from '@/lib/secret-crypto';
 
 // Client-safe metadata lives in provider-metadata.ts so the settings/setup/admin
 // client pages can render the provider UI without pulling this module (and the
@@ -25,6 +27,45 @@ export type { ModelInfo, ProviderMeta };
 const PARSED_TIMEOUT = parseInt(process.env.EXTRACT_TIMEOUT_MS ?? '90000', 10);
 export const EXTRACT_TIMEOUT_MS =
   Number.isFinite(PARSED_TIMEOUT) && PARSED_TIMEOUT > 0 ? PARSED_TIMEOUT : 90_000;
+
+/** Structural subset of ExtractionConfig carrying the encrypted per-provider
+ *  key columns. Typed as a subset (not the generated Prisma type) so this
+ *  module stays decoupled from the generated client path. */
+export type StoredKeyConfig = {
+  anthropicApiKey?: string | null;
+  openaiApiKey?: string | null;
+  googleApiKey?: string | null;
+};
+
+/** Env-backed provider -> the ExtractionConfig column that stores its
+ *  admin-entered key (encrypted). Only the three providers with an `envKey`
+ *  appear here; CLI/local providers need no key. */
+export const STORED_KEY_FIELD: Record<string, keyof StoredKeyConfig> = {
+  anthropic: 'anthropicApiKey',
+  openai: 'openaiApiKey',
+  google: 'googleApiKey',
+};
+
+/**
+ * Resolve a provider's API key. An admin-entered key stored in the DB
+ * (decrypted) takes precedence over the environment variable, so a self-hosted
+ * user can configure a key in the GUI without editing .env or restarting the
+ * stack (#149). A stored value that fails to decrypt (eg. ADMIN_SESSION_SECRET
+ * was rotated) is treated as absent and falls through to the env var. Returns
+ * '' when neither source has a key (CLI/local providers, which need none).
+ */
+export function resolveApiKey(provider: string, config: StoredKeyConfig | null | undefined): string {
+  const field = STORED_KEY_FIELD[provider];
+  if (field && config) {
+    const encrypted = config[field];
+    if (encrypted) {
+      const decrypted = decryptSecret(encrypted);
+      if (decrypted) return decrypted;
+    }
+  }
+  const envKey = PROVIDER_METADATA[provider]?.envKey;
+  return (envKey ? process.env[envKey] : '') ?? '';
+}
 
 export interface ExtractionUsage {
   inputTokens: number;
@@ -452,12 +493,22 @@ export async function isLocalProviderReachable(provider: string): Promise<boolea
   }
 }
 
-export async function detectAvailableProviders(): Promise<string[]> {
+export async function detectAvailableProviders(
+  storedConfig?: (StoredKeyConfig & { customBaseUrl?: string | null }) | null,
+): Promise<string[]> {
   const available: string[] = [];
 
   const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
-  for (const [key, config] of Object.entries(EXTRACTION_PROVIDERS)) {
+  // A stored key/customBaseUrl can make a provider available even when the env
+  // var is unset (#149). Callers that pass nothing get a fresh DB read so the
+  // status reflects keys saved after first-run setup; `null` skips the read.
+  const cfg =
+    storedConfig !== undefined
+      ? storedConfig
+      : await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
+
+  for (const [key] of Object.entries(EXTRACTION_PROVIDERS)) {
     // Local providers: only on self-hosted, and only if reachable
     if (LOCAL_PROVIDERS.has(key)) {
       if (isSelfHosted && await isLocalProviderReachable(key)) {
@@ -478,8 +529,10 @@ export async function detectAvailableProviders(): Promise<string[]> {
       }
       continue;
     }
-    const hasKey = config.envKey && process.env[config.envKey];
-    const hasLocalEndpoint = key === 'openai' && process.env.OPENAI_BASE_URL;
+    // Env-backed (anthropic/openai/google): a stored key OR an env key makes it
+    // available; openai is also usable via a custom local endpoint.
+    const hasKey = !!resolveApiKey(key, cfg);
+    const hasLocalEndpoint = key === 'openai' && (cfg?.customBaseUrl || process.env.OPENAI_BASE_URL);
     if (hasKey || hasLocalEndpoint) {
       available.push(key);
     }

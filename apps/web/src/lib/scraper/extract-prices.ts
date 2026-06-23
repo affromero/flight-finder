@@ -1,4 +1,4 @@
-import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, type ExtractionUsage } from './ai-registry';
+import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionUsage } from './ai-registry';
 import { prisma } from '@/lib/prisma';
 import { parseDurationToMinutes } from './duration';
 import type { NavigationSource } from './navigate';
@@ -392,6 +392,9 @@ export interface ExtractionConfigOverride {
   customBaseUrl: string | null;
   extractTimeoutSeconds?: number | null;
   maxFlightsPerDate?: number | null;
+  /** Pre-resolved API key (stored key decrypted, else env). Lets the caller
+   *  resolve once up front instead of decrypting on every per-attempt call. */
+  apiKey?: string;
 }
 
 export async function extractPrices(
@@ -413,6 +416,9 @@ export async function extractPrices(
   // When the caller already resolved the config (eg. preview-runner hoists
   // it once per preview), skip the DB read. Backwards compatible for the
   // /api/test/scrape endpoint and tests that pass minimal args.
+  const dbConfig = configOverride
+    ? null
+    : await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
   const config = configOverride
     ? {
         provider: configOverride.provider,
@@ -421,7 +427,7 @@ export async function extractPrices(
         extractTimeoutSeconds: configOverride.extractTimeoutSeconds ?? null,
         maxFlightsPerDate: configOverride.maxFlightsPerDate ?? null,
       }
-    : await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
+    : dbConfig;
 
   const effectiveMaxResults = config?.maxFlightsPerDate ?? maxResults;
 
@@ -438,7 +444,11 @@ export async function extractPrices(
   const hasLocalEndpoint =
     (provider === 'openai' && (config?.customBaseUrl || process.env.OPENAI_BASE_URL)) ||
     isLocalProvider;
-  const apiKey = isCliProvider ? '' : (providerConfig.envKey ? process.env[providerConfig.envKey] : '') ?? '';
+  // Override path may carry a pre-resolved key (preview-runner decrypts once);
+  // otherwise (or when the override omits it) resolve from the DB-stored key,
+  // falling back to the env var (#149). dbConfig is null on the override path,
+  // so resolveApiKey there yields the env var.
+  const apiKey = isCliProvider ? '' : (configOverride?.apiKey || resolveApiKey(provider, dbConfig));
   if (!apiKey && !isCliProvider && !hasLocalEndpoint) {
     throw new Error(`Missing API key: ${providerConfig.envKey}`);
   }

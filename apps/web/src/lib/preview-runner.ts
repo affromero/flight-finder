@@ -15,7 +15,7 @@ import {
   type PreviewResultPayload,
   type RouteResultPayload,
 } from '@/lib/preview-run';
-import { getModelCosts } from '@/lib/scraper/ai-registry';
+import { getModelCosts, resolveApiKey } from '@/lib/scraper/ai-registry';
 import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
 import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navigate';
@@ -168,6 +168,9 @@ export interface ExtractionContext {
   model: string;
   customBaseUrl: string | null;
   extractTimeoutSeconds: number | null;
+  /** Pre-resolved API key (DB-stored key decrypted, else env), resolved once
+   *  per preview so workers don't decrypt on every attempt (#149). */
+  apiKey: string;
   costs: { costPer1kInput: number; costPer1kOutput: number };
 }
 
@@ -331,6 +334,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
         model: params.context.model,
         customBaseUrl: params.context.customBaseUrl,
         extractTimeoutSeconds: params.context.extractTimeoutSeconds,
+        apiKey: params.context.apiKey,
       }
     );
 
@@ -427,6 +431,7 @@ export async function runPreview(
     model,
     customBaseUrl: config?.customBaseUrl ?? null,
     extractTimeoutSeconds: config?.extractTimeoutSeconds ?? null,
+    apiKey: resolveApiKey(provider, config),
     costs: getModelCosts(provider, model),
   };
   const outboundDates = payload.outboundDates;

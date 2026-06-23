@@ -116,6 +116,13 @@ model ExtractionConfig {
   defaultCurrency      String?   // ISO 4217 (EUR, GBP). null = Google auto-detects
   defaultCountry       String?   // ISO 3166-1 alpha-2 (DE, GB). null = Google auto-detects
   customBaseUrl        String?   // e.g. http://localhost:11434/v1
+  // Admin-entered provider API keys, encrypted at rest via lib/secret-crypto
+  // (AES-256-GCM, keyed on ADMIN_SESSION_SECRET) exactly like vpnActivationCode.
+  // Resolved BEFORE the matching env var so a self-hosted user can set a key in
+  // the GUI without editing ~/.flight-finder/.env or restarting the stack (#149).
+  anthropicApiKey      String?   // encrypted ANTHROPIC_API_KEY override
+  openaiApiKey         String?   // encrypted OPENAI_API_KEY override
+  googleApiKey         String?   // encrypted GOOGLE_AI_API_KEY override
   vpnProvider          String?   // 'none' | 'expressvpn'
   vpnCountries         String[]  @default([]) // default VPN countries (used when query has none)
   vpnActivationCode    String?   // encrypted VPN activation code

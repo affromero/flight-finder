@@ -15,26 +15,32 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-vi.mock('./ai-registry', () => ({
-  EXTRACTION_PROVIDERS: {
-    anthropic: {
-      displayName: 'Anthropic',
-      envKey: 'ANTHROPIC_API_KEY',
-      models: [],
-      extract: mockExtract,
+// Keep the real ai-registry (so resolveApiKey is exercised end to end), but
+// swap the provider extract fns for a spy.
+vi.mock('./ai-registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./ai-registry')>();
+  return {
+    ...actual,
+    EXTRACTION_PROVIDERS: {
+      anthropic: {
+        displayName: 'Anthropic',
+        envKey: 'ANTHROPIC_API_KEY',
+        models: [],
+        extract: mockExtract,
+      },
+      ollama: {
+        displayName: 'Ollama',
+        envKey: undefined,
+        allowCustomModel: true,
+        allowCustomBaseUrl: true,
+        models: [],
+        extract: mockExtract,
+      },
     },
-    ollama: {
-      displayName: 'Ollama',
-      envKey: undefined,
-      allowCustomModel: true,
-      allowCustomBaseUrl: true,
-      models: [],
-      extract: mockExtract,
-    },
-  },
-  CLI_PROVIDERS: {},
-  LOCAL_PROVIDERS: new Set(['ollama']),
-}));
+    CLI_PROVIDERS: {},
+    LOCAL_PROVIDERS: new Set(['ollama']),
+  };
+});
 
 // Provide a fake API key so the provider check passes
 process.env.ANTHROPIC_API_KEY = 'test-key';
@@ -802,5 +808,34 @@ describe('parseFlightQuery', () => {
     } finally {
       process.env.ANTHROPIC_API_KEY = origKey;
     }
+  });
+
+  it('uses the DB-stored key over the env var when parsing (#149 parity)', async () => {
+    const { prisma } = await import('@/lib/prisma');
+    const { encryptSecret } = await import('@/lib/secret-crypto');
+    vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      anthropicApiKey: encryptSecret('stored-parse-key'),
+    } as never);
+    mockExtract.mockResolvedValue({
+      content: makeLlmResponse({
+        confidence: 'high',
+        ambiguities: [],
+        parsed: {
+          origins: [{ code: 'JFK', name: 'New York JFK' }],
+          destinations: [{ code: 'LAX', name: 'Los Angeles' }],
+          dateFrom: '2026-06-15', dateTo: '2026-06-22', flexibility: 0,
+          maxPrice: null, maxStops: null, preferredAirlines: [],
+          timePreference: 'any', cabinClass: 'economy', tripType: 'round_trip', currency: 'USD',
+        },
+      }),
+      usage: { inputTokens: 1, outputTokens: 1 },
+    });
+
+    await parseFlightQuery('JFK to LAX June 15-22');
+
+    // env ANTHROPIC_API_KEY is 'test-key'; the stored key must win.
+    expect(mockExtract.mock.calls[0]![0]).toBe('stored-parse-key');
   });
 });

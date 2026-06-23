@@ -15,18 +15,24 @@ vi.mock('@/lib/prisma', () => ({
   },
 }));
 
-vi.mock('./ai-registry', () => ({
-  EXTRACTION_PROVIDERS: {
-    anthropic: {
-      displayName: 'Anthropic',
-      envKey: 'ANTHROPIC_API_KEY',
-      models: [],
-      extract: mockExtract,
+// Keep the real ai-registry (so resolveApiKey is exercised end to end), but
+// swap the anthropic provider's extract fn for a spy.
+vi.mock('./ai-registry', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./ai-registry')>();
+  return {
+    ...actual,
+    EXTRACTION_PROVIDERS: {
+      anthropic: {
+        displayName: 'Anthropic',
+        envKey: 'ANTHROPIC_API_KEY',
+        models: [],
+        extract: mockExtract,
+      },
     },
-  },
-  CLI_PROVIDERS: {},
-  LOCAL_PROVIDERS: new Set(),
-}));
+    CLI_PROVIDERS: {},
+    LOCAL_PROVIDERS: new Set(),
+  };
+});
 
 process.env.ANTHROPIC_API_KEY = 'test-key';
 
@@ -318,6 +324,56 @@ describe('extractPrices', () => {
     } finally {
       process.env.ANTHROPIC_API_KEY = origKey;
     }
+  });
+
+  it('passes the DB-stored key to the provider, preferring it over the env var (#149)', async () => {
+    const { prisma } = await import('@/lib/prisma');
+    const { encryptSecret } = await import('@/lib/secret-crypto');
+    vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      anthropicApiKey: encryptSecret('stored-anthropic-key'),
+    } as never);
+    mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 1, outputTokens: 1 } });
+
+    await extractPrices('page', 'https://flights.google.com', '2026-06-15');
+
+    // process.env.ANTHROPIC_API_KEY is 'test-key'; the stored key must win.
+    expect(mockExtract.mock.calls[0]![0]).toBe('stored-anthropic-key');
+  });
+
+  it('does not throw "Missing API key" when only a DB-stored key is present (#149)', async () => {
+    const { prisma } = await import('@/lib/prisma');
+    const { encryptSecret } = await import('@/lib/secret-crypto');
+    const origKey = process.env.ANTHROPIC_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+    vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      anthropicApiKey: encryptSecret('stored-only-key'),
+    } as never);
+    mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 0, outputTokens: 0 } });
+
+    try {
+      await expect(
+        extractPrices('content', 'https://example.com', '2026-06-15')
+      ).resolves.toBeDefined();
+      expect(mockExtract.mock.calls[0]![0]).toBe('stored-only-key');
+    } finally {
+      process.env.ANTHROPIC_API_KEY = origKey;
+    }
+  });
+
+  it('uses the pre-resolved override apiKey on the preview path (#149)', async () => {
+    mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 0, outputTokens: 0 } });
+
+    await extractPrices(
+      'content', 'https://example.com', '2026-06-15',
+      undefined, undefined, true, undefined, null,
+      { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', customBaseUrl: null, apiKey: 'override-key' },
+    );
+
+    expect(mockExtract.mock.calls[0]![0]).toBe('override-key');
   });
 
   // Issue #65: previously, if the LLM rejected (timeout, rate limit, etc.)

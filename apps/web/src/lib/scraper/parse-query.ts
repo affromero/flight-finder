@@ -1,4 +1,4 @@
-import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, type ExtractionResult } from './ai-registry';
+import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionResult } from './ai-registry';
 import { prisma } from '@/lib/prisma';
 
 export interface Airport {
@@ -239,7 +239,9 @@ export async function parseFlightQuery(
   const hasLocalEndpoint =
     (provider === 'openai' && (config?.customBaseUrl || process.env.OPENAI_BASE_URL)) ||
     isLocalProvider;
-  const apiKey = isCliProvider ? '' : (providerConfig.envKey ? process.env[providerConfig.envKey] : '') ?? '';
+  // DB-stored key takes precedence over the env var so a GUI-entered key works
+  // without editing .env or restarting the stack (#149).
+  const apiKey = isCliProvider ? '' : resolveApiKey(provider, config);
   if (!apiKey && !isCliProvider && !hasLocalEndpoint) {
     throw new Error(`Missing API key: ${providerConfig.envKey}`);
   }

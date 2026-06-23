@@ -151,6 +151,25 @@ beforeEach(() => {
   });
 });
 
+describe('runPreview API key resolution (#149)', () => {
+  it('threads the DB-stored key (decrypted) into the extractPrices override', async () => {
+    const { encryptSecret } = await import('@/lib/secret-crypto');
+    mockExtractionConfigFindFirst.mockResolvedValue({
+      id: 'singleton',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      defaultCurrency: 'USD',
+      anthropicApiKey: encryptSecret('stored-preview-key'),
+    });
+
+    await runPreview(makePayload(), { concurrency: 1 });
+
+    expect(mockExtractPrices).toHaveBeenCalled();
+    const override = mockExtractPrices.mock.calls[0]![8] as { apiKey?: string };
+    expect(override.apiKey).toBe('stored-preview-key');
+  });
+});
+
 describe('runPreview hoist invariant', () => {
   it('reads extractionConfig exactly once across many tasks (issue #65 hoist)', async () => {
     const payload = makePayload({
