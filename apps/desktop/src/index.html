@@ -42,8 +42,14 @@
           <button id="install" class="btn btn-primary" hidden>Install &amp; start</button>
           <button id="start" class="btn btn-primary" hidden>Start</button>
           <button id="stop" class="btn btn-ghost" hidden>Stop</button>
+          <button id="restart" class="btn btn-ghost" hidden>Restart</button>
           <button id="open" class="btn btn-secondary" hidden>Open</button>
         </div>
+
+        <p id="config-hint" class="hint" hidden>
+          Config and API keys live in <code>~/.flight-finder/.env</code>. After
+          editing it, use Restart to apply the change.
+        </p>
 
         <div id="needs-docker" class="notice" hidden>
           Docker isn't available. Install Docker Desktop (or Podman) and start it,

@@ -50,7 +50,9 @@ const host = {
   install: $('install'),
   start: $('start'),
   stop: $('stop'),
+  restart: $('restart'),
   open: $('open'),
+  configHint: $('config-hint'),
   needsDocker: $('needs-docker'),
   reach: $('reach'),
   reachInfo: $('reach-info'),
@@ -69,6 +71,8 @@ async function refreshHost() {
   host.needsDocker.hidden = hasDocker;
   host.actions.hidden = !hasDocker;
   host.reach.hidden = true; // re-shown below only when the stack is healthy
+  host.restart.hidden = true; // re-shown below only when the stack is healthy
+  host.configHint.hidden = true; // only meaningful once installed
   if (!hasDocker) return setStatus('idle', 'Docker not found');
 
   if (!isInstalled) {
@@ -81,6 +85,8 @@ async function refreshHost() {
   }
 
   host.install.hidden = true;
+  // Once installed, point the user at the .env they edit and restart to apply.
+  host.configHint.hidden = false;
   const healthy = await invoke('is_healthy', { port: HOST_PORT });
   // The reach choices only make sense once the instance is actually up.
   host.reach.hidden = !healthy;
@@ -88,6 +94,7 @@ async function refreshHost() {
     setStatus('up', 'Running');
     host.start.hidden = true;
     host.stop.hidden = false;
+    host.restart.hidden = false;
     host.open.hidden = false;
   } else {
     setStatus('idle', 'Stopped');
@@ -140,6 +147,22 @@ host.stop.addEventListener('click', async () => {
   } catch (e) {
     setStatus('idle', `Could not stop: ${e}`);
   } finally {
+    refreshHost();
+  }
+});
+
+host.restart.addEventListener('click', async () => {
+  setStatus('working', 'Restarting…');
+  host.restart.disabled = true;
+  try {
+    // Recreates the containers so an edited .env is reloaded (a plain start
+    // would not pick up env_file changes).
+    await invoke('restart_stack');
+    await waitHealthy();
+  } catch (e) {
+    setStatus('idle', `Restart failed: ${e}`);
+  } finally {
+    host.restart.disabled = false;
     refreshHost();
   }
 });
