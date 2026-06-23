@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
-import { EXTRACTION_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, isLocalProviderReachable } from '@/lib/scraper/ai-registry';
 import { hashPassword } from '@/lib/password';
 import { registerForCommunity } from '@/lib/community-sync';
 import { encryptSecret } from '@/lib/secret-crypto';
@@ -248,6 +248,19 @@ export async function PATCH(request: NextRequest) {
     if (body.customBaseUrl && typeof body.customBaseUrl === 'string') {
       try { new URL(body.customBaseUrl); } catch {
         return apiError('customBaseUrl must be a valid URL', 400);
+      }
+      // For a local provider, probe the endpoint so an unreachable URL fails at
+      // save time instead of silently dying at the next scrape (#153). Only when
+      // the URL is set/changed in this request and the selected provider is local.
+      const targetProvider = provider || (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.provider;
+      if (targetProvider && LOCAL_PROVIDERS.has(targetProvider)) {
+        const reachable = await isLocalProviderReachable(targetProvider, body.customBaseUrl);
+        if (!reachable) {
+          return apiError(
+            `Could not reach ${targetProvider} at ${body.customBaseUrl}. Check the URL and that the service is running.`,
+            422,
+          );
+        }
       }
     }
     data.customBaseUrl = body.customBaseUrl || null;

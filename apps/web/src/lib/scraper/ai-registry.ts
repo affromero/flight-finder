@@ -469,24 +469,30 @@ async function hasCliAuth(provider: string): Promise<boolean> {
   }
 }
 
-/** Ping a local provider to check if it's actually reachable (3s timeout). */
-export async function isLocalProviderReachable(provider: string): Promise<boolean> {
+/**
+ * Ping a local provider to check if it's actually reachable.
+ * With no `overrideBaseUrl`, sources the base URL the way extraction does
+ * (env/default) so the status probe agrees with what a real extract call hits;
+ * for Ollama that means honouring OLLAMA_HOST (install.sh sets it to
+ * host.docker.internal in Docker), since probing the localhost default would
+ * falsely report "unreachable" inside a container (issue #139 follow-up).
+ * Pass `overrideBaseUrl` to probe a specific URL instead, e.g. validating a
+ * customBaseUrl at config-save time (#153); that path uses a longer timeout
+ * since it is an interactive save, not a background status sweep.
+ */
+export async function isLocalProviderReachable(provider: string, overrideBaseUrl?: string | null): Promise<boolean> {
   const config = EXTRACTION_PROVIDERS[provider];
   if (!config) return false;
 
-  // Source the base URL the way extraction does, so the status probe agrees
-  // with what a real extract call would hit. For Ollama that means honouring
-  // OLLAMA_HOST (install.sh sets it to host.docker.internal in Docker); probing
-  // the localhost default would falsely report "unreachable" inside a container
-  // even though extraction works. Issue #139 follow-up.
   const envBase = provider === 'ollama' ? process.env.OLLAMA_HOST : undefined;
-  const baseUrl = (envBase || config.defaultBaseUrl || '').replace(/\/v1\/?$/, '');
+  const source = overrideBaseUrl || envBase || config.defaultBaseUrl || '';
+  const baseUrl = source.replace(/\/v1\/?$/, '');
   const endpoint = provider === 'ollama'
     ? `${baseUrl || 'http://localhost:11434'}/api/tags`
     : `${baseUrl || 'http://localhost:8000'}/v1/models`;
 
   try {
-    const res = await fetch(endpoint, { signal: AbortSignal.timeout(3000) });
+    const res = await fetch(endpoint, { signal: AbortSignal.timeout(overrideBaseUrl ? 5000 : 3000) });
     return res.ok;
   } catch {
     return false;

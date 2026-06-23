@@ -2,6 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockUpsert = vi.fn();
 const mockFindFirst = vi.fn().mockResolvedValue(null);
+const mockReachable = vi.fn().mockResolvedValue(true);
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -27,6 +28,8 @@ vi.mock('@/lib/scraper/ai-registry', () => ({
     google: { displayName: 'Google', envKey: 'GOOGLE_AI_API_KEY', allowCustomModel: true, models: [] },
     ollama: { displayName: 'Ollama', allowCustomModel: true, models: [] },
   },
+  LOCAL_PROVIDERS: new Set(['ollama', 'llamacpp', 'vllm']),
+  isLocalProviderReachable: (...args: unknown[]) => mockReachable(...args),
 }));
 
 import { GET, PATCH } from './route';
@@ -409,5 +412,40 @@ describe('PATCH /api/admin/config — provider API keys (#149)', () => {
       expect(json.data[has]).toBe(true);
       expect(json.data).not.toHaveProperty(column);
     });
+  });
+});
+
+describe('PATCH /api/admin/config — local provider reachability (#153)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockReachable.mockResolvedValue(true);
+    mockUpsert.mockImplementation((args: { update: Record<string, unknown> }) =>
+      Promise.resolve({ id: 'singleton', ...args.update }),
+    );
+  });
+
+  it('rejects an unreachable customBaseUrl for a local provider with 422 and no write', async () => {
+    mockReachable.mockResolvedValueOnce(false);
+    const res = await PATCH(patchRequest({ provider: 'ollama', model: 'llama3', customBaseUrl: 'http://localhost:9999/v1' }));
+    expect(res.status).toBe(422);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('accepts a reachable customBaseUrl for a local provider and probes the given URL', async () => {
+    const res = await PATCH(patchRequest({ provider: 'ollama', model: 'llama3', customBaseUrl: 'http://localhost:11434/v1' }));
+    expect(res.status).toBe(200);
+    expect(mockReachable).toHaveBeenCalledWith('ollama', 'http://localhost:11434/v1');
+  });
+
+  it('does not probe reachability for an env-backed provider', async () => {
+    const res = await PATCH(patchRequest({ provider: 'openai', model: 'gpt-4.1-mini', customBaseUrl: 'http://localhost:1234/v1', apiKey: 'sk-x' }));
+    expect(res.status).toBe(200);
+    expect(mockReachable).not.toHaveBeenCalled();
+  });
+
+  it('does not probe when customBaseUrl is absent from the body', async () => {
+    const res = await PATCH(patchRequest({ provider: 'ollama', model: 'llama3' }));
+    expect(res.status).toBe(200);
+    expect(mockReachable).not.toHaveBeenCalled();
   });
 });
