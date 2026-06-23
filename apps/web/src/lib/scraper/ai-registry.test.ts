@@ -33,10 +33,20 @@ vi.mock('openai', () => ({
   }),
 }));
 
+// detectAvailableProviders reads the ExtractionConfig singleton to honor
+// DB-stored keys (#149), so prisma must be mocked or the call hits a real DB.
+// findFirst returns null by default (env-only detection, preserving prior
+// behavior) and is overridable per test with mockResolvedValueOnce.
+const mockConfigFindFirst = vi.fn().mockResolvedValue(null);
+vi.mock('@/lib/prisma', () => ({
+  prisma: { extractionConfig: { findFirst: (...args: unknown[]) => mockConfigFindFirst(...args) } },
+}));
+
 // Must import after mocks
-const { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders, ensureV1Suffix, filterCliStderr, isLocalProviderReachable } = await import(
+const { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders, resolveApiKey, ensureV1Suffix, filterCliStderr, isLocalProviderReachable } = await import(
   './ai-registry'
 );
+const { encryptSecret } = await import('@/lib/secret-crypto');
 
 /** Create a fake ChildProcess-like EventEmitter with stdin/stdout/stderr */
 function createFakeProc() {
@@ -149,6 +159,78 @@ describe('ai-registry', () => {
 
       expect(providers).not.toContain('ollama');
       expect(providers).not.toContain('llamacpp');
+    });
+
+    it('counts a DB-stored key even when the matching env var is unset (#149)', async () => {
+      // env keys are cleared by the describe beforeEach; supply only a stored key.
+      mockConfigFindFirst.mockResolvedValueOnce({ googleApiKey: encryptSecret('stored-google-key') });
+
+      const providers = await detectAvailableProviders();
+
+      expect(providers).toContain('google');
+    });
+
+    it('counts a stored customBaseUrl for openai when no env key/endpoint is set', async () => {
+      const savedBase = process.env.OPENAI_BASE_URL;
+      delete process.env.OPENAI_BASE_URL; // setup.ts sets this globally
+      mockConfigFindFirst.mockResolvedValueOnce({ customBaseUrl: 'http://localhost:1234/v1' });
+
+      const providers = await detectAvailableProviders();
+
+      expect(providers).toContain('openai');
+      if (savedBase === undefined) delete process.env.OPENAI_BASE_URL;
+      else process.env.OPENAI_BASE_URL = savedBase;
+    });
+
+    it('skips the DB read when passed null and detects from env only', async () => {
+      process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+
+      const providers = await detectAvailableProviders(null);
+
+      expect(providers).toContain('anthropic');
+      expect(mockConfigFindFirst).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('resolveApiKey (#149)', () => {
+    const saved: Record<string, string | undefined> = {};
+    beforeEach(() => {
+      for (const k of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_AI_API_KEY']) {
+        saved[k] = process.env[k];
+        delete process.env[k];
+      }
+    });
+    afterEach(() => {
+      for (const [k, v] of Object.entries(saved)) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    });
+
+    it('prefers a DB-stored key over the env var', () => {
+      process.env.OPENAI_API_KEY = 'env-key';
+      expect(resolveApiKey('openai', { openaiApiKey: encryptSecret('stored-key') })).toBe('stored-key');
+    });
+
+    it('falls back to the env var when there is no stored key', () => {
+      process.env.OPENAI_API_KEY = 'env-key';
+      expect(resolveApiKey('openai', null)).toBe('env-key');
+      expect(resolveApiKey('openai', {})).toBe('env-key');
+    });
+
+    it('falls back to env when a stored value cannot be decrypted (rotated secret)', () => {
+      process.env.OPENAI_API_KEY = 'env-key';
+      expect(resolveApiKey('openai', { openaiApiKey: 'not-valid-ciphertext' })).toBe('env-key');
+    });
+
+    it('resolves anthropic and google stored keys too (multi-provider parity)', () => {
+      expect(resolveApiKey('anthropic', { anthropicApiKey: encryptSecret('stored-a') })).toBe('stored-a');
+      expect(resolveApiKey('google', { googleApiKey: encryptSecret('stored-g') })).toBe('stored-g');
+    });
+
+    it('returns empty string for CLI/local providers (no key needed)', () => {
+      expect(resolveApiKey('ollama', null)).toBe('');
+      expect(resolveApiKey('claude-code', null)).toBe('');
     });
   });
 

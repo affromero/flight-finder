@@ -208,6 +208,18 @@
   font-size: 0.75rem;
 }
 
+/* Provider readiness badge (#149). Defined after .toggleHint so the colour
+   wins when both classes are applied to the same element. */
+.statusReady {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+.statusNotReady {
+  color: var(--price-up);
+  font-weight: 600;
+}
+
 .vpnCountries {
   display: flex;
   flex-wrap: wrap;
