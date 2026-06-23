@@ -22,7 +22,11 @@ function maskSecret(value: string): string {
 }
 
 function stripHashes(config: Record<string, unknown>) {
-  const { adminPasswordHash, vpnActivationCode, communityApiKey, ...rest } = config;
+  const {
+    adminPasswordHash, vpnActivationCode, communityApiKey,
+    anthropicApiKey, openaiApiKey, googleApiKey,
+    ...rest
+  } = config;
   return {
     ...rest,
     // Never return the community API key in plaintext. The GET response is
@@ -30,6 +34,11 @@ function stripHashes(config: Record<string, unknown>) {
     communityApiKey: typeof communityApiKey === 'string' ? maskSecret(communityApiKey) : null,
     hasAdminPassword: !!adminPasswordHash,
     hasVpnActivationCode: !!vpnActivationCode,
+    // Provider API keys (#149): never cross the wire, even masked. The UI only
+    // needs to know whether one is stored so it can show a "saved" state.
+    hasAnthropicKey: !!anthropicApiKey,
+    hasOpenaiKey: !!openaiApiKey,
+    hasGoogleKey: !!googleApiKey,
     isSelfHosted: process.env.SELF_HOSTED === 'true',
   };
 }
@@ -72,6 +81,47 @@ export async function PATCH(request: NextRequest) {
   const data: Record<string, unknown> = {};
   if (provider) data.provider = provider;
   if (model) data.model = model;
+
+  // Provider API key (#149): admins enter the key in the GUI instead of editing
+  // .env. Store it encrypted in the per-provider column (a non-empty string
+  // sets it, null/'' clears it, absent leaves it unchanged), keyed to the
+  // provider in this same request. Only env-backed providers have a column;
+  // CLI/local providers need no key. Then reject selecting an env-backed
+  // provider with no usable key (stored, env, or an openai local endpoint) so
+  // the save fails loudly here instead of silently at the next scrape.
+  if (provider) {
+    const KEY_COLUMN: Record<string, 'anthropicApiKey' | 'openaiApiKey' | 'googleApiKey'> = {
+      anthropic: 'anthropicApiKey',
+      openai: 'openaiApiKey',
+      google: 'googleApiKey',
+    };
+    const envKey = EXTRACTION_PROVIDERS[provider]?.envKey;
+    const column = KEY_COLUMN[provider];
+    if (envKey) {
+      const incomingKey = typeof body.apiKey === 'string' && body.apiKey.length > 0;
+      const clearing = body.apiKey === '' || body.apiKey === null;
+      if (column && typeof body.apiKey === 'string') {
+        data[column] = incomingKey ? encryptSecret(body.apiKey) : null;
+      } else if (column && body.apiKey === null) {
+        data[column] = null;
+      }
+      const existing = column ? await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }) : null;
+      const storedKey = !clearing && !!(column && existing && existing[column]);
+      const envPresent = !!process.env[envKey];
+      const baseUrl =
+        (typeof body.customBaseUrl === 'string' && body.customBaseUrl) ||
+        existing?.customBaseUrl ||
+        process.env.OPENAI_BASE_URL;
+      const openaiLocal = provider === 'openai' && !!baseUrl;
+      if (!incomingKey && !storedKey && !envPresent && !openaiLocal) {
+        return apiError(
+          `Provider "${provider}" needs an API key. Enter one here or set the ${envKey} environment variable.`,
+          400,
+        );
+      }
+    }
+  }
+
   if (body.theme !== undefined) {
     if (typeof body.theme !== 'string' || !isThemeId(body.theme)) {
       return apiError('theme must be a valid theme id', 400);

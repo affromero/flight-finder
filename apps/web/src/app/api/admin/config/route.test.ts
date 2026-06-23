@@ -1,11 +1,13 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockUpsert = vi.fn();
+const mockFindFirst = vi.fn().mockResolvedValue(null);
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
     extractionConfig: {
       upsert: (...args: unknown[]) => mockUpsert(...args),
+      findFirst: (...args: unknown[]) => mockFindFirst(...args),
     },
   },
 }));
@@ -20,7 +22,10 @@ vi.mock('@/lib/cron', () => ({
 
 vi.mock('@/lib/scraper/ai-registry', () => ({
   EXTRACTION_PROVIDERS: {
-    anthropic: { displayName: 'Anthropic', models: [] },
+    anthropic: { displayName: 'Anthropic', envKey: 'ANTHROPIC_API_KEY', allowCustomModel: true, models: [] },
+    openai: { displayName: 'OpenAI', envKey: 'OPENAI_API_KEY', allowCustomModel: true, allowCustomBaseUrl: true, models: [] },
+    google: { displayName: 'Google', envKey: 'GOOGLE_AI_API_KEY', allowCustomModel: true, models: [] },
+    ollama: { displayName: 'Ollama', allowCustomModel: true, models: [] },
   },
 }));
 
@@ -297,5 +302,112 @@ describe('GET /api/admin/config: secret redaction (CRYPTO-5/COMM-8)', () => {
     expect(json.data.adminPasswordHash).toBeUndefined();
     expect(json.data.hasAdminPassword).toBe(true);
     expect(json.data.communityApiKey).toBeNull();
+  });
+
+  it('exposes hasXKey booleans but never the stored provider key (#149)', async () => {
+    mockUpsert.mockResolvedValue({
+      id: 'singleton',
+      openaiApiKey: 'iv:tag:ciphertext',
+      anthropicApiKey: null,
+      googleApiKey: null,
+      communityApiKey: null,
+    });
+
+    const res = await GET();
+    const json = (await res.json()) as { data: Record<string, unknown> };
+    expect(json.data.hasOpenaiKey).toBe(true);
+    expect(json.data.hasAnthropicKey).toBe(false);
+    expect(json.data.hasGoogleKey).toBe(false);
+    // The ciphertext (masked or not) must never cross the wire.
+    expect(json.data).not.toHaveProperty('openaiApiKey');
+    expect(JSON.stringify(json.data)).not.toContain('iv:tag:ciphertext');
+  });
+});
+
+describe('PATCH /api/admin/config — provider API keys (#149)', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFindFirst.mockResolvedValue(null);
+    mockUpsert.mockImplementation((args: { update: Record<string, unknown> }) =>
+      Promise.resolve({ id: 'singleton', ...args.update }),
+    );
+  });
+
+  it('rejects selecting an env-backed provider with no usable key, without writing', async () => {
+    const orig = process.env.GOOGLE_AI_API_KEY;
+    delete process.env.GOOGLE_AI_API_KEY; // no env key, no stored key, no local endpoint
+    try {
+      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
+      expect(res.status).toBe(400);
+      expect(mockUpsert).not.toHaveBeenCalled();
+    } finally {
+      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
+      else process.env.GOOGLE_AI_API_KEY = orig;
+    }
+  });
+
+  it('accepts the same provider when an API key is entered, and stores it encrypted', async () => {
+    const { decryptSecret } = await import('@/lib/secret-crypto');
+    const orig = process.env.GOOGLE_AI_API_KEY;
+    delete process.env.GOOGLE_AI_API_KEY;
+    try {
+      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash', apiKey: 'g-secret-123' }));
+      expect(res.status).toBe(200);
+      const update = (mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> }).update;
+      expect(update.googleApiKey).toEqual(expect.any(String));
+      expect(update.googleApiKey).not.toBe('g-secret-123');
+      expect(decryptSecret(update.googleApiKey as string)).toBe('g-secret-123');
+    } finally {
+      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
+      else process.env.GOOGLE_AI_API_KEY = orig;
+    }
+  });
+
+  it('accepts switching to a provider that already has a stored key (no re-entry needed)', async () => {
+    const orig = process.env.GOOGLE_AI_API_KEY;
+    delete process.env.GOOGLE_AI_API_KEY;
+    mockFindFirst.mockResolvedValue({ googleApiKey: 'iv:tag:cipher' }); // already stored
+    try {
+      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
+      expect(res.status).toBe(200);
+    } finally {
+      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
+      else process.env.GOOGLE_AI_API_KEY = orig;
+    }
+  });
+
+  it('clears a stored key when apiKey is null', async () => {
+    // env key present so clearing the stored key does not trip the keyless guard
+    const res = await PATCH(patchRequest({ provider: 'anthropic', model: 'claude-haiku-4-5-20251001', apiKey: null }));
+    expect(res.status).toBe(200);
+    const update = (mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> }).update;
+    expect(update.anthropicApiKey).toBeNull();
+  });
+
+  it('lets a local provider save without any API key', async () => {
+    const res = await PATCH(patchRequest({ provider: 'ollama', model: 'llama3' }));
+    expect(res.status).toBe(200);
+    expect(mockFindFirst).not.toHaveBeenCalled();
+  });
+
+  // Recurrence net: every env-backed provider must round-trip a GUI-entered key
+  // (writable -> encrypted at rest -> exposed only as a boolean). A new provider
+  // wired up incompletely fails here.
+  describe.each([
+    { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', column: 'anthropicApiKey', has: 'hasAnthropicKey' },
+    { provider: 'openai', model: 'gpt-4.1-mini', column: 'openaiApiKey', has: 'hasOpenaiKey' },
+    { provider: 'google', model: 'gemini-2.5-flash', column: 'googleApiKey', has: 'hasGoogleKey' },
+  ])('contract: $provider', ({ provider, model, column, has }) => {
+    it('persists an entered key encrypted and exposes only a boolean', async () => {
+      const { decryptSecret } = await import('@/lib/secret-crypto');
+      const secret = `secret-for-${provider}`;
+      const res = await PATCH(patchRequest({ provider, model, apiKey: secret }));
+      expect(res.status).toBe(200);
+      const update = (mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> }).update;
+      expect(decryptSecret(update[column] as string)).toBe(secret);
+      const json = (await res.json()) as { data: Record<string, unknown> };
+      expect(json.data[has]).toBe(true);
+      expect(json.data).not.toHaveProperty(column);
+    });
   });
 });
