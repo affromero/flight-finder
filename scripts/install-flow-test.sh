@@ -456,6 +456,39 @@ test_helper_shipped_by_install_and_update() {
   fi
 }
 
+test_env_merge_non_destructive() {
+  local installer="apps/web/public/install.sh"
+
+  # Re-running with an existing .env must merge missing keys, not skip wholesale (#152).
+  if grep -q 'append_env_if_missing' "$installer"; then
+    pass "install.sh merges new keys into an existing .env (#152)"
+  else
+    fail "install.sh should non-destructively merge new keys into an existing .env (#152)"
+  fi
+
+  # The merge must guard on the key being absent (^KEY=) so existing lines are never clobbered.
+  if grep -qF '^${_key}=' "$installer"; then
+    pass "install.sh .env merge checks '^KEY=' before appending (no clobber)"
+  else
+    fail "install.sh .env merge must check '^KEY=' before appending so it never clobbers"
+  fi
+
+  # The detected provider key and OLLAMA_HOST are both merge candidates.
+  if grep -qF 'append_env_if_missing "$API_KEY_VAR"' "$installer" \
+     && grep -qF 'append_env_if_missing "OLLAMA_HOST"' "$installer"; then
+    pass "install.sh .env merge covers the provider key and OLLAMA_HOST"
+  else
+    fail "install.sh .env merge should cover API_KEY_VAR and OLLAMA_HOST"
+  fi
+
+  # Clear messaging either way.
+  if grep -q 'no new keys to add' "$installer" && grep -q 'new key(s)' "$installer"; then
+    pass "install.sh reports whether .env keys were added or left unchanged"
+  else
+    fail "install.sh should report added keys or that nothing changed"
+  fi
+}
+
 # ---------------------------------------------------------------------------
 # Run all tests
 # ---------------------------------------------------------------------------
@@ -484,6 +517,7 @@ test_compose_exec_flags_matrix
 test_cmd_tui_uses_helper
 test_no_raw_it_flags_in_dc_exec
 test_helper_shipped_by_install_and_update
+test_env_merge_non_destructive
 
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"

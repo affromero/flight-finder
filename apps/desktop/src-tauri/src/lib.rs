@@ -157,6 +157,24 @@ fn stop_stack() -> Result<String, String> {
     }
 }
 
+/// Recreate the stack so an edited `~/.flight-finder/.env` is reloaded. A plain
+/// `up -d` does not recreate containers on an env_file content change, so a user
+/// who edits .env and just restarts would otherwise keep the stale environment.
+/// `down` then `up -d --force-recreate` guarantees the new env is picked up.
+#[tauri::command]
+fn restart_stack() -> Result<String, String> {
+    let cmd = container_cmd().ok_or("Docker or Podman is required.")?;
+    // `down` may exit non-zero if nothing is running; that is fine, only the
+    // bring-up result decides success.
+    let _ = compose(&cmd, &["down"]).map_err(|e| e.to_string())?;
+    let out = compose(&cmd, &["up", "-d", "--force-recreate"]).map_err(|e| e.to_string())?;
+    if out.status.success() {
+        Ok("restarted".into())
+    } else {
+        Err(String::from_utf8_lossy(&out.stderr).into_owned())
+    }
+}
+
 /// A TCP connect to the published port is enough to know the app is up.
 #[tauri::command]
 fn is_healthy(port: u16) -> bool {
@@ -328,6 +346,7 @@ pub fn run() {
             install_stack,
             start_stack,
             stop_stack,
+            restart_stack,
             is_healthy,
             open_app,
             lan_url,

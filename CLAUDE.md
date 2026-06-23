@@ -20,6 +20,8 @@
 npm workspaces: `@flight-finder/web` (`apps/web/`), `@flight-finder/cli` (`packages/cli/`).
 Root `package.json` proxies common scripts to `@flight-finder/web`. `apps/desktop/` is a Tauri (Rust) launcher: deliberately NOT an npm workspace member and excluded from `npm run ci`; it is built only by `.github/workflows/desktop-release.yml`.
 
+The CLI bundles the shared scraper (`apps/web/src/lib/scraper/*`) via relative imports but maps `@/*` to its own `packages/cli/src/`, so any new `@/lib/<x>` import added to a shared scraper file needs a matching shim in `packages/cli/src/lib/` (re-export the real module like `secret-crypto.ts`/`prisma.ts`, or a stub like `admin-recovery.ts`). Web-only checks pass without it; only the full `npm run ci` (web + cli) catches a missing shim.
+
 **Versioning (locked):** `apps/web`, the root `package.json`, `packages/cli`, and `apps/desktop` all carry the SAME version number. `apps/web/package.json` is the source of truth; git tags `vX.Y.Z` track the web release and `desktop-vX.Y.Z` tags the desktop build at the same number (distinct prefixes, no collision). `/create-release` must bump all of them to the new version — `apps/web/package.json`, root `package.json`, `packages/cli/package.json`, and `apps/desktop` (its `package.json`, `src-tauri/Cargo.toml`, and `src-tauri/tauri.conf.json`) — and regenerate both lockfiles (`package-lock.json` and `apps/desktop/src-tauri/Cargo.lock`).
 
 ## Environment Variables
@@ -148,7 +150,7 @@ Models:
 - `Query` (tracked flights, optional `userId` owner)
 - `PriceSnapshot` (price data points; optional `vpnCountry` for VPN comparison runs)
 - `FetchRun` (scrape run logs; optional `vpnCountry`)
-- `ExtractionConfig` (LLM settings singleton; `multiUserMode` flag; `adminSessionsValidFrom` for session revocation on password change; RPM caps and preview concurrency fields)
+- `ExtractionConfig` (LLM settings singleton; `multiUserMode` flag; `adminSessionsValidFrom` for session revocation on password change; RPM caps and preview concurrency fields; encrypted per-provider API keys `anthropicApiKey`/`openaiApiKey`/`googleApiKey`, set from the admin config or setup wizard)
 - `ApiUsageLog` (cost tracking per provider/model)
 - `User` (multi user accounts, self hosted only; `sessionsValidFrom` for per-user session revocation)
 - `NotificationChannel` (per-channel notification config; nullable `userId` for admin-owned global channels)
@@ -181,6 +183,7 @@ Other themes (cyberpunk, tron, autumn, solar-red) remain as user-selectable alte
 - **Component**: `Name.tsx` + `Name.module.css`. Named export, `styles.root`.
 - **API Route**: Validate → query → `NextResponse.json()` with `apiSuccess()`/`apiError()`.
 - **Scraper**: Playwright navigate → capture HTML → LLM extract → store snapshots.
+- **Provider keys**: resolve via `resolveApiKey(provider, config)` in `lib/scraper/ai-registry.ts`. A DB-stored key (encrypted, set in admin config or the setup wizard) beats `process.env[envKey]`; an undecryptable value falls through to env. Never read `process.env.OPENAI_API_KEY` (or the other provider envs) directly in scraper paths. Selecting an env-backed provider with no usable key is rejected with 400 in `api/admin/config`.
 - **Admin auth**: HMAC session cookie, verified in `middleware.ts` for pages, in handler for cron.
 - **Accounts (self hosted multi user mode)**: opt-in DB flag (`ExtractionConfig.multiUserMode`) gated by `SELF_HOSTED=true`. Admin enables via Settings or setup wizard; the toggle handler atomically creates the first admin User, flips the flag, and backfills existing unowned non-seed queries. User auth is per-route via `getCurrentUser()` (DB lookup so deleted users lose access immediately). Token shape: `admin:<ts>.<sig>` for legacy admin, `user:<userId>:<ts>.<sig>` for users; both share the `ft-session` cookie. Login rate limited via `lib/rate-limit.ts`.
 
