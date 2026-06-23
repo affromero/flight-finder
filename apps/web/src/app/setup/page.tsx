@@ -26,6 +26,8 @@ export default function SetupPage() {
   const [model, setModel] = useState('');
   const [customModel, setCustomModel] = useState('');
   const [customBaseUrl, setCustomBaseUrl] = useState('');
+  // Provider API key entered during first-run setup (#149); stored encrypted.
+  const [apiKey, setApiKey] = useState('');
   const [communitySharing, setCommunitySharing] = useState(false);
   const [enableMultiUser, setEnableMultiUser] = useState(false);
   const [multiUserUsername, setMultiUserUsername] = useState('');
@@ -150,7 +152,7 @@ export default function SetupPage() {
     const res = await fetch('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, communitySharing, customBaseUrl: customBaseUrl.trim() || null, publicBaseUrl: publicBaseUrl.trim() || null }),
+      body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, communitySharing, customBaseUrl: customBaseUrl.trim() || null, publicBaseUrl: publicBaseUrl.trim() || null, apiKey: apiKey.trim() || null }),
     });
 
     if (!res.ok) {
@@ -286,6 +288,9 @@ export default function SetupPage() {
                     onClick={() => {
                       setProvider(key);
                       setCustomModel('');
+                      // Clear the key field when switching providers so a key
+                      // typed for one is never submitted for another.
+                      setApiKey('');
                       // Empty so the default is a placeholder, not a saved value.
                       // A persisted localhost would override the OLLAMA_HOST env
                       // (host.docker.internal) and break Ollama in Docker. #139.
@@ -359,6 +364,23 @@ export default function SetupPage() {
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
                   />
+                )}
+                {PROVIDER_METADATA[provider]!.envKey && (
+                  <>
+                    <input
+                      type="password"
+                      className={styles.input}
+                      autoComplete="off"
+                      placeholder={detectedProviders.includes(provider)
+                        ? `API key (optional — ${PROVIDER_METADATA[provider]!.envKey} is already set)`
+                        : `Paste your ${PROVIDER_METADATA[provider]!.displayName} API key`}
+                      value={apiKey}
+                      onChange={(e) => setApiKey(e.target.value)}
+                    />
+                    <span className={styles.hint}>
+                      Stored encrypted. You can also set the {PROVIDER_METADATA[provider]!.envKey} environment variable instead.
+                    </span>
+                  </>
                 )}
                 {PROVIDER_METADATA[provider]!.allowCustomBaseUrl && (
                   <input

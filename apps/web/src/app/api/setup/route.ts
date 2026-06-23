@@ -2,6 +2,15 @@ import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { hashPassword } from '@/lib/password';
 import { registerForCommunity } from '@/lib/community-sync';
+import { encryptSecret } from '@/lib/secret-crypto';
+
+// Env-backed provider -> the ExtractionConfig column that stores its key,
+// encrypted at rest (#149). Keep in sync with STORED_KEY_FIELD in ai-registry.
+const PROVIDER_KEY_COLUMN: Record<string, 'anthropicApiKey' | 'openaiApiKey' | 'googleApiKey'> = {
+  anthropic: 'anthropicApiKey',
+  openai: 'openaiApiKey',
+  google: 'googleApiKey',
+};
 
 export async function POST(request: Request) {
   // Only allow setup if no config exists yet
@@ -14,13 +23,14 @@ export async function POST(request: Request) {
   }
 
   const body = await request.json();
-  const { adminPassword, provider, model, communitySharing, customBaseUrl, publicBaseUrl } = body as {
+  const { adminPassword, provider, model, communitySharing, customBaseUrl, publicBaseUrl, apiKey } = body as {
     adminPassword: string;
     provider: string;
     model: string;
     communitySharing?: boolean;
     customBaseUrl?: string | null;
     publicBaseUrl?: string | null;
+    apiKey?: string | null;
   };
 
   // Optional public URL the user plans to reach the instance at (for /connect's
@@ -52,6 +62,14 @@ export async function POST(request: Request) {
     ? 'self-hosted'
     : await hashPassword(adminPassword);
 
+  // Store the entered provider key encrypted at rest (#149), so a self-hosted
+  // user can configure a keyed provider in the wizard without editing .env.
+  const providerKeyData: Record<string, string> = {};
+  if (typeof apiKey === 'string' && apiKey.length > 0) {
+    const column = PROVIDER_KEY_COLUMN[provider];
+    if (column) providerKeyData[column] = encryptSecret(apiKey);
+  }
+
   // Register for community API key if opted in
   let communityApiKey: string | null = null;
   if (communitySharing) {
@@ -74,6 +92,7 @@ export async function POST(request: Request) {
       communityApiKey,
       customBaseUrl: customBaseUrl || null,
       publicBaseUrl: normalizedPublicBaseUrl,
+      ...providerKeyData,
     },
     update: {
       provider,
@@ -83,6 +102,7 @@ export async function POST(request: Request) {
       communityApiKey,
       customBaseUrl: customBaseUrl || null,
       publicBaseUrl: normalizedPublicBaseUrl,
+      ...providerKeyData,
     },
   });
 

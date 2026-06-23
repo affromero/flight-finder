@@ -21,6 +21,9 @@ interface Config {
   defaultSearchMethod: 'ai' | 'manual';
   customBaseUrl: string | null;
   extractTimeoutSeconds: number;
+  hasAnthropicKey: boolean;
+  hasOpenaiKey: boolean;
+  hasGoogleKey: boolean;
   vpnProvider: string | null;
   vpnCountries: string[];
   hasVpnActivationCode: boolean;
@@ -58,6 +61,11 @@ export default function ConfigPage() {
   const [defaultCountry, setDefaultCountry] = useState('');
   const [defaultSearchMethod, setDefaultSearchMethod] = useState<'ai' | 'manual'>('ai');
   const [customBaseUrl, setCustomBaseUrl] = useState('');
+  // Provider API key the admin types in (#149). Never pre-filled from the
+  // server (keys never cross the wire); blank means "leave the saved key
+  // unchanged". setProviderStatuses tracks readiness from /api/admin/providers.
+  const [apiKey, setApiKey] = useState('');
+  const [providerStatuses, setProviderStatuses] = useState<Record<string, string>>({});
   const [vpnProvider, setVpnProvider] = useState('none');
   const [vpnCountries, setVpnCountries] = useState<string[]>([]);
   const [aggregatorsEnabled, setAggregatorsEnabled] = useState<string[]>(['google_flights', 'airline_direct']);
@@ -105,6 +113,26 @@ export default function ConfigPage() {
       .finally(() => setLocalModelsLoading(false));
   }, []);
 
+  // Real-time readiness per provider (ready / no_key / unreachable / not_installed)
+  // so the admin can see which providers will actually work (#149).
+  const fetchProviderStatuses = useCallback(() => {
+    fetch('/api/admin/providers')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok) return;
+        const map: Record<string, string> = {};
+        for (const [key, s] of Object.entries(d.data as Record<string, { status: string }>)) {
+          map[key] = s.status;
+        }
+        setProviderStatuses(map);
+      })
+      .catch(() => { /* readiness is advisory; ignore fetch errors */ });
+  }, []);
+
+  useEffect(() => {
+    fetchProviderStatuses();
+  }, [fetchProviderStatuses]);
+
   useEffect(() => {
     fetch('/api/admin/config')
       .then((r) => r.json())
@@ -147,10 +175,27 @@ export default function ConfigPage() {
 
   const providerConfig = PROVIDER_METADATA[provider];
   const models = providerConfig?.models ?? [];
+  // Whether a key is already stored for the selected provider (from the GET
+  // booleans) and its live readiness, to drive the API-key field's hint (#149).
+  const hasStoredKey =
+    provider === 'anthropic' ? !!config?.hasAnthropicKey
+    : provider === 'openai' ? !!config?.hasOpenaiKey
+    : provider === 'google' ? !!config?.hasGoogleKey
+    : false;
+  const providerStatus = providerStatuses[provider];
+  const STATUS_LABEL: Record<string, string> = {
+    ready: 'Ready',
+    no_key: 'No key configured',
+    unreachable: 'Not reachable',
+    not_installed: 'Not installed',
+  };
 
   const handleProviderChange = (newProvider: string) => {
     setProvider(newProvider);
     setCustomModel('');
+    // Clear the key field so a key typed for one provider can't be saved
+    // against another. The saved key (if any) stays in the DB untouched.
+    setApiKey('');
     // Leave the base URL empty so the default is only a placeholder, not a saved
     // value. Persisting the localhost default would be stored as customBaseUrl,
     // which overrides the OLLAMA_HOST env that install.sh sets to
@@ -176,6 +221,8 @@ export default function ConfigPage() {
     setMessage('');
 
     const newBaseUrl = customBaseUrl.trim() || null;
+    // apiKey: a blank field is sent as undefined (dropped by JSON.stringify) so
+    // it leaves the saved key untouched; only a typed value is stored (#149).
     const res = await fetch('/api/admin/config', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -192,6 +239,7 @@ export default function ConfigPage() {
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
         defaultSearchMethod,
         customBaseUrl: newBaseUrl,
+        apiKey: apiKey.trim() || undefined,
         vpnProvider: vpnProvider === 'none' ? null : vpnProvider,
         vpnCountries,
         aggregatorsEnabled,
@@ -208,6 +256,9 @@ export default function ConfigPage() {
     if (data.ok) {
       setConfig(data.data);
       setMessage('Config saved');
+      // Clear the typed key and refresh readiness now that it's stored.
+      setApiKey('');
+      fetchProviderStatuses();
       // Re-fetch models if the base URL changed (cache key includes host)
       if (LOCAL_PROVIDERS.has(provider)) {
         fetchLocalModels(provider);
@@ -260,6 +311,11 @@ export default function ConfigPage() {
               <option key={key} value={key}>{p.displayName}</option>
             ))}
           </select>
+          {providerStatus && (
+            <span className={`${styles.toggleHint} ${providerStatus === 'ready' ? styles.statusReady : styles.statusNotReady}`}>
+              Status: {STATUS_LABEL[providerStatus] ?? providerStatus}
+            </span>
+          )}
           {(provider === 'claude-code' || provider === 'codex') && (
             <div className={styles.info}>
               <div className={styles.infoTitle}>Security note</div>
@@ -271,6 +327,25 @@ export default function ConfigPage() {
             </div>
           )}
         </div>
+
+        {providerConfig?.envKey && (
+          <div className={styles.field}>
+            <label className={styles.label}>API Key</label>
+            <input
+              type="password"
+              className={styles.input}
+              autoComplete="off"
+              placeholder={hasStoredKey ? 'Saved — paste a new key to replace' : `Paste your ${providerConfig.displayName} API key`}
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+            />
+            <span className={styles.toggleHint}>
+              {hasStoredKey
+                ? `A key is saved. Leave blank to keep it, or paste a new one to replace it. Stored encrypted; falls back to the ${providerConfig.envKey} environment variable.`
+                : `Paste a key to store it (encrypted) here, or set the ${providerConfig.envKey} environment variable. No restart needed.`}
+            </span>
+          </div>
+        )}
 
         <div className={styles.field}>
           <label className={styles.label}>Model</label>
@@ -675,7 +750,8 @@ export default function ConfigPage() {
           <strong>API key:</strong>{' '}
           {providerConfig?.envKey ? (
             <>
-              read from <code className={styles.code}>{providerConfig.envKey}</code>
+              entered above (stored encrypted), or read from{' '}
+              <code className={styles.code}>{providerConfig.envKey}</code> if none is set
             </>
           ) : (
             'not required — this provider signs in through its local CLI, no API key needed'

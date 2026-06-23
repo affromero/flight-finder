@@ -74,7 +74,7 @@ describe('settings page parity with admin config', () => {
     // aggregator allowlist that only an admin should configure). Core
     // data fields must exist in both.
     const coreFields = adminFields.filter(
-      (f) => !['hasAdminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'maxTrackedPerRoute', 'previewMaxCombos', 'aggregatorsEnabled', 'anthropicRpm', 'googleRpm', 'openaiRpm', 'groqRpm', 'previewConcurrency', 'previewAdmissionCap'].includes(f)
+      (f) => !['hasAdminPassword', 'hasAnthropicKey', 'hasOpenaiKey', 'hasGoogleKey', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'maxTrackedPerRoute', 'previewMaxCombos', 'aggregatorsEnabled', 'anthropicRpm', 'googleRpm', 'openaiRpm', 'groqRpm', 'previewConcurrency', 'previewAdmissionCap'].includes(f)
     );
 
     for (const field of coreFields) {
@@ -94,7 +94,7 @@ describe('settings page parity with admin config', () => {
     // allowlist) that settings doesn't surface. All other extraction-related
     // fields should be in both.
     const extractionFields = adminSaveFields.filter(
-      (f) => !['adminPassword', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'maxTrackedPerRoute', 'previewMaxCombos', 'aggregatorsEnabled', 'anthropicRpm', 'googleRpm', 'openaiRpm', 'groqRpm', 'previewConcurrency', 'previewAdmissionCap'].includes(f)
+      (f) => !['adminPassword', 'apiKey', 'extractTimeoutSeconds', 'maxFlightsPerDate', 'maxTrackedPerRoute', 'previewMaxCombos', 'aggregatorsEnabled', 'anthropicRpm', 'googleRpm', 'openaiRpm', 'groqRpm', 'previewConcurrency', 'previewAdmissionCap'].includes(f)
     );
 
     for (const field of extractionFields) {
