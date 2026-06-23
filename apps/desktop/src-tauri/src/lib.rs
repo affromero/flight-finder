@@ -19,8 +19,14 @@ use std::thread;
 use std::time::Duration;
 use tauri::{Manager, WebviewUrl, WebviewWindowBuilder};
 
-/// Default install directory used by install.sh (`~/.flight-finder`).
+/// Install directory used by install.sh. Honors `FLIGHT_FINDER_DIR` (the same
+/// override install.sh respects) and otherwise defaults to `~/.flight-finder`.
 fn install_dir() -> PathBuf {
+    if let Ok(dir) = std::env::var("FLIGHT_FINDER_DIR") {
+        if !dir.is_empty() {
+            return PathBuf::from(dir);
+        }
+    }
     let home = std::env::var("HOME")
         .or_else(|_| std::env::var("USERPROFILE"))
         .unwrap_or_default();
@@ -164,10 +170,16 @@ fn stop_stack() -> Result<String, String> {
 #[tauri::command]
 fn restart_stack() -> Result<String, String> {
     let cmd = container_cmd().ok_or("Docker or Podman is required.")?;
+    restart_with(&cmd)
+}
+
+/// Recreate the stack with a resolved container command. Split out from the
+/// tauri command so it can be tested with a fake container binary.
+fn restart_with(cmd: &str) -> Result<String, String> {
     // `down` may exit non-zero if nothing is running; that is fine, only the
     // bring-up result decides success.
-    let _ = compose(&cmd, &["down"]).map_err(|e| e.to_string())?;
-    let out = compose(&cmd, &["up", "-d", "--force-recreate"]).map_err(|e| e.to_string())?;
+    let _ = compose(cmd, &["down"]).map_err(|e| e.to_string())?;
+    let out = compose(cmd, &["up", "-d", "--force-recreate"]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok("restarted".into())
     } else {
@@ -358,4 +370,38 @@ pub fn run() {
         ])
         .run(tauri::generate_context!())
         .expect("error while running Flight Finder");
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::os::unix::fs::PermissionsExt;
+
+    /// restart_with must recreate the stack: `compose down` first, then
+    /// `compose up -d --force-recreate` (a plain `up -d` would not reload an
+    /// edited env_file). Drive it with a fake container binary that records its
+    /// args, and point FLIGHT_FINDER_DIR at a temp dir so compose() has a real
+    /// working directory. #151.
+    #[test]
+    fn restart_runs_down_then_force_recreate_up_in_order() {
+        let tmp = std::env::temp_dir().join(format!("ff-restart-{}", std::process::id()));
+        std::fs::create_dir_all(&tmp).unwrap();
+        std::env::set_var("FLIGHT_FINDER_DIR", &tmp);
+
+        let log = tmp.join("calls.log");
+        let _ = std::fs::remove_file(&log);
+        let shim = tmp.join("fake-container.sh");
+        std::fs::write(&shim, format!("#!/bin/sh\necho \"$@\" >> \"{}\"\n", log.display())).unwrap();
+        std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
+
+        let res = restart_with(shim.to_str().unwrap());
+        assert!(res.is_ok(), "restart_with errored: {res:?}");
+
+        let calls = std::fs::read_to_string(&log).unwrap();
+        let lines: Vec<&str> = calls.lines().collect();
+        assert_eq!(lines, vec!["compose down", "compose up -d --force-recreate"]);
+
+        std::env::remove_var("FLIGHT_FINDER_DIR");
+        let _ = std::fs::remove_dir_all(&tmp);
+    }
 }
