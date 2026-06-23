@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, isLocalProviderReachable } from '@/lib/scraper/ai-registry';
 import { hashPassword } from '@/lib/password';
 import { registerForCommunity } from '@/lib/community-sync';
-import { encryptSecret } from '@/lib/secret-crypto';
+import { encryptSecret, decryptSecret } from '@/lib/secret-crypto';
 import { isThemeId } from '@/lib/theme';
 import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
@@ -82,6 +82,10 @@ export async function PATCH(request: NextRequest) {
   if (provider) data.provider = provider;
   if (model) data.model = model;
 
+  // Read the current config once; reused by the key guard and the reachability
+  // probe below so the request makes a single DB read.
+  const existingConfig = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
+
   // Provider API key (#149): admins enter the key in the GUI instead of editing
   // .env. Store it encrypted in the per-provider column (a non-empty string
   // sets it, null/'' clears it, absent leaves it unchanged), keyed to the
@@ -105,12 +109,16 @@ export async function PATCH(request: NextRequest) {
       } else if (column && body.apiKey === null) {
         data[column] = null;
       }
-      const existing = column ? await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }) : null;
-      const storedKey = !clearing && !!(column && existing && existing[column]);
+      // A stored key only counts if it actually decrypts: runtime resolution
+      // (resolveApiKey) falls through to env on a decrypt failure, so the guard
+      // must too, otherwise an undecryptable key (eg. after ADMIN_SESSION_SECRET
+      // rotation) would pass here and then fail at scrape time. Codex audit #2.
+      const storedEnc = !clearing && column ? existingConfig?.[column] : null;
+      const storedKey = !!(storedEnc && decryptSecret(storedEnc));
       const envPresent = !!process.env[envKey];
       const baseUrl =
         (typeof body.customBaseUrl === 'string' && body.customBaseUrl) ||
-        existing?.customBaseUrl ||
+        existingConfig?.customBaseUrl ||
         process.env.OPENAI_BASE_URL;
       const openaiLocal = provider === 'openai' && !!baseUrl;
       if (!incomingKey && !storedKey && !envPresent && !openaiLocal) {
@@ -251,9 +259,13 @@ export async function PATCH(request: NextRequest) {
       }
       // For a local provider, probe the endpoint so an unreachable URL fails at
       // save time instead of silently dying at the next scrape (#153). Only when
-      // the URL is set/changed in this request and the selected provider is local.
-      const targetProvider = provider || (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.provider;
-      if (targetProvider && LOCAL_PROVIDERS.has(targetProvider)) {
+      // the URL actually CHANGED (not re-sent unchanged on an unrelated save) and
+      // the selected provider is local — this avoids a 5s stall (and a spurious
+      // 422 if the service is briefly down) on every save, and limits the
+      // server-side fetch to a deliberate URL change (Codex audit #4).
+      const targetProvider = provider || existingConfig?.provider;
+      const urlChanged = body.customBaseUrl !== existingConfig?.customBaseUrl;
+      if (urlChanged && targetProvider && LOCAL_PROVIDERS.has(targetProvider)) {
         const reachable = await isLocalProviderReachable(targetProvider, body.customBaseUrl);
         if (!reachable) {
           return apiError(

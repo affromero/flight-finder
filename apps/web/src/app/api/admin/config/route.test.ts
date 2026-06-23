@@ -366,13 +366,30 @@ describe('PATCH /api/admin/config — provider API keys (#149)', () => {
     }
   });
 
-  it('accepts switching to a provider that already has a stored key (no re-entry needed)', async () => {
+  it('accepts switching to a provider that already has a decryptable stored key (no re-entry)', async () => {
+    const { encryptSecret } = await import('@/lib/secret-crypto');
     const orig = process.env.GOOGLE_AI_API_KEY;
     delete process.env.GOOGLE_AI_API_KEY;
-    mockFindFirst.mockResolvedValue({ googleApiKey: 'iv:tag:cipher' }); // already stored
+    mockFindFirst.mockResolvedValue({ googleApiKey: encryptSecret('already-stored-key') });
     try {
       const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
       expect(res.status).toBe(200);
+    } finally {
+      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
+      else process.env.GOOGLE_AI_API_KEY = orig;
+    }
+  });
+
+  it('rejects a provider whose stored key cannot be decrypted and has no env key (Codex audit #2)', async () => {
+    const orig = process.env.GOOGLE_AI_API_KEY;
+    delete process.env.GOOGLE_AI_API_KEY;
+    // Column present but not valid ciphertext (eg. ADMIN_SESSION_SECRET rotated):
+    // runtime would fall through to the absent env key, so the guard must reject.
+    mockFindFirst.mockResolvedValue({ googleApiKey: 'not-decryptable-garbage' });
+    try {
+      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
+      expect(res.status).toBe(400);
+      expect(mockUpsert).not.toHaveBeenCalled();
     } finally {
       if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
       else process.env.GOOGLE_AI_API_KEY = orig;
@@ -390,7 +407,8 @@ describe('PATCH /api/admin/config — provider API keys (#149)', () => {
   it('lets a local provider save without any API key', async () => {
     const res = await PATCH(patchRequest({ provider: 'ollama', model: 'llama3' }));
     expect(res.status).toBe(200);
-    expect(mockFindFirst).not.toHaveBeenCalled();
+    const update = (mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> }).update;
+    expect(update.provider).toBe('ollama');
   });
 
   // Recurrence net: every env-backed provider must round-trip a GUI-entered key
@@ -445,6 +463,13 @@ describe('PATCH /api/admin/config — local provider reachability (#153)', () =>
 
   it('does not probe when customBaseUrl is absent from the body', async () => {
     const res = await PATCH(patchRequest({ provider: 'ollama', model: 'llama3' }));
+    expect(res.status).toBe(200);
+    expect(mockReachable).not.toHaveBeenCalled();
+  });
+
+  it('does not re-probe when the customBaseUrl is unchanged from the stored value (Codex audit #4)', async () => {
+    mockFindFirst.mockResolvedValue({ provider: 'ollama', customBaseUrl: 'http://localhost:11434/v1' });
+    const res = await PATCH(patchRequest({ provider: 'ollama', model: 'llama3', customBaseUrl: 'http://localhost:11434/v1' }));
     expect(res.status).toBe(200);
     expect(mockReachable).not.toHaveBeenCalled();
   });
