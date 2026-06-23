@@ -632,7 +632,37 @@ fi
 # 6. Generate .env
 # ---------------------------------------------------------------------------
 if [ -f "$FLIGHT_FINDER_DIR/.env" ]; then
-  warn "Existing .env found — keeping it"
+  # Never clobber an existing .env, but non-destructively add any provider key
+  # detected or provided in this run that is not already present. Without this,
+  # re-running the installer to add a key was a silent no-op (#152). Existing
+  # lines (and any unrelated config) are left exactly as they are.
+  ENV_FILE="$FLIGHT_FINDER_DIR/.env"
+  ENV_ADDED=0
+  append_env_if_missing() {
+    # $1 = key name, $2 = value, $3 = optional comment line
+    local _key="$1" _val="$2" _comment="${3:-}"
+    [ -n "$_val" ] || return 0
+    if grep -qE "^${_key}=" "$ENV_FILE"; then
+      return 0
+    fi
+    {
+      echo ""
+      if [ -n "$_comment" ]; then echo "$_comment"; fi
+      echo "${_key}=${_val}"
+    } >> "$ENV_FILE"
+    ENV_ADDED=$((ENV_ADDED + 1))
+    ok "Added ${_key} to existing .env"
+  }
+  if [ -n "$API_KEY_VAR" ]; then
+    append_env_if_missing "$API_KEY_VAR" "$API_KEY_VAL"
+  fi
+  append_env_if_missing "OLLAMA_HOST" "$OLLAMA_HOST_VAL" "# Ollama (Docker-compatible address)"
+  append_env_if_missing "CLAUDE_CODE_OAUTH_TOKEN" "${CLAUDE_SETUP_TOKEN:-}" "# Claude Code setup token (long-lived, from 'claude setup-token')"
+  if [ "$ENV_ADDED" -eq 0 ]; then
+    warn "Existing .env found — no new keys to add, keeping it as is"
+  else
+    ok "Updated existing .env with ${ENV_ADDED} new key(s) — restart the stack to apply"
+  fi
 else
   # Generate a random 48-char hex password for PostgreSQL. Using a random value
   # means each self-hosted install has a unique credential instead of the
