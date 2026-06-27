@@ -21,6 +21,7 @@ Track flight prices over time. Self-hosted. Open source. Bring your own LLM.
 [![self-hostable: yes](https://img.shields.io/badge/self--hostable-yes-3fa463)](#quick-start)
 [![BYOK: bring your own keys](https://img.shields.io/badge/BYOK-bring%20your%20own%20keys-c2772e)](#quick-start)
 [![agent: Claude Code / Codex](https://img.shields.io/badge/agent-Claude%20Code%20%2F%20Codex-4b5fc7)](#quick-start)
+[![AGENTS.md](https://img.shields.io/badge/AGENTS.md-7c3aed)](https://github.com/affromero/flight-finder/blob/main/AGENTS.md)
 [![LLM: 100% local capable](https://img.shields.io/badge/LLM-100%25%20local%20capable-3fa463)](#quick-start)
 
 <br>
