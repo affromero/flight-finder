@@ -541,7 +541,7 @@ Turn on **Community Data Sharing** in Settings (or during setup) to contribute. 
 <details>
 <summary>Agent & CLI Integration</summary>
 
-Your local instance exposes a REST API. See [`AGENTS.md`](AGENTS.md) for the full reference.
+Your local instance exposes a REST API. See [`API.md`](API.md) for the full reference.
 
 ```bash
 # Parse a natural language query
