@@ -13,7 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.105.0",
+    "@anthropic-ai/sdk": "^0.106.0",
     "@google/generative-ai": "^0.24.1",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
@@ -22,13 +22,13 @@
     "ioredis": "^5.11.1",
     "next": "^16.2.9",
     "nodemailer": "^9.0.1",
-    "openai": "^6.44.0",
-    "playwright": "^1.61.0",
+    "openai": "^6.45.0",
+    "playwright": "^1.61.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
     "react-dom": "^19.2.7",
     "react-plotly.js": "^4.0.0",
-    "recharts": "^3.8.0",
+    "recharts": "^3.9.0",
     "ua-parser-js": "^2.0.10",
     "undici": "^8.5.0"
   },
@@ -40,7 +40,7 @@
     "@testing-library/user-event": "^14.6.1",
     "@types/better-sqlite3": "^7.6.13",
     "@types/geoip-lite": "^1.4.4",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.0.1",
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
     "@types/react": "^19.2.17",
@@ -51,7 +51,7 @@
     "jsdom": "^29.0.2",
     "prisma": "^7.8.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.1",
+    "typescript-eslint": "^8.62.0",
     "vitest": "^4.1.8"
   }
 }

@@ -28,13 +28,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^25.9.3",
+    "@types/node": "^26.0.1",
     "@types/react": "^19.2.17",
     "eslint": "^10.5.0",
     "tsup": "^8.0.0",
     "tsx": "^4.22.4",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.61.1",
+    "typescript-eslint": "^8.62.0",
     "vitest": "^4.1.8"
   }
 }
