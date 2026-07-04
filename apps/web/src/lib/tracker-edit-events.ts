@@ -1,0 +1,1 @@
+export const MAX_TRACKER_EDIT_EVENTS = 25;

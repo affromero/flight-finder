@@ -20,11 +20,10 @@ import { TrackerFilters } from '@/components/TrackerFilters';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { canManageQueryWithoutToken } from '@/lib/query-auth';
 import { filterSnapshotsByTrackerFilters } from '@/lib/snapshot-filters';
+import { MAX_TRACKER_EDIT_EVENTS } from '@/lib/tracker-edit-events';
 import { groupDateRange } from './group-date-range';
 import { safeJsonLd } from './safe-json-ld';
 import styles from './page.module.css';
-
-const MAX_EDIT_EVENTS = 25;
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -265,7 +264,7 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
   const editEventsDesc = await prisma.queryEditEvent.findMany({
     where: { queryId: id },
     orderBy: { editedAt: 'desc' },
-    take: MAX_EDIT_EVENTS,
+    take: MAX_TRACKER_EDIT_EVENTS,
     select: {
       id: true,
       editedAt: true,

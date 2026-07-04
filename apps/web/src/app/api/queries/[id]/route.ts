@@ -129,18 +129,13 @@ function summarizeChanges(changes: TrackerEditChange[]): string {
   return `${changes.length} tracker filters changed`;
 }
 
-function editValueToJson(value: TrackerEditValue): Prisma.InputJsonValue | null {
-  if (Array.isArray(value)) return value;
-  return value;
-}
-
 function changesToJson(changes: TrackerEditChange[]): Prisma.InputJsonObject {
   return {
     changes: changes.map((change): Prisma.InputJsonObject => ({
       field: change.field,
       label: change.label,
-      before: editValueToJson(change.before),
-      after: editValueToJson(change.after),
+      before: change.before,
+      after: change.after,
       beforeLabel: change.beforeLabel,
       afterLabel: change.afterLabel,
     })),

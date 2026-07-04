@@ -18,6 +18,8 @@ function airlineMatches(snapshotAirline: string, preferredAirline: string): bool
   const snapshot = snapshotAirline.trim().toLowerCase();
   const preferred = preferredAirline.trim().toLowerCase();
   if (!snapshot || !preferred) return false;
+  // Snapshot airlines are provider display names, not normalized airline IDs,
+  // so retroactive airline filtering is necessarily name-based.
   if (preferred.length < 4) {
     return (
       snapshot === preferred ||
@@ -46,6 +48,8 @@ export function filterSnapshotsByTrackerFilters<T extends FilterableSnapshot>(
 
     if (filters.maxDurationHours !== null && filters.maxDurationHours !== undefined) {
       const minutes = parseDurationToMinutes(snapshot.duration);
+      // Keep unknown durations: older/provider snapshots can lack a parseable
+      // duration, and hiding them would drop otherwise valid historical fares.
       if (minutes !== null && minutes > filters.maxDurationHours * 60) return false;
     }
 

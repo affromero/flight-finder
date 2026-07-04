@@ -498,6 +498,23 @@ describe('PATCH /api/queries/[id]', () => {
       expect(mockQueryUpdateMany).not.toHaveBeenCalled();
       expect(mockQueryEditEventCreateMany).not.toHaveBeenCalled();
     });
+
+    it('rejects time and cabin edits because snapshots cannot enforce them', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue(editableQuery);
+
+      const res = await PATCH(...makePatchRequest('q1', {
+        timePreference: 'morning',
+        cabinClass: 'business',
+      }));
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('No updatable fields');
+      expect(mockTransaction).not.toHaveBeenCalled();
+      expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+      expect(mockQueryEditEventCreateMany).not.toHaveBeenCalled();
+    });
   });
 
   describe('label', () => {

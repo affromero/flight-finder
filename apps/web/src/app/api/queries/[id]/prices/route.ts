@@ -3,8 +3,7 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
 import { filterSnapshotsByTrackerFilters } from '@/lib/snapshot-filters';
-
-const MAX_EDIT_EVENTS = 25;
+import { MAX_TRACKER_EDIT_EVENTS } from '@/lib/tracker-edit-events';
 
 export async function GET(
   _request: NextRequest,
@@ -98,7 +97,7 @@ export async function GET(
     prisma.queryEditEvent.findMany({
       where: { queryId: id },
       orderBy: { editedAt: 'desc' },
-      take: MAX_EDIT_EVENTS,
+      take: MAX_TRACKER_EDIT_EVENTS,
       select: { id: true, editedAt: true, summary: true, changes: true },
     }),
   ]);
