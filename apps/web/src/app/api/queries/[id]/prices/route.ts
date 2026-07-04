@@ -2,6 +2,9 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
+import { filterSnapshotsByTrackerFilters } from '@/lib/snapshot-filters';
+
+const MAX_EDIT_EVENTS = 25;
 
 export async function GET(
   _request: NextRequest,
@@ -22,6 +25,7 @@ export async function GET(
       flexibility: true,
       maxPrice: true,
       maxStops: true,
+      maxDurationHours: true,
       preferredAirlines: true,
       timePreference: true,
       cabinClass: true,
@@ -82,13 +86,23 @@ export async function GET(
     120 // 2 min cache for public page
   );
 
-  const snapshots = snapshotsDesc.slice().reverse();
+  const allSnapshots = snapshotsDesc.slice().reverse();
+  const snapshots = filterSnapshotsByTrackerFilters(allSnapshots, query);
 
-  const lastRun = await prisma.fetchRun.findFirst({
-    where: { queryId: id },
-    orderBy: { startedAt: 'desc' },
-    select: { startedAt: true, status: true },
-  });
+  const [lastRun, editEventsDesc] = await Promise.all([
+    prisma.fetchRun.findFirst({
+      where: { queryId: id },
+      orderBy: { startedAt: 'desc' },
+      select: { startedAt: true, status: true },
+    }),
+    prisma.queryEditEvent.findMany({
+      where: { queryId: id },
+      orderBy: { editedAt: 'desc' },
+      take: MAX_EDIT_EVENTS,
+      select: { id: true, editedAt: true, summary: true, changes: true },
+    }),
+  ]);
+  const editEvents = editEventsDesc.slice().reverse();
 
   const effectiveInterval = query.scrapeInterval ?? globalConfig?.scrapeInterval ?? 3;
 
@@ -98,6 +112,8 @@ export async function GET(
     lastChecked: lastRun?.startedAt ?? null,
     lastStatus: lastRun?.status ?? null,
     snapshotCount: snapshots.length,
+    totalSnapshotCount: allSnapshots.length,
+    editEvents,
     effectiveInterval,
   });
 }

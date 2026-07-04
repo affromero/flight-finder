@@ -16,11 +16,15 @@ import { Footer } from '@/components/Footer';
 import { StackedSortControls, type StackedItem } from '@/components/StackedSortControls';
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
 import { ForceScrapeButton } from '@/components/ForceScrapeButton';
+import { TrackerFilters } from '@/components/TrackerFilters';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { canManageQueryWithoutToken } from '@/lib/query-auth';
+import { filterSnapshotsByTrackerFilters } from '@/lib/snapshot-filters';
 import { groupDateRange } from './group-date-range';
 import { safeJsonLd } from './safe-json-ld';
 import styles from './page.module.css';
+
+const MAX_EDIT_EVENTS = 25;
 
 interface Props {
   params: Promise<{ id: string }>;
@@ -69,6 +73,26 @@ function daysUntil(d: Date): number {
   return Math.max(0, Math.ceil((d.getTime() - Date.now()) / (1000 * 60 * 60 * 24)));
 }
 
+interface ChartSnapshot {
+  id: string;
+  travelDate: string;
+  price: number;
+  currency: string;
+  airline: string;
+  bookingUrl: string | null;
+  stops: number;
+  duration: string | null;
+  flightId: string | null;
+  flightNumber: string | null;
+  departureTime: string | null;
+  arrivalTime: string | null;
+  seatsLeft: number | null;
+  status: string;
+  airlineDirectPrice: number | null;
+  vpnCountry: string | null;
+  scrapedAt: string;
+}
+
 interface QueryWithSnapshots {
   query: {
     id: string;
@@ -82,6 +106,12 @@ interface QueryWithSnapshots {
     flexibility: number;
     tripType: string;
     active: boolean;
+    maxPrice: number | null;
+    maxStops: number | null;
+    maxDurationHours: number | null;
+    preferredAirlines: string[];
+    timePreference: string;
+    cabinClass: string;
     expiresAt: Date;
     createdAt: Date;
     firstViewedAt: Date | null;
@@ -93,24 +123,12 @@ interface QueryWithSnapshots {
     label: string | null;
     userId: string | null;
   };
-  snapshots: Array<{
+  snapshots: ChartSnapshot[];
+  allSnapshots: ChartSnapshot[];
+  editEvents: Array<{
     id: string;
-    travelDate: string;
-    price: number;
-    currency: string;
-    airline: string;
-    bookingUrl: string | null;
-    stops: number;
-    duration: string | null;
-    flightId: string | null;
-    flightNumber: string | null;
-    departureTime: string | null;
-    arrivalTime: string | null;
-    seatsLeft: number | null;
-    status: string;
-    airlineDirectPrice: number | null;
-    vpnCountry: string | null;
-    scrapedAt: string;
+    editedAt: string;
+    summary: string;
   }>;
   lastRun: { startedAt: Date; status: string; error: string | null } | null;
   globalScrapeInterval: number;
@@ -138,8 +156,13 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean) {
       )}
 
       <section className={styles.chart}>
-        <PriceChart snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
-        {qData.query.vpnCountries.length > 0 && !qData.snapshots.some((s) => s.vpnCountry) && (
+        <PriceChart
+          snapshots={qData.snapshots}
+          allSnapshots={qData.allSnapshots}
+          editEvents={qData.editEvents}
+          currency={qData.query.currency ?? 'USD'}
+        />
+        {qData.query.vpnCountries.length > 0 && !qData.allSnapshots.some((s) => s.vpnCountry) && (
           <p className={styles.vpnPending}>
             VPN comparison in progress -- prices from {qData.query.vpnCountries.map((c) =>
               String.fromCodePoint(...c.split('').map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) + ' ' + c
@@ -239,12 +262,31 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
     select: { scrapeInterval: true },
   });
 
+  const editEventsDesc = await prisma.queryEditEvent.findMany({
+    where: { queryId: id },
+    orderBy: { editedAt: 'desc' },
+    take: MAX_EDIT_EVENTS,
+    select: {
+      id: true,
+      editedAt: true,
+      summary: true,
+    },
+  });
+
+  const allSnapshots = snapshots.map((s) => ({
+    ...s,
+    travelDate: s.travelDate.toISOString(),
+    scrapedAt: s.scrapedAt.toISOString(),
+  }));
+
   return {
     query,
-    snapshots: snapshots.map((s) => ({
-      ...s,
-      travelDate: s.travelDate.toISOString(),
-      scrapedAt: s.scrapedAt.toISOString(),
+    snapshots: filterSnapshotsByTrackerFilters(allSnapshots, query),
+    allSnapshots,
+    editEvents: editEventsDesc.slice().reverse().map((event) => ({
+      id: event.id,
+      editedAt: event.editedAt.toISOString(),
+      summary: event.summary,
     })),
     lastRun,
     globalScrapeInterval: globalConfig?.scrapeInterval ?? 3,
@@ -445,6 +487,16 @@ export default async function ChartPage({ params }: Props) {
                 <ForceScrapeButton queryId={id} ariaLabel="Refresh prices now" />
               )}
               <ScrapeInterval queryId={id} currentInterval={primary.query.scrapeInterval} canEdit={canEdit} />
+              <TrackerFilters
+                queryId={id}
+                filters={{
+                  maxPrice: primary.query.maxPrice,
+                  maxStops: primary.query.maxStops,
+                  maxDurationHours: primary.query.maxDurationHours,
+                  preferredAirlines: primary.query.preferredAirlines,
+                }}
+                canEdit={canEdit}
+              />
               <AggregatorPicker
                 queryId={id}
                 currentAggregators={primary.query.preferredAggregators}
