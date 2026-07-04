@@ -7,9 +7,31 @@ const mockQueryDeleteMany = vi.fn();
 const mockQueryFindMany = vi.fn();
 const mockQueryUpdateMany = vi.fn();
 const mockQueryUpdate = vi.fn();
+const mockQueryEditEventCreateMany = vi.fn();
+
+interface MockTransactionClient {
+  query: {
+    updateMany: (...args: unknown[]) => unknown;
+    update: (...args: unknown[]) => unknown;
+  };
+  queryEditEvent: {
+    createMany: (...args: unknown[]) => unknown;
+  };
+}
+
+const mockTransaction = vi.fn((callback: (tx: MockTransactionClient) => unknown) => callback({
+  query: {
+    updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args),
+    update: (...args: unknown[]) => mockQueryUpdate(...args),
+  },
+  queryEditEvent: {
+    createMany: (...args: unknown[]) => mockQueryEditEventCreateMany(...args),
+  },
+}));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    $transaction: (callback: (tx: MockTransactionClient) => unknown) => mockTransaction(callback),
     query: {
       findUnique: (...args: unknown[]) => mockQueryFindUnique(...args),
       delete: (...args: unknown[]) => mockQueryDelete(...args),
@@ -19,6 +41,9 @@ vi.mock('@/lib/prisma', () => ({
       update: (...args: unknown[]) => mockQueryUpdate(...args),
     },
     extractionConfig: { findUnique: async () => null },
+    queryEditEvent: {
+      createMany: (...args: unknown[]) => mockQueryEditEventCreateMany(...args),
+    },
   },
 }));
 
@@ -281,6 +306,7 @@ describe('PATCH /api/queries/[id]', () => {
     vi.clearAllMocks();
     mockQueryFindMany.mockResolvedValue([]);
     mockQueryUpdateMany.mockResolvedValue({ count: 1 });
+    mockQueryEditEventCreateMany.mockResolvedValue({ count: 0 });
     mockIsMultiUserEnabled.mockResolvedValue(false);
     mockGetCurrentUser.mockResolvedValue(null);
     delete process.env.SELF_HOSTED;
@@ -385,6 +411,109 @@ describe('PATCH /api/queries/[id]', () => {
       const res = await PATCH(...makePatchRequest('q1', { active: false }));
       expect(res.status).toBe(401);
       expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('tracker filters', () => {
+    const editableQuery = {
+      id: 'q1',
+      deleteToken: null,
+      groupId: 'g1',
+      userId: null,
+      maxPrice: null,
+      maxStops: 1,
+      maxDurationHours: null,
+      preferredAirlines: [],
+      timePreference: 'any',
+      cabinClass: 'economy',
+      preferredAggregators: [],
+    };
+
+    it('updates tracker filters across grouped queries and records edit events', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      mockQueryFindUnique.mockResolvedValue(editableQuery);
+      mockQueryFindMany.mockResolvedValue([{
+        ...editableQuery,
+        id: 'q2',
+        maxStops: null,
+      }]);
+
+      const res = await PATCH(...makePatchRequest('q1', {
+        maxPrice: 500,
+        maxStops: 0,
+        maxDurationHours: 12,
+        preferredAirlines: [' Delta ', ''],
+      }));
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.data).toMatchObject({
+        maxPrice: 500,
+        maxStops: 0,
+        maxDurationHours: 12,
+        preferredAirlines: ['Delta'],
+        updated: 2,
+      });
+      expect(mockQueryUpdateMany).toHaveBeenCalledWith({
+        where: { id: { in: ['q1', 'q2'] } },
+        data: {
+          maxPrice: 500,
+          maxStops: 0,
+          maxDurationHours: 12,
+          preferredAirlines: ['Delta'],
+        },
+      });
+      expect(mockTransaction).toHaveBeenCalledTimes(1);
+      expect(mockQueryEditEventCreateMany).toHaveBeenCalledWith({
+        data: expect.arrayContaining([
+          expect.objectContaining({
+            queryId: 'q1',
+            userId: 'user_1',
+            summary: '4 tracker filters changed',
+            changes: {
+              changes: expect.arrayContaining([
+                expect.objectContaining({
+                  field: 'maxStops',
+                  beforeLabel: 'Max 1 stop',
+                  afterLabel: 'Nonstop only',
+                }),
+              ]),
+            },
+          }),
+          expect.objectContaining({ queryId: 'q2' }),
+        ]),
+      });
+    });
+
+    it('rejects invalid maxStops before updating', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue(editableQuery);
+
+      const res = await PATCH(...makePatchRequest('q1', { maxStops: 11 }));
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('maxStops');
+      expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+      expect(mockQueryEditEventCreateMany).not.toHaveBeenCalled();
+    });
+
+    it('rejects time and cabin edits because snapshots cannot enforce them', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockQueryFindUnique.mockResolvedValue(editableQuery);
+
+      const res = await PATCH(...makePatchRequest('q1', {
+        timePreference: 'morning',
+        cabinClass: 'business',
+      }));
+      const data = await res.json();
+
+      expect(res.status).toBe(400);
+      expect(data.error).toContain('No updatable fields');
+      expect(mockTransaction).not.toHaveBeenCalled();
+      expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+      expect(mockQueryEditEventCreateMany).not.toHaveBeenCalled();
     });
   });
 

@@ -5,6 +5,7 @@ const mockQueryFindUnique = vi.fn();
 const mockSnapshotFindMany = vi.fn();
 const mockFetchRunFindFirst = vi.fn();
 const mockExtractionConfigFindFirst = vi.fn().mockResolvedValue({ scrapeInterval: 3 });
+const mockQueryEditEventFindMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
@@ -12,6 +13,7 @@ vi.mock('@/lib/prisma', () => ({
     priceSnapshot: { findMany: (...args: unknown[]) => mockSnapshotFindMany(...args) },
     fetchRun: { findFirst: (...args: unknown[]) => mockFetchRunFindFirst(...args) },
     extractionConfig: { findFirst: (...args: unknown[]) => mockExtractionConfigFindFirst(...args) },
+    queryEditEvent: { findMany: (...args: unknown[]) => mockQueryEditEventFindMany(...args) },
   },
 }));
 
@@ -39,6 +41,7 @@ describe('GET /api/queries/[id]/prices', () => {
     mockExtractionConfigFindFirst.mockResolvedValue({ scrapeInterval: 3 });
     mockSnapshotFindMany.mockResolvedValue([]);
     mockFetchRunFindFirst.mockResolvedValue(null);
+    mockQueryEditEventFindMany.mockResolvedValue([]);
   });
 
   it('returns 404 for nonexistent query', async () => {
@@ -139,5 +142,49 @@ describe('GET /api/queries/[id]/prices', () => {
     expect(body.data.snapshots[0].id).toBe('s1');
     expect(body.data.snapshots[1].id).toBe('s2');
     expect(body.data.snapshots[2].id).toBe('s3');
+  });
+
+  it('filters snapshots by current tracker filters and reports total count', async () => {
+    mockQueryFindUnique.mockResolvedValue({
+      id: 'test-id',
+      expiresAt: futureDate(),
+      maxStops: 0,
+      maxPrice: null,
+      maxDurationHours: null,
+      preferredAirlines: [],
+    });
+    mockSnapshotFindMany.mockResolvedValue([
+      { id: 's2', price: 200, stops: 1, duration: null, airline: 'United', scrapedAt: '2026-02-01T00:00:00.000Z' },
+      { id: 's1', price: 300, stops: 0, duration: null, airline: 'Delta', scrapedAt: '2026-01-01T00:00:00.000Z' },
+    ]);
+
+    const res = await callGet();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(body.data.snapshots).toHaveLength(1);
+    expect(body.data.snapshots[0].id).toBe('s1');
+    expect(body.data.snapshotCount).toBe(1);
+    expect(body.data.totalSnapshotCount).toBe(2);
+  });
+
+  it('includes tracker edit events for chart annotations', async () => {
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockQueryEditEventFindMany.mockResolvedValue([
+      { id: 'e2', editedAt: new Date('2026-03-01T00:00:00Z'), summary: 'Price cap changed', changes: { changes: [] } },
+      { id: 'e1', editedAt: new Date('2026-02-01T00:00:00Z'), summary: 'Nonstop only enabled', changes: { changes: [] } },
+    ]);
+
+    const res = await callGet();
+    const body = await res.json();
+
+    expect(res.status).toBe(200);
+    expect(mockQueryEditEventFindMany).toHaveBeenCalledWith(expect.objectContaining({
+      orderBy: { editedAt: 'desc' },
+      take: 25,
+    }));
+    expect(body.data.editEvents).toHaveLength(2);
+    expect(body.data.editEvents[0].summary).toBe('Nonstop only enabled');
+    expect(body.data.editEvents[1].summary).toBe('Price cap changed');
   });
 });

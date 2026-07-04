@@ -44,12 +44,27 @@ model Query {
 
   snapshots PriceSnapshot[]
   fetchRuns FetchRun[]
+  editEvents QueryEditEvent[]
   user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([active])
   @@index([expiresAt])
   @@index([isSeed])
   @@index([groupId])
+  @@index([userId])
+}
+
+model QueryEditEvent {
+  id        String   @id @default(cuid())
+  queryId   String
+  editedAt  DateTime @default(now())
+  userId    String?
+  summary   String
+  changes   Json
+
+  query Query @relation(fields: [queryId], references: [id], onDelete: Cascade)
+
+  @@index([queryId, editedAt])
   @@index([userId])
 }
 
