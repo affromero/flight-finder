@@ -428,6 +428,19 @@ describe('validatePreviewPayload combo cap (issue #89, configurable)', () => {
   });
 });
 
+describe('validatePreviewPayload maxPrice', () => {
+  it('rejects NaN, negative, and non-finite maxPrice', () => {
+    for (const bad of [NaN, -1, Infinity, Number.MAX_SAFE_INTEGER + 2]) {
+      expect(() => validatePreviewPayload(makePayload({ maxPrice: bad }))).toThrow(/maxPrice/);
+    }
+  });
+
+  it('accepts null and high denomination currency values', () => {
+    expect(() => validatePreviewPayload(makePayload({ maxPrice: null }))).not.toThrow();
+    expect(() => validatePreviewPayload(makePayload({ maxPrice: 2_550_760 }))).not.toThrow();
+  });
+});
+
 describe('preview admission gate (audit M5 TOCTOU, finding F)', () => {
   /**
    * Backs the gate with a per-key integer counter that mirrors how the atomic

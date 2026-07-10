@@ -5,9 +5,9 @@ import { prisma } from '@/lib/prisma';
 import { authorizeMutation } from '@/lib/query-auth';
 import { getCurrentUser } from '@/lib/user-auth';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
+import { isValidPriceAmount } from '@/lib/limits';
 
 const ALLOWED_INTERVALS = [1, 3, 6, 12, 24];
-const MAX_PRICE_VALUE = 1_000_000;
 const MAX_STOPS_VALUE = 10;
 const MAX_AIRLINE_LENGTH = 100;
 
@@ -56,10 +56,6 @@ const EDIT_FIELD_LABELS: Record<TrackerEditField, string> = {
 
 function hasOwn(body: object, field: string): boolean {
   return Object.prototype.hasOwnProperty.call(body, field);
-}
-
-function isFiniteNonNegative(n: number): boolean {
-  return Number.isFinite(n) && n >= 0;
 }
 
 function stringArraysEqual(a: readonly string[], b: readonly string[]): boolean {
@@ -211,8 +207,8 @@ export async function PATCH(
       cascadeData.maxPrice = null;
     } else {
       const maxPrice = Number(body.maxPrice);
-      if (!isFiniteNonNegative(maxPrice) || maxPrice > MAX_PRICE_VALUE) {
-        return apiError(`maxPrice must be null or a finite number between 0 and ${MAX_PRICE_VALUE}`, 400);
+      if (!isValidPriceAmount(maxPrice)) {
+        return apiError('maxPrice must be null or a finite non-negative number', 400);
       }
       cascadeData.maxPrice = maxPrice;
     }

@@ -1,4 +1,5 @@
 import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionUsage } from './ai-registry';
+import { MAX_PRICE_VALUE } from '@/lib/limits';
 import { prisma } from '@/lib/prisma';
 import { parseDurationToMinutes } from './duration';
 import type { NavigationSource } from './navigate';
@@ -248,7 +249,7 @@ export function extractJsonArray(
  * on every search. Issue #139.
  */
 export function coercePrice(value: unknown): number {
-  if (typeof value === 'number') return Number.isFinite(value) && value > 0 ? value : 0;
+  if (typeof value === 'number') return Number.isFinite(value) && value > 0 && value <= MAX_PRICE_VALUE ? value : 0;
   if (typeof value !== 'string') return 0;
   let s = value.replace(/[^0-9.,]/g, '');
   if (!s) return 0;
@@ -271,7 +272,7 @@ export function coercePrice(value: unknown): number {
     if (dotCount > 1 || s.length - lastDot - 1 === 3) s = s.replace(/\./g, '');
   }
   const n = parseFloat(s);
-  return Number.isFinite(n) && n > 0 ? n : 0;
+  return Number.isFinite(n) && n > 0 && n <= MAX_PRICE_VALUE ? n : 0;
 }
 
 /** Coerce `stops` into a non-negative integer. Accepts numbers, "1 stop",

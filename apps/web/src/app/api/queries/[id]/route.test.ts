@@ -499,6 +499,19 @@ describe('PATCH /api/queries/[id]', () => {
       expect(mockQueryEditEventCreateMany).not.toHaveBeenCalled();
     });
 
+    it('accepts a high denomination maxPrice above the old 1M cap', async () => {
+      process.env.SELF_HOSTED = 'true';
+      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      mockQueryFindUnique.mockResolvedValue(editableQuery);
+      mockQueryFindMany.mockResolvedValue([]);
+
+      const res = await PATCH(...makePatchRequest('q1', { maxPrice: 2_550_760 }));
+      const data = await res.json();
+
+      expect(res.status).toBe(200);
+      expect(data.data).toMatchObject({ maxPrice: 2_550_760 });
+    });
+
     it('rejects time and cabin edits because snapshots cannot enforce them', async () => {
       process.env.SELF_HOSTED = 'true';
       mockQueryFindUnique.mockResolvedValue(editableQuery);
