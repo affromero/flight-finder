@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import type { Airport } from '@/lib/scraper/parse-query';
-import { currencySymbol } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import styles from './ConfirmationCard.module.css';
 
 export interface ParsedQuery {
@@ -214,7 +214,7 @@ export function ConfirmationCard({
       {hasFilters(parsed) && (
         <div className={styles.filters}>
           {parsed.maxPrice && (
-            <span className={styles.tag}>Under {currencySymbol(parsed.currency ?? 'USD')}{parsed.maxPrice}</span>
+            <span className={styles.tag}>Under {formatCurrency(parsed.maxPrice, parsed.currency ?? 'USD')}</span>
           )}
           {parsed.maxStops !== null && (
             <span className={styles.tag}>

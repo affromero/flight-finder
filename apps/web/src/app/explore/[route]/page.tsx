@@ -4,6 +4,7 @@ import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
+import { formatCurrency } from '@/lib/currency';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Footer } from '@/components/Footer';
 import shell from '../page.module.css';
@@ -54,6 +55,11 @@ export default async function ExploreRoutePage({ params }: Props) {
   const airlines = Array.from(new Set(snapshots.map((s) => s.airline))).sort();
   const cabins = Array.from(new Set(snapshots.map((s) => s.cabinClass))).sort();
   const currencies = Array.from(new Set(snapshots.map((s) => s.currency))).sort();
+  // Mixed-currency aggregates cannot carry one code; the data window line
+  // below already discloses the mix, so fall back to a bare number there.
+  const statCurrency = currencies.length === 1 ? currencies[0] : null;
+  const stat = (v: number) =>
+    statCurrency ? formatCurrency(v, statCurrency) : v.toLocaleString('en-US');
   const recent = snapshots.slice(0, 25);
 
   // snapshots.length > 0 was guarded above with notFound(), so these are defined.
@@ -83,15 +89,15 @@ export default async function ExploreRoutePage({ params }: Props) {
       <div className={styles.statsGrid}>
         <div className={styles.stat}>
           <span className={styles.statLabel}>cheapest</span>
-          <span className={styles.statValue}>${min}</span>
+          <span className={styles.statValue}>{stat(min)}</span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statLabel}>average</span>
-          <span className={styles.statValue}>${avg}</span>
+          <span className={styles.statValue}>{stat(avg)}</span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statLabel}>highest</span>
-          <span className={styles.statValue}>${max}</span>
+          <span className={styles.statValue}>{stat(max)}</span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statLabel}>data points</span>
@@ -144,7 +150,7 @@ export default async function ExploreRoutePage({ params }: Props) {
                   <td>{s.airline}</td>
                   <td>{s.stops === 0 ? 'nonstop' : String(s.stops)}</td>
                   <td>{s.cabinClass}</td>
-                  <td className={styles.priceCol}>${Math.round(s.price)}</td>
+                  <td className={styles.priceCol}>{formatCurrency(s.price, s.currency)}</td>
                 </tr>
               ))}
             </tbody>

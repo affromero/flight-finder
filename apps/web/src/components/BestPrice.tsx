@@ -1,4 +1,4 @@
-import { currencySymbol } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import styles from './BestPrice.module.css';
 
@@ -33,7 +33,7 @@ export function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
       </div>
       <div className={styles.content}>
         <span className={styles.price}>
-          {currencySymbol(best.currency)}{best.price.toLocaleString('en-US', { minimumFractionDigits: 0 })}
+          {formatCurrency(best.price, best.currency)}
         </span>
         <div className={styles.details}>
           <span className={styles.airline}>{best.airline}</span>

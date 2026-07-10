@@ -1,5 +1,57 @@
 import { describe, it, expect } from 'vitest';
-import { currencyForLocale, detectLocaleCurrency, currencySymbol } from './currency';
+import { formatCurrency, currencyForLocale, detectLocaleCurrency } from './currency';
+
+const norm = (s: string) => s.replace(/\s/g, ' ');
+
+describe('formatCurrency', () => {
+  it('shows the currency code and grouped amount with no decimals for an integer COP', () => {
+    expect(norm(formatCurrency(228290, 'COP'))).toBe('COP 228.290');
+  });
+
+  it('formats each currency in its own locale (COP dot-grouping, USD comma-grouping)', () => {
+    // COP cents depend on the ICU version (CLDR says 0 fraction digits, older
+    // data says 2), so accept both rather than pin the runtime's ICU.
+    expect(norm(formatCurrency(1350.25, 'COP'))).toMatch(/^COP 1\.350(,25)?$/);
+    expect(norm(formatCurrency(1234.5, 'USD'))).toBe('USD 1,234.50');
+  });
+
+  it('strips decimals for an integer USD amount', () => {
+    expect(norm(formatCurrency(250, 'USD'))).toBe('USD 250');
+  });
+
+  it('keeps two decimals for a non-integer USD amount', () => {
+    expect(norm(formatCurrency(1234.5, 'USD'))).toBe('USD 1,234.50');
+  });
+
+  it('returns empty string for null, undefined, NaN and Infinity', () => {
+    expect(formatCurrency(null, 'USD')).toBe('');
+    expect(formatCurrency(undefined, 'USD')).toBe('');
+    expect(formatCurrency(NaN, 'USD')).toBe('');
+    expect(formatCurrency(Infinity, 'USD')).toBe('');
+    expect(formatCurrency(-Infinity, 'USD')).toBe('');
+  });
+
+  it('upper-cases a lowercase currency code', () => {
+    expect(norm(formatCurrency(100, 'usd'))).toBe('USD 100');
+  });
+
+  it('defaults a missing currency to USD', () => {
+    expect(norm(formatCurrency(100, null))).toBe('USD 100');
+    expect(norm(formatCurrency(100, undefined))).toBe('USD 100');
+  });
+
+  it('falls back to amount plus code consistently for an invalid currency without throwing', () => {
+    expect(() => formatCurrency(10, 'ZZ')).not.toThrow();
+    expect(formatCurrency(10, 'ZZ')).toBe('10 ZZ');
+    expect(formatCurrency(10, 'ZZ')).toBe('10 ZZ');
+  });
+
+  it('formats every currency in the locale map without throwing', () => {
+    for (const code of ['RON', 'HUF', 'EGP', 'BGN', 'VND', 'CLP', 'INR']) {
+      expect(norm(formatCurrency(1234567, code))).toContain(code);
+    }
+  });
+});
 
 describe('currencyForLocale', () => {
   it('resolves country locales to their ISO 4217 currency', () => {
@@ -68,21 +120,5 @@ describe('currencyForLocale', () => {
 describe('detectLocaleCurrency', () => {
   it('returns a valid ISO 4217 code', () => {
     expect(detectLocaleCurrency()).toMatch(/^[A-Z]{3}$/);
-  });
-});
-
-describe('currencySymbol', () => {
-  it('returns the symbol for known currencies', () => {
-    expect(currencySymbol('USD')).toBe('$');
-    expect(currencySymbol('EUR')).toBe('€');
-    expect(currencySymbol('COP')).toBe('COL$');
-    expect(currencySymbol('ARS')).toBe('AR$');
-    expect(currencySymbol('PEN')).toBe('S/');
-    expect(currencySymbol('VND')).toBe('₫');
-  });
-
-  it('falls back to the code itself for currencies without a symbol', () => {
-    expect(currencySymbol('SAR')).toBe('SAR');
-    expect(currencySymbol('BGN')).toBe('BGN');
   });
 });

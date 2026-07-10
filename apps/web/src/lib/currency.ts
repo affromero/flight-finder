@@ -1,58 +1,44 @@
-const SYMBOLS: Record<string, string> = {
-  USD: '$',
-  EUR: '€',
-  GBP: '£',
-  JPY: '¥',
-  CNY: '¥',
-  KRW: '₩',
-  INR: '₹',
-  CHF: 'CHF',
-  CAD: 'CA$',
-  AUD: 'A$',
-  NZD: 'NZ$',
-  HKD: 'HK$',
-  SGD: 'S$',
-  SEK: 'kr',
-  NOK: 'kr',
-  DKK: 'kr',
-  PLN: 'zł',
-  BRL: 'R$',
-  MXN: 'MX$',
-  THB: '฿',
-  TRY: '₺',
-  ZAR: 'R',
-  ILS: '₪',
-  COP: 'COL$',
-  ARS: 'AR$',
-  CLP: 'CL$',
-  PEN: 'S/',
-  UYU: 'UY$',
-  PYG: '₲',
-  BOB: 'Bs',
-  VES: 'Bs.',
-  CRC: '₡',
-  GTQ: 'Q',
-  HNL: 'L',
-  NIO: 'C$',
-  DOP: 'RD$',
-  PAB: 'B/.',
-  CUP: 'CU$',
-  TWD: 'NT$',
-  VND: '₫',
-  IDR: 'Rp',
-  MYR: 'RM',
-  PHP: '₱',
-  RUB: '₽',
-  UAH: '₴',
-  CZK: 'Kč',
-  RON: 'lei',
-  HUF: 'Ft',
-  NGN: '₦',
-  EGP: 'E£',
+const CURRENCY_LOCALE: Record<string, string> = {
+  USD: 'en-US', EUR: 'de-DE', GBP: 'en-GB', JPY: 'ja-JP', CNY: 'zh-CN',
+  CHF: 'de-CH', CAD: 'en-CA', AUD: 'en-AU', NZD: 'en-NZ',
+  SEK: 'sv-SE', NOK: 'nb-NO', DKK: 'da-DK', PLN: 'pl-PL', RUB: 'ru-RU',
+  TRY: 'tr-TR', CZK: 'cs-CZ', UAH: 'uk-UA', RON: 'ro-RO', HUF: 'hu-HU',
+  BGN: 'bg-BG',
+  COP: 'es-CO', MXN: 'es-MX', ARS: 'es-AR', CLP: 'es-CL', PEN: 'es-PE',
+  BOB: 'es-BO', PYG: 'es-PY', UYU: 'es-UY', VES: 'es-VE', CRC: 'es-CR',
+  GTQ: 'es-GT', PAB: 'es-PA', DOP: 'es-DO', NIO: 'es-NI', HNL: 'es-HN',
+  CUP: 'es-CU', BRL: 'pt-BR',
+  INR: 'hi-IN', KRW: 'ko-KR', TWD: 'zh-TW', HKD: 'zh-HK', SGD: 'en-SG',
+  THB: 'th-TH', VND: 'vi-VN', IDR: 'id-ID', MYR: 'ms-MY', PHP: 'en-PH',
+  AED: 'ar-AE', SAR: 'ar-SA', ILS: 'he-IL', ZAR: 'en-ZA', NGN: 'en-NG',
+  EGP: 'ar-EG',
 };
 
-export function currencySymbol(code: string): string {
-  return SYMBOLS[code] ?? code;
+const currencyFormatters = new Map<string, Intl.NumberFormat>();
+
+export function formatCurrency(
+  amount: number | null | undefined,
+  currency: string | null | undefined,
+): string {
+  if (amount == null || !Number.isFinite(amount)) return '';
+  const code = (currency || 'USD').toUpperCase();
+  const locale = CURRENCY_LOCALE[code] ?? 'en-US';
+  let formatter = currencyFormatters.get(code);
+  if (!formatter) {
+    try {
+      const options: Intl.NumberFormatOptions & { trailingZeroDisplay?: 'auto' | 'stripIfInteger' } = {
+        style: 'currency',
+        currency: code,
+        currencyDisplay: 'code',
+        trailingZeroDisplay: 'stripIfInteger',
+      };
+      formatter = new Intl.NumberFormat(locale, options);
+    } catch {
+      return `${new Intl.NumberFormat(locale, { style: 'decimal', maximumFractionDigits: 2 }).format(amount)} ${code}`;
+    }
+    currencyFormatters.set(code, formatter);
+  }
+  return formatter.format(amount);
 }
 
 const COUNTRY_CURRENCY: Record<string, string> = {

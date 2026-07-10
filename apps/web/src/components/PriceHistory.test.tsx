@@ -67,7 +67,7 @@ describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
     const dataRows = screen
       .getAllByRole('row')
       .map((r) => r.textContent ?? '')
-      .filter((t) => t.includes('$'));
+      .filter((t) => t.includes('USD'));
 
     expect(dataRows[0]).toMatch(/Beta/); // 200
     expect(dataRows[1]).toMatch(/Alpha/); // 300
