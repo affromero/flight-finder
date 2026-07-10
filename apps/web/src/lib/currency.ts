@@ -23,35 +23,64 @@ const SYMBOLS: Record<string, string> = {
   ZAR: 'R',
   ILS: '₪',
   COP: 'COL$',
+  ARS: 'AR$',
+  CLP: 'CL$',
+  PEN: 'S/',
+  UYU: 'UY$',
+  PYG: '₲',
+  BOB: 'Bs',
+  VES: 'Bs.',
+  CRC: '₡',
+  GTQ: 'Q',
+  HNL: 'L',
+  NIO: 'C$',
+  DOP: 'RD$',
+  PAB: 'B/.',
+  CUP: 'CU$',
+  TWD: 'NT$',
+  VND: '₫',
+  IDR: 'Rp',
+  MYR: 'RM',
+  PHP: '₱',
+  RUB: '₽',
+  UAH: '₴',
+  CZK: 'Kč',
+  RON: 'lei',
+  HUF: 'Ft',
+  NGN: '₦',
+  EGP: 'E£',
 };
 
 export function currencySymbol(code: string): string {
   return SYMBOLS[code] ?? code;
 }
 
-/** Detect a likely currency from the user's browser locale. Server-safe fallback to USD. */
-export function detectLocaleCurrency(): string {
-  if (typeof navigator === 'undefined') return 'USD';
+const COUNTRY_CURRENCY: Record<string, string> = {
+  AR: 'ARS', BO: 'BOB', BR: 'BRL', CL: 'CLP', CO: 'COP', CR: 'CRC', CU: 'CUP',
+  DO: 'DOP', EC: 'USD', GT: 'GTQ', HN: 'HNL', MX: 'MXN', NI: 'NIO', PA: 'PAB',
+  PE: 'PEN', PY: 'PYG', SV: 'USD', UY: 'UYU', VE: 'VES', PR: 'USD',
+  US: 'USD', CA: 'CAD',
+  DE: 'EUR', FR: 'EUR', ES: 'EUR', IT: 'EUR', NL: 'EUR', BE: 'EUR', AT: 'EUR',
+  PT: 'EUR', IE: 'EUR', FI: 'EUR', GR: 'EUR', GB: 'GBP', CH: 'CHF', SE: 'SEK',
+  NO: 'NOK', DK: 'DKK', PL: 'PLN', RU: 'RUB', TR: 'TRY', UA: 'UAH', CZ: 'CZK',
+  JP: 'JPY', CN: 'CNY', KR: 'KRW', IN: 'INR', TW: 'TWD', HK: 'HKD', SG: 'SGD',
+  TH: 'THB', VN: 'VND', ID: 'IDR', MY: 'MYR', PH: 'PHP', AE: 'AED', SA: 'SAR',
+  IL: 'ILS', AU: 'AUD', NZ: 'NZD', ZA: 'ZAR', NG: 'NGN', EG: 'EGP',
+  SK: 'EUR', SI: 'EUR', EE: 'EUR', LV: 'EUR', LT: 'EUR', HR: 'EUR', MT: 'EUR',
+  CY: 'EUR', LU: 'EUR', RO: 'RON', BG: 'BGN', HU: 'HUF',
+};
 
+export function currencyForLocale(locale: string): string {
   try {
-    const locale = navigator.language || 'en-US';
-    // Use Intl to resolve the locale's currency
-    const parts = new Intl.NumberFormat(locale, { style: 'currency', currency: 'USD' })
-      .resolvedOptions();
-
-    // Map common locale regions to currencies
-    const region = locale.split('-')[1]?.toUpperCase() ?? '';
-    const REGION_CURRENCY: Record<string, string> = {
-      US: 'USD', GB: 'GBP', DE: 'EUR', FR: 'EUR', ES: 'EUR', IT: 'EUR',
-      NL: 'EUR', BE: 'EUR', AT: 'EUR', PT: 'EUR', IE: 'EUR', FI: 'EUR',
-      GR: 'EUR', JP: 'JPY', CN: 'CNY', KR: 'KRW', IN: 'INR', CH: 'CHF',
-      CA: 'CAD', AU: 'AUD', NZ: 'NZD', HK: 'HKD', SG: 'SGD', SE: 'SEK',
-      NO: 'NOK', DK: 'DKK', PL: 'PLN', BR: 'BRL', MX: 'MXN', TH: 'THB',
-      TR: 'TRY', ZA: 'ZAR', IL: 'ILS', CO: 'COP',
-    };
-
-    return REGION_CURRENCY[region] ?? parts.locale?.split('-')[1]?.toUpperCase() ?? 'USD';
+    const region = new Intl.Locale(locale).maximize().region ?? '';
+    return COUNTRY_CURRENCY[region] ?? 'USD';
   } catch {
     return 'USD';
   }
+}
+
+/** Detect a likely currency from the user's browser locale. Server-safe fallback to USD. */
+export function detectLocaleCurrency(): string {
+  if (typeof navigator === 'undefined') return 'USD';
+  return currencyForLocale(navigator.language || 'en-US');
 }
