@@ -1,6 +1,7 @@
 import type { ChannelMessage } from './channels/types';
 import type { NewLowAlert } from './detect';
 import { safeHttpUrl } from '@/lib/safe-url';
+import { formatCurrency } from '@/lib/currency';
 
 export interface AlertRoute {
   origin: string;
@@ -52,14 +53,5 @@ export function formatNewLowMessage(params: {
 
 /** Format a price using the currency's locale rules, with a safe fallback. */
 export function formatPrice(amount: number, currency: string | null): string {
-  try {
-    return new Intl.NumberFormat('en-US', {
-      style: 'currency',
-      currency: currency ?? 'USD',
-      minimumFractionDigits: 0,
-      maximumFractionDigits: 0,
-    }).format(amount);
-  } catch {
-    return `${Math.round(amount)} ${currency ?? 'USD'}`;
-  }
+  return formatCurrency(amount, currency);
 }

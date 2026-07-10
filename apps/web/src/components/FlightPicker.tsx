@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import type { PriceData } from '@/lib/scraper/extract-prices';
-import { currencySymbol } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import styles from './FlightPicker.module.css';
 
 export interface RouteFlights {
@@ -162,7 +162,7 @@ export function FlightPicker({
                       )}
                     </div>
                     <div className={styles.airline}>{flight.airline}</div>
-                    <div className={styles.price}>{currencySymbol(flight.currency)}{flight.price}</div>
+                    <div className={styles.price}>{formatCurrency(flight.price, flight.currency)}</div>
                     <div className={styles.meta}>
                       <span className={styles.stops}>{formatStops(flight.stops)}</span>
                       {flight.duration && (

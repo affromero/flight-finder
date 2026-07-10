@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import Link from 'next/link';
+import { formatCurrency } from '@/lib/currency';
 import styles from './PriceAlerts.module.css';
 
 interface Alert {
@@ -50,13 +51,4 @@ export function PriceAlerts() {
       ))}
     </div>
   );
-}
-
-function formatCurrency(amount: number, currency: string | null): string {
-  return new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency: currency ?? 'USD',
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  }).format(amount);
 }

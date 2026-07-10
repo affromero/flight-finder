@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { formatNewLowMessage, formatPrice } from './format';
 import type { NewLowAlert } from './detect';
 
+const norm = (s: string) => s.replace(/\s/g, ' ');
+
 const ALERT: NewLowAlert = {
   queryId: 'q-abc',
   currentMin: 250,
@@ -21,9 +23,9 @@ describe('formatNewLowMessage', () => {
       route: { origin: 'LHR', destination: 'JFK' },
       baseUrl: 'https://flights.example',
     });
-    expect(msg.title).toBe('New low: LHR to JFK $250');
-    expect(msg.body).toContain('dropped to $250 on United');
-    expect(msg.body).toContain('was $300, down $50');
+    expect(norm(msg.title)).toBe('New low: LHR to JFK USD 250');
+    expect(norm(msg.body)).toContain('dropped to USD 250 on United');
+    expect(norm(msg.body)).toContain('was USD 300, down USD 50');
     expect(msg.body).toContain('2026-08-01');
     expect(msg.url).toBe('https://flights.example/q/q-abc');
     expect(msg.data).toMatchObject({
@@ -64,7 +66,7 @@ describe('formatNewLowMessage', () => {
       baseUrl: null,
     });
     expect(msg.url).toBe('https://book/x');
-    expect(msg.body).toContain('dropped to $250'); // price/route still present
+    expect(norm(msg.body)).toContain('dropped to USD 250'); // price/route still present
   });
 
   it('emits no link when there is no base url and no usable booking url', () => {
@@ -74,7 +76,7 @@ describe('formatNewLowMessage', () => {
       baseUrl: null,
     });
     expect(msg.url).toBe('');
-    expect(msg.body).toContain('dropped to $250');
+    expect(norm(msg.body)).toContain('dropped to USD 250');
   });
 
   it('rejects a dangerous booking url scheme instead of linking to it', () => {
@@ -88,10 +90,10 @@ describe('formatNewLowMessage', () => {
 });
 
 describe('formatPrice', () => {
-  it('formats known currencies with their symbol and no decimals', () => {
-    expect(formatPrice(250, 'USD')).toBe('$250');
+  it('formats an integer amount with its code and no decimals', () => {
+    expect(norm(formatPrice(250, 'USD'))).toBe('USD 250');
     expect(formatPrice(250, 'EUR')).toContain('250');
-    expect(formatPrice(250, null)).toBe('$250');
+    expect(norm(formatPrice(250, null))).toBe('USD 250');
   });
 
   it('renders a well-formed but unknown currency code via Intl', () => {

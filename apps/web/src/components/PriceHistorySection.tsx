@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { currencySymbol } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { useHydrated } from '@/lib/use-hydrated';
 import styles from './PriceHistory.module.css';
@@ -83,14 +83,12 @@ function TrendCell({ current, previous }: { current: Snapshot; previous: Snapsho
       </td>
     );
   }
-  const sym = currencySymbol(current.currency);
+  const up = diff > 0;
   return (
     <td>
-      {diff > 0 ? (
-        <span className={styles.trendUp}>+{sym}{Math.abs(diff).toFixed(0)}</span>
-      ) : (
-        <span className={styles.trendDown}>-{sym}{Math.abs(diff).toFixed(0)}</span>
-      )}
+      <span className={up ? styles.trendUp : styles.trendDown}>
+        {up ? '+' : '-'}{formatCurrency(Math.abs(diff), current.currency)}
+      </span>
     </td>
   );
 }
@@ -110,8 +108,7 @@ function FlightRow({
       <td>{flightName(s)}</td>
       <td className={styles.times}>{timesLabel(s)}</td>
       <td className={styles.price}>
-        {currencySymbol(s.currency)}
-        {s.price.toLocaleString('en-US')}
+        {formatCurrency(s.price, s.currency)}
       </td>
       <TrendCell current={s} previous={previous} />
       <td className={styles.stops}>{stopsLabel(s)}</td>

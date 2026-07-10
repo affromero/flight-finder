@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import dynamic from 'next/dynamic';
-import { currencySymbol } from '@/lib/currency';
+import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import styles from './PriceChart.module.css';
 
@@ -125,7 +125,7 @@ function usePlotTheme(): PlotTheme {
   return plotTheme;
 }
 
-function buildDetailTraces(snapshots: Snapshot[], sym: string, hasVpnData: boolean) {
+function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: boolean) {
   const available = snapshots.filter((s) => s.status !== 'sold_out');
   const soldOut = snapshots.filter((s) => s.status === 'sold_out');
 
@@ -152,7 +152,7 @@ function buildDetailTraces(snapshots: Snapshot[], sym: string, hasVpnData: boole
       customdata: points.map((p) => [p.bookingUrl]),
       text: points.map((p) => {
         const lines = [
-          `<b>${sym}${p.price.toFixed(2)}</b> ${p.currency}`,
+          `<b>${formatCurrency(p.price, p.currency ?? currency)}</b>`,
           new Date(p.scrapedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         ];
         if (p.departureTime || p.arrivalTime) {
@@ -179,7 +179,7 @@ function buildDetailTraces(snapshots: Snapshot[], sym: string, hasVpnData: boole
       customdata: soldOut.map((p) => [p.bookingUrl]),
       text: soldOut.map((p) => {
         const lines = [
-          `<b>${sym}${p.price.toFixed(2)}</b> (sold out)`,
+          `<b>${formatCurrency(p.price, p.currency ?? currency)}</b> (sold out)`,
           new Date(p.scrapedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         ];
         if (p.departureTime || p.arrivalTime) {
@@ -195,7 +195,7 @@ function buildDetailTraces(snapshots: Snapshot[], sym: string, hasVpnData: boole
 }
 
 /** Comparison view: one line per country showing the cheapest price at each scrape time */
-function buildComparisonTraces(snapshots: Snapshot[], sym: string) {
+function buildComparisonTraces(snapshots: Snapshot[], currency: string) {
   const available = snapshots.filter((s) => s.status !== 'sold_out');
 
   // Group by country label
@@ -238,7 +238,7 @@ function buildComparisonTraces(snapshots: Snapshot[], sym: string) {
       customdata: cheapest.map((p) => [p.bookingUrl]),
       text: cheapest.map((p) => {
         const lines = [
-          `<b>${sym}${p.price.toFixed(2)}</b> cheapest from ${flag}${label}`,
+          `<b>${formatCurrency(p.price, p.currency ?? currency)}</b> cheapest from ${flag}${label}`,
           `${p.airline}`,
           new Date(p.scrapedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         ];
@@ -257,7 +257,6 @@ interface Props {
 }
 
 export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency = 'USD' }: Props) {
-  const sym = currencySymbol(currency);
   const plotTheme = usePlotTheme();
   const fullHistory = allSnapshots ?? snapshots;
   const hasFilteredHistory = fullHistory.length !== snapshots.length;
@@ -287,10 +286,10 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
 
   const traces = useMemo(() => {
     if (view === 'comparison') {
-      return buildComparisonTraces(filteredSnapshots, sym);
+      return buildComparisonTraces(filteredSnapshots, currency);
     }
-    return buildDetailTraces(filteredSnapshots, sym, hasVpnData && view === 'all');
-  }, [filteredSnapshots, sym, view, hasVpnData]);
+    return buildDetailTraces(filteredSnapshots, currency, hasVpnData && view === 'all');
+  }, [filteredSnapshots, currency, view, hasVpnData]);
 
   const editShapes = useMemo(() => editEvents.map((event) => ({
     type: 'line' as const,
@@ -404,7 +403,6 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
           },
           yaxis: {
             gridcolor: plotTheme.grid,
-            tickprefix: sym,
             title: { text: '' },
           },
           legend: {

@@ -1,6 +1,7 @@
 'use client';
 
 import { safeHttpUrl } from '@/lib/safe-url';
+import { formatCurrency } from '@/lib/currency';
 import styles from './PriceCalendar.module.css';
 
 interface Snapshot {
@@ -50,13 +51,6 @@ export function PriceCalendar({ snapshots, currency }: Props) {
   const maxPrice = Math.max(...prices);
   const range = maxPrice - minPrice || 1;
 
-  const fmt = new Intl.NumberFormat('en-US', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: 0,
-    maximumFractionDigits: 0,
-  });
-
   const formatDay = (iso: string) =>
     new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
@@ -75,10 +69,10 @@ export function PriceCalendar({ snapshots, currency }: Props) {
               rel="noopener noreferrer"
               className={`${styles.cell} ${isMin ? styles.cellBest : ''}`}
               style={{ '--intensity': intensity } as React.CSSProperties}
-              title={`${formatDay(d.date)}: ${fmt.format(d.minPrice)} (${d.airline})`}
+              title={`${formatDay(d.date)}: ${formatCurrency(d.minPrice, currency)} (${d.airline})`}
             >
               <span className={styles.cellDate}>{formatDay(d.date)}</span>
-              <span className={styles.cellPrice}>{fmt.format(d.minPrice)}</span>
+              <span className={styles.cellPrice}>{formatCurrency(d.minPrice, currency)}</span>
             </a>
           );
         })}
