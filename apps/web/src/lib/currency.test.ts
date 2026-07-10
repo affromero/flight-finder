@@ -33,6 +33,16 @@ describe('currencyForLocale', () => {
     }
   });
 
+  it('resolves EU member locales missing from the old table', () => {
+    expect(currencyForLocale('sk-SK')).toBe('EUR');
+    expect(currencyForLocale('sl-SI')).toBe('EUR');
+    expect(currencyForLocale('hr-HR')).toBe('EUR');
+    expect(currencyForLocale('lt-LT')).toBe('EUR');
+    expect(currencyForLocale('ro-RO')).toBe('RON');
+    expect(currencyForLocale('bg-BG')).toBe('BGN');
+    expect(currencyForLocale('hu-HU')).toBe('HUF');
+  });
+
   it('treats script subtags as scripts, not regions', () => {
     expect(currencyForLocale('zh-Hans-CN')).toBe('CNY');
     expect(currencyForLocale('zh-Hant-TW')).toBe('TWD');
@@ -66,10 +76,13 @@ describe('currencySymbol', () => {
     expect(currencySymbol('USD')).toBe('$');
     expect(currencySymbol('EUR')).toBe('€');
     expect(currencySymbol('COP')).toBe('COL$');
+    expect(currencySymbol('ARS')).toBe('AR$');
+    expect(currencySymbol('PEN')).toBe('S/');
+    expect(currencySymbol('VND')).toBe('₫');
   });
 
   it('falls back to the code itself for currencies without a symbol', () => {
-    expect(currencySymbol('ARS')).toBe('ARS');
-    expect(currencySymbol('PEN')).toBe('PEN');
+    expect(currencySymbol('SAR')).toBe('SAR');
+    expect(currencySymbol('BGN')).toBe('BGN');
   });
 });

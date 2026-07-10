@@ -23,6 +23,32 @@ const SYMBOLS: Record<string, string> = {
   ZAR: 'R',
   ILS: '₪',
   COP: 'COL$',
+  ARS: 'AR$',
+  CLP: 'CL$',
+  PEN: 'S/',
+  UYU: 'UY$',
+  PYG: '₲',
+  BOB: 'Bs',
+  VES: 'Bs.',
+  CRC: '₡',
+  GTQ: 'Q',
+  HNL: 'L',
+  NIO: 'C$',
+  DOP: 'RD$',
+  PAB: 'B/.',
+  CUP: 'CU$',
+  TWD: 'NT$',
+  VND: '₫',
+  IDR: 'Rp',
+  MYR: 'RM',
+  PHP: '₱',
+  RUB: '₽',
+  UAH: '₴',
+  CZK: 'Kč',
+  RON: 'lei',
+  HUF: 'Ft',
+  NGN: '₦',
+  EGP: 'E£',
 };
 
 export function currencySymbol(code: string): string {
@@ -39,7 +65,9 @@ const COUNTRY_CURRENCY: Record<string, string> = {
   NO: 'NOK', DK: 'DKK', PL: 'PLN', RU: 'RUB', TR: 'TRY', UA: 'UAH', CZ: 'CZK',
   JP: 'JPY', CN: 'CNY', KR: 'KRW', IN: 'INR', TW: 'TWD', HK: 'HKD', SG: 'SGD',
   TH: 'THB', VN: 'VND', ID: 'IDR', MY: 'MYR', PH: 'PHP', AE: 'AED', SA: 'SAR',
-  IL: 'ILS', AU: 'AUD', NZ: 'NZD', ZA: 'ZAR', NG: 'NGN',
+  IL: 'ILS', AU: 'AUD', NZ: 'NZD', ZA: 'ZAR', NG: 'NGN', EG: 'EGP',
+  SK: 'EUR', SI: 'EUR', EE: 'EUR', LV: 'EUR', LT: 'EUR', HR: 'EUR', MT: 'EUR',
+  CY: 'EUR', LU: 'EUR', RO: 'RON', BG: 'BGN', HU: 'HUF',
 };
 
 export function currencyForLocale(locale: string): string {
