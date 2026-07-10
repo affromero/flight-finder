@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { getDeleteToken } from '@/lib/tracker-storage';
+import { MAX_PRICE_VALUE } from '@/lib/limits';
 import styles from './TrackerFilters.module.css';
 
 interface TrackerFilterState {
@@ -111,9 +112,9 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
     const nextMaxPrice = parseOptionalNumber(maxPrice);
     if (
       nextMaxPrice !== null &&
-      (Number.isNaN(nextMaxPrice) || nextMaxPrice < 0 || nextMaxPrice > 1_000_000)
+      (Number.isNaN(nextMaxPrice) || nextMaxPrice < 0 || nextMaxPrice > MAX_PRICE_VALUE)
     ) {
-      setError('Max price must be between 0 and 1,000,000.');
+      setError('Max price must be a positive number.');
       return;
     }
 
@@ -210,7 +211,7 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
                 className={styles.input}
                 type="number"
                 min={0}
-                max={1_000_000}
+                max={MAX_PRICE_VALUE}
                 step={1}
                 placeholder="Any"
                 value={maxPrice}

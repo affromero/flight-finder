@@ -414,8 +414,8 @@ describe('POST /api/queries', () => {
     expect(mockQueryCreate).not.toHaveBeenCalled();
   });
 
-  it('rejects maxPrice that exceeds the ceiling with 400', async () => {
-    const res = await POST(makeRequest({ ...validBody, maxPrice: 1_000_001 }));
+  it('rejects maxPrice above the safe-integer ceiling with 400', async () => {
+    const res = await POST(makeRequest({ ...validBody, maxPrice: Number.MAX_SAFE_INTEGER + 1 }));
     expect(res.status).toBe(400);
     const body = await res.json();
     expect(body.error).toContain('maxPrice');
