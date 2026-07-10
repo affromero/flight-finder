@@ -403,7 +403,7 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
           },
           yaxis: {
             gridcolor: plotTheme.grid,
-            title: { text: '' },
+            title: { text: currency },
           },
           legend: {
             orientation: 'h',

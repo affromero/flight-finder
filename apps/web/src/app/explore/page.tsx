@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { prisma } from '@/lib/prisma';
+import { formatCurrency } from '@/lib/currency';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { Footer } from '@/components/Footer';
 import styles from './page.module.css';
@@ -10,37 +11,55 @@ interface RouteData {
   origin: string;
   destination: string;
   count: number;
+  currency: string;
   avgPrice: number;
   minPrice: number;
   airlines: string[];
 }
 
 async function getRoutes(): Promise<RouteData[]> {
+  // Group by currency too: min/avg across mixed currencies is meaningless.
+  // A route's displayed prices come from its dominant currency's snapshots.
   const raw = await prisma.communitySnapshot.groupBy({
-    by: ['origin', 'destination'],
+    by: ['origin', 'destination', 'currency'],
     _count: { id: true },
     _avg: { price: true },
     _min: { price: true },
-    orderBy: { _count: { id: 'desc' } },
-    take: 100,
   });
+
+  const byRoute = new Map<string, { count: number; best: (typeof raw)[number] }>();
+  for (const g of raw) {
+    const key = `${g.origin}-${g.destination}`;
+    const entry = byRoute.get(key);
+    if (!entry) {
+      byRoute.set(key, { count: g._count.id, best: g });
+    } else {
+      entry.count += g._count.id;
+      if (g._count.id > entry.best._count.id) entry.best = g;
+    }
+  }
+
+  const top = Array.from(byRoute.values())
+    .sort((a, b) => b.count - a.count)
+    .slice(0, 100);
 
   const routes: RouteData[] = [];
 
-  for (const r of raw) {
+  for (const { count, best } of top) {
     const airlines = await prisma.communitySnapshot.findMany({
-      where: { origin: r.origin, destination: r.destination },
+      where: { origin: best.origin, destination: best.destination },
       select: { airline: true },
       distinct: ['airline'],
       take: 10,
     });
 
     routes.push({
-      origin: r.origin,
-      destination: r.destination,
-      count: r._count.id,
-      avgPrice: Math.round(r._avg.price ?? 0),
-      minPrice: Math.round(r._min.price ?? 0),
+      origin: best.origin,
+      destination: best.destination,
+      count,
+      currency: best.currency,
+      avgPrice: Math.round(best._avg.price ?? 0),
+      minPrice: Math.round(best._min.price ?? 0),
       airlines: airlines.map((a: { airline: string }) => a.airline),
     });
   }
@@ -104,11 +123,11 @@ export default async function ExplorePage() {
               <div className={styles.cardPrices}>
                 <div className={styles.cardPrice}>
                   <span className={styles.cardPriceLabel}>from</span>
-                  <span className={styles.cardPriceValue}>${route.minPrice}</span>
+                  <span className={styles.cardPriceValue}>{formatCurrency(route.minPrice, route.currency)}</span>
                 </div>
                 <div className={styles.cardPrice}>
                   <span className={styles.cardPriceLabel}>avg</span>
-                  <span className={styles.cardPriceValue}>${route.avgPrice}</span>
+                  <span className={styles.cardPriceValue}>{formatCurrency(route.avgPrice, route.currency)}</span>
                 </div>
               </div>
               <div className={styles.cardMeta}>
