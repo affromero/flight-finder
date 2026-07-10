@@ -1,6 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { isValidIATA } from '@/lib/iata-codes';
+import { isValidPriceAmount } from '@/lib/limits';
 import { redis } from '@/lib/redis';
 import { timingSafeEqual } from 'crypto';
 
@@ -8,8 +9,10 @@ const MAX_BATCH_SIZE = 1000;
 const RATE_LIMIT_WINDOW = 3600; // 1 hour per API key
 
 // Snapshot field bounds. Values outside these ranges are almost certainly
-// malformed or hostile, so the whole batch is rejected.
-const MAX_PRICE = 50000;
+// malformed or hostile, so the whole batch is rejected. Prices carry an
+// arbitrary currency, and high denomination currencies (COP, JPY, VND) put
+// ordinary fares in the millions, so the only price bounds are positive and
+// within the shared safe integer ceiling.
 const MAX_STOPS = 5;
 const MAX_AIRLINE_LEN = 100;
 const MAX_CABIN_LEN = 20;
@@ -127,7 +130,7 @@ export async function POST(request: Request) {
     // permissive client cannot smuggle in unnormalized routes).
     if (typeof s.origin !== 'string' || !isValidIATA(s.origin)) { errors.push(`[${i}] invalid origin: ${s.origin}`); continue; }
     if (typeof s.destination !== 'string' || !isValidIATA(s.destination)) { errors.push(`[${i}] invalid destination: ${s.destination}`); continue; }
-    if (typeof s.price !== 'number' || !Number.isFinite(s.price) || s.price <= 0 || s.price > MAX_PRICE) { errors.push(`[${i}] invalid price: ${s.price}`); continue; }
+    if (typeof s.price !== 'number' || s.price <= 0 || !isValidPriceAmount(s.price)) { errors.push(`[${i}] invalid price: ${s.price}`); continue; }
     if (typeof s.stops !== 'number' || !Number.isInteger(s.stops) || s.stops < 0 || s.stops > MAX_STOPS) { errors.push(`[${i}] invalid stops: ${s.stops}`); continue; }
 
     const scrapedAt = new Date(s.scrapedAt);

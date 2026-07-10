@@ -114,7 +114,7 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
       nextMaxPrice !== null &&
       (Number.isNaN(nextMaxPrice) || nextMaxPrice < 0 || nextMaxPrice > MAX_PRICE_VALUE)
     ) {
-      setError('Max price must be a positive number.');
+      setError('Max price cannot be negative.');
       return;
     }
 
@@ -211,7 +211,6 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
                 className={styles.input}
                 type="number"
                 min={0}
-                max={MAX_PRICE_VALUE}
                 step={1}
                 placeholder="Any"
                 value={maxPrice}

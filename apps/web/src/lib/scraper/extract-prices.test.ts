@@ -491,6 +491,12 @@ describe('coercePrice (issue #139 — string/symbol/grouped prices)', () => {
     expect(coercePrice(NaN)).toBe(0);
     expect(coercePrice(Infinity)).toBe(0);
   });
+  it('accepts high denomination fares but drops absurd finite values beyond the safe integer ceiling', () => {
+    expect(coercePrice(2_550_760)).toBe(2_550_760);
+    expect(coercePrice('COL$2,550,760')).toBe(2_550_760);
+    expect(coercePrice(1e300)).toBe(0);
+    expect(coercePrice('9007199254740993')).toBe(0);
+  });
   it('strips a currency symbol', () => {
     expect(coercePrice('$189')).toBe(189);
     expect(coercePrice('£1234')).toBe(1234);

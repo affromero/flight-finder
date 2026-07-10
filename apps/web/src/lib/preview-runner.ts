@@ -15,6 +15,7 @@ import {
   type PreviewResultPayload,
   type RouteResultPayload,
 } from '@/lib/preview-run';
+import { isValidPriceAmount } from '@/lib/limits';
 import { getModelCosts, resolveApiKey } from '@/lib/scraper/ai-registry';
 import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
@@ -259,6 +260,12 @@ export function validatePreviewPayload(
   const isOneWay = tripType === 'one_way';
   if (!isOneWay && from >= to) {
     throw new Error('dateFrom must be before dateTo');
+  }
+
+  // Number(body.maxPrice) in the route can produce NaN or garbage; stop it
+  // here so it never reaches the DB or the extraction prompt.
+  if (payload.maxPrice !== null && !isValidPriceAmount(payload.maxPrice)) {
+    throw new Error('maxPrice must be a finite non-negative number');
   }
 
   const combos = origins.length * destinations.length;

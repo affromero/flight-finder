@@ -422,6 +422,26 @@ describe('POST /api/queries', () => {
     expect(mockQueryCreate).not.toHaveBeenCalled();
   });
 
+  // A COP fare of ~USD 600 is 2,550,760 pesos; the old 1M cap rejected it at
+  // the route level, so guard acceptance here and not only in the helper test.
+  it('accepts a high denomination maxPrice and selected flight price above the old 1M cap', async () => {
+    const res = await POST(makeRequest({
+      ...validBody,
+      maxPrice: 3_000_000,
+      currency: 'COP',
+      routes: [{
+        ...validBody.routes[0],
+        selectedFlights: [
+          { travelDate: '2026-06-15', price: 2_550_760, airline: 'Avianca', bookingUrl: 'https://avianca.com' },
+        ],
+      }],
+    }));
+    expect(res.status).toBe(201);
+    const createArg = mockQueryCreate.mock.calls[0]![0] as { data: { maxPrice: number } };
+    expect(createArg.data.maxPrice).toBe(3_000_000);
+    expect(mockSnapshotCreateMany).toHaveBeenCalled();
+  });
+
   it('rejects maxStops outside 0-10 range with 400', async () => {
     const res = await POST(makeRequest({ ...validBody, maxStops: 11 }));
     expect(res.status).toBe(400);
