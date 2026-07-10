@@ -63,7 +63,7 @@ jobs:
           npm install
           npm run icon
 
-      - uses: tauri-apps/tauri-action@v0.6.2
+      - uses: tauri-apps/tauri-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # Add these secrets to produce SIGNED / NOTARIZED builds (see
