@@ -8,6 +8,7 @@ import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { getClientIp } from '@/lib/trusted-ip';
 import { redis } from '@/lib/redis';
 import { safeHttpUrl } from '@/lib/safe-url';
+import { isValidPriceAmount } from '@/lib/limits';
 
 const MAX_ROUTES = 20;
 const MAX_FLIGHTS_PER_ROUTE = 50;
@@ -29,7 +30,6 @@ const MAX_DURATION_LENGTH = 20;
 const MAX_CURRENCY_LENGTH = 3;
 
 // Numeric field bounds
-const MAX_PRICE_VALUE = 1_000_000;
 const MAX_STOPS_VALUE = 10;
 
 interface RouteInput {
@@ -49,10 +49,6 @@ interface RouteInput {
     duration?: string | null;
     flightNumber?: string | null;
   }>;
-}
-
-function isFinitePositive(n: number): boolean {
-  return Number.isFinite(n) && n >= 0;
 }
 
 /**
@@ -148,8 +144,8 @@ export async function POST(request: NextRequest) {
   let maxPriceValidated: number | null = null;
   if (maxPrice !== undefined && maxPrice !== null) {
     const n = Number(maxPrice);
-    if (!isFinitePositive(n) || n > MAX_PRICE_VALUE) {
-      return apiError(`maxPrice must be a finite number between 0 and ${MAX_PRICE_VALUE}`, 400);
+    if (!isValidPriceAmount(n)) {
+      return apiError('maxPrice must be a finite non-negative number', 400);
     }
     maxPriceValidated = n;
   }
@@ -228,8 +224,8 @@ export async function POST(request: NextRequest) {
       }
 
       const price = Number(f.price);
-      if (!isFinitePositive(price) || price > MAX_PRICE_VALUE) {
-        return apiError(`Selected flight price must be a finite number between 0 and ${MAX_PRICE_VALUE}`, 400);
+      if (!isValidPriceAmount(price)) {
+        return apiError('Selected flight price must be a finite non-negative number', 400);
       }
 
       if (typeof f.airline === 'string' && f.airline.length > MAX_AIRLINE_LENGTH) {

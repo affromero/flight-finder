@@ -143,8 +143,16 @@ describe('POST /api/community/ingest', () => {
     expect(body.data.rejected).toBe(1);
   });
 
-  it('rejects a price outside the sane positive range', async () => {
-    const res = await POST(makeRequest({ snapshots: [validSnapshot({ price: 999999 })] }));
+  it('accepts a high denomination currency price above the old 50k cap', async () => {
+    const res = await POST(makeRequest({ snapshots: [validSnapshot({ price: 2_550_760, currency: 'COP' })] }));
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.data.accepted).toBe(1);
+    expect(body.data.rejected).toBe(0);
+  });
+
+  it('rejects a price beyond the safe integer ceiling', async () => {
+    const res = await POST(makeRequest({ snapshots: [validSnapshot({ price: Number.MAX_SAFE_INTEGER + 2 })] }));
     const body = await res.json();
     expect(body.data.accepted).toBe(0);
     expect(body.data.rejected).toBe(1);
