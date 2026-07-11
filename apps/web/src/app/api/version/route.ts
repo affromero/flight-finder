@@ -21,16 +21,22 @@ export async function GET() {
   let latest: string | null = null;
 
   try {
+    // List releases instead of /releases/latest: GitHub's "latest" is just the
+    // newest release, which can be a desktop-vX.Y.Z installer release. Only
+    // vX.Y.Z tags track the web app.
     const res = await fetch(
-      'https://api.github.com/repos/affromero/flight-finder/releases/latest',
+      'https://api.github.com/repos/affromero/flight-finder/releases?per_page=15',
       {
         headers: { Accept: 'application/vnd.github.v3+json' },
         next: { revalidate: 3600 },
       }
     );
     if (res.ok) {
-      const data = await res.json();
-      latest = (data.tag_name as string)?.replace(/^v/, '') ?? null;
+      const data = (await res.json()) as { tag_name?: string; prerelease?: boolean; draft?: boolean }[];
+      const webRelease = data.find(
+        (r) => /^v\d+\.\d+\.\d+$/.test(r.tag_name ?? '') && !r.prerelease && !r.draft,
+      );
+      latest = webRelease?.tag_name?.replace(/^v/, '') ?? null;
     }
   } catch {
     // GitHub unreachable — return what we have
@@ -48,7 +54,7 @@ export async function GET() {
     current,
     commit: process.env.NEXT_PUBLIC_COMMIT_SHA ?? 'dev',
     latest,
-    updateAvailable: latest ? latest !== current : false,
+    updateAvailable: latest ? compareSemver(latest, current) > 0 : false,
     renameAnnouncement,
   });
 }
