@@ -1,5 +1,16 @@
 # Changelog
 
+## [0.13.1] - 2026-07-11
+
+The interface now speaks five languages.
+
+### Added
+* **UI internationalization.** The whole interface is available in English, Spanish, Portuguese, German, and French. The language follows a cookie, so no URLs change and English stays the default. Pick your language in Settings under Appearance. Thanks @ssantss.
+* **Language picker in the setup wizard.** First run now offers the language choice on the wizard's first step, and switching mid setup keeps anything already entered.
+
+### Changed
+* A key parity test now guards all five locales in CI, missing translations fall back to English at runtime, and admin only strings no longer ship in the payload of public pages.
+
 ## [0.13.0] - 2026-07-10
 
 Editable trackers, honest prices in every currency, and provider keys managed from the admin UI.
