@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
@@ -57,17 +58,17 @@ function pickAsset(assets: GhAsset[], patterns: RegExp[]): GhAsset | null {
 }
 
 export default async function DownloadPage() {
+  const t = await getTranslations('Download');
   const release = await fetchDesktopRelease();
 
   return (
     <main className={styles.root}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Download Flight Finder</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <p className={styles.subtitle}>
-          The desktop app runs a self-hosted instance on your computer, or
-          connects to one on your VPS, with no terminal.
+          {t('subtitle')}
         </p>
-        {release && <p className={styles.version}>Latest: v{release.version}</p>}
+        {release && <p className={styles.version}>{t('latest', { version: release.version })}</p>}
       </header>
 
       {release ? (
@@ -79,10 +80,10 @@ export default async function DownloadPage() {
                 <span className={styles.os}>{card.label}</span>
                 {asset ? (
                   <a className={styles.button} href={asset.browser_download_url}>
-                    Download
+                    {t('download')}
                   </a>
                 ) : (
-                  <span className={styles.unavailable}>Not in this release</span>
+                  <span className={styles.unavailable}>{t('notInRelease')}</span>
                 )}
               </div>
             );
@@ -90,9 +91,9 @@ export default async function DownloadPage() {
         </div>
       ) : (
         <div className={styles.empty}>
-          <p>No desktop release is published yet.</p>
+          <p>{t('noRelease')}</p>
           <p className={styles.emptyHint}>
-            You can still run Flight Finder from the terminal:
+            {t('terminalHint')}
             <br />
             <code>curl -fsSL https://flight-finder.org/install.sh | bash</code>
           </p>
@@ -100,9 +101,11 @@ export default async function DownloadPage() {
       )}
 
       <p className={styles.note}>
-        Prefer the terminal, or running on a server? See the{' '}
-        <a href="https://github.com/affromero/flight-finder#readme">README</a> for
-        the one-command installer and VPS setup.
+        {t.rich('readmeNote', {
+          link: (chunks) => (
+            <a href="https://github.com/affromero/flight-finder#readme">{chunks}</a>
+          ),
+        })}
       </p>
     </main>
   );

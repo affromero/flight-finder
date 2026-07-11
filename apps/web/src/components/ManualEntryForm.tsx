@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { ParsedQuery } from './ConfirmationCard';
 import { AirportCombobox } from './AirportCombobox';
 import { detectLocaleCurrency } from '@/lib/currency';
@@ -59,9 +60,10 @@ export function ManualEntryForm({
   onSubmit,
   onCancel,
   adminCurrency,
-  cancelLabel = 'Cancel',
+  cancelLabel,
   initialValues,
 }: ManualEntryFormProps) {
+  const t = useTranslations('ManualEntryForm');
   const iv = initialValues;
   const [origin, setOrigin] = useState<SelectedAirport | null>(iv?.origin ?? null);
   const [destination, setDestination] = useState<SelectedAirport | null>(iv?.destination ?? null);
@@ -104,29 +106,29 @@ export function ManualEntryForm({
   const validate = (): Record<string, string> | null => {
     const errors: Record<string, string> = {};
 
-    if (!origin) errors.origin = 'Select an origin airport';
-    if (!destination) errors.destination = 'Select a destination airport';
+    if (!origin) errors.origin = t('selectOrigin');
+    if (!destination) errors.destination = t('selectDestination');
     if (origin && destination && origin.code === destination.code) {
-      errors.destination = 'Must differ from origin';
+      errors.destination = t('destinationDiffers');
     }
     const today = new Date();
     const todayStr = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
     if (!dateFrom) {
-      errors.dateFrom = 'Select a departure date';
+      errors.dateFrom = t('selectDeparture');
     } else if (dateFrom < todayStr) {
-      errors.dateFrom = 'Date cannot be in the past';
+      errors.dateFrom = t('dateInPast');
     }
     if (tripType === 'round_trip') {
       if (!dateTo) {
-        errors.dateTo = 'Select a return date';
+        errors.dateTo = t('selectReturn');
       } else if (dateFrom && dateTo <= dateFrom) {
-        errors.dateTo = 'Return must be after departure';
+        errors.dateTo = t('returnAfterDeparture');
       }
     }
     if (maxDuration) {
       const n = parseInt(maxDuration, 10);
       if (!Number.isInteger(n) || n < 1 || n > 48) {
-        errors.maxDuration = 'Enter a value between 1 and 48 hours';
+        errors.maxDuration = t('durationRange');
       }
     }
 
@@ -199,8 +201,8 @@ export function ManualEntryForm({
     <form className={styles.root} onSubmit={handleSubmit} noValidate>
       <AirportCombobox
         id="me-origin"
-        label="Origin"
-        placeholder="Search by city, airport, or code (e.g. JFK)"
+        label={t('origin')}
+        placeholder={t('originPlaceholder')}
         value={origin}
         onChange={(v) => { setOrigin(v); clearError('origin'); }}
         error={fieldErrors.origin}
@@ -210,8 +212,8 @@ export function ManualEntryForm({
 
       <AirportCombobox
         id="me-dest"
-        label="Destination"
-        placeholder="Search by city, airport, or code (e.g. CDG)"
+        label={t('destination')}
+        placeholder={t('destinationPlaceholder')}
         value={destination}
         onChange={(v) => { setDestination(v); clearError('destination'); }}
         error={fieldErrors.destination}
@@ -224,20 +226,20 @@ export function ManualEntryForm({
           className={`${styles.tripOption} ${tripType === 'round_trip' ? styles.tripOptionActive : ''}`}
           onClick={() => setTripType('round_trip')}
         >
-          Round trip
+          {t('roundTrip')}
         </button>
         <button
           type="button"
           className={`${styles.tripOption} ${tripType === 'one_way' ? styles.tripOptionActive : ''}`}
           onClick={() => setTripType('one_way')}
         >
-          One way
+          {t('oneWay')}
         </button>
       </div>
 
       <div className={styles.fieldRow}>
         <div className={styles.field}>
-          <label className={styles.label} htmlFor="me-date-from">Departure</label>
+          <label className={styles.label} htmlFor="me-date-from">{t('departure')}</label>
           <input
             id="me-date-from"
             className={`${styles.input} ${fieldErrors.dateFrom ? styles.inputError : ''}`}
@@ -252,7 +254,7 @@ export function ManualEntryForm({
         </div>
         {tripType === 'round_trip' && (
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="me-date-to">Return</label>
+            <label className={styles.label} htmlFor="me-date-to">{t('return')}</label>
             <input
               id="me-date-to"
               className={`${styles.input} ${fieldErrors.dateTo ? styles.inputError : ''}`}
@@ -274,7 +276,7 @@ export function ManualEntryForm({
         onClick={() => setShowAdvanced(!showAdvanced)}
         aria-expanded={showAdvanced}
       >
-        <span>Advanced options</span>
+        <span>{t('advancedOptions')}</span>
         <svg
           className={`${styles.chevron} ${showAdvanced ? styles.chevronOpen : ''}`}
           width="16" height="16" viewBox="0 0 24 24"
@@ -289,7 +291,7 @@ export function ManualEntryForm({
         <div className={styles.advancedPanel}>
           <div className={styles.fieldRow}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-flexibility">Flexibility (days)</label>
+              <label className={styles.label} htmlFor="me-flexibility">{t('flexibilityDays')}</label>
               <input
                 id="me-flexibility"
                 className={styles.input}
@@ -301,13 +303,13 @@ export function ManualEntryForm({
               />
             </div>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-max-price">Max price</label>
+              <label className={styles.label} htmlFor="me-max-price">{t('maxPrice')}</label>
               <input
                 id="me-max-price"
                 className={styles.input}
                 type="number"
                 min={0}
-                placeholder="No limit"
+                placeholder={t('noLimit')}
                 value={maxPrice}
                 onChange={(e) => setMaxPrice(e.target.value)}
               />
@@ -316,60 +318,60 @@ export function ManualEntryForm({
 
           <div className={styles.fieldRow}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-time">Time preference</label>
+              <label className={styles.label} htmlFor="me-time">{t('timePreference')}</label>
               <select
                 id="me-time"
                 className={styles.input}
                 value={timePreference}
                 onChange={(e) => setTimePreference(e.target.value as typeof timePreference)}
               >
-                <option value="any">Any</option>
-                <option value="morning">Morning</option>
-                <option value="afternoon">Afternoon</option>
-                <option value="evening">Evening</option>
-                <option value="redeye">Red-eye</option>
+                <option value="any">{t('any')}</option>
+                <option value="morning">{t('morning')}</option>
+                <option value="afternoon">{t('afternoon')}</option>
+                <option value="evening">{t('evening')}</option>
+                <option value="redeye">{t('redEye')}</option>
               </select>
             </div>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-cabin">Cabin class</label>
+              <label className={styles.label} htmlFor="me-cabin">{t('cabinClass')}</label>
               <select
                 id="me-cabin"
                 className={styles.input}
                 value={cabinClass}
                 onChange={(e) => setCabinClass(e.target.value as typeof cabinClass)}
               >
-                <option value="economy">Economy</option>
-                <option value="premium_economy">Premium Economy</option>
-                <option value="business">Business</option>
-                <option value="first">First</option>
+                <option value="economy">{t('economy')}</option>
+                <option value="premium_economy">{t('premiumEconomy')}</option>
+                <option value="business">{t('business')}</option>
+                <option value="first">{t('first')}</option>
               </select>
             </div>
           </div>
 
           <div className={styles.fieldRow}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-max-stops">Max stops</label>
+              <label className={styles.label} htmlFor="me-max-stops">{t('maxStops')}</label>
               <select
                 id="me-max-stops"
                 className={styles.input}
                 value={maxStops}
                 onChange={(e) => setMaxStops(e.target.value)}
               >
-                <option value="">Any</option>
-                <option value="0">Nonstop only</option>
-                <option value="1">Max 1 stop</option>
-                <option value="2">Max 2 stops</option>
+                <option value="">{t('any')}</option>
+                <option value="0">{t('nonstopOnly')}</option>
+                <option value="1">{t('maxOneStop')}</option>
+                <option value="2">{t('maxTwoStops')}</option>
               </select>
             </div>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-max-duration">Max trip duration (hours)</label>
+              <label className={styles.label} htmlFor="me-max-duration">{t('maxDuration')}</label>
               <input
                 id="me-max-duration"
                 className={`${styles.input} ${fieldErrors.maxDuration ? styles.inputError : ''}`}
                 type="number"
                 min={1}
                 max={48}
-                placeholder="No limit"
+                placeholder={t('noLimit')}
                 value={maxDuration}
                 onChange={(e) => { setMaxDuration(e.target.value); clearError('maxDuration'); }}
                 aria-invalid={!!fieldErrors.maxDuration}
@@ -380,12 +382,12 @@ export function ManualEntryForm({
 
           <div className={styles.fieldRow}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-currency">Currency</label>
+              <label className={styles.label} htmlFor="me-currency">{t('currency')}</label>
               <input
                 id="me-currency"
                 className={styles.input}
                 type="text"
-                placeholder="Auto-detect"
+                placeholder={t('autoDetect')}
                 maxLength={3}
                 value={currency}
                 onChange={(e) => setCurrency(e.target.value.toUpperCase())}
@@ -395,12 +397,12 @@ export function ManualEntryForm({
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label} htmlFor="me-airlines">Preferred airlines</label>
+            <label className={styles.label} htmlFor="me-airlines">{t('preferredAirlines')}</label>
             <input
               id="me-airlines"
               className={styles.input}
               type="text"
-              placeholder="e.g. Delta, United"
+              placeholder={t('airlinesPlaceholder')}
               value={airlines}
               onChange={(e) => setAirlines(e.target.value)}
             />
@@ -410,10 +412,10 @@ export function ManualEntryForm({
 
       <div className={styles.actions}>
         <button type="submit" className={styles.submitButton}>
-          Show available flights
+          {t('showAvailableFlights')}
         </button>
         <button type="button" className={styles.cancelButton} onClick={onCancel}>
-          {cancelLabel}
+          {cancelLabel ?? t('cancel')}
         </button>
       </div>
     </form>

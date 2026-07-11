@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import type { TopPageEngagement } from '@/lib/analytics/query';
 import styles from './TopPagesTable.module.css';
 
@@ -13,21 +14,22 @@ function formatScroll(depth: number | null): string {
   return `${Math.round(depth * 100)}%`;
 }
 
-export function TopPagesTable({ pages }: { pages: TopPageEngagement[] }) {
+export async function TopPagesTable({ pages }: { pages: TopPageEngagement[] }) {
+  const t = await getTranslations('AdminAnalytics');
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Top Pages</h2>
+      <h2 className={styles.cardTitle}>{t('topPages.title')}</h2>
       {pages.length === 0 ? (
-        <p className={styles.empty}>No data</p>
+        <p className={styles.empty}>{t('topPages.empty')}</p>
       ) : (
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Page</th>
-              <th>Views</th>
-              <th>Visitors</th>
-              <th>Avg Duration</th>
-              <th>Avg Scroll</th>
+              <th>{t('topPages.page')}</th>
+              <th>{t('topPages.views')}</th>
+              <th>{t('topPages.visitors')}</th>
+              <th>{t('topPages.avgDuration')}</th>
+              <th>{t('topPages.avgScroll')}</th>
             </tr>
           </thead>
           <tbody>

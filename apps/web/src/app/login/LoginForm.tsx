@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import { Avatar } from '@/components/Avatar/Avatar';
 import { sanitizeNext } from '@/lib/safe-next';
 import styles from './page.module.css';
@@ -24,6 +25,7 @@ interface LoginResponse {
 }
 
 export function LoginForm({ next }: Props) {
+  const t = useTranslations('Login');
   const [profiles, setProfiles] = useState<Profile[] | null>(null); // null = loading
   const [selected, setSelected] = useState<Profile | null>(null);
   const [manual, setManual] = useState(false);
@@ -53,7 +55,7 @@ export function LoginForm({ next }: Props) {
       window.location.href = dest;
       return;
     }
-    setError(body?.error || 'Invalid username or password');
+    setError(body?.error || t('invalidCredentials'));
     setLoading(false);
   };
 
@@ -63,7 +65,7 @@ export function LoginForm({ next }: Props) {
   if (profiles === null) {
     return (
       <main className={styles.root}>
-        <p className={styles.loading}>Loading…</p>
+        <p className={styles.loading}>{t('loading')}</p>
       </main>
     );
   }
@@ -82,7 +84,7 @@ export function LoginForm({ next }: Props) {
           <input
             type="text"
             className={styles.input}
-            placeholder="Username"
+            placeholder={t('usernamePlaceholder')}
             value={username}
             onChange={(e) => setUsername(e.target.value)}
             autoComplete="username"
@@ -92,7 +94,7 @@ export function LoginForm({ next }: Props) {
           <input
             type="password"
             className={styles.input}
-            placeholder="Password"
+            placeholder={t('passwordPlaceholder')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
@@ -100,7 +102,7 @@ export function LoginForm({ next }: Props) {
           />
           {error && <p className={styles.error}>{error}</p>}
           <button className={styles.button} type="submit" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('signingIn') : t('signIn')}
           </button>
           {profiles.length > 0 && (
             <button
@@ -112,7 +114,7 @@ export function LoginForm({ next }: Props) {
                 setPassword('');
               }}
             >
-              Back to profiles
+              {t('backToProfiles')}
             </button>
           )}
         </form>
@@ -137,7 +139,7 @@ export function LoginForm({ next }: Props) {
           <input
             type="password"
             className={styles.input}
-            placeholder="Password"
+            placeholder={t('passwordPlaceholder')}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             autoComplete="current-password"
@@ -146,7 +148,7 @@ export function LoginForm({ next }: Props) {
           />
           {error && <p className={styles.error}>{error}</p>}
           <button className={styles.button} type="submit" disabled={loading}>
-            {loading ? 'Signing in…' : 'Sign in'}
+            {loading ? t('signingIn') : t('signIn')}
           </button>
           <button
             type="button"
@@ -157,7 +159,7 @@ export function LoginForm({ next }: Props) {
               setPassword('');
             }}
           >
-            Back
+            {t('back')}
           </button>
         </form>
       </main>
@@ -168,7 +170,7 @@ export function LoginForm({ next }: Props) {
   return (
     <main className={styles.root}>
       <h1 className={styles.pickerTitle}>
-        {loading ? 'Signing in…' : "Who's using Flight Finder?"}
+        {loading ? t('signingIn') : t('pickerTitle')}
       </h1>
       <div className={styles.profiles}>
         {profiles.map((p) => {
@@ -199,7 +201,7 @@ export function LoginForm({ next }: Props) {
         disabled={loading}
         onClick={() => setManual(true)}
       >
-        Sign in with a username instead
+        {t('manualSignIn')}
       </button>
     </main>
   );

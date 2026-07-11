@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './page.module.css';
 
 export function CopyButton({ value }: { value: string }) {
+  const t = useTranslations('Connect');
   const [copied, setCopied] = useState(false);
 
   const copy = async () => {
@@ -20,7 +22,7 @@ export function CopyButton({ value }: { value: string }) {
 
   return (
     <button type="button" className={styles.copy} onClick={copy} aria-live="polite">
-      {copied ? 'Copied' : 'Copy'}
+      {copied ? t('copied') : t('copy')}
     </button>
   );
 }

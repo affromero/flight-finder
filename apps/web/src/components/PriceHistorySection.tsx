@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { useHydrated } from '@/lib/use-hydrated';
@@ -51,10 +52,6 @@ function timesLabel(s: Snapshot): string | null {
   return `${s.departureTime ?? '?'} - ${s.arrivalTime ?? '?'}`;
 }
 
-function stopsLabel(s: Snapshot): string {
-  return s.stops === 0 ? 'Direct' : `${s.stops} stop${s.stops > 1 ? 's' : ''}`;
-}
-
 /**
  * Map each snapshot id to the same flight's immediately-older snapshot, so the
  * Change column reflects this exact flight's last move rather than the airline's.
@@ -102,6 +99,7 @@ function FlightRow({
   previous: Snapshot | null;
   showDate: boolean;
 }) {
+  const t = useTranslations('PriceHistorySection');
   return (
     <tr>
       {showDate && <td className={styles.date}><ScrapeTime iso={s.scrapedAt} /></td>}
@@ -111,12 +109,12 @@ function FlightRow({
         {formatCurrency(s.price, s.currency)}
       </td>
       <TrendCell current={s} previous={previous} />
-      <td className={styles.stops}>{stopsLabel(s)}</td>
+      <td className={styles.stops}>{s.stops === 0 ? t('direct') : t('stopCount', { count: s.stops })}</td>
       <td className={styles.seats}>
         {s.status === 'sold_out' ? (
-          <span className={styles.soldOut}>Sold out</span>
+          <span className={styles.soldOut}>{t('soldOut')}</span>
         ) : s.seatsLeft !== null ? (
-          <span className={s.seatsLeft <= 3 ? styles.seatsLow : styles.seatsNormal}>{s.seatsLeft} left</span>
+          <span className={s.seatsLeft <= 3 ? styles.seatsLow : styles.seatsNormal}>{t('seatsLeftShort', { count: s.seatsLeft })}</span>
         ) : null}
       </td>
       <td>
@@ -124,7 +122,7 @@ function FlightRow({
           <span className={styles.soldOutLabel}>&mdash;</span>
         ) : (
           <a href={safeHttpUrl(s.bookingUrl)} target="_blank" rel="noopener noreferrer" className={styles.bookLink}>
-            Book
+            {t('book')}
           </a>
         )}
       </td>
@@ -142,6 +140,7 @@ function FlightRow({
  * ones and it was impossible to read today's situation at a glance.
  */
 export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
+  const t = useTranslations('PriceHistorySection');
   const [expanded, setExpanded] = useState(false);
   if (snapshots.length === 0) return null;
 
@@ -175,19 +174,18 @@ export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
   return (
     <div className={styles.section}>
       <div className={styles.caption}>
-        Latest check &middot; <ScrapeTime iso={latestScrapedAt} /> &middot; {current.length} flight
-        {current.length === 1 ? '' : 's'}
+        {t('latestCheck')} &middot; <ScrapeTime iso={latestScrapedAt} /> &middot; {t('flightCount', { count: current.length })}
       </div>
       <div className={styles.tableWrapper}>
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Airline</th>
-              <th>Times</th>
-              <th>Price</th>
-              <th>Change</th>
-              <th>Stops</th>
-              <th>Seats</th>
+              <th>{t('airline')}</th>
+              <th>{t('times')}</th>
+              <th>{t('price')}</th>
+              <th>{t('change')}</th>
+              <th>{t('stops')}</th>
+              <th>{t('seats')}</th>
               <th></th>
             </tr>
           </thead>
@@ -206,7 +204,7 @@ export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
         >
-          {expanded ? 'Hide full history' : `Show full history (${snapshots.length} checks)`}
+          {expanded ? t('hideHistory') : t('showHistory', { count: snapshots.length })}
         </button>
       )}
 
@@ -215,13 +213,13 @@ export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Date</th>
-                <th>Airline</th>
-                <th>Times</th>
-                <th>Price</th>
-                <th>Change</th>
-                <th>Stops</th>
-                <th>Seats</th>
+                <th>{t('date')}</th>
+                <th>{t('airline')}</th>
+                <th>{t('times')}</th>
+                <th>{t('price')}</th>
+                <th>{t('change')}</th>
+                <th>{t('stops')}</th>
+                <th>{t('seats')}</th>
                 <th></th>
               </tr>
             </thead>
@@ -232,7 +230,7 @@ export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
               {hiddenCount > 0 && (
                 <tr>
                   <td colSpan={8} className={styles.truncationNote}>
-                    Showing the latest {MAX_HISTORY_ROWS} of {history.length} checks.
+                    {t('truncation', { shown: MAX_HISTORY_ROWS, total: history.length })}
                   </td>
                 </tr>
               )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { ALL_AGGREGATORS, AGGREGATOR_LABEL, EXPERIMENTAL_AGGREGATORS, type Aggregator } from '@/lib/aggregators';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
@@ -37,6 +38,7 @@ export function SettingsForm({
   initial: Preferences;
   adminEnabledAggregators: string[];
 }) {
+  const t = useTranslations('AccountSettings');
   const [displayName, setDisplayName] = useState(initial.displayName ?? '');
   const [avatar, setAvatar] = useState<string | null>(initial.avatar);
   const [defaultCurrency, setDefaultCurrency] = useState(initial.defaultCurrency ?? '');
@@ -108,40 +110,40 @@ export function SettingsForm({
 
     setSaving(false);
     const data = await res.json();
-    if (data.ok) setMessage('Saved');
-    else setError(data.error || 'Failed to save');
+    if (data.ok) setMessage(t('saved'));
+    else setError(data.error || t('saveFailed'));
   };
 
   return (
     <>
     <form className={styles.form} onSubmit={handleSubmit}>
       <div className={styles.field}>
-        <label className={styles.label}>Username</label>
+        <label className={styles.label}>{t('username')}</label>
         <p className={styles.fixed}>@{initial.username}</p>
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="displayName">Display name</label>
+        <label className={styles.label} htmlFor="displayName">{t('displayName')}</label>
         <input
           id="displayName"
           className={styles.input}
-          placeholder="Optional"
+          placeholder={t('optionalPlaceholder')}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
         />
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label}>Profile avatar</label>
+        <label className={styles.label}>{t('profileAvatar')}</label>
         <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || initial.username} />
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="currency">Default currency</label>
+        <label className={styles.label} htmlFor="currency">{t('defaultCurrency')}</label>
         <input
           id="currency"
           className={styles.input}
-          placeholder="USD, EUR, GBP..."
+          placeholder={t('currencyPlaceholder')}
           maxLength={3}
           value={defaultCurrency}
           onChange={(e) => setDefaultCurrency(e.target.value)}
@@ -149,11 +151,11 @@ export function SettingsForm({
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="country">Default country</label>
+        <label className={styles.label} htmlFor="country">{t('defaultCountry')}</label>
         <input
           id="country"
           className={styles.input}
-          placeholder="US, DE, GB..."
+          placeholder={t('countryPlaceholder')}
           maxLength={2}
           value={defaultCountry}
           onChange={(e) => setDefaultCountry(e.target.value)}
@@ -161,33 +163,33 @@ export function SettingsForm({
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="airlines">Preferred airlines</label>
+        <label className={styles.label} htmlFor="airlines">{t('preferredAirlines')}</label>
         <input
           id="airlines"
           className={styles.input}
-          placeholder="Comma separated (Delta, Lufthansa, ...)"
+          placeholder={t('airlinesPlaceholder')}
           value={preferredAirlines}
           onChange={(e) => setPreferredAirlines(e.target.value)}
         />
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="cabin">Cabin class</label>
+        <label className={styles.label} htmlFor="cabin">{t('cabinClass')}</label>
         <select
           id="cabin"
           className={styles.input}
           value={cabinClass}
           onChange={(e) => setCabinClass(e.target.value)}
         >
-          <option value="">Use instance default (economy)</option>
+          <option value="">{t('cabinDefault')}</option>
           {CABIN_CLASSES.map((c) => (
-            <option key={c} value={c}>{c.replace('_', ' ')}</option>
+            <option key={c} value={c}>{t(`cabins.${c}`)}</option>
           ))}
         </select>
       </div>
 
       <div className={styles.field}>
-        <label className={styles.label}>Aggregator preference</label>
+        <label className={styles.label}>{t('aggregatorPreference')}</label>
         <div className={styles.aggregatorList}>
           {aggregatorOrder.map((source, index) => {
             const allowedByAdmin = adminAllowed.has(source);
@@ -210,14 +212,14 @@ export function SettingsForm({
                   />
                 </label>
                 <span className={styles.aggregatorLabel}>{AGGREGATOR_LABEL[source]}</span>
-                {experimental && <span className={styles.aggregatorTag}>experimental</span>}
+                {experimental && <span className={styles.aggregatorTag}>{t('experimental')}</span>}
                 <div className={styles.aggregatorButtons}>
                   <button
                     type="button"
                     className={styles.aggregatorButton}
                     onClick={() => moveAggregator(index, -1)}
                     disabled={index === 0}
-                    aria-label={`Move ${AGGREGATOR_LABEL[source]} up`}
+                    aria-label={t('moveUp', { name: AGGREGATOR_LABEL[source] })}
                   >
                     ↑
                   </button>
@@ -226,7 +228,7 @@ export function SettingsForm({
                     className={styles.aggregatorButton}
                     onClick={() => moveAggregator(index, 1)}
                     disabled={index === aggregatorOrder.length - 1}
-                    aria-label={`Move ${AGGREGATOR_LABEL[source]} down`}
+                    aria-label={t('moveDown', { name: AGGREGATOR_LABEL[source] })}
                   >
                     ↓
                   </button>
@@ -236,8 +238,7 @@ export function SettingsForm({
           })}
         </div>
         <p className={styles.aggregatorHint}>
-          Order matters: when one source returns no flights, the next is tried.
-          Leave everything unchecked to inherit instance defaults.
+          {t('aggregatorHint')}
         </p>
       </div>
 
@@ -245,7 +246,7 @@ export function SettingsForm({
       {message && <p className={styles.success}>{message}</p>}
 
       <button type="submit" className={styles.button} disabled={saving}>
-        {saving ? 'Saving...' : 'Save'}
+        {saving ? t('saving') : t('save')}
       </button>
     </form>
     <AppearanceSection initialTheme={initial.theme} />
@@ -255,11 +256,12 @@ export function SettingsForm({
 }
 
 function AppearanceSection({ initialTheme }: { initialTheme: string | null }) {
+  const t = useTranslations('AccountSettings');
   const [theme, setTheme] = useState<string | null>(initialTheme);
   const [message, setMessage] = useState('');
 
   const persist = async (id: ThemeId | null) => {
-    setMessage('Saving…');
+    setMessage(t('themeSaving'));
     try {
       const res = await fetch('/api/account/settings', {
         method: 'PATCH',
@@ -267,10 +269,10 @@ function AppearanceSection({ initialTheme }: { initialTheme: string | null }) {
         body: JSON.stringify({ theme: id }),
       });
       const data = await res.json();
-      setMessage(data.ok ? 'Saved' : (data.error || 'Failed to save theme'));
+      setMessage(data.ok ? t('saved') : (data.error || t('themeSaveFailed')));
       return data.ok as boolean;
     } catch {
-      setMessage('Failed to save theme');
+      setMessage(t('themeSaveFailed'));
       return false;
     }
   };
@@ -278,10 +280,9 @@ function AppearanceSection({ initialTheme }: { initialTheme: string | null }) {
   return (
     <section className={styles.form}>
       <div className={styles.field}>
-        <label className={styles.label}>Appearance</label>
+        <label className={styles.label}>{t('appearance')}</label>
         <p className={styles.themeCardDesc}>
-          Your personal colour. The light/dark toggle in the top bar flips between
-          this family&apos;s light and dark palettes.
+          {t('appearanceDesc')}
         </p>
         <ThemePicker
           value={theme}
@@ -306,6 +307,7 @@ function AppearanceSection({ initialTheme }: { initialTheme: string | null }) {
 }
 
 function PasswordSection() {
+  const t = useTranslations('AccountSettings');
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -318,11 +320,11 @@ function PasswordSection() {
     setMessage('');
     setError('');
     if (newPassword.length < 8) {
-      setError('New password must be at least 8 characters');
+      setError(t('passwordTooShort'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setError('New passwords do not match');
+      setError(t('passwordMismatch'));
       return;
     }
     setSaving(true);
@@ -337,19 +339,19 @@ function PasswordSection() {
       setNewPassword('');
       setConfirmPassword('');
       // The change revoked all sessions (this one included); send to login.
-      setMessage('Password changed. Logging you out...');
+      setMessage(t('passwordChanged'));
       setTimeout(() => {
         window.location.href = '/login';
       }, 1200);
     } else {
-      setError((await res.json()).error || 'Failed to change password');
+      setError((await res.json()).error || t('passwordChangeFailed'));
     }
   };
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="currentPassword">Current password</label>
+        <label className={styles.label} htmlFor="currentPassword">{t('currentPassword')}</label>
         <input
           id="currentPassword"
           className={styles.input}
@@ -361,7 +363,7 @@ function PasswordSection() {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="newPassword">New password</label>
+        <label className={styles.label} htmlFor="newPassword">{t('newPassword')}</label>
         <input
           id="newPassword"
           className={styles.input}
@@ -374,7 +376,7 @@ function PasswordSection() {
         />
       </div>
       <div className={styles.field}>
-        <label className={styles.label} htmlFor="confirmPassword">Confirm new password</label>
+        <label className={styles.label} htmlFor="confirmPassword">{t('confirmNewPassword')}</label>
         <input
           id="confirmPassword"
           className={styles.input}
@@ -391,7 +393,7 @@ function PasswordSection() {
       {message && <p className={styles.success}>{message}</p>}
 
       <button type="submit" className={styles.button} disabled={saving}>
-        {saving ? 'Changing...' : 'Change password'}
+        {saving ? t('changing') : t('changePassword')}
       </button>
     </form>
   );

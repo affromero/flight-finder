@@ -20,6 +20,10 @@ const CONFIG_API = readFileSync(
   resolve(__dirname, '../../app/api/admin/config/route.ts'),
   'utf-8'
 );
+const SETTINGS_MESSAGES = readFileSync(
+  resolve(__dirname, '../../../messages/en/settings.json'),
+  'utf-8'
+);
 
 /** Extract Config interface fields from source code */
 function extractConfigFields(source: string): string[] {
@@ -126,7 +130,9 @@ describe('settings page parity with admin config', () => {
   });
 
   it('settings page renders currency selector and search method selector', () => {
-    expect(SETTINGS_PAGE).toContain('Default Currency');
-    expect(SETTINGS_PAGE).toContain('Default Search Method');
+    expect(SETTINGS_PAGE).toContain("t('extraction.defaultCurrency')");
+    expect(SETTINGS_PAGE).toContain("t('extraction.defaultSearchMethod')");
+    expect(SETTINGS_MESSAGES).toContain('Default Currency');
+    expect(SETTINGS_MESSAGES).toContain('Default Search Method');
   });
 });

@@ -1,9 +1,11 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './ReachGuide.module.css';
 
 type OS = 'macos' | 'linux' | 'windows';
+type Translator = ReturnType<typeof useTranslations>;
 
 function detectOS(): OS {
   if (typeof navigator === 'undefined') return 'linux';
@@ -29,23 +31,17 @@ interface MethodCtx {
 
 interface Method {
   id: string;
-  label: string;
-  badge: string;
-  blurb: string;
-  steps: (ctx: MethodCtx) => Step[];
+  steps: (ctx: MethodCtx, t: Translator) => Step[];
 }
 
 const METHODS: Method[] = [
   {
     id: 'lan',
-    label: 'Same Wi-Fi',
-    badge: 'http · local only',
-    blurb: 'Fastest to set up. Reachable by devices on your network. Not encrypted, and phones cannot install it as an app.',
-    steps: ({ os, port, host, onLocalhost }) =>
+    steps: ({ os, port, host, onLocalhost }, t) =>
       onLocalhost
         ? [
             {
-              text: "You're viewing this on localhost, which phones can't reach. Find this machine's network IP:",
+              text: t('lan.findIp'),
               code:
                 os === 'macos'
                   ? 'ipconfig getifaddr en0'
@@ -53,34 +49,28 @@ const METHODS: Method[] = [
                     ? 'ipconfig   (use the IPv4 Address)'
                     : 'hostname -I | awk \'{print $1}\'',
             },
-            { text: 'On your phone (same Wi-Fi), open that address with the port:', code: `http://<that-ip>:${port}` },
-            { text: 'Leave the Public URL field below empty for this mode.' },
+            { text: t('lan.openWithPort'), code: `http://<that-ip>:${port}` },
+            { text: t('lan.leaveEmpty') },
           ]
         : [
-            { text: 'Open this exact address on your phone (it must be on the same Wi-Fi):', code: `http://${host}` },
-            { text: 'Leave the Public URL field below empty for this mode.' },
+            { text: t('lan.openExact'), code: `http://${host}` },
+            { text: t('lan.leaveEmpty') },
           ],
   },
   {
     id: 'tailscale',
-    label: 'Tailscale',
-    badge: 'https · private',
-    blurb: 'A private, encrypted URL only your own devices can reach. No public exposure and no domain required.',
-    steps: ({ port }) => [
-      { text: 'Install Tailscale on this machine and your phone, signed into the same account:', code: 'https://tailscale.com/download' },
-      { text: 'Bring this machine onto your tailnet:', code: 'sudo tailscale up' },
-      { text: 'Serve this app over HTTPS on your tailnet:', code: `sudo tailscale serve ${port}` },
-      { text: 'Tailscale prints an https URL ending in .ts.net — paste it into Public URL below.' },
+    steps: ({ port }, t) => [
+      { text: t('tailscale.install'), code: 'https://tailscale.com/download' },
+      { text: t('tailscale.up'), code: 'sudo tailscale up' },
+      { text: t('tailscale.serve'), code: `sudo tailscale serve ${port}` },
+      { text: t('tailscale.paste') },
     ],
   },
   {
     id: 'cloudflare',
-    label: 'Cloudflare Tunnel',
-    badge: 'https · public',
-    blurb: 'A public https URL. A quick tunnel takes seconds with no account; a named tunnel gives a permanent URL on your domain.',
-    steps: ({ os, port }) => [
+    steps: ({ os, port }, t) => [
       {
-        text: 'Install cloudflared:',
+        text: t('cloudflare.install'),
         code:
           os === 'macos'
             ? 'brew install cloudflared'
@@ -89,11 +79,11 @@ const METHODS: Method[] = [
               : 'sudo apt install cloudflared',
       },
       {
-        text: 'Quick, temporary URL (no account): start a tunnel, then copy the https://<name>.trycloudflare.com address it prints and paste it below.',
+        text: t('cloudflare.quick'),
         code: `cloudflared tunnel --url http://localhost:${port}`,
       },
       {
-        text: 'Permanent URL on your own domain (needs a free Cloudflare account with your domain added to it): log in, create a named tunnel, point a DNS record at it, then run it.',
+        text: t('cloudflare.permanent'),
         code: [
           'cloudflared tunnel login',
           'cloudflared tunnel create flight-finder',
@@ -101,20 +91,17 @@ const METHODS: Method[] = [
           `cloudflared tunnel run --url http://localhost:${port} flight-finder`,
         ].join('\n'),
       },
-      { text: 'Paste your https URL into Public URL below.' },
+      { text: t('cloudflare.paste') },
     ],
   },
   {
     id: 'domain',
-    label: 'Your own domain',
-    badge: 'https · permanent',
-    blurb: 'A permanent https URL on a domain you own, via Caddy — certificates are issued automatically.',
-    steps: ({ port }) => [
-      { text: "Point an A record for your (sub)domain at this server's public IP." },
-      { text: 'Install Caddy:', code: 'https://caddyserver.com/docs/install' },
-      { text: 'Create a Caddyfile:', code: `flights.example.com {\n  reverse_proxy localhost:${port}\n}` },
-      { text: "Start Caddy — it fetches a Let's Encrypt certificate automatically:", code: 'caddy run' },
-      { text: 'Paste https://flights.example.com into Public URL below.' },
+    steps: ({ port }, t) => [
+      { text: t('domain.dns') },
+      { text: t('domain.install'), code: 'https://caddyserver.com/docs/install' },
+      { text: t('domain.caddyfile'), code: `flights.example.com {\n  reverse_proxy localhost:${port}\n}` },
+      { text: t('domain.run'), code: 'caddy run' },
+      { text: t('domain.paste') },
     ],
   },
 ];
@@ -122,6 +109,7 @@ const METHODS: Method[] = [
 const OS_LABELS: Record<OS, string> = { macos: 'macOS', linux: 'Linux', windows: 'Windows' };
 
 export function ReachGuide() {
+  const t = useTranslations('ReachGuide');
   const [os, setOs] = useState<OS>('linux');
   const [selected, setSelected] = useState<string>('tailscale');
   const [port, setPort] = useState('3003');
@@ -138,14 +126,12 @@ export function ReachGuide() {
   }, []);
 
   const method = METHODS.find((m) => m.id === selected) ?? METHODS[0]!;
-  const steps = method.steps({ os, port, host, onLocalhost });
-  // OS-specific commands appear in the LAN method (only on localhost) and the
-  // Cloudflare install line, so only show the OS switch then.
+  const steps = method.steps({ os, port, host, onLocalhost }, t);
   const osMatters = (selected === 'lan' && onLocalhost) || selected === 'cloudflare';
 
   return (
     <div className={styles.root}>
-      <div className={styles.methods} role="tablist" aria-label="Reach method">
+      <div className={styles.methods} role="tablist" aria-label={t('ariaLabel')}>
         {METHODS.map((m) => (
           <button
             key={m.id}
@@ -155,13 +141,13 @@ export function ReachGuide() {
             className={`${styles.method} ${selected === m.id ? styles.methodActive : ''}`}
             onClick={() => setSelected(m.id)}
           >
-            <span className={styles.methodLabel}>{m.label}</span>
-            <span className={styles.methodBadge}>{m.badge}</span>
+            <span className={styles.methodLabel}>{t(`${m.id}.label`)}</span>
+            <span className={styles.methodBadge}>{t(`${m.id}.badge`)}</span>
           </button>
         ))}
       </div>
 
-      <p className={styles.blurb}>{method.blurb}</p>
+      <p className={styles.blurb}>{t(`${method.id}.blurb`)}</p>
 
       {osMatters && (
         <div className={styles.osRow}>

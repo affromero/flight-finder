@@ -1,16 +1,18 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import type { BotFilter } from '@/lib/analytics/query';
 import styles from './BotFilterToggle.module.css';
 
-const OPTIONS: { label: string; value: BotFilter }[] = [
-  { label: 'Humans', value: 'humans' },
-  { label: 'Bots', value: 'bots' },
-  { label: 'All', value: 'all' },
+const OPTIONS: { labelKey: 'humans' | 'bots' | 'all'; value: BotFilter }[] = [
+  { labelKey: 'humans', value: 'humans' },
+  { labelKey: 'bots', value: 'bots' },
+  { labelKey: 'all', value: 'all' },
 ];
 
 export function BotFilterToggle({ current }: { current: BotFilter }) {
+  const t = useTranslations('AdminAnalytics');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -33,7 +35,7 @@ export function BotFilterToggle({ current }: { current: BotFilter }) {
           className={`${styles.button} ${current === opt.value ? styles.active : ''}`}
           onClick={() => setFilter(opt.value)}
         >
-          {opt.label}
+          {t(`filter.${opt.labelKey}`)}
         </button>
       ))}
     </div>

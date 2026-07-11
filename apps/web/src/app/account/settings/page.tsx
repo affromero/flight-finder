@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { prisma } from '@/lib/prisma';
@@ -10,6 +11,8 @@ export const dynamic = 'force-dynamic';
 
 export default async function AccountSettingsPage() {
   if (!(await isMultiUserEnabled())) notFound();
+
+  const t = await getTranslations('AccountSettings');
 
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/account/settings');
@@ -30,9 +33,9 @@ export default async function AccountSettingsPage() {
           <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
             <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          Your account
+          {t('backLink')}
         </Link>
-        <h1 className={styles.title}>Account settings</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
       </header>
 
       <SettingsForm

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { getDeleteToken } from '@/lib/tracker-storage';
 import styles from './ScrapeInterval.module.css';
 
@@ -21,6 +22,7 @@ interface Props {
 }
 
 export function ScrapeInterval({ queryId, currentInterval, canEdit = false }: Props) {
+  const t = useTranslations('ScrapeInterval');
   const [interval, setInterval] = useState<number | null>(currentInterval);
   const [saving, setSaving] = useState(false);
 
@@ -52,14 +54,14 @@ export function ScrapeInterval({ queryId, currentInterval, canEdit = false }: Pr
 
   return (
     <div className={styles.root}>
-      <span className={styles.label}>Check every</span>
+      <span className={styles.label}>{t('checkEvery')}</span>
       <div className={styles.options}>
         <button
           className={`${styles.option} ${interval === null ? styles.active : ''}`}
           onClick={() => handleChange(null)}
           disabled={saving}
         >
-          Auto
+          {t('auto')}
         </button>
         {INTERVALS.map((opt) => (
           <button

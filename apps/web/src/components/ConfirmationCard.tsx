@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import type { Airport } from '@/lib/scraper/parse-query';
 import { formatCurrency } from '@/lib/currency';
 import styles from './ConfirmationCard.module.css';
@@ -84,8 +85,8 @@ export function ConfirmationCard({
   onTrack,
   onEdit,
   loading,
-  actionLabel = 'Show available flights',
-  loadingLabel = 'Checking Google Flights...',
+  actionLabel,
+  loadingLabel,
   vpnCountries,
   onVpnCountriesChange,
 }: {
@@ -98,6 +99,7 @@ export function ConfirmationCard({
   vpnCountries?: string[];
   onVpnCountriesChange?: (countries: string[]) => void;
 }) {
+  const t = useTranslations('ConfirmationCard');
   const [vpnOpen, setVpnOpen] = useState(false);
   const [vpnShowAll, setVpnShowAll] = useState(false);
   const [vpnStatus, setVpnStatus] = useState<{ configured: boolean; sidecarRunning: boolean; ready: boolean } | null>(null);
@@ -153,7 +155,7 @@ export function ConfirmationCard({
       </div>
       <div className={styles.filters}>
         <span className={styles.tag}>
-          {parsed.tripType === 'one_way' ? 'One way' : 'Round trip'}
+          {parsed.tripType === 'one_way' ? t('oneWay') : t('roundTrip')}
         </span>
       </div>
 
@@ -163,7 +165,7 @@ export function ConfirmationCard({
             {parsed.outboundDates && (
               <div className={styles.dateRange}>
                 <span className={styles.label}>
-                  {parsed.tripType === 'one_way' ? 'Departure' : 'Outbound'}
+                  {parsed.tripType === 'one_way' ? t('departure') : t('outbound')}
                 </span>
                 <span className={styles.value}>
                   {parsed.outboundDates.map(formatDate).join(', ')}
@@ -172,7 +174,7 @@ export function ConfirmationCard({
             )}
             {parsed.returnDates && (
               <div className={styles.dateRange}>
-                <span className={styles.label}>Return</span>
+                <span className={styles.label}>{t('return')}</span>
                 <span className={styles.value}>
                   {parsed.returnDates.map(formatDate).join(', ')}
                 </span>
@@ -181,7 +183,7 @@ export function ConfirmationCard({
           </>
         ) : (
           <div className={styles.dateRange}>
-            <span className={styles.label}>Travel window</span>
+            <span className={styles.label}>{t('travelWindow')}</span>
             <span className={styles.value}>
               {formatDate(parsed.dateFrom)} &mdash; {formatDate(parsed.dateTo)}
             </span>
@@ -190,13 +192,13 @@ export function ConfirmationCard({
 
         {parsed.flexibility > 0 && (
           <div className={styles.flexibility}>
-            <span className={styles.label}>Flexibility</span>
-            <span className={styles.value}>&plusmn; {parsed.flexibility} days</span>
+            <span className={styles.label}>{t('flexibility')}</span>
+            <span className={styles.value}>{t('flexibilityDays', { days: parsed.flexibility })}</span>
           </div>
         )}
 
         <div className={styles.expiry}>
-          <span className={styles.label}>Link expires</span>
+          <span className={styles.label}>{t('linkExpires')}</span>
           <span className={styles.value}>
             {computeExpiry(parsed.dateTo, parsed.flexibility)}
           </span>
@@ -208,21 +210,21 @@ export function ConfirmationCard({
           <circle cx="12" cy="12" r="10" />
           <path d="M12 6v6l4 2" />
         </svg>
-        Prices checked daily &middot; Shareable chart &middot; Tracking ends {computeExpiry(parsed.dateTo, parsed.flexibility)}
+        {t('trackingInfo', { date: computeExpiry(parsed.dateTo, parsed.flexibility) })}
       </p>
 
       {hasFilters(parsed) && (
         <div className={styles.filters}>
           {parsed.maxPrice && (
-            <span className={styles.tag}>Under {formatCurrency(parsed.maxPrice, parsed.currency ?? 'USD')}</span>
+            <span className={styles.tag}>{t('underPrice', { price: formatCurrency(parsed.maxPrice, parsed.currency ?? 'USD') })}</span>
           )}
           {parsed.maxStops !== null && (
             <span className={styles.tag}>
-              {parsed.maxStops === 0 ? 'Nonstop only' : `Max ${parsed.maxStops} stop${parsed.maxStops > 1 ? 's' : ''}`}
+              {parsed.maxStops === 0 ? t('nonstopOnly') : t('maxStops', { count: parsed.maxStops })}
             </span>
           )}
           {parsed.maxDurationHours !== null && parsed.maxDurationHours > 0 && (
-            <span className={styles.tag}>Under {parsed.maxDurationHours}h</span>
+            <span className={styles.tag}>{t('underHours', { hours: parsed.maxDurationHours })}</span>
           )}
           {parsed.preferredAirlines.length > 0 && (
             <span className={styles.tag}>{parsed.preferredAirlines.join(', ')}</span>
@@ -249,10 +251,10 @@ export function ConfirmationCard({
                 <circle cx="12" cy="12" r="10" />
                 <path d="M2 12h20M12 2a15.3 15.3 0 014 10 15.3 15.3 0 01-4 10 15.3 15.3 0 01-4-10 15.3 15.3 0 014-10z" />
               </svg>
-              <span className={styles.vpnTitle}>Global Price Check</span>
+              <span className={styles.vpnTitle}>{t('globalPriceCheck')}</span>
               {vpnStatus && (
                 <span className={vpnStatus.ready ? styles.vpnStatusReady : styles.vpnStatusOff}>
-                  {vpnStatus.ready ? 'VPN ready' : !vpnStatus.configured ? 'Not set up' : 'Sidecar offline'}
+                  {vpnStatus.ready ? t('vpnReady') : !vpnStatus.configured ? t('notSetUp') : t('sidecarOffline')}
                 </span>
               )}
               {vpnCountries && vpnCountries.length > 0 && (
@@ -266,7 +268,7 @@ export function ConfirmationCard({
 
           {!vpnOpen && (
             <div className={styles.vpnTeaser} onClick={() => setVpnOpen(true)}>
-              Does your location affect the price? <span className={styles.vpnHighlight}>Find out.</span>
+              {t('vpnTeaser')} <span className={styles.vpnHighlight}>{t('findOut')}</span>
             </div>
           )}
 
@@ -275,17 +277,17 @@ export function ConfirmationCard({
               <div className={styles.vpnSetupPrompt}>
                 {!vpnStatus.configured ? (
                   <>
-                    <p>VPN is not configured yet. Set up ExpressVPN to compare prices from different countries.</p>
+                    <p>{t('vpnNotConfigured')}</p>
                     <a href="/settings" className={styles.vpnSetupLink}>
                       <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
                         <path d="M6.5 1.75a.75.75 0 0 1 .75-.75h1.5a.75.75 0 0 1 .75.75v.3a5.5 5.5 0 0 1 1.654.685l.212-.212a.75.75 0 0 1 1.06 0l1.061 1.06a.75.75 0 0 1 0 1.061l-.212.212A5.5 5.5 0 0 1 14 6.5h.25a.75.75 0 0 1 .75.75v1.5a.75.75 0 0 1-.75.75H14a5.5 5.5 0 0 1-.685 1.654l.212.212a.75.75 0 0 1 0 1.06l-1.06 1.061a.75.75 0 0 1-1.061 0l-.212-.212A5.5 5.5 0 0 1 9.5 14v.25a.75.75 0 0 1-.75.75h-1.5a.75.75 0 0 1-.75-.75V14a5.5 5.5 0 0 1-1.654-.685l-.212.212a.75.75 0 0 1-1.06 0l-1.061-1.06a.75.75 0 0 1 0-1.061l.212-.212A5.5 5.5 0 0 1 2 9.5h-.25a.75.75 0 0 1-.75-.75v-1.5a.75.75 0 0 1 .75-.75H2a5.5 5.5 0 0 1 .685-1.654l-.212-.212a.75.75 0 0 1 0-1.06l1.06-1.061a.75.75 0 0 1 1.061 0l.212.212A5.5 5.5 0 0 1 6.5 2.05v-.3ZM8 10a2 2 0 1 0 0-4 2 2 0 0 0 0 4Z" fill="currentColor" />
                       </svg>
-                      Go to Settings
+                      {t('goToSettings')}
                     </a>
                   </>
                 ) : (
                   <>
-                    <p>ExpressVPN sidecar is not running. Start Flight Finder with VPN support:</p>
+                    <p>{t('sidecarNotRunning')}</p>
                     <code className={styles.vpnCommand}>docker compose -f docker-compose.prod.yml -f docker-compose.vpn.yml up -d</code>
                   </>
                 )}
@@ -310,7 +312,7 @@ export function ConfirmationCard({
               </div>
               {!vpnShowAll && POPULAR_COUNTRIES.length > 12 && (
                 <button className={styles.vpnShowAll} onClick={() => setVpnShowAll(true)} type="button">
-                  + {POPULAR_COUNTRIES.length - 12} more regions
+                  {t('moreRegions', { count: POPULAR_COUNTRIES.length - 12 })}
                 </button>
               )}
             </div>
@@ -324,14 +326,14 @@ export function ConfirmationCard({
           onClick={onTrack}
           disabled={loading}
         >
-          {loading ? loadingLabel : actionLabel}
+          {loading ? loadingLabel ?? t('checkingGoogleFlights') : actionLabel ?? t('showAvailableFlights')}
         </button>
         <button
           className={styles.editButton}
           onClick={onEdit}
           disabled={loading}
         >
-          Edit
+          {t('edit')}
         </button>
       </div>
     </div>

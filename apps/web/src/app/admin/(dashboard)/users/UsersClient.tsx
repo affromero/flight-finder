@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { Avatar } from '@/components/Avatar/Avatar';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { FLIGHT_AVATARS } from '@/lib/avatars';
@@ -25,6 +26,7 @@ const BACKFILL_BANNER_KEY = 'ft-backfill-banner-dismissed';
 const BACKFILL_COUNT_KEY = 'ft-backfill-count';
 
 export function UsersClient({ initialUsers }: Props) {
+  const t = useTranslations('AdminUsers');
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [banner, setBanner] = useState<number | null>(null);
 
@@ -77,29 +79,29 @@ export function UsersClient({ initialUsers }: Props) {
     const res = await fetch('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: `guest${n}`, displayName: `Guest ${n}`, password: '', avatar }),
+      body: JSON.stringify({ username: `guest${n}`, displayName: t('guestDisplayName', { n }), password: '', avatar }),
     });
     if (res.ok) await refresh();
-    else alert((await res.json()).error || 'Failed to add guest');
+    else alert((await res.json()).error || t('errors.addGuest'));
   };
 
   const handleDelete = async (id: string, username: string) => {
-    if (!confirm(`Delete user ${username}? Their trackers will become unowned.`)) return;
+    if (!confirm(t('deleteConfirm', { username }))) return;
     const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
     if (res.ok) await refresh();
-    else alert((await res.json()).error || 'Failed to delete user');
+    else alert((await res.json()).error || t('errors.delete'));
   };
 
   const handleResetPassword = async (id: string, username: string) => {
-    const pw = prompt(`New password for ${username} (8+ chars):`);
+    const pw = prompt(t('resetPrompt', { username }));
     if (!pw) return;
     const res = await fetch(`/api/admin/users/${id}`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ password: pw }),
     });
-    if (res.ok) alert('Password reset.');
-    else alert((await res.json()).error || 'Failed to reset password');
+    if (res.ok) alert(t('passwordReset'));
+    else alert((await res.json()).error || t('errors.resetPassword'));
   };
 
   const handleToggleAdmin = async (id: string, isAdmin: boolean) => {
@@ -109,21 +111,16 @@ export function UsersClient({ initialUsers }: Props) {
       body: JSON.stringify({ isAdmin: !isAdmin }),
     });
     if (res.ok) await refresh();
-    else alert((await res.json()).error || 'Failed to update user');
+    else alert((await res.json()).error || t('errors.update'));
   };
 
   const handleDisableMultiUser = async () => {
-    if (
-      !confirm(
-        'Disable multi user mode? This turns off all logins and clears the admin password, reverting to a single user self hosted instance. Accounts stay in the database but become inaccessible until you re-enable multi user mode. Continue?',
-      )
-    )
-      return;
+    if (!confirm(t('disableConfirm'))) return;
     const res = await fetch('/api/admin/multi-user', { method: 'DELETE' });
     if (res.ok) {
       window.location.href = '/admin';
     } else {
-      alert((await res.json()).error || 'Failed to disable multi user mode');
+      alert((await res.json()).error || t('errors.disableMultiUser'));
     }
   };
 
@@ -132,12 +129,13 @@ export function UsersClient({ initialUsers }: Props) {
       {banner !== null && (
         <div className={styles.banner}>
           <p>
-            {banner} existing tracker{banner === 1 ? '' : 's'} {banner === 1 ? 'was' : 'were'} assigned to you when you enabled multi user mode.
-            Reassign any that belong to other household members from the{' '}
-            <a href="/admin/queries">admin trackers page</a>.
+            {t.rich('banner', {
+              count: banner,
+              link: (chunks) => <a href="/admin/queries">{chunks}</a>,
+            })}
           </p>
           <button className={styles.bannerDismiss} onClick={dismissBanner}>
-            Dismiss
+            {t('dismiss')}
           </button>
         </div>
       )}
@@ -145,12 +143,12 @@ export function UsersClient({ initialUsers }: Props) {
       <AddUserForm onCreated={refresh} />
 
       <button type="button" className={styles.action} onClick={handleQuickAddGuest}>
-        + Add a guest (no password)
+        {t('addGuest')}
       </button>
 
       <div className={styles.list}>
         {users.length === 0 ? (
-          <p className={styles.empty}>No users yet.</p>
+          <p className={styles.empty}>{t('noUsers')}</p>
         ) : (
           users.map((u) => (
             <div key={u.id} className={styles.row}>
@@ -159,22 +157,22 @@ export function UsersClient({ initialUsers }: Props) {
                 <div>
                   <div className={styles.rowName}>
                     {u.displayName || u.username}
-                    {u.isAdmin && <span className={styles.adminBadge}>admin</span>}
+                    {u.isAdmin && <span className={styles.adminBadge}>{t('adminBadge')}</span>}
                   </div>
                   <div className={styles.rowMeta}>
-                    @{u.username} {' '} {u.queryCount} tracker{u.queryCount === 1 ? '' : 's'}
+                    @{u.username} {' '} {t('trackerCount', { count: u.queryCount })}
                   </div>
                 </div>
               </div>
               <div className={styles.rowActions}>
                 <button className={styles.action} onClick={() => handleResetPassword(u.id, u.username)}>
-                  Reset password
+                  {t('resetPassword')}
                 </button>
                 <button className={styles.action} onClick={() => handleToggleAdmin(u.id, u.isAdmin)}>
-                  {u.isAdmin ? 'Demote' : 'Promote to admin'}
+                  {u.isAdmin ? t('demote') : t('promote')}
                 </button>
                 <button className={styles.danger} onClick={() => handleDelete(u.id, u.username)}>
-                  Delete
+                  {t('delete')}
                 </button>
               </div>
             </div>
@@ -183,12 +181,12 @@ export function UsersClient({ initialUsers }: Props) {
       </div>
 
       <div className={styles.addForm}>
-        <h2 className={styles.formTitle}>Danger zone</h2>
+        <h2 className={styles.formTitle}>{t('dangerZone')}</h2>
         <p className={styles.rowMeta}>
-          Turn off multi user mode and revert to a single user self hosted instance. Accounts are kept in the database but become inaccessible, and the admin password is cleared.
+          {t('dangerText')}
         </p>
         <button className={styles.danger} onClick={handleDisableMultiUser}>
-          Disable multi user mode
+          {t('disableMultiUser')}
         </button>
       </div>
     </>
@@ -196,6 +194,7 @@ export function UsersClient({ initialUsers }: Props) {
 }
 
 function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
+  const t = useTranslations('AdminUsers');
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
   const [password, setPassword] = useState('');
@@ -225,7 +224,7 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
 
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error || 'Failed to create user');
+      setError(data.error || t('errors.create'));
       return;
     }
 
@@ -239,11 +238,11 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
 
   return (
     <form className={styles.addForm} onSubmit={handleSubmit}>
-      <h2 className={styles.formTitle}>Add user</h2>
+      <h2 className={styles.formTitle}>{t('addUser.title')}</h2>
       <div className={styles.formGrid}>
         <input
           className={styles.input}
-          placeholder="Username"
+          placeholder={t('addUser.username')}
           value={username}
           onChange={(e) => setUsername(e.target.value)}
           autoComplete="off"
@@ -251,7 +250,7 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
         />
         <input
           className={styles.input}
-          placeholder="Display name (optional)"
+          placeholder={t('addUser.displayName')}
           value={displayName}
           onChange={(e) => setDisplayName(e.target.value)}
           autoComplete="off"
@@ -259,7 +258,7 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
         <input
           className={styles.input}
           type="password"
-          placeholder={isAdmin ? 'Password (8+ chars)' : 'Password (optional)'}
+          placeholder={isAdmin ? t('addUser.passwordAdmin') : t('addUser.passwordOptional')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
@@ -272,18 +271,16 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
             checked={isAdmin}
             onChange={(e) => setIsAdmin(e.target.checked)}
           />
-          Admin
+          {t('addUser.admin')}
         </label>
       </div>
       <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || username} />
       <p className={styles.rowMeta}>
-        Leave the password blank for a tap-to-sign-in member. Anyone who can reach this
-        instance can sign in as a passwordless member, so add a password if it&apos;s public.
-        Admins always need a password.
+        {t('addUser.note')}
       </p>
       {error && <p className={styles.error}>{error}</p>}
       <button type="submit" className={styles.primaryButton} disabled={submitting}>
-        {submitting ? 'Adding...' : 'Add user'}
+        {submitting ? t('addUser.adding') : t('addUser.submit')}
       </button>
     </form>
   );

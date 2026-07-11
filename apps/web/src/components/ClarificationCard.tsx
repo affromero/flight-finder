@@ -1,6 +1,7 @@
 'use client';
 
 import { useId, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { ParseAmbiguity, ParsedFlightQuery } from '@/lib/scraper/parse-query';
 import type { ConversationMessage } from '@/lib/clarification-types';
 import styles from './ClarificationCard.module.css';
@@ -41,6 +42,7 @@ export function ClarificationCard({
   onReset: () => void;
   loading: boolean;
 }) {
+  const t = useTranslations('ClarificationCard');
   const [answers, setAnswers] = useState<Record<number, string>>({});
   const submittingRef = useRef(false);
   const baseId = useId();
@@ -74,19 +76,19 @@ export function ClarificationCard({
           <span className={styles.code}>{partialParsed.origin}</span>
           <span className={styles.arrow}>→</span>
           <span className={styles.code}>{partialParsed.destination}</span>
-          <span className={styles.narrowing}>narrowing...</span>
+          <span className={styles.narrowing}>{t('narrowing')}</span>
         </div>
       )}
 
       {history.length > 0 && (
-        <div className={styles.history} aria-label="Clarification history">
+        <div className={styles.history} aria-label={t('historyLabel')}>
           {history.map((turn, i) => (
             <div
               key={`${i}-${turn.role}`}
               className={`${styles.turn} ${turn.role === 'assistant' ? styles.assistantTurn : styles.userTurn}`}
             >
               <span className={styles.turnLabel}>
-                {turn.role === 'assistant' ? 'Flight Finder' : 'You'}
+                {turn.role === 'assistant' ? 'Flight Finder' : t('you')}
               </span>
               <span className={styles.turnContent}>{turn.content}</span>
             </div>
@@ -136,7 +138,7 @@ export function ClarificationCard({
                 id={inputId}
                 type="text"
                 className={styles.input}
-                placeholder={hasOptions ? 'Or type your answer...' : 'Type your answer...'}
+                placeholder={hasOptions ? t('orTypeAnswer') : t('typeAnswer')}
                 value={textValue}
                 onChange={(e) => setAnswer(i, e.target.value)}
                 onKeyDown={(e) => {
@@ -159,7 +161,7 @@ export function ClarificationCard({
           onClick={handleSubmit}
           disabled={loading || !allAnswered}
         >
-          {loading ? 'Submitting...' : 'Submit answers'}
+          {loading ? t('submitting') : t('submitAnswers')}
         </button>
         <button
           type="button"
@@ -167,7 +169,7 @@ export function ClarificationCard({
           onClick={onReset}
           disabled={loading}
         >
-          Start over
+          {t('startOver')}
         </button>
       </div>
     </div>

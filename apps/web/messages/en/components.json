@@ -1,0 +1,378 @@
+{
+  "AggregatorPicker": {
+    "sources": "Sources",
+    "disabledByAdmin": "Disabled by admin"
+  },
+  "AirportCombobox": {
+    "placeholder": "Search by city, airport, or code",
+    "suggestions": "{label} suggestions"
+  },
+  "Avatar": {
+    "fallbackLabel": "avatar"
+  },
+  "AvatarPicker": {
+    "chooseAvatar": "Choose a profile avatar",
+    "initials": "Initials"
+  },
+  "BestPrice": {
+    "bestPriceFound": "Best price found",
+    "nonstop": "Nonstop",
+    "stops": "{count, plural, one {# stop} other {# stops}}",
+    "bookOn": "Book on {airline}"
+  },
+  "ChartActions": {
+    "copyShareableLink": "Copy shareable link",
+    "copied": "Copied!",
+    "share": "Share",
+    "downloadCsv": "Download CSV",
+    "csv": "CSV"
+  },
+  "ClarificationCard": {
+    "narrowing": "narrowing...",
+    "historyLabel": "Clarification history",
+    "you": "You",
+    "orTypeAnswer": "Or type your answer...",
+    "typeAnswer": "Type your answer...",
+    "submitting": "Submitting...",
+    "submitAnswers": "Submit answers",
+    "startOver": "Start over"
+  },
+  "ConfirmationCard": {
+    "showAvailableFlights": "Show available flights",
+    "checkingGoogleFlights": "Checking Google Flights...",
+    "oneWay": "One way",
+    "roundTrip": "Round trip",
+    "departure": "Departure",
+    "outbound": "Outbound",
+    "return": "Return",
+    "travelWindow": "Travel window",
+    "flexibility": "Flexibility",
+    "flexibilityDays": "± {days} days",
+    "linkExpires": "Link expires",
+    "trackingInfo": "Prices checked daily · Shareable chart · Tracking ends {date}",
+    "underPrice": "Under {price}",
+    "nonstopOnly": "Nonstop only",
+    "maxStops": "{count, plural, one {Max # stop} other {Max # stops}}",
+    "underHours": "Under {hours}h",
+    "globalPriceCheck": "Global Price Check",
+    "vpnReady": "VPN ready",
+    "notSetUp": "Not set up",
+    "sidecarOffline": "Sidecar offline",
+    "vpnTeaser": "Does your location affect the price?",
+    "findOut": "Find out.",
+    "vpnNotConfigured": "VPN is not configured yet. Set up ExpressVPN to compare prices from different countries.",
+    "goToSettings": "Go to Settings",
+    "sidecarNotRunning": "ExpressVPN sidecar is not running. Start Flight Finder with VPN support:",
+    "moreRegions": "+ {count} more regions",
+    "edit": "Edit"
+  },
+  "DeleteTracker": {
+    "deleteFailed": "Failed to delete tracker",
+    "networkError": "Network error — please try again",
+    "warning": "This will permanently delete this tracker and all its price history. This cannot be undone.",
+    "cancel": "Cancel",
+    "deleting": "Deleting...",
+    "confirmDelete": "Yes, delete",
+    "stopTracking": "Stop tracking"
+  },
+  "DemoGif": {
+    "alt": "Price evolution charts - JFK to Paris, LAX to Tokyo, Chicago to Rome"
+  },
+  "FlightPicker": {
+    "nonstop": "Nonstop",
+    "stops": "{count, plural, one {# stop} other {# stops}}",
+    "flightsOn": "Flights on {date}",
+    "availableFlights": "Available flights",
+    "selectedCount": "{selected} of {total} selected",
+    "selectAll": "Select all",
+    "clear": "Clear",
+    "hint": "Select up to {count} flights to track daily price changes",
+    "creatingTrackers": "Creating trackers...",
+    "trackFlights": "Track {count, plural, one {# flight} other {# flights}}",
+    "back": "Back",
+    "editSearch": "Edit search"
+  },
+  "Footer": {
+    "tagline": "your data, not theirs",
+    "explore": "Explore community data",
+    "support": "Support on Ko-fi"
+  },
+  "ForceScrapeButton": {
+    "tryAgain": "Try again in a minute.",
+    "refreshFailed": "Refresh failed ({status})",
+    "networkError": "Network error",
+    "refreshNow": "Refresh now"
+  },
+  "HomeBrand": {
+    "home": "Flight Finder home"
+  },
+  "InstallCommand": {
+    "copyToClipboard": "Copy to clipboard",
+    "hint": "Works with Claude Code, Codex, or any LLM API key. No account needed.",
+    "desktopLink": "Rather not use the terminal? Get the desktop app"
+  },
+  "LinkBanner": {
+    "trackersCreated": "{count, plural, one {Tracker created} other {# trackers created}}",
+    "copied": "Copied!",
+    "copy": "Copy",
+    "saveWarning": "{count, plural, one {Save this link! It's the only way to access your tracker.} other {Save these links! They're the only way to access your trackers.}}",
+    "deleteWarning": "{count, plural, one {If you don't visit within 24 hours, it will be automatically deleted.} other {If you don't visit within 24 hours, they will be automatically deleted.}}",
+    "copiedAll": "Copied all!",
+    "copyAllLinks": "Copy all links",
+    "goToTracker": "Go to Tracker",
+    "done": "Done"
+  },
+  "ManualEntryForm": {
+    "origin": "Origin",
+    "originPlaceholder": "Search by city, airport, or code (e.g. JFK)",
+    "destination": "Destination",
+    "destinationPlaceholder": "Search by city, airport, or code (e.g. CDG)",
+    "selectOrigin": "Select an origin airport",
+    "selectDestination": "Select a destination airport",
+    "destinationDiffers": "Must differ from origin",
+    "selectDeparture": "Select a departure date",
+    "dateInPast": "Date cannot be in the past",
+    "selectReturn": "Select a return date",
+    "returnAfterDeparture": "Return must be after departure",
+    "durationRange": "Enter a value between 1 and 48 hours",
+    "roundTrip": "Round trip",
+    "oneWay": "One way",
+    "departure": "Departure",
+    "return": "Return",
+    "advancedOptions": "Advanced options",
+    "flexibilityDays": "Flexibility (days)",
+    "maxPrice": "Max price",
+    "noLimit": "No limit",
+    "timePreference": "Time preference",
+    "any": "Any",
+    "morning": "Morning",
+    "afternoon": "Afternoon",
+    "evening": "Evening",
+    "redEye": "Red-eye",
+    "cabinClass": "Cabin class",
+    "economy": "Economy",
+    "premiumEconomy": "Premium Economy",
+    "business": "Business",
+    "first": "First",
+    "maxStops": "Max stops",
+    "nonstopOnly": "Nonstop only",
+    "maxOneStop": "Max 1 stop",
+    "maxTwoStops": "Max 2 stops",
+    "maxDuration": "Max trip duration (hours)",
+    "currency": "Currency",
+    "autoDetect": "Auto-detect",
+    "preferredAirlines": "Preferred airlines",
+    "airlinesPlaceholder": "e.g. Delta, United",
+    "showAvailableFlights": "Show available flights",
+    "cancel": "Cancel"
+  },
+  "PriceAlerts": {
+    "priceDrop": "{airline} · now {current} (was {previous})"
+  },
+  "PriceCalendar": {
+    "title": "Cheapest by Date",
+    "cellTitle": "{date}: {price} ({airline})"
+  },
+  "PriceChart": {
+    "seatsLeft": "{count} seats left",
+    "scrapedFrom": "Scraped from {country}",
+    "soldOut": "Sold out",
+    "soldOutSuffix": "(sold out)",
+    "cheapestFrom": "cheapest from {location}",
+    "local": "Local",
+    "currentFilters": "Current filters",
+    "allHistory": "All history",
+    "allCountries": "All countries",
+    "countryComparison": "Country comparison (cheapest)",
+    "localOnly": "Local only",
+    "countryOnly": "{country} only",
+    "edited": "Edited",
+    "noPriceData": "No price data yet",
+    "noPriceDataHint": "Prices will appear after the first scrape runs. Check back soon.",
+    "noViewData": "No price data for this view",
+    "noViewDataHint": "Switch views or wait for the next scrape to collect prices under the current filters."
+  },
+  "PriceHistory": {
+    "title": "Price History",
+    "local": "Local"
+  },
+  "PriceHistorySection": {
+    "latestCheck": "Latest check",
+    "flightCount": "{count, plural, one {# flight} other {# flights}}",
+    "airline": "Airline",
+    "times": "Times",
+    "price": "Price",
+    "change": "Change",
+    "stops": "Stops",
+    "seats": "Seats",
+    "date": "Date",
+    "direct": "Direct",
+    "stopCount": "{count, plural, one {# stop} other {# stops}}",
+    "soldOut": "Sold out",
+    "seatsLeftShort": "{count} left",
+    "book": "Book",
+    "hideHistory": "Hide full history",
+    "showHistory": "Show full history ({count} checks)",
+    "truncation": "Showing the latest {shown} of {total} checks."
+  },
+  "ProfileMenu": {
+    "yourTrackers": "Your trackers",
+    "accountAppearance": "Account & appearance",
+    "connectDevice": "Connect a device",
+    "instanceSettings": "Instance settings",
+    "manageHousehold": "Manage household",
+    "adminDashboard": "Admin dashboard",
+    "switchUser": "Switch user",
+    "logOut": "Log out"
+  },
+  "ReachGuide": {
+    "ariaLabel": "Reach method",
+    "lan": {
+      "label": "Same Wi-Fi",
+      "badge": "http · local only",
+      "blurb": "Fastest to set up. Reachable by devices on your network. Not encrypted, and phones cannot install it as an app.",
+      "findIp": "You're viewing this on localhost, which phones can't reach. Find this machine's network IP:",
+      "openWithPort": "On your phone (same Wi-Fi), open that address with the port:",
+      "leaveEmpty": "Leave the Public URL field below empty for this mode.",
+      "openExact": "Open this exact address on your phone (it must be on the same Wi-Fi):"
+    },
+    "tailscale": {
+      "label": "Tailscale",
+      "badge": "https · private",
+      "blurb": "A private, encrypted URL only your own devices can reach. No public exposure and no domain required.",
+      "install": "Install Tailscale on this machine and your phone, signed into the same account:",
+      "up": "Bring this machine onto your tailnet:",
+      "serve": "Serve this app over HTTPS on your tailnet:",
+      "paste": "Tailscale prints an https URL ending in .ts.net — paste it into Public URL below."
+    },
+    "cloudflare": {
+      "label": "Cloudflare Tunnel",
+      "badge": "https · public",
+      "blurb": "A public https URL. A quick tunnel takes seconds with no account; a named tunnel gives a permanent URL on your domain.",
+      "install": "Install cloudflared:",
+      "quick": "Quick, temporary URL (no account): start a tunnel, then copy the https://<name>.trycloudflare.com address it prints and paste it below.",
+      "permanent": "Permanent URL on your own domain (needs a free Cloudflare account with your domain added to it): log in, create a named tunnel, point a DNS record at it, then run it.",
+      "paste": "Paste your https URL into Public URL below."
+    },
+    "domain": {
+      "label": "Your own domain",
+      "badge": "https · permanent",
+      "blurb": "A permanent https URL on a domain you own, via Caddy — certificates are issued automatically.",
+      "dns": "Point an A record for your (sub)domain at this server's public IP.",
+      "install": "Install Caddy:",
+      "caddyfile": "Create a Caddyfile:",
+      "run": "Start Caddy — it fetches a Let's Encrypt certificate automatically:",
+      "paste": "Paste https://flights.example.com into Public URL below."
+    }
+  },
+  "SavedTrackers": {
+    "justNow": "just now",
+    "minutesAgo": "{count}m ago",
+    "hoursAgo": "{count}h ago",
+    "daysAgo": "{count}d ago",
+    "confirmDelete": "{count, plural, =1 {Delete tracker for {route}?} other {Delete tracker for {route} ({count} charts)?}}",
+    "noTrackers": "No trackers yet. Search for a flight above to start tracking prices.",
+    "yourTrackers": "Your Trackers",
+    "remove": "Remove",
+    "removeTracker": "Remove tracker",
+    "moreDestinations": "+ {count} more",
+    "charts": "{count} charts",
+    "prices": "{count, plural, one {# price} other {# prices}}",
+    "unavailable": "Unavailable",
+    "tracking": "Tracking",
+    "paused": "Paused",
+    "expired": "Expired",
+    "refreshPrices": "Refresh prices now",
+    "pauseTracking": "Pause tracking",
+    "resumeTracking": "Resume tracking"
+  },
+  "ScrapeInterval": {
+    "checkEvery": "Check every",
+    "auto": "Auto"
+  },
+  "ScrapeStatusDot": {
+    "lastScrape": "Last scrape: {status}",
+    "success": "success",
+    "failed": "failed",
+    "partial": "partial",
+    "inProgress": "in progress",
+    "justNow": "just now",
+    "minutesAgo": "{count}m ago",
+    "hoursAgo": "{count}h ago",
+    "daysAgo": "{count}d ago"
+  },
+  "SearchBar": {
+    "parseFailed": "Failed to parse query",
+    "networkError": "Network error - please try again",
+    "beMoreSpecific": "Can you be more specific?",
+    "searchTimeout": "Flight search took too long. Please try again.",
+    "searchFailed": "Failed to search flights",
+    "startFailed": "Failed to start flight search",
+    "createFailed": "Failed to create tracker",
+    "placeholder": "NYC to Paris around June 15 +/- 3 days",
+    "example1": "JFK to CDG June 15-20",
+    "example2": "London to Tokyo next month flexible",
+    "example3": "SFO to LAX March 20 +/- 2 days",
+    "tryRandomFlight": "Try a random flight",
+    "enterManually": "Enter flight details manually",
+    "useAiSearch": "Use AI search",
+    "searchingGoogleFlights": "Searching Google Flights..."
+  },
+  "StackedSortControls": {
+    "sort": "Sort",
+    "byDate": "By date",
+    "lowestPriceFirst": "Lowest price first",
+    "footnote": "{count, plural, one {# route placed last — no current price yet.} other {# routes placed last — no current price yet.}}"
+  },
+  "ThemePicker": {
+    "lightOrDark": "Light or dark",
+    "lightBtn": "☀ Light",
+    "darkBtn": "☾ Dark",
+    "light": "Light",
+    "dark": "Dark",
+    "followingDefault": "✓ Following the instance default",
+    "followDefault": "Follow the instance default instead"
+  },
+  "ThemeToggle": {
+    "toggleTheme": "Toggle theme"
+  },
+  "TrackerFilters": {
+    "maxPriceNegative": "Max price cannot be negative.",
+    "maxStopsInvalid": "Max stops must be a whole number from 0 to 10.",
+    "maxDurationInvalid": "Max duration must be a whole number from 1 to 48.",
+    "updateFailed": "Could not update filters.",
+    "networkError": "Network error. Please try again.",
+    "filters": "Filters",
+    "maxStops": "Max stops",
+    "maxPrice": "Max price",
+    "maxDuration": "Max duration",
+    "airlines": "Airlines",
+    "any": "Any",
+    "anyAirline": "Any airline",
+    "clearFilters": "Clear filters",
+    "cancel": "Cancel",
+    "saving": "Saving...",
+    "apply": "Apply"
+  },
+  "TrackerLabel": {
+    "placeholder": "e.g. Paris via Skyscanner",
+    "clickToEdit": "Click to edit label",
+    "addLabel": "+ Add label"
+  },
+  "UpdateBanner": {
+    "renamed": "Renamed to <strong>{to}</strong>. Run the upgrade command to migrate your install.",
+    "dismiss": "Dismiss",
+    "updateAvailable": "Flight Finder <strong>v{version}</strong> is available."
+  },
+  "UsageStats": {
+    "tracking": "Tracking",
+    "scrapes": "Scrapes",
+    "prices": "Prices",
+    "llmCost": "LLM cost (30d)",
+    "nextScrape": "Next scrape {time} (every {hours}h)",
+    "now": "now",
+    "inMinutes": "in {minutes}m",
+    "inHours": "in {hours}h",
+    "inHoursMinutes": "in {hours}h {minutes}m"
+  }
+}

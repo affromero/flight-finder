@@ -1,5 +1,6 @@
 import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
@@ -21,6 +22,8 @@ interface AccountQuery extends GroupableQuery {
 
 export default async function AccountPage() {
   if (!(await isMultiUserEnabled())) notFound();
+
+  const t = await getTranslations('Account');
 
   const user = await getCurrentUser();
   if (!user) redirect('/login?next=/account');
@@ -77,7 +80,7 @@ export default async function AccountPage() {
     <main className={styles.root}>
       <header className={styles.header}>
         <div className={styles.identity}>
-          <Link href="/account/settings" className={styles.avatarLink} title="Change avatar">
+          <Link href="/account/settings" className={styles.avatarLink} title={t('changeAvatar')}>
             <Avatar slug={user.avatar} name={user.displayName || user.username} size={48} />
           </Link>
           <div>
@@ -99,10 +102,12 @@ export default async function AccountPage() {
       </header>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>Your trackers</h2>
+        <h2 className={styles.sectionTitle}>{t('yourTrackers')}</h2>
         {groups.length === 0 ? (
           <p className={styles.empty}>
-            No trackers yet. <Link href="/">Search for a flight</Link> to get started.
+            {t.rich('empty', {
+              link: (chunks) => <Link href="/">{chunks}</Link>,
+            })}
           </p>
         ) : (
           <div className={styles.list}>
@@ -123,7 +128,7 @@ export default async function AccountPage() {
                       <span className={styles.rowArrow}>→</span>
                       <span className={styles.rowCode}>{g.destination}</span>
                       {extraDestinations > 0 && (
-                        <span className={styles.rowMeta}>+ {extraDestinations} more</span>
+                        <span className={styles.rowMeta}>{t('moreDestinations', { count: extraDestinations })}</span>
                       )}
                     </div>
                     <div className={styles.rowMeta}>
@@ -132,15 +137,15 @@ export default async function AccountPage() {
                         error={aggregate.error}
                         lastScrapedAt={aggregate.startedAt}
                       />
-                      {fmt(g.dateFrom)} {' '} {fmt(g.dateTo)} {' '} {g.snapshotCount} snapshots
-                      {g.routeCount > 1 && ` · ${g.routeCount} charts`}
-                      {!g.anyActive && <span className={styles.paused}>paused</span>}
+                      {fmt(g.dateFrom)} {' '} {fmt(g.dateTo)} {' '} {t('snapshots', { count: g.snapshotCount })}
+                      {g.routeCount > 1 && ` · ${t('charts', { count: g.routeCount })}`}
+                      {!g.anyActive && <span className={styles.paused}>{t('paused')}</span>}
                     </div>
                   </Link>
                   {g.anyActive && !g.allExpired && (
                     <ForceScrapeButton
                       queryId={g.primaryId}
-                      ariaLabel="Refresh prices now"
+                      ariaLabel={t('refreshNow')}
                     />
                   )}
                 </div>

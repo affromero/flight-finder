@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { getDeleteToken } from '@/lib/tracker-storage';
 import { ALL_AGGREGATORS, AGGREGATOR_LABEL, EXPERIMENTAL_AGGREGATORS, type Aggregator } from '@/lib/aggregators';
 import styles from './AggregatorPicker.module.css';
@@ -15,6 +16,7 @@ interface Props {
 }
 
 export function AggregatorPicker({ queryId, currentAggregators, adminEnabledAggregators, canEdit = false }: Props) {
+  const t = useTranslations('AggregatorPicker');
   const [selected, setSelected] = useState<Set<Aggregator>>(
     () => new Set(
       currentAggregators.filter((s): s is Aggregator =>
@@ -59,7 +61,7 @@ export function AggregatorPicker({ queryId, currentAggregators, adminEnabledAggr
 
   return (
     <div className={styles.root}>
-      <span className={styles.label}>Sources</span>
+      <span className={styles.label}>{t('sources')}</span>
       <div className={styles.options}>
         {ALL_AGGREGATORS.map((source) => {
           const allowed = adminAllowed.has(source);
@@ -71,7 +73,7 @@ export function AggregatorPicker({ queryId, currentAggregators, adminEnabledAggr
               className={`${styles.option} ${checked ? styles.active : ''} ${!allowed ? styles.disabled : ''}`}
               onClick={() => toggle(source)}
               disabled={!allowed || saving}
-              title={!allowed ? 'Disabled by admin' : AGGREGATOR_LABEL[source]}
+              title={!allowed ? t('disabledByAdmin') : AGGREGATOR_LABEL[source]}
             >
               <span className={`${styles.check} ${checked ? styles.checked : ''}`}>
                 {checked ? '✓' : ''}

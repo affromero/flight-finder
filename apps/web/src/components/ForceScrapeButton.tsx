@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, type MouseEvent } from 'react';
+import { useTranslations } from 'next-intl';
 import { getDeleteToken } from '@/lib/tracker-storage';
 import styles from './ForceScrapeButton.module.css';
 
@@ -26,6 +27,7 @@ export function ForceScrapeButton({
   onScraped,
   ariaLabel,
 }: ForceScrapeButtonProps): React.ReactElement {
+  const t = useTranslations('ForceScrapeButton');
   const [pending, setPending] = useState(false);
   const [hint, setHint] = useState<string | null>(null);
 
@@ -51,16 +53,16 @@ export function ForceScrapeButton({
       if (res.ok && data?.ok) {
         onScraped?.({ accepted: true, count: data.data?.count });
       } else if (res.status === 429) {
-        const msg = data?.error ?? 'Try again in a minute.';
+        const msg = data?.error ?? t('tryAgain');
         setHint(msg);
         onScraped?.({ accepted: false, error: msg });
       } else {
-        const msg = data?.error ?? `Refresh failed (${res.status})`;
+        const msg = data?.error ?? t('refreshFailed', { status: res.status });
         setHint(msg);
         onScraped?.({ accepted: false, error: msg });
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Network error';
+      const msg = err instanceof Error ? err.message : t('networkError');
       setHint(msg);
       onScraped?.({ accepted: false, error: msg });
     } finally {
@@ -70,7 +72,7 @@ export function ForceScrapeButton({
     }
   };
 
-  const label = ariaLabel ?? 'Refresh now';
+  const label = ariaLabel ?? t('refreshNow');
 
   return (
     <button

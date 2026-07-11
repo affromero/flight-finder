@@ -9,16 +9,18 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import type { SessionDepthBucket } from '@/lib/analytics/query';
 import styles from './ChartCard.module.css';
 
 export function SessionDepthChart({ data }: { data: SessionDepthBucket[] }) {
+  const t = useTranslations('AdminAnalytics');
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Pages Per Session</h2>
+      <h2 className={styles.cardTitle}>{t('sessionDepth.title')}</h2>
       <div className={styles.chartContainer}>
         {data.length === 0 ? (
-          <p className={styles.empty}>No session data</p>
+          <p className={styles.empty}>{t('sessionDepth.empty')}</p>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data}>
@@ -32,7 +34,11 @@ export function SessionDepthChart({ data }: { data: SessionDepthBucket[] }) {
                   borderRadius: '8px',
                   color: 'var(--text)',
                 }}
-                labelFormatter={(label) => `${label} page${label === '1' ? '' : 's'}`}
+                labelFormatter={(label) =>
+                  label === '1'
+                    ? t('sessionDepth.pageSingular', { label: String(label) })
+                    : t('sessionDepth.pagePlural', { label: String(label) })
+                }
               />
               <Bar dataKey="count" fill="var(--accent)" radius={[4, 4, 0, 0]} />
             </BarChart>

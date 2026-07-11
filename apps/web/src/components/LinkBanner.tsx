@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './LinkBanner.module.css';
 
 export interface CreatedTracker {
@@ -18,6 +19,7 @@ interface LinkBannerProps {
 }
 
 export function LinkBanner({ trackers, onDismiss }: LinkBannerProps) {
+  const t = useTranslations('LinkBanner');
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const baseUrl = typeof window !== 'undefined' ? window.location.origin : '';
 
@@ -57,7 +59,7 @@ export function LinkBanner({ trackers, onDismiss }: LinkBannerProps) {
             <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="1.5" />
             <path d="M8 12l3 3 5-5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
           </svg>
-          <span>{isSingle ? 'Tracker created' : `${trackers.length} trackers created`}</span>
+          <span>{t('trackersCreated', { count: trackers.length })}</span>
         </div>
 
         {trackers.map((tracker, i) => (
@@ -93,7 +95,7 @@ export function LinkBanner({ trackers, onDismiss }: LinkBannerProps) {
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
                         <path d="M5 12l5 5L20 7" />
                       </svg>
-                      Copied!
+                      {t('copied')}
                     </>
                   ) : (
                     <>
@@ -101,7 +103,7 @@ export function LinkBanner({ trackers, onDismiss }: LinkBannerProps) {
                         <rect x="9" y="9" width="13" height="13" rx="2" />
                         <path d="M5 15H4a2 2 0 01-2-2V4a2 2 0 012-2h9a2 2 0 012 2v1" />
                       </svg>
-                      Copy
+                      {t('copy')}
                     </>
                   )}
                 </button>
@@ -117,22 +119,22 @@ export function LinkBanner({ trackers, onDismiss }: LinkBannerProps) {
             <line x1="12" y1="17" x2="12.01" y2="17" />
           </svg>
           <div>
-            <p className={styles.warningBold}>Save {isSingle ? 'this link' : 'these links'}! {isSingle ? "It's" : "They're"} the only way to access your {isSingle ? 'tracker' : 'trackers'}.</p>
-            <p className={styles.warningText}>If you don&apos;t visit within 24 hours, {isSingle ? 'it' : 'they'} will be automatically deleted.</p>
+            <p className={styles.warningBold}>{t('saveWarning', { count: trackers.length })}</p>
+            <p className={styles.warningText}>{t('deleteWarning', { count: trackers.length })}</p>
           </div>
         </div>
 
         <div className={styles.actions}>
           {!isSingle && (
             <button className={styles.goButton} onClick={handleCopyAll}>
-              {copiedIndex === -1 ? 'Copied all!' : 'Copy all links'}
+              {copiedIndex === -1 ? t('copiedAll') : t('copyAllLinks')}
             </button>
           )}
           <a href={primaryUrl} className={styles.goButton}>
-            Go to Tracker
+            {t('goToTracker')}
           </a>
           <button className={styles.dismissButton} onClick={onDismiss}>
-            Done
+            {t('done')}
           </button>
         </div>
       </div>

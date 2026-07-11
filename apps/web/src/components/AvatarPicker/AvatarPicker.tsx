@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { FLIGHT_AVATARS } from '@/lib/avatars';
 import { Avatar } from '@/components/Avatar/Avatar';
 import styles from './AvatarPicker.module.css';
@@ -15,15 +16,16 @@ interface AvatarPickerProps {
 
 /** A grid of preset avatars plus an initials option, for account/admin/setup. */
 export function AvatarPicker({ value, onChange, name, size = 72 }: AvatarPickerProps) {
+  const t = useTranslations('AvatarPicker');
   return (
-    <div className={styles.root} role="radiogroup" aria-label="Choose a profile avatar">
+    <div className={styles.root} role="radiogroup" aria-label={t('chooseAvatar')}>
       <button
         type="button"
         className={`${styles.option} ${value === null ? styles.selected : ''}`}
         onClick={() => onChange(null)}
         role="radio"
         aria-checked={value === null}
-        title="Initials"
+        title={t('initials')}
       >
         <Avatar slug={null} name={name} size={size} />
       </button>

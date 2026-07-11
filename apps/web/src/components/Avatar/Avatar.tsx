@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef, type CSSProperties } from 'react';
+import { useTranslations } from 'next-intl';
 import { avatarImagePath, getAvatar } from '@/lib/avatars';
 import styles from './Avatar.module.css';
 
@@ -28,11 +29,12 @@ function initialsOf(name: string | null | undefined): string {
  * there is no preset, to the user's initials. Works with no image assets.
  */
 export function Avatar({ slug, name, size = 40, className }: AvatarProps) {
+  const t = useTranslations('Avatar');
   const [imgFailed, setImgFailed] = useState(false);
   const imgRef = useRef<HTMLImageElement>(null);
   const preset = getAvatar(slug);
   const imgPath = avatarImagePath(slug);
-  const label = preset?.name ?? name ?? 'avatar';
+  const label = preset?.name ?? name ?? t('fallbackLabel');
 
   // The image is server-rendered, so a 404 (e.g. the preset PNGs aren't
   // generated yet) can fire before React hydrates and attaches onError. Catch

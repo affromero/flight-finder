@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { formatCurrency } from '@/lib/currency';
 import styles from './PriceAlerts.module.css';
@@ -17,6 +18,7 @@ interface Alert {
 }
 
 export function PriceAlerts() {
+  const t = useTranslations('PriceAlerts');
   const [alerts, setAlerts] = useState<Alert[]>([]);
 
   useEffect(() => {
@@ -44,7 +46,11 @@ export function PriceAlerts() {
               {a.origin} &rarr; {a.destination}
             </span>
             <span className={styles.alertDetail}>
-              {a.airline} &middot; now {formatCurrency(a.currentMin, a.currency)} (was {formatCurrency(a.previousMin, a.currency)})
+              {t('priceDrop', {
+                airline: a.airline,
+                current: formatCurrency(a.currentMin, a.currency),
+                previous: formatCurrency(a.previousMin, a.currency),
+              })}
             </span>
           </div>
         </Link>

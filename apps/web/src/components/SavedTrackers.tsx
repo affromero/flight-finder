@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { getSavedTrackers, getDeleteToken, removeSavedTracker, type SavedTracker } from '@/lib/tracker-storage';
 import { groupQueries, type GroupableQuery, type QueryGroup } from '@/lib/query-grouping';
@@ -51,15 +52,15 @@ function formatDate(iso: string): string {
   });
 }
 
-function timeAgo(iso: string): string {
+function timeAgo(iso: string, t: ReturnType<typeof useTranslations>): string {
   const diff = Date.now() - new Date(iso).getTime();
   const minutes = Math.floor(diff / 60000);
-  if (minutes < 1) return 'just now';
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 1) return t('justNow');
+  if (minutes < 60) return t('minutesAgo', { count: minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('hoursAgo', { count: hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t('daysAgo', { count: days });
 }
 
 function deriveGroupStatus(group: QueryGroup<DisplayQuery>): DisplayGroup['status'] {
@@ -88,6 +89,7 @@ function toDisplayGroups(queries: DisplayQuery[]): DisplayGroup[] {
 }
 
 export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: boolean } = {}) {
+  const t = useTranslations('SavedTrackers');
   const [groups, setGroups] = useState<DisplayGroup[]>([]);
 
   useEffect(() => {
@@ -202,8 +204,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
   const handleRemove = async (entry: DisplayGroup) => {
     const { group } = entry;
     const label = `${group.origin} → ${group.destination}`;
-    const suffix = group.routeCount > 1 ? ` (${group.routeCount} charts)` : '';
-    if (!confirm(`Delete tracker for ${label}${suffix}?`)) return;
+    if (!confirm(t('confirmDelete', { route: label, count: group.routeCount }))) return;
 
     const token = getDeleteToken(group.primaryId);
     try {
@@ -299,7 +300,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
       <div className={styles.root}>
         <div className={styles.empty}>
           <p className={styles.emptyText}>
-            No trackers yet. Search for a flight above to start tracking prices.
+            {t('noTrackers')}
           </p>
         </div>
       </div>
@@ -308,7 +309,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
 
   return (
     <div className={styles.root}>
-      <h3 className={styles.title}>Your Trackers</h3>
+      <h3 className={styles.title}>{t('yourTrackers')}</h3>
       <div className={styles.list}>
         {groups.map((entry) => {
           const { group, status, aggregate } = entry;
@@ -320,8 +321,8 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
               <button
                 className={styles.remove}
                 onClick={() => handleRemove(entry)}
-                title="Remove"
-                aria-label="Remove tracker"
+                title={t('remove')}
+                aria-label={t('removeTracker')}
               >
                 &times;
               </button>
@@ -333,10 +334,10 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                     <span className={styles.arrow}>&rarr;</span>
                     <span className={styles.code}>{group.destination}</span>
                     {extraDestinations > 0 && (
-                      <span className={styles.dates}>+ {extraDestinations} more</span>
+                      <span className={styles.dates}>{t('moreDestinations', { count: extraDestinations })}</span>
                     )}
                   </div>
-                  <span className={`${styles.badge} ${styles.badgeDeleted}`}>Unavailable</span>
+                  <span className={`${styles.badge} ${styles.badgeDeleted}`}>{t('unavailable')}</span>
                 </div>
               ) : (
                 <Link href={`/q/${group.primaryId}`} className={styles.link}>
@@ -349,7 +350,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                       <span className={styles.arrow}>&rarr;</span>
                       <span className={styles.code}>{group.destination}</span>
                       {extraDestinations > 0 && (
-                        <span className={styles.dates}>+ {extraDestinations} more</span>
+                        <span className={styles.dates}>{t('moreDestinations', { count: extraDestinations })}</span>
                       )}
                     </div>
                     <span className={styles.dates}>
@@ -358,12 +359,12 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                     <div className={styles.meta}>
                       {group.routeCount > 1 && (
                         <span className={styles.snapshots}>
-                          {group.routeCount} charts
+                          {t('charts', { count: group.routeCount })}
                         </span>
                       )}
                       {group.snapshotCount > 0 && (
                         <span className={styles.snapshots}>
-                          {group.snapshotCount} price{group.snapshotCount !== 1 ? 's' : ''}
+                          {t('prices', { count: group.snapshotCount })}
                         </span>
                       )}
                       {group.lastScrapedAt && (
@@ -373,7 +374,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                             error={aggregate.error}
                             lastScrapedAt={aggregate.startedAt}
                           />
-                          {timeAgo(group.lastScrapedAt)}
+                          {timeAgo(group.lastScrapedAt, t)}
                         </span>
                       )}
                     </div>
@@ -383,14 +384,14 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                           : status === 'paused' ? styles.badgePaused
                           : styles.badgeExpired
                       }`}>
-                        {status === 'active' ? 'Tracking' : status === 'paused' ? 'Paused' : 'Expired'}
+                        {status === 'active' ? t('tracking') : status === 'paused' ? t('paused') : t('expired')}
                       </span>
                       {status === 'active' && (
                         <ForceScrapeButton
                           queryId={group.primaryId}
                           deleteToken={primaryToken}
                           onScraped={(result) => { if (result.accepted) refetchActive(); }}
-                          ariaLabel="Refresh prices now"
+                          ariaLabel={t('refreshPrices')}
                         />
                       )}
                       {(status === 'active' || status === 'paused') && (
@@ -400,7 +401,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                             e.preventDefault();
                             handleTogglePause(entry);
                           }}
-                          title={status === 'active' ? 'Pause tracking' : 'Resume tracking'}
+                          title={status === 'active' ? t('pauseTracking') : t('resumeTracking')}
                         >
                           {status === 'active' ? '⏸' : '▶'}
                         </button>

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import { Avatar } from '@/components/Avatar/Avatar';
 import styles from './ProfileMenu.module.css';
@@ -20,6 +21,7 @@ interface ProfileMenuProps {
  * session model, so "Switch user" logs out and returns to the login screen.
  */
 export function ProfileMenu({ user }: ProfileMenuProps) {
+  const t = useTranslations('ProfileMenu');
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const name = user.displayName || user.username;
@@ -66,34 +68,34 @@ export function ProfileMenu({ user }: ProfileMenuProps) {
             </div>
           </div>
           <Link href="/account" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
-            Your trackers
+            {t('yourTrackers')}
           </Link>
           <Link href="/account/settings" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
-            Account &amp; appearance
+            {t('accountAppearance')}
           </Link>
           <Link href="/connect" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
-            Connect a device
+            {t('connectDevice')}
           </Link>
           {user.isAdmin && (
             <>
               <div className={styles.divider} role="separator" />
               <Link href="/settings" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
-                Instance settings
+                {t('instanceSettings')}
               </Link>
               <Link href="/admin/users" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
-                Manage household
+                {t('manageHousehold')}
               </Link>
               <Link href="/admin" className={styles.item} role="menuitem" onClick={() => setOpen(false)}>
-                Admin dashboard
+                {t('adminDashboard')}
               </Link>
             </>
           )}
           <div className={styles.divider} role="separator" />
           <button className={styles.item} role="menuitem" onClick={() => logout('/login')}>
-            Switch user
+            {t('switchUser')}
           </button>
           <button className={`${styles.item} ${styles.danger}`} role="menuitem" onClick={() => logout('/')}>
-            Log out
+            {t('logOut')}
           </button>
         </div>
       )}

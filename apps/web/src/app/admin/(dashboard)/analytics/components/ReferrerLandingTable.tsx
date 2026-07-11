@@ -1,19 +1,21 @@
+import { getTranslations } from 'next-intl/server';
 import type { ReferrerLandingPage } from '@/lib/analytics/query';
 import styles from './ReferrerLandingTable.module.css';
 
-export function ReferrerLandingTable({ data }: { data: ReferrerLandingPage[] }) {
+export async function ReferrerLandingTable({ data }: { data: ReferrerLandingPage[] }) {
+  const t = await getTranslations('AdminAnalytics');
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Referrer &rarr; Landing Page</h2>
+      <h2 className={styles.cardTitle}>{t('referrerLanding.title')}</h2>
       {data.length === 0 ? (
-        <p className={styles.empty}>No referrer data</p>
+        <p className={styles.empty}>{t('referrerLanding.empty')}</p>
       ) : (
         <table className={styles.table}>
           <thead>
             <tr>
-              <th>Domain</th>
-              <th>Landing Page</th>
-              <th>Count</th>
+              <th>{t('referrerLanding.domain')}</th>
+              <th>{t('referrerLanding.landingPage')}</th>
+              <th>{t('referrerLanding.count')}</th>
             </tr>
           </thead>
           <tbody>

@@ -2,22 +2,23 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { ProfileMenu } from '@/components/ProfileMenu/ProfileMenu';
 import styles from './layout.module.css';
 
 const ALL_NAV_ITEMS = [
-  { href: '/admin', label: 'Dashboard', selfHosted: true },
-  { href: '/admin/search', label: 'Search', selfHosted: true },
-  { href: '/admin/queries', label: 'Queries', selfHosted: true },
-  { href: '/admin/seed-routes', label: 'Seed Routes', selfHosted: false },
-  { href: '/admin/insights', label: 'Insights', selfHosted: true },
-  { href: '/admin/analytics', label: 'Analytics', selfHosted: false },
-  { href: '/admin/config', label: 'Config', selfHosted: true },
-  { href: '/admin/notifications', label: 'Notifications', selfHosted: true },
-];
+  { href: '/admin', labelKey: 'dashboard', selfHosted: true },
+  { href: '/admin/search', labelKey: 'search', selfHosted: true },
+  { href: '/admin/queries', labelKey: 'queries', selfHosted: true },
+  { href: '/admin/seed-routes', labelKey: 'seedRoutes', selfHosted: false },
+  { href: '/admin/insights', labelKey: 'insights', selfHosted: true },
+  { href: '/admin/analytics', labelKey: 'analytics', selfHosted: false },
+  { href: '/admin/config', labelKey: 'config', selfHosted: true },
+  { href: '/admin/notifications', labelKey: 'notifications', selfHosted: true },
+] as const;
 
-const USERS_NAV_ITEM = { href: '/admin/users', label: 'Users' };
+const USERS_NAV_ITEM = { href: '/admin/users', labelKey: 'users' } as const;
 
 export function DashboardNav({
   isSelfHosted,
@@ -30,6 +31,7 @@ export function DashboardNav({
   user?: { username: string; displayName: string | null; avatar: string | null } | null;
   children: React.ReactNode;
 }) {
+  const t = useTranslations('AdminNav');
   const pathname = usePathname();
 
   const baseItems = isSelfHosted
@@ -48,7 +50,7 @@ export function DashboardNav({
   return (
     <div className={styles.root}>
       <nav className={styles.nav}>
-        <Link href="/" className={styles.brand}>Flight Finder</Link>
+        <Link href="/" className={styles.brand}>{t('brand')}</Link>
         <div className={styles.links}>
           {navItems.map((item) => (
             <Link
@@ -56,7 +58,7 @@ export function DashboardNav({
               href={item.href}
               className={`${styles.link} ${pathname === item.href ? styles.active : ''}`}
             >
-              {item.label}
+              {t(item.labelKey)}
             </Link>
           ))}
         </div>
@@ -66,7 +68,7 @@ export function DashboardNav({
         ) : (
           showLogout && (
             <button className={styles.logout} onClick={handleLogout}>
-              Logout
+              {t('logout')}
             </button>
           )
         )}

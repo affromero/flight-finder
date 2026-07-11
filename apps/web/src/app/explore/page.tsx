@@ -1,6 +1,7 @@
 export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
+import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { formatCurrency } from '@/lib/currency';
 import { ThemeToggle } from '@/components/ThemeToggle';
@@ -68,6 +69,7 @@ async function getRoutes(): Promise<RouteData[]> {
 }
 
 export default async function ExplorePage() {
+  const t = await getTranslations('Explore');
   const routes = await getRoutes();
 
   const contributorCount = await prisma.communityApiKey.count({
@@ -86,25 +88,24 @@ export default async function ExplorePage() {
         <h1 className={styles.title}>
           <Link href="/">Flight Finder</Link>
           {' '}
-          <span className={styles.titleAccent}>Explore</span>
+          <span className={styles.titleAccent}>{t('explore')}</span>
         </h1>
         <p className={styles.tagline}>
-          Community-sourced flight price data from {contributorCount} contributor{contributorCount !== 1 ? 's' : ''}
+          {t('tagline', { count: contributorCount })}
         </p>
         <p className={styles.stats}>
-          {totalSnapshots.toLocaleString()} price points across {routes.length} routes
+          {t('stats', { snapshots: totalSnapshots, routes: routes.length })}
         </p>
       </div>
 
       {routes.length === 0 ? (
         <div className={styles.empty}>
-          <p className={styles.emptyTitle}>No community data yet</p>
+          <p className={styles.emptyTitle}>{t('emptyTitle')}</p>
           <p className={styles.emptyText}>
-            Self-host Flight Finder and opt in to community sharing to help build the
-            world&apos;s first open flight price database.
+            {t('emptyText')}
           </p>
           <Link href="/" className={styles.emptyLink}>
-            Get started
+            {t('getStarted')}
           </Link>
         </div>
       ) : (
@@ -122,11 +123,11 @@ export default async function ExplorePage() {
               </div>
               <div className={styles.cardPrices}>
                 <div className={styles.cardPrice}>
-                  <span className={styles.cardPriceLabel}>from</span>
+                  <span className={styles.cardPriceLabel}>{t('from')}</span>
                   <span className={styles.cardPriceValue}>{formatCurrency(route.minPrice, route.currency)}</span>
                 </div>
                 <div className={styles.cardPrice}>
-                  <span className={styles.cardPriceLabel}>avg</span>
+                  <span className={styles.cardPriceLabel}>{t('avg')}</span>
                   <span className={styles.cardPriceValue}>{formatCurrency(route.avgPrice, route.currency)}</span>
                 </div>
               </div>
@@ -136,7 +137,7 @@ export default async function ExplorePage() {
                   {route.airlines.length > 3 ? ` +${route.airlines.length - 3}` : ''}
                 </span>
                 <span className={styles.cardCount}>
-                  {route.count} pts
+                  {t('pts', { count: route.count })}
                 </span>
               </div>
             </Link>

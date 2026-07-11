@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState, type ReactNode } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './StackedSortControls.module.css';
 
 export interface StackedItem {
@@ -43,6 +44,7 @@ function sortItems(items: StackedItem[], mode: SortMode): StackedItem[] {
 }
 
 export function StackedSortControls({ items }: { items: StackedItem[] }) {
+  const t = useTranslations('StackedSortControls');
   const [mode, setMode] = useState<SortMode>('date');
   const ordered = useMemo(() => sortItems(items, mode), [items, mode]);
   const hiddenInPriceMode = mode === 'price'
@@ -52,15 +54,15 @@ export function StackedSortControls({ items }: { items: StackedItem[] }) {
   return (
     <>
       <div className={styles.controls}>
-        <label htmlFor="stack-sort" className={styles.label}>Sort</label>
+        <label htmlFor="stack-sort" className={styles.label}>{t('sort')}</label>
         <select
           id="stack-sort"
           className={styles.select}
           value={mode}
           onChange={(e) => setMode(e.target.value as SortMode)}
         >
-          <option value="date">By date</option>
-          <option value="price">Lowest price first</option>
+          <option value="date">{t('byDate')}</option>
+          <option value="price">{t('lowestPriceFirst')}</option>
         </select>
       </div>
       {ordered.map((item) => (
@@ -68,7 +70,7 @@ export function StackedSortControls({ items }: { items: StackedItem[] }) {
       ))}
       {hiddenInPriceMode > 0 && (
         <p className={styles.footnote}>
-          {hiddenInPriceMode} route{hiddenInPriceMode === 1 ? '' : 's'} placed last — no current price yet.
+          {t('footnote', { count: hiddenInPriceMode })}
         </p>
       )}
     </>

@@ -39,8 +39,8 @@ const SNAPSHOTS: Snapshot[] = [
 ];
 
 describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
-  it('shows only the latest scrape by default, hiding earlier checks', () => {
-    render(<PriceHistory snapshots={SNAPSHOTS} />);
+  it('shows only the latest scrape by default, hiding earlier checks', async () => {
+    render(<>{await PriceHistory({ snapshots: SNAPSHOTS })}</>);
 
     // Latest price of each live flight is visible...
     expect(screen.getByText(/\b300\b/)).toBeInTheDocument();
@@ -52,8 +52,8 @@ describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
     expect(screen.queryByText(/\b250\b/)).not.toBeInTheDocument();
   });
 
-  it('excludes flights absent from the latest scrape, even if they were the cheapest ever', () => {
-    render(<PriceHistory snapshots={SNAPSHOTS} />);
+  it('excludes flights absent from the latest scrape, even if they were the cheapest ever', async () => {
+    render(<>{await PriceHistory({ snapshots: SNAPSHOTS })}</>);
 
     // Gamma (150) was the lifetime-cheapest but is gone from the latest scrape,
     // so it must not surface in the current snapshot.
@@ -61,8 +61,8 @@ describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
     expect(screen.queryByText(/\b150\b/)).not.toBeInTheDocument();
   });
 
-  it('orders the latest scrape cheapest first', () => {
-    render(<PriceHistory snapshots={SNAPSHOTS} />);
+  it('orders the latest scrape cheapest first', async () => {
+    render(<>{await PriceHistory({ snapshots: SNAPSHOTS })}</>);
 
     const dataRows = screen
       .getAllByRole('row')
@@ -73,8 +73,8 @@ describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
     expect(dataRows[1]).toMatch(/Alpha/); // 300
   });
 
-  it('reveals the full chronological log when full history is shown', () => {
-    render(<PriceHistory snapshots={SNAPSHOTS} />);
+  it('reveals the full chronological log when full history is shown', async () => {
+    render(<>{await PriceHistory({ snapshots: SNAPSHOTS })}</>);
 
     fireEvent.click(screen.getByRole('button', { name: /show full history/i }));
 
@@ -85,21 +85,21 @@ describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
     expect(screen.getByText(/\b150\b/)).toBeInTheDocument();
   });
 
-  it('labels the toggle with the total number of checks', () => {
-    render(<PriceHistory snapshots={SNAPSHOTS} />);
+  it('labels the toggle with the total number of checks', async () => {
+    render(<>{await PriceHistory({ snapshots: SNAPSHOTS })}</>);
     expect(screen.getByRole('button', { name: /show full history \(7 checks\)/i })).toBeInTheDocument();
   });
 
-  it('omits the full-history toggle when there is only one scrape', () => {
+  it('omits the full-history toggle when there is only one scrape', async () => {
     const single = [
       snap({ id: 'x1', flightId: 'X', airline: 'Solo', price: 400, scrapedAt: '2026-05-03T08:00:00.000Z' }),
     ];
-    render(<PriceHistory snapshots={single} />);
+    render(<>{await PriceHistory({ snapshots: single })}</>);
     expect(screen.queryByRole('button', { name: /full history/i })).not.toBeInTheDocument();
   });
 
-  it('renders nothing when there are no snapshots', () => {
-    const { container } = render(<PriceHistory snapshots={[]} />);
+  it('renders nothing when there are no snapshots', async () => {
+    const { container } = render(<>{await PriceHistory({ snapshots: [] })}</>);
     expect(container).toBeEmptyDOMElement();
   });
 });

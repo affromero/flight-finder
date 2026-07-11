@@ -1,7 +1,10 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
+import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/locales';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
 import { ReachGuide } from '@/components/ReachGuide/ReachGuide';
@@ -31,6 +34,7 @@ interface Config {
 }
 
 export default function SettingsPage() {
+  const t = useTranslations('Settings');
   const [config, setConfig] = useState<Config | null>(null);
   const [provider, setProvider] = useState('anthropic');
   const [model, setModel] = useState('claude-haiku-4-5-20251001');
@@ -58,6 +62,21 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [themeMessage, setThemeMessage] = useState('');
+  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+  const router = useRouter();
+
+  useEffect(() => {
+    const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE}=([^;]*)`));
+    const value = match?.[1];
+    if (isLocale(value)) setLocaleState(value);
+  }, []);
+
+  const changeLocale = (value: string) => {
+    if (!isLocale(value)) return;
+    setLocaleState(value);
+    document.cookie = `${LOCALE_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
+    router.refresh();
+  };
 
   const [localModels, setLocalModels] = useState<{ id: string; name: string; size: string }[]>([]);
   const [localModelsLoading, setLocalModelsLoading] = useState(false);
@@ -79,15 +98,15 @@ export default function SettingsPage() {
           setLocalModels(d.data);
         } else {
           setLocalModels([]);
-          setLocalModelsError(d.error || 'Failed to fetch models');
+          setLocalModelsError(d.error || t('extraction.fetchModelsFailed'));
         }
       })
       .catch(() => {
         setLocalModels([]);
-        setLocalModelsError('Could not connect');
+        setLocalModelsError(t('extraction.couldNotConnect'));
       })
       .finally(() => setLocalModelsLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetch('/api/setup/status')
@@ -159,7 +178,7 @@ export default function SettingsPage() {
 
   const handleSave = async () => {
     if (!effectiveModel) {
-      setMessage('Enter a model ID before saving');
+      setMessage(t('extraction.enterModelId'));
       return;
     }
     setSaving(true);
@@ -185,12 +204,12 @@ export default function SettingsPage() {
     const data = await res.json();
     if (data.ok) {
       setConfig(data.data);
-      setMessage('Saved');
+      setMessage(t('extraction.saved'));
       if (LOCAL_PROVIDERS.has(provider)) {
         fetchLocalModels(provider);
       }
     } else {
-      setMessage(data.error || 'Failed to save');
+      setMessage(data.error || t('extraction.saveFailed'));
     }
     setSaving(false);
   };
@@ -201,26 +220,25 @@ export default function SettingsPage() {
     <div className={styles.root}>
       <div className={styles.content}>
         <div className={styles.header}>
-          <Link href="/" className={styles.backLink} title="Back to home">
+          <Link href="/" className={styles.backLink} title={t('backToHome')}>
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
               <path d="M10 12L6 8l4-4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           </Link>
-          <h1 className={styles.title}>Settings</h1>
+          <h1 className={styles.title}>{t('title')}</h1>
         </div>
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Appearance</h2>
+          <h2 className={styles.sectionTitle}>{t('appearance.title')}</h2>
           <p className={styles.toggleHint}>
-            The default theme for this instance. Each signed-in member can override
-            it with their own in Account settings.
+            {t('appearance.hint')}
           </p>
 
           <ThemePicker
             value={theme}
             onSelect={async (id) => {
               setTheme(id);
-              setThemeMessage('Saving…');
+              setThemeMessage(t('appearance.saving'));
               try {
                 const res = await fetch('/api/admin/config', {
                   method: 'PATCH',
@@ -228,28 +246,40 @@ export default function SettingsPage() {
                   body: JSON.stringify({ theme: id }),
                 });
                 const data = await res.json();
-                setThemeMessage(data.ok ? 'Saved' : (data.error || 'Failed to save theme'));
+                setThemeMessage(data.ok ? t('appearance.saved') : (data.error || t('appearance.saveThemeFailed')));
                 if (data.ok) setConfig(data.data);
               } catch {
-                setThemeMessage('Failed to save theme');
+                setThemeMessage(t('appearance.saveThemeFailed'));
               }
             }}
           />
 
           {themeMessage && <span className={styles.message}>{themeMessage}</span>}
+
+          <div className={styles.field}>
+            <label className={styles.label} htmlFor="language-select">{t('appearance.language')}</label>
+            <select
+              id="language-select"
+              className={styles.select}
+              value={locale}
+              onChange={(e) => changeLocale(e.target.value)}
+            >
+              {LOCALES.map((l) => (
+                <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {config.isSelfHosted && (
           <div className={styles.section} id="reach">
-            <h2 className={styles.sectionTitle}>Reach it from other devices</h2>
+            <h2 className={styles.sectionTitle}>{t('reach.title')}</h2>
             <p className={styles.toggleHint}>
-              Flight Finder runs on this machine. Pick how you want to reach it from
-              a phone or share it with the household, follow the steps, then paste
-              the resulting URL below so QR codes and price-alert links use it.
+              {t('reach.hint')}
             </p>
             <ReachGuide />
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="publicBaseUrl">Public URL</label>
+              <label className={styles.label} htmlFor="publicBaseUrl">{t('reach.publicUrl')}</label>
               <input
                 id="publicBaseUrl"
                 type="url"
@@ -259,7 +289,7 @@ export default function SettingsPage() {
                 onChange={(e) => setPublicBaseUrl(e.target.value)}
               />
               <span className={styles.toggleHint}>
-                Leave empty to use the address each device connects on.
+                {t('reach.publicUrlHint')}
               </span>
             </div>
             <div className={styles.reachActions}>
@@ -277,27 +307,27 @@ export default function SettingsPage() {
                       body: JSON.stringify({ publicBaseUrl: publicBaseUrl.trim() || null }),
                     });
                     const data = await res.json();
-                    setReachMessage(data.ok ? 'Saved' : (data.error || 'Failed to save'));
+                    setReachMessage(data.ok ? t('reach.saved') : (data.error || t('reach.saveFailed')));
                   } catch {
-                    setReachMessage('Failed to save');
+                    setReachMessage(t('reach.saveFailed'));
                   } finally {
                     setReachSaving(false);
                   }
                 }}
               >
-                {reachSaving ? 'Saving…' : 'Save URL'}
+                {reachSaving ? t('reach.saving') : t('reach.saveUrl')}
               </button>
-              <Link href="/connect" className={styles.secondaryLink}>Phone setup &amp; QR →</Link>
+              <Link href="/connect" className={styles.secondaryLink}>{t('reach.phoneSetup')}</Link>
               {reachMessage && <span className={styles.message}>{reachMessage}</span>}
             </div>
           </div>
         )}
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Extraction</h2>
+          <h2 className={styles.sectionTitle}>{t('extraction.title')}</h2>
 
           <div className={styles.field}>
-            <label className={styles.label}>Provider</label>
+            <label className={styles.label}>{t('extraction.provider')}</label>
             <div className={styles.providerGrid}>
               {Object.entries(PROVIDER_METADATA).map(([key, p]) => {
                 const detected = detectedProviders.includes(key);
@@ -321,8 +351,8 @@ export default function SettingsPage() {
                       <span className={styles.providerCardName}>{p.displayName}</span>
                       <span className={styles.providerCardStatus}>
                         {detected
-                          ? isCli ? 'Your subscription' : isLocal ? 'Local' : 'Ready'
-                          : isCli ? 'Set up' : isLocal ? 'Local' : 'Add key'}
+                          ? isCli ? t('extraction.statusSubscription') : isLocal ? t('extraction.statusLocal') : t('extraction.statusReady')
+                          : isCli ? t('extraction.statusSetUp') : isLocal ? t('extraction.statusLocal') : t('extraction.statusAddKey')}
                       </span>
                     </button>
                     {configuringProvider === key && !detected && (
@@ -330,13 +360,13 @@ export default function SettingsPage() {
                         {isCli && key === 'claude-code' ? (
                           <>
                             <p className={styles.providerConfigHint}>
-                              Run <code>claude setup-token</code> in your terminal, then paste the token:
+                              {t.rich('extraction.claudeCodeHint', { code: (chunks) => <code>{chunks}</code> })}
                             </p>
                             <div className={styles.providerConfigRow}>
                               <input
                                 type="password"
                                 className={styles.input}
-                                placeholder="Paste setup token"
+                                placeholder={t('extraction.pasteSetupToken')}
                                 value={providerKeyInput}
                                 onChange={(e) => setProviderKeyInput(e.target.value)}
                                 autoFocus
@@ -349,24 +379,24 @@ export default function SettingsPage() {
                                   // TODO: save Claude Code setup token to container
                                   // For now, show instructions
                                   setProviderKeySaving(false);
-                                  setMessage('Add CLAUDE_CODE_OAUTH_TOKEN to ~/.flight-finder/.env and restart');
+                                  setMessage(t('extraction.addTokenEnvHint'));
                                   setConfiguringProvider(null);
                                 }}
                               >
-                                Save
+                                {t('extraction.save')}
                               </button>
                             </div>
                           </>
                         ) : isCli && key === 'codex' ? (
                           <>
                             <p className={styles.providerConfigHint}>
-                              Codex CLI needs to be installed on the host. Run <code>npm i -g @openai/codex</code>.
+                              {t.rich('extraction.codexHint', { code: (chunks) => <code>{chunks}</code> })}
                             </p>
                           </>
                         ) : (
                           <>
                             <p className={styles.providerConfigHint}>
-                              Paste your {p.displayName} API key:
+                              {t('extraction.pasteApiKey', { name: p.displayName })}
                             </p>
                             <div className={styles.providerConfigRow}>
                               <input
@@ -382,13 +412,13 @@ export default function SettingsPage() {
                                 disabled={providerKeySaving || !providerKeyInput}
                                 onClick={async () => {
                                   setProviderKeySaving(true);
-                                  setMessage(`Add ${p.envKey}=${providerKeyInput.slice(0, 8)}... to ~/.flight-finder/.env and restart`);
+                                  setMessage(t('extraction.addKeyEnvHint', { envKey: p.envKey ?? '', keyPrefix: providerKeyInput.slice(0, 8) }));
                                   setProviderKeySaving(false);
                                   setConfiguringProvider(null);
                                   setProviderKeyInput('');
                                 }}
                               >
-                                Save
+                                {t('extraction.save')}
                               </button>
                             </div>
                           </>
@@ -402,7 +432,7 @@ export default function SettingsPage() {
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label}>Model</label>
+            <label className={styles.label}>{t('extraction.model')}</label>
             {models.length > 0 && (
               <select
                 className={styles.select}
@@ -411,7 +441,7 @@ export default function SettingsPage() {
               >
                 {models.map((m) => (
                   <option key={m.id} value={m.id}>
-                    {m.name} ({m.costPer1kInput === 0 ? 'Free (CLI)' : `$${m.costPer1kInput}/1k in`})
+                    {m.name} ({m.costPer1kInput === 0 ? t('extraction.freeCli') : t('extraction.costPer1kIn', { cost: m.costPer1kInput })})
                   </option>
                 ))}
               </select>
@@ -430,7 +460,7 @@ export default function SettingsPage() {
               </select>
             )}
             {models.length === 0 && localModelsLoading && (
-              <span className={styles.modelHint}>Fetching models...</span>
+              <span className={styles.modelHint}>{t('extraction.fetchingModels')}</span>
             )}
             {models.length === 0 && localModelsError && (
               <span className={styles.modelHintError}>{localModelsError}</span>
@@ -440,8 +470,8 @@ export default function SettingsPage() {
                 type="text"
                 className={styles.input}
                 placeholder={models.length === 0 && localModels.length === 0
-                  ? 'Model ID (e.g. llama3.1:8b, mistral:7b)'
-                  : 'Or type a custom model ID'}
+                  ? t('extraction.modelIdPlaceholder')
+                  : t('extraction.customModelPlaceholder')}
                 value={customModel}
                 onChange={(e) => setCustomModel(e.target.value)}
               />
@@ -450,7 +480,7 @@ export default function SettingsPage() {
 
           {providerConfig?.allowCustomBaseUrl && (
             <div className={styles.field}>
-              <label className={styles.label}>API Base URL</label>
+              <label className={styles.label}>{t('extraction.apiBaseUrl')}</label>
               <input
                 type="url"
                 className={styles.input}
@@ -460,33 +490,33 @@ export default function SettingsPage() {
               />
               <span className={styles.toggleHint}>
                 {providerConfig.defaultBaseUrl
-                  ? `Default: ${providerConfig.defaultBaseUrl}`
-                  : 'Leave empty for default'}
+                  ? t('extraction.defaultBaseUrl', { url: providerConfig.defaultBaseUrl })
+                  : t('extraction.leaveEmptyForDefault')}
               </span>
             </div>
           )}
 
           <div className={styles.field}>
-            <label className={styles.label}>Scrape Interval</label>
+            <label className={styles.label}>{t('extraction.scrapeInterval')}</label>
             <select
               className={styles.select}
               value={scrapeInterval}
               onChange={(e) => setScrapeInterval(Number(e.target.value))}
             >
               {[1, 2, 3, 4, 6, 8, 12, 24].map((h) => (
-                <option key={h} value={h}>Every {h} hour{h !== 1 ? 's' : ''}</option>
+                <option key={h} value={h}>{t('extraction.everyHours', { hours: h })}</option>
               ))}
             </select>
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label}>Default Currency</label>
+            <label className={styles.label}>{t('extraction.defaultCurrency')}</label>
             <select
               className={styles.select}
               value={['', 'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'MXN', 'BRL', 'KRW', 'SGD', 'HKD', 'SEK', 'NOK', 'DKK', 'NZD', 'THB', 'COP', 'ARS'].includes(defaultCurrency) ? defaultCurrency : '_custom'}
               onChange={(e) => setDefaultCurrency(e.target.value === '_custom' ? '' : e.target.value)}
             >
-              <option value="">Auto-detect</option>
+              <option value="">{t('extraction.autoDetect')}</option>
               <option value="USD">USD - US Dollar</option>
               <option value="EUR">EUR - Euro</option>
               <option value="GBP">GBP - British Pound</option>
@@ -508,13 +538,13 @@ export default function SettingsPage() {
               <option value="THB">THB - Thai Baht</option>
               <option value="COP">COP - Colombian Peso</option>
               <option value="ARS">ARS - Argentine Peso</option>
-              <option value="_custom">Other...</option>
+              <option value="_custom">{t('extraction.otherCurrency')}</option>
             </select>
             {!['', 'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR', 'MXN', 'BRL', 'KRW', 'SGD', 'HKD', 'SEK', 'NOK', 'DKK', 'NZD', 'THB', 'COP', 'ARS'].includes(defaultCurrency) && (
               <input
                 type="text"
                 className={styles.input}
-                placeholder="3-letter ISO 4217 code"
+                placeholder={t('extraction.currencyCodePlaceholder')}
                 value={defaultCurrency}
                 onChange={(e) => setDefaultCurrency(e.target.value.toUpperCase())}
                 maxLength={3}
@@ -523,32 +553,32 @@ export default function SettingsPage() {
           </div>
 
           <div className={styles.field}>
-            <label className={styles.label}>Default Search Method</label>
+            <label className={styles.label}>{t('extraction.defaultSearchMethod')}</label>
             <select
               className={styles.select}
               value={defaultSearchMethod}
               onChange={(e) => setDefaultSearchMethod(e.target.value as 'ai' | 'manual')}
             >
-              <option value="ai">AI natural language search</option>
-              <option value="manual">Manual input form</option>
+              <option value="ai">{t('extraction.searchMethodAi')}</option>
+              <option value="manual">{t('extraction.searchMethodManual')}</option>
             </select>
             <span className={styles.toggleHint}>
-              Controls which search flow opens first on the home page for this Flight Finder instance.
+              {t('extraction.searchMethodHint')}
             </span>
           </div>
 
           <div className={styles.actions}>
             <button className={styles.saveButton} onClick={handleSave} disabled={saving}>
-              {saving ? 'Saving...' : 'Save'}
+              {saving ? t('extraction.saving') : t('extraction.save')}
             </button>
             {message && <span className={styles.message}>{message}</span>}
           </div>
         </div>
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>VPN Price Comparison</h2>
+          <h2 className={styles.sectionTitle}>{t('vpn.title')}</h2>
           <p className={styles.toggleHint}>
-            Test the myth: do flight prices change based on your VPN location?
+            {t('vpn.hint')}
           </p>
 
           <div className={styles.vpnProviderGrid}>
@@ -565,41 +595,41 @@ export default function SettingsPage() {
               <div className={styles.vpnCardHeader}>
                 <span className={styles.vpnCardName}>ExpressVPN</span>
                 <span className={vpnLive?.ready ? styles.vpnCardStatusReady : hasVpnCode ? styles.vpnCardStatusWarn : styles.vpnCardStatusOff}>
-                  {vpnLive?.ready ? 'Connected' : hasVpnCode ? (vpnLive?.sidecarRunning === false ? 'Sidecar offline' : 'Code saved') : 'Not set up'}
+                  {vpnLive?.ready ? t('vpn.statusConnected') : hasVpnCode ? (vpnLive?.sidecarRunning === false ? t('vpn.statusSidecarOffline') : t('vpn.statusCodeSaved')) : t('vpn.statusNotSetUp')}
                 </span>
               </div>
-              <span className={styles.vpnCardDesc}>Docker sidecar with SOCKS5 proxy</span>
+              <span className={styles.vpnCardDesc}>{t('vpn.expressVpnDesc')}</span>
             </button>
 
             <div className={styles.vpnCardDisabled}>
               <div className={styles.vpnCardHeader}>
                 <span className={styles.vpnCardName}>NordVPN</span>
-                <span className={styles.vpnCardStatusOff}>Coming soon</span>
+                <span className={styles.vpnCardStatusOff}>{t('vpn.comingSoon')}</span>
               </div>
-              <span className={styles.vpnCardDesc}>WireGuard-based sidecar</span>
+              <span className={styles.vpnCardDesc}>{t('vpn.nordVpnDesc')}</span>
             </div>
 
             <div className={styles.vpnCardDisabled}>
               <div className={styles.vpnCardHeader}>
                 <span className={styles.vpnCardName}>Mullvad</span>
-                <span className={styles.vpnCardStatusOff}>Coming soon</span>
+                <span className={styles.vpnCardStatusOff}>{t('vpn.comingSoon')}</span>
               </div>
-              <span className={styles.vpnCardDesc}>Privacy-focused SOCKS5</span>
+              <span className={styles.vpnCardDesc}>{t('vpn.mullvadDesc')}</span>
             </div>
 
             <div className={styles.vpnCardDisabled}>
               <div className={styles.vpnCardHeader}>
-                <span className={styles.vpnCardName}>Custom Proxy</span>
-                <span className={styles.vpnCardStatusOff}>Coming soon</span>
+                <span className={styles.vpnCardName}>{t('vpn.customProxy')}</span>
+                <span className={styles.vpnCardStatusOff}>{t('vpn.comingSoon')}</span>
               </div>
-              <span className={styles.vpnCardDesc}>SOCKS5/HTTP proxy URLs</span>
+              <span className={styles.vpnCardDesc}>{t('vpn.customProxyDesc')}</span>
             </div>
           </div>
 
           <div className={styles.vpnActivation}>
             <label className={styles.label}>
-              ExpressVPN Activation Code
-              {hasVpnCode && <span className={styles.vpnCodeSaved}> (saved)</span>}
+              {t('vpn.activationCode')}
+              {hasVpnCode && <span className={styles.vpnCodeSaved}> {t('vpn.codeSavedSuffix')}</span>}
             </label>
             {hasVpnCode && !vpnActivationCode && (
               <div className={styles.vpnCodeMasked}>
@@ -612,7 +642,7 @@ export default function SettingsPage() {
                     el?.focus();
                   }}
                 >
-                  Change
+                  {t('vpn.change')}
                 </button>
               </div>
             )}
@@ -621,7 +651,7 @@ export default function SettingsPage() {
                 id="vpn-activation-input"
                 type="password"
                 className={styles.input}
-                placeholder="Paste your activation code"
+                placeholder={t('vpn.activationCodePlaceholder')}
                 value={vpnActivationCode}
                 onChange={(e) => setVpnActivationCode(e.target.value)}
               />
@@ -630,20 +660,20 @@ export default function SettingsPage() {
                 target="_blank"
                 rel="noopener noreferrer"
                 className={styles.vpnGetCode}
-                title="Get your activation code"
+                title={t('vpn.getCodeTitle')}
               >
-                Get code
+                {t('vpn.getCode')}
               </a>
             </div>
 
             <div className={styles.vpnSteps}>
               <div className={styles.vpnStep}>
                 <span className={styles.vpnStepNum}>1</span>
-                <span>Visit <a href="https://www.expressvpn.com/setup" target="_blank" rel="noopener noreferrer">expressvpn.com/setup</a> and copy your activation code</span>
+                <span>{t.rich('vpn.step1', { link: (chunks) => <a href="https://www.expressvpn.com/setup" target="_blank" rel="noopener noreferrer">{chunks}</a> })}</span>
               </div>
               <div className={styles.vpnStep}>
                 <span className={styles.vpnStepNum}>2</span>
-                <span>Paste it above and save -- your code is encrypted before storage</span>
+                <span>{t('vpn.step2')}</span>
               </div>
             </div>
 
@@ -668,52 +698,47 @@ export default function SettingsPage() {
                     setHasVpnCode(true);
                     setVpnActivationCode('');
                     setVpnProvider('expressvpn');
-                    setVpnCodeMessage('VPN configured');
+                    setVpnCodeMessage(t('vpn.configured'));
                     // Refresh live status
                     fetch('/api/vpn/status').then((r) => r.json()).then((s) => { if (s.ok) setVpnLive(s.data); }).catch(() => {});
                   } else {
-                    setVpnCodeMessage(data.error || 'Failed to save');
+                    setVpnCodeMessage(data.error || t('vpn.saveFailed'));
                   }
                   setVpnCodeSaving(false);
                 }}
               >
-                {vpnCodeSaving ? 'Saving...' : hasVpnCode ? 'Update Code' : 'Save Code'}
+                {vpnCodeSaving ? t('vpn.saving') : hasVpnCode ? t('vpn.updateCode') : t('vpn.saveCode')}
               </button>
               {vpnCodeMessage && <span className={styles.message}>{vpnCodeMessage}</span>}
             </div>
           </div>
 
           <div className={styles.vpnStealthInfo}>
-            <h3 className={styles.vpnStealthTitle}>What happens when Flight Finder switches country</h3>
+            <h3 className={styles.vpnStealthTitle}>{t('vpn.stealthTitle')}</h3>
             <p className={styles.toggleHint}>
-              Changing your IP is not enough. Websites detect mismatches between your IP and browser signals.
-              Flight Finder aligns everything to match the target country:
+              {t('vpn.stealthHint')}
             </p>
             <ul className={styles.vpnStealthList}>
-              <li>IP address routed through VPN exit node</li>
-              <li>Browser timezone set to match the country</li>
-              <li>Accept-Language header and navigator.languages aligned</li>
-              <li>Geolocation API returns the capital city coordinates</li>
-              <li>Google Flights <code>gl=</code> country hint parameter set</li>
-              <li>WebRTC leak prevention (real IP never exposed)</li>
-              <li>DNS leak prevention (queries routed through VPN tunnel)</li>
-              <li>Canvas and WebGL fingerprint noise (unique per session)</li>
-              <li>AudioContext fingerprint randomization</li>
-              <li>Screen dimensions matched to viewport</li>
-              <li>Exit country verified via IP geolocation after connect</li>
+              <li>{t('vpn.stealthIp')}</li>
+              <li>{t('vpn.stealthTimezone')}</li>
+              <li>{t('vpn.stealthAcceptLanguage')}</li>
+              <li>{t('vpn.stealthGeolocation')}</li>
+              <li>{t.rich('vpn.stealthGlParam', { code: (chunks) => <code>{chunks}</code> })}</li>
+              <li>{t('vpn.stealthWebrtc')}</li>
+              <li>{t('vpn.stealthDns')}</li>
+              <li>{t('vpn.stealthCanvas')}</li>
+              <li>{t('vpn.stealthAudio')}</li>
+              <li>{t('vpn.stealthScreen')}</li>
+              <li>{t('vpn.stealthExitCountry')}</li>
             </ul>
           </div>
         </div>
 
         <div className={styles.section}>
-          <h2 className={styles.sectionTitle}>Community Data Sharing</h2>
+          <h2 className={styles.sectionTitle}>{t('community.title')}</h2>
 
           <p className={styles.toggleHint}>
-            Flight Finder gets better when instances pool their price history. Turn on
-            sharing to contribute your anonymized data points (route, price, airline,
-            and date only, never anything personal) to a shared fare dataset everyone
-            can explore, and in return you see community prices on routes you have not
-            scraped yourself. It is fully opt-in and you can turn it off any time.
+            {t('community.hint')}
           </p>
 
           <div className={styles.toggleRow}>
@@ -735,10 +760,10 @@ export default function SettingsPage() {
             </button>
             <div>
               <span className={styles.toggleLabel}>
-                {config.communitySharing ? 'Sharing enabled' : 'Sharing disabled'}
+                {config.communitySharing ? t('community.sharingEnabled') : t('community.sharingDisabled')}
               </span>
               <p className={styles.toggleHint}>
-                Contribute this instance&apos;s anonymized prices (route, price, airline, date) to the community dataset.
+                {t('community.contributeHint')}
               </p>
             </div>
           </div>
@@ -765,12 +790,10 @@ export default function SettingsPage() {
               </button>
               <div>
                 <span className={styles.toggleLabel}>
-                  Run a hub: {config.communityRegistrationOpen ? 'accepting contributors' : 'closed'}
+                  {config.communityRegistrationOpen ? t('community.hubAccepting') : t('community.hubClosed')}
                 </span>
                 <p className={styles.toggleHint}>
-                  Lets other Flight Finder instances register with this one and send their
-                  anonymized data here. Only relevant for the central hub. New registrations
-                  are rate limited and globally capped.
+                  {t('community.hubHint')}
                 </p>
               </div>
             </div>
@@ -778,7 +801,7 @@ export default function SettingsPage() {
 
           {config.communityApiKey && (
             <div className={styles.field}>
-              <label className={styles.label}>API Key</label>
+              <label className={styles.label}>{t('community.apiKey')}</label>
               <code className={styles.code}>
                 {config.communityApiKey.slice(0, 8)}...{config.communityApiKey.slice(-4)}
               </code>
@@ -809,6 +832,7 @@ interface MultiUserSectionProps {
 }
 
 function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
+  const t = useTranslations('Settings');
   const [showForm, setShowForm] = useState(false);
   const [adminUsername, setAdminUsername] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
@@ -820,12 +844,12 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
   if (enabled) {
     return (
       <div className={styles.section}>
-        <h2 className={styles.sectionTitle}>Multi user mode</h2>
+        <h2 className={styles.sectionTitle}>{t('multiUser.title')}</h2>
         <p className={styles.toggleHint}>
-          Each household member has their own account, trackers, and preferences.
+          {t('multiUser.enabledHint')}
         </p>
         <Link href="/admin/users" className={styles.link}>
-          Manage users
+          {t('multiUser.manageUsers')}
         </Link>
       </div>
     );
@@ -851,7 +875,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
     setSubmitting(false);
 
     if (!data.ok) {
-      setError(data.error || 'Failed to enable multi user mode');
+      setError(data.error || t('multiUser.enableFailed'));
       return;
     }
 
@@ -862,7 +886,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
 
   return (
     <div className={styles.section}>
-      <h2 className={styles.sectionTitle}>Multi user mode</h2>
+      <h2 className={styles.sectionTitle}>{t('multiUser.title')}</h2>
 
       <div className={styles.toggleRow}>
         <button
@@ -874,11 +898,10 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
         </button>
         <div>
           <span className={styles.toggleLabel}>
-            {showForm ? 'Enabling' : 'Disabled'}
+            {showForm ? t('multiUser.enabling') : t('multiUser.disabled')}
           </span>
           <p className={styles.toggleHint}>
-            Turn on to host multiple accounts on this instance (family, household).
-            You stay admin; new users get their own trackers and preferences.
+            {t('multiUser.toggleHint')}
           </p>
         </div>
       </div>
@@ -888,7 +911,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
           <input
             type="text"
             className={styles.input}
-            placeholder="Admin username (defaults to admin)"
+            placeholder={t('multiUser.adminUsernamePlaceholder')}
             value={adminUsername}
             onChange={(e) => setAdminUsername(e.target.value)}
             autoComplete="username"
@@ -896,23 +919,22 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
           <input
             type="text"
             className={styles.input}
-            placeholder="Display name (optional)"
+            placeholder={t('multiUser.displayNamePlaceholder')}
             value={displayName}
             onChange={(e) => setDisplayName(e.target.value)}
           />
           <input
             type="password"
             className={styles.input}
-            placeholder="Admin password (optional — blank = no password)"
+            placeholder={t('multiUser.adminPasswordPlaceholder')}
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
             autoComplete="new-password"
           />
           <p className={styles.toggleHint}>
-            Leave blank for a Netflix-style household where everyone taps to sign in. Add
-            a password only if this instance is reachable from the public internet.
+            {t('multiUser.passwordHint')}
           </p>
-          <label className={styles.toggleHint}>Your avatar</label>
+          <label className={styles.toggleHint}>{t('multiUser.yourAvatar')}</label>
           <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || adminUsername} />
           {error && <p className={styles.error}>{error}</p>}
           <button
@@ -920,7 +942,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
             className={styles.saveButton}
             disabled={submitting}
           >
-            {submitting ? 'Enabling...' : 'Enable multi user mode'}
+            {submitting ? t('multiUser.enablingButton') : t('multiUser.enableButton')}
           </button>
         </form>
       )}

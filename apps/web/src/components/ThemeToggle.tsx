@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './ThemeToggle.module.css';
 import { applyTheme, getNextToggleTheme, getThemeFromDom, getThemeMode, isThemeId, resolveInitialTheme, THEME_CHANGE_EVENT, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 
@@ -45,6 +46,7 @@ function writeLocalTheme(theme: ThemeId) {
 }
 
 export function ThemeToggle() {
+  const t = useTranslations('ThemeToggle');
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [saving, setSaving] = useState(false);
 
@@ -112,7 +114,7 @@ export function ThemeToggle() {
   };
 
   return (
-    <button className={styles.toggle} onClick={toggle} aria-label="Toggle theme" disabled={saving}>
+    <button className={styles.toggle} onClick={toggle} aria-label={t('toggleTheme')} disabled={saving}>
       {getThemeMode(theme) === 'dark' ? (
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
           <circle cx="12" cy="12" r="5" />

@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { getDeleteToken } from '@/lib/tracker-storage';
 import { MAX_PRICE_VALUE } from '@/lib/limits';
@@ -36,6 +37,7 @@ function parseOptionalNumber(value: string): number | null {
 }
 
 export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
+  const t = useTranslations('TrackerFilters');
   const router = useRouter();
   const token = typeof window !== 'undefined' ? getDeleteToken(queryId) : null;
   const rootRef = useRef<HTMLDivElement>(null);
@@ -114,7 +116,7 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
       nextMaxPrice !== null &&
       (Number.isNaN(nextMaxPrice) || nextMaxPrice < 0 || nextMaxPrice > MAX_PRICE_VALUE)
     ) {
-      setError('Max price cannot be negative.');
+      setError(t('maxPriceNegative'));
       return;
     }
 
@@ -123,7 +125,7 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
       nextMaxStops !== null &&
       (Number.isNaN(nextMaxStops) || !Number.isInteger(nextMaxStops) || nextMaxStops < 0 || nextMaxStops > 10)
     ) {
-      setError('Max stops must be a whole number from 0 to 10.');
+      setError(t('maxStopsInvalid'));
       return;
     }
 
@@ -137,7 +139,7 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
         nextMaxDurationHours > 48
       )
     ) {
-      setError('Max duration must be a whole number from 1 to 48.');
+      setError(t('maxDurationInvalid'));
       return;
     }
 
@@ -161,13 +163,13 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
       });
       const data = await res.json();
       if (!data.ok) {
-        setError(data.error || 'Could not update filters.');
+        setError(data.error || t('updateFailed'));
         return;
       }
       setOpen(false);
       router.refresh();
     } catch {
-      setError('Network error. Please try again.');
+      setError(t('networkError'));
     } finally {
       setSaving(false);
     }
@@ -184,7 +186,7 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" strokeWidth="1.5" aria-hidden="true">
           <path d="M2 4h12M4 8h8M6 12h4" />
         </svg>
-        Filters
+        {t('filters')}
         {activeCount > 0 && <span className={styles.count}>{activeCount}</span>}
       </button>
 
@@ -192,52 +194,52 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
         <div className={styles.panel}>
           <div className={styles.grid}>
             <label className={styles.field}>
-              <span className={styles.label}>Max stops</span>
+              <span className={styles.label}>{t('maxStops')}</span>
               <input
                 className={styles.input}
                 type="number"
                 min={0}
                 max={10}
                 step={1}
-                placeholder="Any"
+                placeholder={t('any')}
                 value={maxStops}
                 onChange={(event) => setMaxStops(event.target.value)}
               />
             </label>
 
             <label className={styles.field}>
-              <span className={styles.label}>Max price</span>
+              <span className={styles.label}>{t('maxPrice')}</span>
               <input
                 className={styles.input}
                 type="number"
                 min={0}
                 step={1}
-                placeholder="Any"
+                placeholder={t('any')}
                 value={maxPrice}
                 onChange={(event) => setMaxPrice(event.target.value)}
               />
             </label>
 
             <label className={styles.field}>
-              <span className={styles.label}>Max duration</span>
+              <span className={styles.label}>{t('maxDuration')}</span>
               <input
                 className={styles.input}
                 type="number"
                 min={1}
                 max={48}
                 step={1}
-                placeholder="Any"
+                placeholder={t('any')}
                 value={maxDurationHours}
                 onChange={(event) => setMaxDurationHours(event.target.value)}
               />
             </label>
 
             <label className={`${styles.field} ${styles.airlines}`}>
-              <span className={styles.label}>Airlines</span>
+              <span className={styles.label}>{t('airlines')}</span>
               <input
                 className={styles.input}
                 type="text"
-                placeholder="Any airline"
+                placeholder={t('anyAirline')}
                 value={preferredAirlines}
                 onChange={(event) => setPreferredAirlines(event.target.value)}
               />
@@ -248,13 +250,13 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
 
           <div className={styles.actions}>
             <button className={`${styles.secondary} ${styles.clear}`} type="button" onClick={clearDraft} disabled={saving}>
-              Clear filters
+              {t('clearFilters')}
             </button>
             <button className={styles.secondary} type="button" onClick={closePanel} disabled={saving}>
-              Cancel
+              {t('cancel')}
             </button>
             <button className={styles.primary} type="button" onClick={save} disabled={saving}>
-              {saving ? 'Saving...' : 'Apply'}
+              {saving ? t('saving') : t('apply')}
             </button>
           </div>
         </div>

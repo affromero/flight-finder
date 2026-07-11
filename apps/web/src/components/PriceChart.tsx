@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
@@ -29,6 +30,7 @@ interface Snapshot {
 
 type ChartView = 'all' | 'local' | 'comparison' | string; // string = specific country code
 type HistoryMode = 'current' | 'all';
+type Translator = ReturnType<typeof useTranslations>;
 
 interface PlotTheme {
   axisText: string;
@@ -125,7 +127,7 @@ function usePlotTheme(): PlotTheme {
   return plotTheme;
 }
 
-function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: boolean) {
+function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: boolean, t: Translator) {
   const available = snapshots.filter((s) => s.status !== 'sold_out');
   const soldOut = snapshots.filter((s) => s.status === 'sold_out');
 
@@ -159,8 +161,8 @@ function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: 
           lines.push(`${p.departureTime ?? '?'} - ${p.arrivalTime ?? '?'}`);
         }
         if (p.duration) lines.push(p.duration);
-        if (p.seatsLeft) lines.push(`${p.seatsLeft} seats left`);
-        if (p.vpnCountry) lines.push(`${countryFlag(p.vpnCountry)} Scraped from ${p.vpnCountry}`);
+        if (p.seatsLeft) lines.push(t('seatsLeft', { count: p.seatsLeft }));
+        if (p.vpnCountry) lines.push(`${countryFlag(p.vpnCountry)} ${t('scrapedFrom', { country: p.vpnCountry })}`);
         return lines.join('<br>');
       }),
       hovertemplate: '%{text}<extra>%{fullData.name}</extra>',
@@ -173,13 +175,13 @@ function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: 
       y: soldOut.map((p) => p.price),
       type: 'scatter' as const,
       mode: 'lines+markers' as const,
-      name: 'Sold out',
+      name: t('soldOut'),
       line: { color: '#ef4444', width: 0 },
       marker: { color: '#ef4444', size: 10 },
       customdata: soldOut.map((p) => [p.bookingUrl]),
       text: soldOut.map((p) => {
         const lines = [
-          `<b>${formatCurrency(p.price, p.currency ?? currency)}</b> (sold out)`,
+          `<b>${formatCurrency(p.price, p.currency ?? currency)}</b> ${t('soldOutSuffix')}`,
           new Date(p.scrapedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         ];
         if (p.departureTime || p.arrivalTime) {
@@ -187,7 +189,7 @@ function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: 
         }
         return lines.join('<br>');
       }),
-      hovertemplate: '%{text}<extra>Sold out</extra>',
+      hovertemplate: `%{text}<extra>${t('soldOut')}</extra>`,
     });
   }
 
@@ -195,7 +197,7 @@ function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: 
 }
 
 /** Comparison view: one line per country showing the cheapest price at each scrape time */
-function buildComparisonTraces(snapshots: Snapshot[], currency: string) {
+function buildComparisonTraces(snapshots: Snapshot[], currency: string, t: Translator) {
   const available = snapshots.filter((s) => s.status !== 'sold_out');
 
   // Group by country label
@@ -225,6 +227,7 @@ function buildComparisonTraces(snapshots: Snapshot[], currency: string) {
 
     const color = COUNTRY_COLORS[idx % COUNTRY_COLORS.length]!;
     const flag = label !== 'Local' ? countryFlag(label) + ' ' : '';
+    const displayLabel = label === 'Local' ? t('local') : label;
     idx++;
 
     return {
@@ -232,13 +235,13 @@ function buildComparisonTraces(snapshots: Snapshot[], currency: string) {
       y: cheapest.map((p) => p.price),
       type: 'scatter' as const,
       mode: 'lines+markers' as const,
-      name: `${flag}${label}`,
+      name: `${flag}${displayLabel}`,
       line: { color, width: 3 },
       marker: { color, size: 8 },
       customdata: cheapest.map((p) => [p.bookingUrl]),
       text: cheapest.map((p) => {
         const lines = [
-          `<b>${formatCurrency(p.price, p.currency ?? currency)}</b> cheapest from ${flag}${label}`,
+          `<b>${formatCurrency(p.price, p.currency ?? currency)}</b> ${t('cheapestFrom', { location: `${flag}${displayLabel}` })}`,
           `${p.airline}`,
           new Date(p.scrapedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
         ];
@@ -257,6 +260,7 @@ interface Props {
 }
 
 export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency = 'USD' }: Props) {
+  const t = useTranslations('PriceChart');
   const plotTheme = usePlotTheme();
   const fullHistory = allSnapshots ?? snapshots;
   const hasFilteredHistory = fullHistory.length !== snapshots.length;
@@ -286,10 +290,10 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
 
   const traces = useMemo(() => {
     if (view === 'comparison') {
-      return buildComparisonTraces(filteredSnapshots, currency);
+      return buildComparisonTraces(filteredSnapshots, currency, t);
     }
-    return buildDetailTraces(filteredSnapshots, currency, hasVpnData && view === 'all');
-  }, [filteredSnapshots, currency, view, hasVpnData]);
+    return buildDetailTraces(filteredSnapshots, currency, hasVpnData && view === 'all', t);
+  }, [filteredSnapshots, currency, view, hasVpnData, t]);
 
   const editShapes = useMemo(() => editEvents.map((event) => ({
     type: 'line' as const,
@@ -307,7 +311,7 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
     y: 1,
     xref: 'x' as const,
     yref: 'paper' as const,
-    text: index === editEvents.length - 1 ? event.summary : 'Edited',
+    text: index === editEvents.length - 1 ? event.summary : t('edited'),
     showarrow: false,
     xanchor: 'left' as const,
     yanchor: 'bottom' as const,
@@ -317,7 +321,7 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
     bordercolor: plotTheme.accent,
     borderwidth: 1,
     borderpad: 3,
-  })), [editEvents, plotTheme.accent, plotTheme.surface]);
+  })), [editEvents, plotTheme.accent, plotTheme.surface, t]);
 
   const controls = (
     <>
@@ -328,14 +332,14 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
             onClick={() => setHistoryMode('current')}
             type="button"
           >
-            Current filters
+            {t('currentFilters')}
           </button>
           <button
             className={`${styles.historyOption} ${historyMode === 'all' ? styles.historyOptionActive : ''}`}
             onClick={() => setHistoryMode('all')}
             type="button"
           >
-            All history
+            {t('allHistory')}
           </button>
         </div>
       )}
@@ -346,12 +350,12 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
             value={view}
             onChange={(e) => setView(e.target.value)}
           >
-            <option value="all">All countries</option>
-            <option value="comparison">Country comparison (cheapest)</option>
-            <option value="local">Local only</option>
+            <option value="all">{t('allCountries')}</option>
+            <option value="comparison">{t('countryComparison')}</option>
+            <option value="local">{t('localOnly')}</option>
             {vpnCountries.map((code) => (
               <option key={code} value={code}>
-                {countryFlag(code)} {code} only
+                {countryFlag(code)} {t('countryOnly', { country: code })}
               </option>
             ))}
           </select>
@@ -364,9 +368,9 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
   if (fullHistory.length === 0) {
     return (
       <div className={styles.empty}>
-        <p className={styles.emptyText}>No price data yet</p>
+        <p className={styles.emptyText}>{t('noPriceData')}</p>
         <p className={styles.emptyHint}>
-          Prices will appear after the first scrape runs. Check back soon.
+          {t('noPriceDataHint')}
         </p>
       </div>
     );
@@ -377,9 +381,9 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
       <div className={styles.root}>
         {hasControls && <div className={styles.controls}>{controls}</div>}
         <div className={styles.empty}>
-          <p className={styles.emptyText}>No price data for this view</p>
+          <p className={styles.emptyText}>{t('noViewData')}</p>
           <p className={styles.emptyHint}>
-            Switch views or wait for the next scrape to collect prices under the current filters.
+            {t('noViewDataHint')}
           </p>
         </div>
       </div>

@@ -1,18 +1,20 @@
 'use client';
 
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip, Legend } from 'recharts';
+import { useTranslations } from 'next-intl';
 import type { DeviceBreakdown } from '@/lib/analytics/query';
 import styles from './ChartCard.module.css';
 
 const COLORS = ['#60A5FA', '#F59E0B', '#10B981', '#8B5CF6'];
 
 export function DevicesChart({ data }: { data: DeviceBreakdown[] }) {
+  const t = useTranslations('AdminAnalytics');
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Devices</h2>
+      <h2 className={styles.cardTitle}>{t('devices.title')}</h2>
       <div className={styles.chartContainer}>
         {data.length === 0 ? (
-          <p className={styles.empty}>No device data</p>
+          <p className={styles.empty}>{t('devices.empty')}</p>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <PieChart>

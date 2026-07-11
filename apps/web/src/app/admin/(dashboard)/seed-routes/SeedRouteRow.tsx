@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { useHydrated } from '@/lib/use-hydrated';
 import styles from './page.module.css';
 
@@ -23,17 +24,18 @@ interface SeedData {
   createdAt: string;
 }
 
-function timeAgo(iso: string): string {
-  const diff = Date.now() - new Date(iso).getTime();
-  const hours = Math.floor(diff / (1000 * 60 * 60));
-  if (hours < 1) return 'just now';
-  if (hours < 24) return `${hours}h ago`;
-  return `${Math.floor(hours / 24)}d ago`;
-}
-
 export function SeedRouteRow({ seed }: { seed: SeedData }) {
+  const t = useTranslations('AdminSeedRoutes');
   const router = useRouter();
   const hydrated = useHydrated();
+
+  const timeAgo = (iso: string): string => {
+    const diff = Date.now() - new Date(iso).getTime();
+    const hours = Math.floor(diff / (1000 * 60 * 60));
+    if (hours < 1) return t('row.justNow');
+    if (hours < 24) return t('row.hoursAgo', { hours });
+    return t('row.daysAgo', { days: Math.floor(hours / 24) });
+  };
 
   const handleToggle = async () => {
     await fetch(`/api/admin/seed-routes/${seed.id}`, {
@@ -45,7 +47,7 @@ export function SeedRouteRow({ seed }: { seed: SeedData }) {
   };
 
   const handleDelete = async () => {
-    if (!confirm(`Delete seed route ${seed.origin} → ${seed.destination}?`)) return;
+    if (!confirm(t('row.deleteConfirm', { origin: seed.origin, destination: seed.destination }))) return;
     await fetch(`/api/admin/seed-routes/${seed.id}`, { method: 'DELETE' });
     router.refresh();
   };
@@ -75,21 +77,21 @@ export function SeedRouteRow({ seed }: { seed: SeedData }) {
         <span className={styles.rowCode}>{seed.origin}</span>
         <span className={styles.rowArrow}>→</span>
         <span className={styles.rowCode}>{seed.destination}</span>
-        <span className={styles.seedBadge}>SEED</span>
-        {!seed.active && <span className={styles.pausedBadge}>PAUSED</span>}
+        <span className={styles.seedBadge}>{t('row.seedBadge')}</span>
+        {!seed.active && <span className={styles.pausedBadge}>{t('row.pausedBadge')}</span>}
       </div>
       <div className={styles.rowMeta}>
         <span>{seed.originName} → {seed.destinationName}</span>
         <span className={styles.rowSep}>·</span>
         <span>{seed.cabinClass}</span>
         <span className={styles.rowSep}>·</span>
-        <span>{seed.snapshotCount} snapshots</span>
+        <span>{t('row.snapshots', { count: seed.snapshotCount })}</span>
         <span className={styles.rowSep}>·</span>
-        <span>{seed.runCount} runs</span>
+        <span>{t('row.runs', { count: seed.runCount })}</span>
         {seed.lastRunAt && (
           <>
             <span className={styles.rowSep}>·</span>
-            <span>last: {hydrated ? timeAgo(seed.lastRunAt) : '…'} ({seed.lastRunStatus})</span>
+            <span>{t('row.lastRun', { time: hydrated ? timeAgo(seed.lastRunAt) : '…', status: seed.lastRunStatus ?? '' })}</span>
           </>
         )}
       </div>
@@ -102,32 +104,32 @@ export function SeedRouteRow({ seed }: { seed: SeedData }) {
       )}
       {seed.preferredAirlines.length > 0 && (
         <div className={styles.rowMeta}>
-          <span>Tracking: {seed.preferredAirlines.join(', ')}</span>
+          <span>{t('row.tracking', { airlines: seed.preferredAirlines.join(', ') })}</span>
         </div>
       )}
       <div className={styles.rowActions}>
         <select className={styles.intervalSelect} value={seed.scrapeInterval ?? ''} onChange={handleIntervalChange}>
-          <option value="">Follow global</option>
-          <option value={1}>Every 1h</option>
-          <option value={3}>Every 3h</option>
-          <option value={6}>Every 6h</option>
-          <option value={12}>Every 12h</option>
-          <option value={24}>Every 24h</option>
+          <option value="">{t('row.followGlobal')}</option>
+          <option value={1}>{t('row.everyHours', { hours: 1 })}</option>
+          <option value={3}>{t('row.everyHours', { hours: 3 })}</option>
+          <option value={6}>{t('row.everyHours', { hours: 6 })}</option>
+          <option value={12}>{t('row.everyHours', { hours: 12 })}</option>
+          <option value={24}>{t('row.everyHours', { hours: 24 })}</option>
         </select>
         <select className={styles.intervalSelect} value={seed.lookAheadDays} onChange={handleLookAheadChange}>
-          <option value={7}>7d ahead</option>
-          <option value={14}>14d ahead</option>
-          <option value={21}>21d ahead</option>
-          <option value={30}>30d ahead</option>
+          <option value={7}>{t('row.daysAhead', { days: 7 })}</option>
+          <option value={14}>{t('row.daysAhead', { days: 14 })}</option>
+          <option value={21}>{t('row.daysAhead', { days: 21 })}</option>
+          <option value={30}>{t('row.daysAhead', { days: 30 })}</option>
         </select>
         <button
           className={seed.active ? styles.pauseButton : styles.resumeButton}
           onClick={handleToggle}
         >
-          {seed.active ? 'Pause' : 'Resume'}
+          {seed.active ? t('row.pause') : t('row.resume')}
         </button>
         <button className={styles.deleteButton} onClick={handleDelete}>
-          Delete
+          {t('row.delete')}
         </button>
       </div>
     </div>

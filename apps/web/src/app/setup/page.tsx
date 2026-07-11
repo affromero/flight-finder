@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './page.module.css';
 import { PROVIDER_METADATA, LOCAL_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
@@ -18,6 +19,7 @@ interface SetupStatus {
 }
 
 export default function SetupPage() {
+  const t = useTranslations('Setup');
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [step, setStep] = useState(0);
   const [password, setPassword] = useState('');
@@ -62,15 +64,15 @@ export default function SetupPage() {
           }
         } else {
           setLocalModels([]);
-          setLocalModelsError(d.error || 'Failed to fetch models');
+          setLocalModelsError(d.error || t('fetchModelsFailed'));
         }
       })
       .catch(() => {
         setLocalModels([]);
-        setLocalModelsError('Could not connect');
+        setLocalModelsError(t('couldNotConnect'));
       })
       .finally(() => setLocalModelsLoading(false));
-  }, []);
+  }, [t]);
 
   useEffect(() => {
     fetch('/api/setup/status')
@@ -96,20 +98,20 @@ export default function SetupPage() {
         }
       })
       .catch(() => {
-        setError('Could not load setup status. Refresh to try again.');
+        setError(t('statusLoadFailed'));
       });
-  }, [fetchLocalModels]);
+  }, [fetchLocalModels, t]);
 
   const handleSubmit = async () => {
     setError('');
 
     if (step === 0) {
       if (password.length < 8) {
-        setError('Password must be at least 8 characters');
+        setError(t('passwordTooShort'));
         return;
       }
       if (password !== confirmPassword) {
-        setError('Passwords do not match');
+        setError(t('passwordMismatch'));
         return;
       }
       setStep(1);
@@ -120,8 +122,8 @@ export default function SetupPage() {
       const effective = customModel.trim() || model;
       if (!provider || !effective) {
         const hint = LOCAL_PROVIDERS.has(provider) && localModelsError
-          ? 'Could not reach ' + PROVIDER_METADATA[provider]?.displayName + ' — type a model ID manually'
-          : 'Select a provider and model';
+          ? t('providerUnreachable', { provider: PROVIDER_METADATA[provider]?.displayName ?? provider })
+          : t('selectProviderModel');
         setError(hint);
         return;
       }
@@ -139,7 +141,7 @@ export default function SetupPage() {
       // Validate the account fields here before moving to the reach step, so
       // bad credentials are caught before the final submit.
       if (enableMultiUser && multiUserPassword && multiUserPassword.length < 8) {
-        setError('Password must be at least 8 characters (or leave it blank)');
+        setError(t('passwordTooShortOptional'));
         return;
       }
       setStep(4);
@@ -157,7 +159,7 @@ export default function SetupPage() {
 
     if (!res.ok) {
       const data = await res.json();
-      setError(data.error || 'Setup failed');
+      setError(data.error || t('setupFailed'));
       setLoading(false);
       return;
     }
@@ -165,7 +167,7 @@ export default function SetupPage() {
     if (status?.isSelfHosted && enableMultiUser) {
       const username = multiUserUsername.trim();
       if (multiUserPassword && multiUserPassword.length < 8) {
-        setError('Password must be at least 8 characters (or leave it blank)');
+        setError(t('passwordTooShortOptional'));
         setLoading(false);
         return;
       }
@@ -181,7 +183,7 @@ export default function SetupPage() {
       });
       const muData = await muRes.json();
       if (!muRes.ok) {
-        setError(muData.error || 'Failed to enable multi user mode');
+        setError(muData.error || t('multiUserFailed'));
         setLoading(false);
         return;
       }
@@ -198,7 +200,7 @@ export default function SetupPage() {
     return (
       <main className={styles.root}>
         <div className={styles.card}>
-          {error ? <p className={styles.error}>{error}</p> : <p className={styles.loading}>Loading...</p>}
+          {error ? <p className={styles.error}>{error}</p> : <p className={styles.loading}>{t('loading')}</p>}
         </div>
       </main>
     );
@@ -211,42 +213,42 @@ export default function SetupPage() {
   const providerEntries = Object.entries(PROVIDER_METADATA);
   const isSelfHosted = status.isSelfHosted ?? false;
   const subtitles = [
-    'Set your admin password',
-    'Choose your LLM provider',
-    'Join the community',
-    'Multi user mode (optional)',
-    'Use it on other devices',
+    t('subtitlePassword'),
+    t('subtitleProvider'),
+    t('subtitleCommunity'),
+    t('subtitleAccounts'),
+    t('subtitleReach'),
   ];
 
   const isFinalStep = isSelfHosted ? step === 4 : step === 2;
   const submitLabel = loading
-    ? 'Setting up...'
+    ? t('settingUp')
     : isFinalStep
-      ? (isSelfHosted && enableMultiUser ? 'Complete setup and enable accounts' : 'Complete Setup')
-      : 'Next';
+      ? (isSelfHosted && enableMultiUser ? t('completeSetupAccounts') : t('completeSetup'))
+      : t('next');
 
   return (
     <main className={styles.root}>
       <div className={styles.card}>
-        <h1 className={styles.title}>Flight Finder Setup</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <p className={styles.subtitle}>{subtitles[step]}</p>
 
         <div className={styles.steps}>
           {!isSelfHosted && (
             <>
-              <span className={`${styles.step} ${step >= 0 ? styles.active : ''}`}>1. Password</span>
+              <span className={`${styles.step} ${step >= 0 ? styles.active : ''}`}>1. {t('stepPassword')}</span>
               <span className={styles.stepDivider}>/</span>
             </>
           )}
-          <span className={`${styles.step} ${step >= 1 ? styles.active : ''}`}>{isSelfHosted ? '1' : '2'}. Provider</span>
+          <span className={`${styles.step} ${step >= 1 ? styles.active : ''}`}>{isSelfHosted ? '1' : '2'}. {t('stepProvider')}</span>
           <span className={styles.stepDivider}>/</span>
-          <span className={`${styles.step} ${step >= 2 ? styles.active : ''}`}>{isSelfHosted ? '2' : '3'}. Community</span>
+          <span className={`${styles.step} ${step >= 2 ? styles.active : ''}`}>{isSelfHosted ? '2' : '3'}. {t('stepCommunity')}</span>
           {isSelfHosted && (
             <>
               <span className={styles.stepDivider}>/</span>
-              <span className={`${styles.step} ${step >= 3 ? styles.active : ''}`}>3. Accounts</span>
+              <span className={`${styles.step} ${step >= 3 ? styles.active : ''}`}>3. {t('stepAccounts')}</span>
               <span className={styles.stepDivider}>/</span>
-              <span className={`${styles.step} ${step >= 4 ? styles.active : ''}`}>4. Reach</span>
+              <span className={`${styles.step} ${step >= 4 ? styles.active : ''}`}>4. {t('stepReach')}</span>
             </>
           )}
         </div>
@@ -256,7 +258,7 @@ export default function SetupPage() {
             <input
               type="password"
               className={styles.input}
-              placeholder="Admin password"
+              placeholder={t('adminPasswordPlaceholder')}
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               autoFocus
@@ -264,7 +266,7 @@ export default function SetupPage() {
             <input
               type="password"
               className={styles.input}
-              placeholder="Confirm password"
+              placeholder={t('confirmPasswordPlaceholder')}
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
             />
@@ -275,7 +277,7 @@ export default function SetupPage() {
           <div className={styles.fields}>
             {hasCliProvider && (
               <p className={styles.cliHint}>
-                Using your existing CLI subscription — no API key needed, no extra cost.
+                {t('cliHint')}
               </p>
             )}
             <div className={styles.providers}>
@@ -304,15 +306,15 @@ export default function SetupPage() {
                     <span className={styles.providerStatus}>
                       {detected
                         ? CLI_PROVIDERS.has(key)
-                          ? 'Your subscription'
+                          ? t('statusSubscription')
                           : LOCAL_PROVIDERS.has(key)
-                            ? 'Local'
-                            : 'Ready'
+                            ? t('statusLocal')
+                            : t('statusReady')
                         : CLI_PROVIDERS.has(key)
-                          ? 'Not installed'
+                          ? t('statusNotInstalled')
                           : LOCAL_PROVIDERS.has(key)
-                            ? 'Local'
-                            : 'No key'}
+                            ? t('statusLocal')
+                            : t('statusNoKey')}
                     </span>
                   </button>
                 );
@@ -330,7 +332,7 @@ export default function SetupPage() {
                     {PROVIDER_METADATA[provider]!.models.map((m) => (
                       <option key={m.id} value={m.id}>
                         {m.name}
-                        {m.costPer1kInput === 0 ? ' (free)' : ` ($${m.costPer1kInput}/1k in)`}
+                        {m.costPer1kInput === 0 ? ` ${t('modelFree')}` : ` ${t('modelCost', { cost: m.costPer1kInput })}`}
                       </option>
                     ))}
                   </select>
@@ -349,7 +351,7 @@ export default function SetupPage() {
                   </select>
                 )}
                 {PROVIDER_METADATA[provider]!.models.length === 0 && localModelsLoading && (
-                  <span className={styles.hint}>Fetching models...</span>
+                  <span className={styles.hint}>{t('fetchingModels')}</span>
                 )}
                 {PROVIDER_METADATA[provider]!.models.length === 0 && localModelsError && (
                   <span className={styles.hintError}>{localModelsError}</span>
@@ -359,8 +361,8 @@ export default function SetupPage() {
                     type="text"
                     className={styles.input}
                     placeholder={localModels.length > 0
-                      ? 'Or type a custom model ID'
-                      : 'Model ID (e.g. llama3.1:8b, mistral:7b)'}
+                      ? t('customModelPlaceholder')
+                      : t('modelIdPlaceholder')}
                     value={customModel}
                     onChange={(e) => setCustomModel(e.target.value)}
                   />
@@ -372,13 +374,13 @@ export default function SetupPage() {
                       className={styles.input}
                       autoComplete="off"
                       placeholder={detectedProviders.includes(provider)
-                        ? `API key (optional — ${PROVIDER_METADATA[provider]!.envKey} is already set)`
-                        : `Paste your ${PROVIDER_METADATA[provider]!.displayName} API key`}
+                        ? t('apiKeyOptionalPlaceholder', { envKey: PROVIDER_METADATA[provider]!.envKey })
+                        : t('apiKeyPastePlaceholder', { provider: PROVIDER_METADATA[provider]!.displayName })}
                       value={apiKey}
                       onChange={(e) => setApiKey(e.target.value)}
                     />
                     <span className={styles.hint}>
-                      Stored encrypted. You can also set the {PROVIDER_METADATA[provider]!.envKey} environment variable instead.
+                      {t('apiKeyHint', { envKey: PROVIDER_METADATA[provider]!.envKey })}
                     </span>
                   </>
                 )}
@@ -400,21 +402,20 @@ export default function SetupPage() {
           <div className={styles.fields}>
             <div className={styles.communityCard}>
               <h3 className={styles.communityTitle}>
-                Help build the world&apos;s first open flight price database
+                {t('communityTitle')}
               </h3>
               <p className={styles.communityText}>
-                Share anonymized price data (route, price, airline, date) with the
-                Flight Finder community. No personal info is ever sent.
+                {t('communityText')}
               </p>
               <button
                 className={`${styles.communityToggle} ${communitySharing ? styles.communityActive : ''}`}
                 onClick={() => setCommunitySharing(!communitySharing)}
               >
-                {communitySharing ? 'Sharing enabled' : 'Not sharing'}
+                {communitySharing ? t('sharingEnabled') : t('notSharing')}
               </button>
             </div>
             <p className={styles.communityHint}>
-              You can change this anytime in the admin panel.
+              {t('communityHint')}
             </p>
           </div>
         )}
@@ -422,27 +423,25 @@ export default function SetupPage() {
         {step === 3 && isSelfHosted && (
           <div className={styles.fields}>
             <div className={styles.communityCard}>
-              <h3 className={styles.communityTitle}>Who uses this?</h3>
+              <h3 className={styles.communityTitle}>{t('whoUsesThis')}</h3>
               <div className={styles.choiceRow}>
                 <button
                   type="button"
                   className={`${styles.choice} ${!enableMultiUser ? styles.choiceActive : ''}`}
                   onClick={() => setEnableMultiUser(false)}
                 >
-                  Just me
+                  {t('justMe')}
                 </button>
                 <button
                   type="button"
                   className={`${styles.choice} ${enableMultiUser ? styles.choiceActive : ''}`}
                   onClick={() => setEnableMultiUser(true)}
                 >
-                  A household
+                  {t('household')}
                 </button>
               </div>
               <p className={styles.communityText}>
-                {enableMultiUser
-                  ? 'Each person gets their own profile, trackers, and preferences — they pick their face to sign in.'
-                  : 'You can add a household later from Settings.'}
+                {enableMultiUser ? t('householdText') : t('justMeText')}
               </p>
             </div>
             {enableMultiUser && (
@@ -450,7 +449,7 @@ export default function SetupPage() {
                 <input
                   type="text"
                   className={styles.input}
-                  placeholder="Admin username (defaults to admin)"
+                  placeholder={t('adminUsernamePlaceholder')}
                   value={multiUserUsername}
                   onChange={(e) => setMultiUserUsername(e.target.value)}
                   autoComplete="username"
@@ -458,24 +457,22 @@ export default function SetupPage() {
                 <input
                   type="text"
                   className={styles.input}
-                  placeholder="Display name (optional)"
+                  placeholder={t('displayNamePlaceholder')}
                   value={multiUserDisplayName}
                   onChange={(e) => setMultiUserDisplayName(e.target.value)}
                 />
                 <input
                   type="password"
                   className={styles.input}
-                  placeholder="Admin password (optional — leave blank for no password)"
+                  placeholder={t('adminPasswordOptionalPlaceholder')}
                   value={multiUserPassword}
                   onChange={(e) => setMultiUserPassword(e.target.value)}
                   autoComplete="new-password"
                 />
                 <p className={styles.communityHint}>
-                  Leave the password blank for a Netflix-style household: everyone just
-                  taps their face to sign in. Add a password only if this instance will
-                  be reachable from the public internet.
+                  {t('passwordBlankHint')}
                 </p>
-                <label className={styles.avatarLabel}>Profile avatar</label>
+                <label className={styles.avatarLabel}>{t('profileAvatar')}</label>
                 <AvatarPicker
                   value={multiUserAvatar}
                   onChange={setMultiUserAvatar}
@@ -489,15 +486,14 @@ export default function SetupPage() {
         {step === 4 && isSelfHosted && (
           <div className={styles.fields}>
             <div className={styles.communityCard}>
-              <h3 className={styles.communityTitle}>Use it on your phone?</h3>
+              <h3 className={styles.communityTitle}>{t('phoneTitle')}</h3>
               <p className={styles.communityText}>
-                It runs on this machine and nothing is exposed by default. To open
-                it on a phone or share it, you&apos;ll pick how (WiFi, Tailscale,
-                Cloudflare, or your own domain) when you install or from the desktop
-                app. Step-by-step guide at <strong>/connect</strong>.
+                {t.rich('phoneText', {
+                  strong: (chunks) => <strong>{chunks}</strong>,
+                })}
               </p>
             </div>
-            <label className={styles.avatarLabel} htmlFor="publicBaseUrl">Already have a URL? (optional)</label>
+            <label className={styles.avatarLabel} htmlFor="publicBaseUrl">{t('haveUrl')}</label>
             <input
               id="publicBaseUrl"
               type="url"
@@ -507,8 +503,7 @@ export default function SetupPage() {
               onChange={(e) => setPublicBaseUrl(e.target.value)}
             />
             <p className={styles.communityHint}>
-              Paste a domain, tunnel, or tailnet URL so QR codes and price alerts
-              use it. Change it anytime.
+              {t('publicUrlHint')}
             </p>
           </div>
         )}
@@ -521,7 +516,7 @@ export default function SetupPage() {
               className={styles.backButton}
               onClick={() => setStep(step - 1)}
             >
-              Back
+              {t('back')}
             </button>
           )}
           <button

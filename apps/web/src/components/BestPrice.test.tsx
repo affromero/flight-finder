@@ -35,16 +35,18 @@ function snap(overrides: Partial<Snap>): Snap {
 }
 
 describe('BestPrice — sold-out exclusion (issue #64)', () => {
-  it('ignores sold-out snapshots when picking the best price', () => {
+  it('ignores sold-out snapshots when picking the best price', async () => {
     // A sold-out snapshot at a lower price should not win — its listing is
     // gone and the user can't actually book at that price anymore.
     render(
-      <BestPrice
-        snapshots={[
-          snap({ price: 96, status: 'sold_out', airline: 'Turkish' }),
-          snap({ price: 175, status: 'available', airline: 'Pegasus' }),
-        ]}
-      />,
+      <>
+        {await BestPrice({
+          snapshots: [
+            snap({ price: 96, status: 'sold_out', airline: 'Turkish' }),
+            snap({ price: 175, status: 'available', airline: 'Pegasus' }),
+          ],
+        })}
+      </>,
     );
 
     expect(screen.queryByText(/Best price found/)).toBeTruthy();
@@ -52,40 +54,46 @@ describe('BestPrice — sold-out exclusion (issue #64)', () => {
     expect(screen.queryByText(/96$/)).toBeNull();
   });
 
-  it('renders nothing when every snapshot is sold out', () => {
+  it('renders nothing when every snapshot is sold out', async () => {
     const { container } = render(
-      <BestPrice
-        snapshots={[
-          snap({ price: 96, status: 'sold_out' }),
-          snap({ price: 110, status: 'sold_out' }),
-        ]}
-      />,
+      <>
+        {await BestPrice({
+          snapshots: [
+            snap({ price: 96, status: 'sold_out' }),
+            snap({ price: 110, status: 'sold_out' }),
+          ],
+        })}
+      </>,
     );
     expect(container.firstChild).toBeNull();
   });
 
-  it('still picks the cheapest available snapshot when none are sold out', () => {
+  it('still picks the cheapest available snapshot when none are sold out', async () => {
     render(
-      <BestPrice
-        snapshots={[
-          snap({ price: 320, airline: 'Lufthansa' }),
-          snap({ price: 220, airline: 'United' }),
-          snap({ price: 410, airline: 'Air France' }),
-        ]}
-      />,
+      <>
+        {await BestPrice({
+          snapshots: [
+            snap({ price: 320, airline: 'Lufthansa' }),
+            snap({ price: 220, airline: 'United' }),
+            snap({ price: 410, airline: 'Air France' }),
+          ],
+        })}
+      </>,
     );
     expect(screen.getByText(/220/)).toBeTruthy();
   });
 
-  it('falls back gracefully when snapshots have no status field', () => {
+  it('falls back gracefully when snapshots have no status field', async () => {
     // Defensive: callers passing legacy data without `status` should still work.
     render(
-      <BestPrice
-        snapshots={[
-          { ...snap({ price: 150 }), status: undefined },
-          { ...snap({ price: 90 }), status: undefined },
-        ]}
-      />,
+      <>
+        {await BestPrice({
+          snapshots: [
+            { ...snap({ price: 150 }), status: undefined },
+            { ...snap({ price: 90 }), status: undefined },
+          ],
+        })}
+      </>,
     );
     expect(screen.getByText(/90/)).toBeTruthy();
   });

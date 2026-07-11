@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, useRef, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import type { ParseAmbiguity, ParsedFlightQuery } from '@/lib/scraper/parse-query';
 import type { ConversationMessage } from '@/lib/clarification-types';
 import type { PreviewRunStatusPayload } from '@/lib/preview-run';
@@ -90,6 +91,7 @@ export function SearchBar({
   initialQuery?: string;
   surface?: SearchSurface;
 } = {}) {
+  const t = useTranslations('SearchBar');
   const storageKey = previewStorageKey(surface);
   const [query, setQuery] = useState(initialQuery ?? '');
   const [parsed, setParsed] = useState<ParsedQuery | null>(null);
@@ -159,7 +161,7 @@ export function SearchBar({
       const data = await res.json();
 
       if (!data.ok) {
-        setError(data.error || 'Failed to parse query');
+        setError(data.error || t('parseFailed'));
         return false;
       }
 
@@ -186,17 +188,17 @@ export function SearchBar({
               role: 'assistant' as const,
               content: ambiguity.question,
             }))
-          : [{ role: 'assistant' as const, content: 'Can you be more specific?' }];
+          : [{ role: 'assistant' as const, content: t('beMoreSpecific') }];
         setConversation((prev) => [...prev, ...assistantTurns]);
       }
       return true;
     } catch {
-      setError('Network error - please try again');
+      setError(t('networkError'));
       return false;
     } finally {
       setLoading(false);
     }
-  }, [adminCurrency]);
+  }, [adminCurrency, t]);
 
   useEffect(() => {
     if (!previewRunId || !parsed) return;
@@ -207,7 +209,7 @@ export function SearchBar({
     const checkCutoff = (): boolean => {
       const saved = readSavedPreview(storageKey);
       if (saved && Date.now() - saved.startedAt > PREVIEW_POLL_TIMEOUT_MS) {
-        setError('Flight search took too long. Please try again.');
+        setError(t('searchTimeout'));
         setPreviewLoading(false);
         setPreviewRunId(null);
         clearSavedPreview(storageKey);
@@ -224,7 +226,7 @@ export function SearchBar({
         if (cancelled) return;
 
         if (!data.ok) {
-          setError(data.error || 'Failed to search flights');
+          setError(data.error || t('searchFailed'));
           setPreviewLoading(false);
           setPreviewRunId(null);
           clearSavedPreview(storageKey);
@@ -245,7 +247,7 @@ export function SearchBar({
         }
 
         if (preview.status === 'failed') {
-          setError(preview.error || 'Failed to search flights');
+          setError(preview.error || t('searchFailed'));
           setPreviewLoading(false);
           setPreviewRunId(null);
           clearSavedPreview(storageKey);
@@ -274,7 +276,7 @@ export function SearchBar({
         window.clearTimeout(timer);
       }
     };
-  }, [previewRunId, parsed, storageKey]);
+  }, [previewRunId, parsed, storageKey, t]);
 
   const handleParse = useCallback(async () => {
     const trimmed = query.trim();
@@ -327,14 +329,14 @@ export function SearchBar({
       const data = await res.json();
 
       if (!data.ok) {
-        setError(data.error || 'Failed to search flights');
+        setError(data.error || t('searchFailed'));
         setPreviewLoading(false);
         return;
       }
 
       const nextPreviewRunId = data.data.previewRunId as string | undefined;
       if (!nextPreviewRunId) {
-        setError('Failed to start flight search');
+        setError(t('startFailed'));
         setPreviewLoading(false);
         return;
       }
@@ -349,7 +351,7 @@ export function SearchBar({
         startedAt: Date.now(),
       });
     } catch {
-      setError('Network error - please try again');
+      setError(t('networkError'));
       setPreviewLoading(false);
     }
   };
@@ -393,7 +395,7 @@ export function SearchBar({
       const data = await res.json();
 
       if (!data.ok) {
-        setError(data.error || 'Failed to create tracker');
+        setError(data.error || t('createFailed'));
         return;
       }
 
@@ -436,7 +438,7 @@ export function SearchBar({
       setPreviewRunId(null);
       clearSavedPreview(storageKey);
     } catch {
-      setError('Network error - please try again');
+      setError(t('networkError'));
     } finally {
       setLoading(false);
     }
@@ -515,7 +517,7 @@ export function SearchBar({
             setEditingValues(null);
           }}
           adminCurrency={adminCurrency}
-          cancelLabel="Use AI search"
+          cancelLabel={t('useAiSearch')}
           initialValues={editingValues ?? undefined}
         />
       ) : (
@@ -525,7 +527,7 @@ export function SearchBar({
               ref={inputRef}
               type="text"
               className={styles.input}
-              placeholder="NYC to Paris around June 15 +/- 3 days"
+              placeholder={t('placeholder')}
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
@@ -548,7 +550,7 @@ export function SearchBar({
           </div>
 
           <div className={styles.hints}>
-            {['JFK to CDG June 15-20', 'London to Tokyo next month flexible', 'SFO to LAX March 20 +/- 2 days'].map((example, i) => (
+            {[t('example1'), t('example2'), t('example3')].map((example, i) => (
               <span key={i}>
                 {i > 0 && <span className={styles.hintSep}>&middot; </span>}
                 <button
@@ -598,7 +600,7 @@ export function SearchBar({
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden="true">
                   <path d="M2 18h1.4c1.3 0 2.5-.6 3.3-1.7l6.1-8.6c.7-1.1 2-1.7 3.3-1.7H22M22 6l-4-4M22 6l-4 4M2 6h1.4c1.3 0 2.5.6 3.3 1.7l6.1 8.6c.7 1.1 2 1.7 3.3 1.7H22M22 18l-4-4M22 18l-4 4" />
                 </svg>
-                Try a random flight
+                {t('tryRandomFlight')}
               </button>
               <button
                 type="button"
@@ -617,7 +619,7 @@ export function SearchBar({
                   <rect x="3" y="14" width="7" height="7" rx="1" />
                   <rect x="14" y="14" width="7" height="7" rx="1" />
                 </svg>
-                Enter flight details manually
+                {t('enterManually')}
               </button>
             </>
           )}
@@ -655,7 +657,7 @@ export function SearchBar({
             {' -> '}
             {parsed.destinations.map((airport) => airport.code).join(', ')}
           </span>
-          <span className={styles.previewStatus}>Searching Google Flights...</span>
+          <span className={styles.previewStatus}>{t('searchingGoogleFlights')}</span>
         </div>
       )}
 

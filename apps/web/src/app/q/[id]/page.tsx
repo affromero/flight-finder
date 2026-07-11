@@ -1,5 +1,6 @@
 import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { PriceChart } from '@/components/PriceChart';
 import { BestPrice } from '@/components/BestPrice';
@@ -133,7 +134,9 @@ interface QueryWithSnapshots {
   globalScrapeInterval: number;
 }
 
-function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean) {
+type Translator = Awaited<ReturnType<typeof getTranslations>>;
+
+function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: Translator) {
   const isRoundTrip = qData.query.tripType === 'round_trip';
   const hasDistinctReturn = qData.query.dateFrom.getTime() < qData.query.dateTo.getTime();
   const dateLabel = isRoundTrip && hasDistinctReturn
@@ -148,7 +151,7 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean) {
           <span className={styles.routeBlockArrow}>→</span>
           <span className={styles.routeBlockCode}>{qData.query.destination}</span>
           <span className={styles.routeBlockName}>
-            {qData.query.originName} to {qData.query.destinationName}
+            {t('routeName', { origin: qData.query.originName, destination: qData.query.destinationName })}
           </span>
           <span className={styles.routeBlockDate}>{dateLabel}</span>
         </div>
@@ -163,9 +166,11 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean) {
         />
         {qData.query.vpnCountries.length > 0 && !qData.allSnapshots.some((s) => s.vpnCountry) && (
           <p className={styles.vpnPending}>
-            VPN comparison in progress -- prices from {qData.query.vpnCountries.map((c) =>
-              String.fromCodePoint(...c.split('').map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) + ' ' + c
-            ).join(', ')} will appear after the next scrape
+            {t('vpnPending', {
+              countries: qData.query.vpnCountries.map((c) =>
+                String.fromCodePoint(...c.split('').map((ch) => 0x1f1e6 + ch.charCodeAt(0) - 65)) + ' ' + c
+              ).join(', '),
+            })}
           </p>
         )}
       </section>
@@ -213,12 +218,12 @@ function currentPriceForSibling(qData: QueryWithSnapshots): number | null {
   return Number.isFinite(min) ? min : null;
 }
 
-function buildStackedItem(qData: QueryWithSnapshots): StackedItem {
+function buildStackedItem(qData: QueryWithSnapshots, t: Translator): StackedItem {
   return {
     key: qData.query.id,
     outboundDate: qData.query.dateFrom.toISOString().slice(0, 10),
     currentPrice: currentPriceForSibling(qData),
-    node: renderRouteBlock(qData, true),
+    node: renderRouteBlock(qData, true, t),
   };
 }
 
@@ -294,6 +299,7 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
 
 export default async function ChartPage({ params }: Props) {
   const { id } = await params;
+  const t = await getTranslations('QueryPage');
 
   const [primary, adminConfig] = await Promise.all([
     loadQueryWithSnapshots(id),
@@ -411,7 +417,7 @@ export default async function ChartPage({ params }: Props) {
               {primary.query.flexibility > 0 && (
                 <>
                   <span className={styles.sep}>·</span>
-                  <span>±{primary.query.flexibility}d</span>
+                  <span>{t('flexDays', { days: primary.query.flexibility })}</span>
                 </>
               )}
             </div>
@@ -424,13 +430,13 @@ export default async function ChartPage({ params }: Props) {
               <span className={styles.code}>{primary.query.destination}</span>
             </div>
             <div className={styles.meta}>
-              <span>{primary.query.originName} to {primary.query.destinationName}</span>
+              <span>{t('routeName', { origin: primary.query.originName, destination: primary.query.destinationName })}</span>
               <span className={styles.sep}>·</span>
               <span>{formatDate(groupDateFrom)} — {formatDate(groupDateTo)}</span>
               {primary.query.flexibility > 0 && (
                 <>
                   <span className={styles.sep}>·</span>
-                  <span>±{primary.query.flexibility}d</span>
+                  <span>{t('flexDays', { days: primary.query.flexibility })}</span>
                 </>
               )}
             </div>
@@ -440,9 +446,9 @@ export default async function ChartPage({ params }: Props) {
         <div className={styles.headerActions}>
           <div className={styles.expiry}>
             {expired ? (
-              <span className={styles.expiredBadge}>Expired</span>
+              <span className={styles.expiredBadge}>{t('expired')}</span>
             ) : (
-              <span className={styles.activeBadge}>Expires in {daysLeft}d</span>
+              <span className={styles.activeBadge}>{t('expiresIn', { days: daysLeft })}</span>
             )}
           </div>
           <ChartActions
@@ -456,15 +462,15 @@ export default async function ChartPage({ params }: Props) {
 
       {expired ? (
         <div className={styles.expiredNotice}>
-          <p>This tracker expired on {formatDate(groupExpiresAt)}.</p>
-          <p>The data below is a snapshot of prices collected during the tracking period.</p>
+          <p>{t('expiredOn', { date: formatDate(groupExpiresAt) })}</p>
+          <p>{t('expiredSnapshot')}</p>
         </div>
       ) : null}
 
       {isMultiRoute ? (
-        <StackedSortControls items={allQueries.map(buildStackedItem)} />
+        <StackedSortControls items={allQueries.map((q) => buildStackedItem(q, t))} />
       ) : (
-        renderRouteBlock(primary, false)
+        renderRouteBlock(primary, false, t)
       )}
 
       <div className={styles.footerMeta}>
@@ -475,15 +481,15 @@ export default async function ChartPage({ params }: Props) {
               error={scrapeAggregate.error}
               lastScrapedAt={scrapeAggregate.startedAt}
             />
-            Tracked since {formatDate(primary.query.createdAt)}
-            {allQueries[0]?.lastRun && ` · Last checked ${timeAgo(allQueries[0].lastRun.startedAt)}`}
-            {allQueries[0]?.lastRun && !expired && ` · Next check in ~${primary.query.scrapeInterval ?? primary.globalScrapeInterval}h`}
-            {primary.query.scrapeInterval === null && !expired && ' (follows global)'}
+            {t('trackedSince', { date: formatDate(primary.query.createdAt) })}
+            {allQueries[0]?.lastRun && ` · ${t('lastChecked', { timeAgo: timeAgo(allQueries[0].lastRun.startedAt, t) })}`}
+            {allQueries[0]?.lastRun && !expired && ` · ${t('nextCheck', { hours: primary.query.scrapeInterval ?? primary.globalScrapeInterval })}`}
+            {primary.query.scrapeInterval === null && !expired && ` ${t('followsGlobal')}`}
           </p>
           {!expired && (
             <>
               {primary.query.active && (
-                <ForceScrapeButton queryId={id} ariaLabel="Refresh prices now" />
+                <ForceScrapeButton queryId={id} ariaLabel={t('refreshNow')} />
               )}
               <ScrapeInterval queryId={id} currentInterval={primary.query.scrapeInterval} canEdit={canEdit} />
               <TrackerFilters
@@ -512,13 +518,13 @@ export default async function ChartPage({ params }: Props) {
   );
 }
 
-function timeAgo(date: Date): string {
+function timeAgo(date: Date, t: Translator): string {
   const seconds = Math.floor((Date.now() - date.getTime()) / 1000);
-  if (seconds < 60) return 'just now';
+  if (seconds < 60) return t('justNow');
   const minutes = Math.floor(seconds / 60);
-  if (minutes < 60) return `${minutes}m ago`;
+  if (minutes < 60) return t('minutesAgo', { minutes });
   const hours = Math.floor(minutes / 60);
-  if (hours < 24) return `${hours}h ago`;
+  if (hours < 24) return t('hoursAgo', { hours });
   const days = Math.floor(hours / 24);
-  return `${days}d ago`;
+  return t('daysAgo', { days });
 }
