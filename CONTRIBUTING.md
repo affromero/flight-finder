@@ -45,7 +45,8 @@ All three must pass. The linter runs with `--max-warnings 0` (zero tolerance).
 - **New LLM providers** — add to `apps/web/src/lib/scraper/ai-registry.ts`
 - **Extraction improvements** — better price parsing, new airline support
 - **UI enhancements** — chart features, responsive design, accessibility
-- **Documentation** — setup guides, troubleshooting, translations
+- **Internationalization** — UI translations via next-intl (English default, incremental per-language PRs — see [#172](https://github.com/affromero/flight-finder/issues/172)), locale-aware dates and currency
+- **Documentation** — setup guides, troubleshooting, doc translations
 - **Bug fixes** — check [Issues](https://github.com/affromero/flight-finder/issues)
 
 ## Commit Messages
