@@ -1,5 +1,8 @@
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
+import createNextIntlPlugin from 'next-intl/plugin';
+
+const withNextIntl = createNextIntlPlugin('./src/i18n/request.ts');
 
 // Monorepo root, so Next traces workspace files into the standalone build
 // instead of only inferring the root (which it warns about in 16).
@@ -22,4 +25,4 @@ const nextConfig = {
   ],
 };
 
-export default nextConfig;
+export default withNextIntl(nextConfig);

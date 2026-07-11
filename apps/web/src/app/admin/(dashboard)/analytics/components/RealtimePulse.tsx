@@ -1,9 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './RealtimePulse.module.css';
 
 export function RealtimePulse({ initial }: { initial: number }) {
+  const t = useTranslations('AdminAnalytics');
   const [count, setCount] = useState(initial);
 
   useEffect(() => {
@@ -26,7 +28,7 @@ export function RealtimePulse({ initial }: { initial: number }) {
     <div className={styles.pulse}>
       <span className={styles.dot} />
       <span className={styles.text}>
-        <strong>{count}</strong> {count === 1 ? 'visitor' : 'visitors'} in the last 5 minutes
+        {t.rich('realtime', { count, strong: (chunks) => <strong>{chunks}</strong> })}
       </span>
     </div>
   );

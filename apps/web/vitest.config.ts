@@ -9,7 +9,7 @@ export default defineConfig({
     environment: 'node',
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     globalSetup: ['src/test/llmock-setup.ts'],
-    setupFiles: ['src/test/setup.ts', 'src/test/setup-dom.ts'],
+    setupFiles: ['src/test/setup.ts', 'src/test/setup-dom.ts', 'src/test/setup-intl.ts'],
     coverage: {
       provider: 'v8',
       include: ['src/lib/**/*.ts', 'src/app/api/**/*.ts'],

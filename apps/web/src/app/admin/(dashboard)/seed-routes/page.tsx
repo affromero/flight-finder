@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { SeedRouteRow } from './SeedRouteRow';
 import { SeedRouteForm } from './SeedRouteForm';
@@ -6,6 +7,7 @@ import styles from './page.module.css';
 export const dynamic = 'force-dynamic';
 
 export default async function SeedRoutesPage() {
+  const t = await getTranslations('AdminSeedRoutes');
   const seeds = await prisma.query.findMany({
     where: { isSeed: true },
     orderBy: { createdAt: 'desc' },
@@ -34,15 +36,15 @@ export default async function SeedRoutesPage() {
 
   return (
     <div className={styles.root}>
-      <h1 className={styles.title}>Seed Routes</h1>
+      <h1 className={styles.title}>{t('title')}</h1>
       <p className={styles.description}>
-        Persistent routes tracked continuously for reliability metrics. These never expire.
+        {t('description')}
       </p>
 
       <SeedRouteForm />
 
       {seeds.length === 0 ? (
-        <p className={styles.empty}>No seed routes yet. Create one above.</p>
+        <p className={styles.empty}>{t('empty')}</p>
       ) : (
         <div className={styles.list}>
           {seeds.map((s) => (

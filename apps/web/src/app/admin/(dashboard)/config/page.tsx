@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import { PROVIDER_METADATA, LOCAL_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
 import { isThemeId, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
@@ -47,6 +48,7 @@ const AGGREGATOR_OPTIONS = [
 
 
 export default function ConfigPage() {
+  const t = useTranslations('AdminConfig');
   const [config, setConfig] = useState<Config | null>(null);
   const [provider, setProvider] = useState('anthropic');
   const [model, setModel] = useState('claude-haiku-4-5-20251001');
@@ -88,6 +90,8 @@ export default function ConfigPage() {
   const [localModelsError, setLocalModelsError] = useState('');
 
   const fetchLocalModels = useCallback((p: string) => {
+    const fetchFailed = t('modelsFetchFailed');
+    const couldNotConnect = t('modelsCouldNotConnect');
     if (!LOCAL_PROVIDERS.has(p)) {
       setLocalModels([]);
       setLocalModelsError('');
@@ -103,15 +107,15 @@ export default function ConfigPage() {
           setLocalModels(d.data);
         } else {
           setLocalModels([]);
-          setLocalModelsError(d.error || 'Failed to fetch models');
+          setLocalModelsError(d.error || fetchFailed);
         }
       })
       .catch(() => {
         setLocalModels([]);
-        setLocalModelsError('Could not connect');
+        setLocalModelsError(couldNotConnect);
       })
       .finally(() => setLocalModelsLoading(false));
-  }, []);
+  }, [t]);
 
   // Real-time readiness per provider (ready / no_key / unreachable / not_installed)
   // so the admin can see which providers will actually work (#149).
@@ -184,10 +188,10 @@ export default function ConfigPage() {
     : false;
   const providerStatus = providerStatuses[provider];
   const STATUS_LABEL: Record<string, string> = {
-    ready: 'Ready',
-    no_key: 'No key configured',
-    unreachable: 'Not reachable',
-    not_installed: 'Not installed',
+    ready: t('providerStatus.ready'),
+    no_key: t('providerStatus.noKey'),
+    unreachable: t('providerStatus.unreachable'),
+    not_installed: t('providerStatus.notInstalled'),
   };
 
   const handleProviderChange = (newProvider: string) => {
@@ -214,7 +218,7 @@ export default function ConfigPage() {
 
   const handleSave = async () => {
     if (!effectiveModel) {
-      setMessage('Enter a model ID before saving');
+      setMessage(t('enterModelId'));
       return;
     }
     setSaving(true);
@@ -255,7 +259,7 @@ export default function ConfigPage() {
     const data = await res.json();
     if (data.ok) {
       setConfig(data.data);
-      setMessage('Config saved');
+      setMessage(t('configSaved'));
       // Clear the typed key and refresh readiness now that it's stored.
       setApiKey('');
       fetchProviderStatuses();
@@ -264,7 +268,7 @@ export default function ConfigPage() {
         fetchLocalModels(provider);
       }
     } else {
-      setMessage(data.error || 'Failed to save');
+      setMessage(data.error || t('failedToSave'));
     }
     setSaving(false);
   };
@@ -284,24 +288,24 @@ export default function ConfigPage() {
     if (data.ok) {
       setConfig(data.data);
       setAdminPassword('');
-      setPasswordMessage('Password updated');
+      setPasswordMessage(t('passwordUpdated'));
     } else {
-      setPasswordMessage(data.error || 'Failed to save');
+      setPasswordMessage(data.error || t('failedToSave'));
     }
     setSavingPassword(false);
   };
 
   if (!config) {
-    return <div className={styles.root}><p className={styles.loading}>Loading config...</p></div>;
+    return <div className={styles.root}><p className={styles.loading}>{t('loading')}</p></div>;
   }
 
   return (
     <div className={styles.root}>
-      <h1 className={styles.title}>Extraction Config</h1>
+      <h1 className={styles.title}>{t('title')}</h1>
 
       <div className={styles.form}>
         <div className={styles.field}>
-          <label className={styles.label}>Provider</label>
+          <label className={styles.label}>{t('provider')}</label>
           <select
             className={styles.select}
             value={provider}
@@ -313,16 +317,14 @@ export default function ConfigPage() {
           </select>
           {providerStatus && (
             <span className={`${styles.toggleHint} ${providerStatus === 'ready' ? styles.statusReady : styles.statusNotReady}`}>
-              Status: {STATUS_LABEL[providerStatus] ?? providerStatus}
+              {t('status', { status: STATUS_LABEL[providerStatus] ?? providerStatus })}
             </span>
           )}
           {(provider === 'claude-code' || provider === 'codex') && (
             <div className={styles.info}>
-              <div className={styles.infoTitle}>Security note</div>
+              <div className={styles.infoTitle}>{t('securityNote')}</div>
               <div className={styles.infoText}>
-                {provider === 'codex'
-                  ? 'Codex runs an agentic CLI to read scraped pages. It is pinned to a read-only sandbox, but an agentic CLI can still read local files, so a crafted page could read (not write or execute) host data. The page is sanitized and fenced as untrusted first. For the strongest isolation, prefer an API provider.'
-                  : 'Claude Code runs a local CLI to read scraped pages, locked to text-only inference with every tool disabled, so scraped page content cannot trigger file or command access.'}
+                {provider === 'codex' ? t('codexNote') : t('claudeCodeNote')}
               </div>
             </div>
           )}
@@ -330,25 +332,25 @@ export default function ConfigPage() {
 
         {providerConfig?.envKey && (
           <div className={styles.field}>
-            <label className={styles.label}>API Key</label>
+            <label className={styles.label}>{t('apiKey')}</label>
             <input
               type="password"
               className={styles.input}
               autoComplete="off"
-              placeholder={hasStoredKey ? 'Saved — paste a new key to replace' : `Paste your ${providerConfig.displayName} API key`}
+              placeholder={hasStoredKey ? t('apiKeySavedPlaceholder') : t('apiKeyPlaceholder', { provider: providerConfig.displayName })}
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
             />
             <span className={styles.toggleHint}>
               {hasStoredKey
-                ? `A key is saved. Leave blank to keep it, or paste a new one to replace it. Stored encrypted; falls back to the ${providerConfig.envKey} environment variable.`
-                : `Paste a key to store it (encrypted) here, or set the ${providerConfig.envKey} environment variable. No restart needed.`}
+                ? t('apiKeySavedHint', { envKey: providerConfig.envKey })
+                : t('apiKeyNewHint', { envKey: providerConfig.envKey })}
             </span>
           </div>
         )}
 
         <div className={styles.field}>
-          <label className={styles.label}>Model</label>
+          <label className={styles.label}>{t('model')}</label>
           {models.length > 0 && (
             <select
               className={styles.select}
@@ -357,7 +359,7 @@ export default function ConfigPage() {
             >
               {models.map((m) => (
                 <option key={m.id} value={m.id}>
-                  {m.name} ({m.costPer1kInput === 0 ? 'Free (Max)' : `$${m.costPer1kInput}/1k in`})
+                  {m.name} ({m.costPer1kInput === 0 ? t('modelCostFree') : t('modelCost', { cost: m.costPer1kInput })})
                 </option>
               ))}
             </select>
@@ -376,7 +378,7 @@ export default function ConfigPage() {
             </select>
           )}
           {models.length === 0 && localModelsLoading && (
-            <span className={styles.modelHint}>Fetching models...</span>
+            <span className={styles.modelHint}>{t('fetchingModels')}</span>
           )}
           {models.length === 0 && localModelsError && (
             <span className={styles.modelHintError}>{localModelsError}</span>
@@ -386,8 +388,8 @@ export default function ConfigPage() {
               type="text"
               className={styles.input}
               placeholder={models.length === 0 && localModels.length === 0
-                ? 'Model ID (e.g. llama3.1:8b, mistral:7b)'
-                : 'Or type a custom model ID'}
+                ? t('customModelPlaceholderEmpty')
+                : t('customModelPlaceholder')}
               value={customModel}
               onChange={(e) => setCustomModel(e.target.value)}
             />
@@ -396,7 +398,7 @@ export default function ConfigPage() {
 
         {providerConfig?.allowCustomBaseUrl && (
           <div className={styles.field}>
-            <label className={styles.label}>API Base URL</label>
+            <label className={styles.label}>{t('apiBaseUrl')}</label>
             <input
               type="url"
               className={styles.input}
@@ -406,27 +408,27 @@ export default function ConfigPage() {
             />
             <span className={styles.toggleHint}>
               {providerConfig.defaultBaseUrl
-                ? `Default: ${providerConfig.defaultBaseUrl}`
-                : 'Leave empty for default'}
+                ? t('baseUrlDefault', { url: providerConfig.defaultBaseUrl })
+                : t('baseUrlEmptyHint')}
             </span>
           </div>
         )}
 
         <div className={styles.field}>
-          <label className={styles.label}>Scrape Interval</label>
+          <label className={styles.label}>{t('scrapeInterval')}</label>
           <select
             className={styles.select}
             value={scrapeInterval}
             onChange={(e) => setScrapeInterval(Number(e.target.value))}
           >
             {[1, 2, 3, 4, 6, 8, 12, 24].map((h) => (
-              <option key={h} value={h}>Every {h}h</option>
+              <option key={h} value={h}>{t('everyHours', { hours: h })}</option>
             ))}
           </select>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Extraction Timeout (seconds)</label>
+          <label className={styles.label}>{t('extractionTimeout')}</label>
           <input
             type="number"
             className={styles.input}
@@ -437,12 +439,12 @@ export default function ConfigPage() {
             onChange={(e) => setExtractTimeoutSeconds(Number(e.target.value))}
           />
           <span className={styles.toggleHint}>
-            Default 90. Raise this for slow CPU bound local models that exceed the default and time out.
+            {t('extractionTimeoutHint')}
           </span>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Max flights per date</label>
+          <label className={styles.label}>{t('maxFlightsPerDate')}</label>
           <input
             type="number"
             className={styles.input}
@@ -453,12 +455,12 @@ export default function ConfigPage() {
             onChange={(e) => setMaxFlightsPerDate(Number(e.target.value))}
           />
           <span className={styles.toggleHint}>
-            Default 10. Raise to 20-30 for busy routes (JFK-LAX, LHR-CDG) where 10 flights may miss afternoon or budget options. Higher values use more LLM output tokens per scrape.
+            {t('maxFlightsPerDateHint')}
           </span>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Max tracked flights per route</label>
+          <label className={styles.label}>{t('maxTrackedPerRoute')}</label>
           <input
             type="number"
             className={styles.input}
@@ -469,12 +471,12 @@ export default function ConfigPage() {
             onChange={(e) => setMaxTrackedPerRoute(Number(e.target.value))}
           />
           <span className={styles.toggleHint}>
-            Default 10. How many flights a user can select to track from one route in the results picker. The selection is also bounded by Max flights per date, since you can only pick from the flights that were extracted.
+            {t('maxTrackedPerRouteHint')}
           </span>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Max preview combinations</label>
+          <label className={styles.label}>{t('maxPreviewCombos')}</label>
           <input
             type="number"
             className={styles.input}
@@ -485,21 +487,21 @@ export default function ConfigPage() {
             onChange={(e) => setPreviewMaxCombos(Number(e.target.value))}
           />
           <span className={styles.toggleHint}>
-            Default 24. Caps routes x dates for the create-time preview scrape only; the recurring cron always covers the full grid. Raise it for wide multi-airport flex searches, but each combination is a live page load, so higher values make creating a tracker slower.
+            {t('maxPreviewCombosHint')}
           </span>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Theme (instance default)</label>
+          <label className={styles.label}>{t('themeLabel')}</label>
           <ThemePicker value={theme} onSelect={(id) => setTheme(id)} />
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Default Currency (ISO 4217)</label>
+          <label className={styles.label}>{t('defaultCurrency')}</label>
           <input
             type="text"
             className={styles.input}
-            placeholder="e.g. EUR, GBP — empty = auto-detect"
+            placeholder={t('defaultCurrencyPlaceholder')}
             value={defaultCurrency}
             onChange={(e) => setDefaultCurrency(e.target.value.toUpperCase())}
             maxLength={3}
@@ -507,11 +509,11 @@ export default function ConfigPage() {
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Default Country (ISO 3166-1)</label>
+          <label className={styles.label}>{t('defaultCountry')}</label>
           <input
             type="text"
             className={styles.input}
-            placeholder="e.g. DE, GB — empty = auto-detect"
+            placeholder={t('defaultCountryPlaceholder')}
             value={defaultCountry}
             onChange={(e) => setDefaultCountry(e.target.value.toUpperCase())}
             maxLength={2}
@@ -519,19 +521,19 @@ export default function ConfigPage() {
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Default Search Method</label>
+          <label className={styles.label}>{t('defaultSearchMethod')}</label>
           <select
             className={styles.select}
             value={defaultSearchMethod}
             onChange={(e) => setDefaultSearchMethod(e.target.value as 'ai' | 'manual')}
           >
-            <option value="ai">AI natural language search</option>
-            <option value="manual">Manual input form</option>
+            <option value="ai">{t('searchMethodAi')}</option>
+            <option value="manual">{t('searchMethodManual')}</option>
           </select>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Aggregator Sources</label>
+          <label className={styles.label}>{t('aggregatorSources')}</label>
           <div>
             {AGGREGATOR_OPTIONS.map((opt) => {
               const checked = aggregatorsEnabled.includes(opt.id);
@@ -551,7 +553,7 @@ export default function ConfigPage() {
                   <span>{opt.label}</span>
                   {opt.experimental && (
                     <span style={{ fontSize: '0.75rem', textTransform: 'uppercase', color: 'var(--accent)', fontWeight: 700, letterSpacing: '0.05em' }}>
-                      experimental
+                      {t('experimental')}
                     </span>
                   )}
                 </label>
@@ -559,49 +561,49 @@ export default function ConfigPage() {
             })}
           </div>
           <span className={styles.toggleHint}>
-            Sources allowed in the per-query aggregator chain. Skyscanner and Kayak are best-effort, gated by aggressive anti-bot protection on those sites.
+            {t('aggregatorsHint')}
           </span>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Provider rate limits (advanced)</label>
+          <label className={styles.label}>{t('rateLimits')}</label>
           <span className={styles.toggleHint}>
-            Requests per minute per provider. Leave blank to use the conservative free tier defaults (Anthropic 50, Google 15, OpenAI 60, Groq 30). Raise these to match a paid API tier; lower them to stay under a quota.
+            {t('rateLimitsHint')}
           </span>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Anthropic RPM</label>
-          <input type="number" className={styles.input} min={1} placeholder="default 50" value={anthropicRpm} onChange={(e) => setAnthropicRpm(e.target.value)} />
+          <label className={styles.label}>{t('anthropicRpm')}</label>
+          <input type="number" className={styles.input} min={1} placeholder={t('defaultPlaceholder', { value: 50 })} value={anthropicRpm} onChange={(e) => setAnthropicRpm(e.target.value)} />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Google / Gemini RPM</label>
-          <input type="number" className={styles.input} min={1} placeholder="default 15" value={googleRpm} onChange={(e) => setGoogleRpm(e.target.value)} />
+          <label className={styles.label}>{t('googleRpm')}</label>
+          <input type="number" className={styles.input} min={1} placeholder={t('defaultPlaceholder', { value: 15 })} value={googleRpm} onChange={(e) => setGoogleRpm(e.target.value)} />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>OpenAI RPM</label>
-          <input type="number" className={styles.input} min={1} placeholder="default 60" value={openaiRpm} onChange={(e) => setOpenaiRpm(e.target.value)} />
+          <label className={styles.label}>{t('openaiRpm')}</label>
+          <input type="number" className={styles.input} min={1} placeholder={t('defaultPlaceholder', { value: 60 })} value={openaiRpm} onChange={(e) => setOpenaiRpm(e.target.value)} />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Groq RPM</label>
-          <input type="number" className={styles.input} min={1} placeholder="default 30" value={groqRpm} onChange={(e) => setGroqRpm(e.target.value)} />
+          <label className={styles.label}>{t('groqRpm')}</label>
+          <input type="number" className={styles.input} min={1} placeholder={t('defaultPlaceholder', { value: 30 })} value={groqRpm} onChange={(e) => setGroqRpm(e.target.value)} />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Preview concurrency</label>
-          <input type="number" className={styles.input} min={1} max={10} placeholder="default 3" value={previewConcurrency} onChange={(e) => setPreviewConcurrency(e.target.value)} />
+          <label className={styles.label}>{t('previewConcurrency')}</label>
+          <input type="number" className={styles.input} min={1} max={10} placeholder={t('defaultPlaceholder', { value: 3 })} value={previewConcurrency} onChange={(e) => setPreviewConcurrency(e.target.value)} />
           <span className={styles.toggleHint}>
-            Parallel browser instances for the create-time preview scrape. Higher is faster but uses more memory. Leave blank for the default (3).
+            {t('previewConcurrencyHint')}
           </span>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Preview admission cap per IP</label>
-          <input type="number" className={styles.input} min={1} max={50} placeholder="default 3" value={previewAdmissionCap} onChange={(e) => setPreviewAdmissionCap(e.target.value)} />
+          <label className={styles.label}>{t('previewAdmissionCap')}</label>
+          <input type="number" className={styles.input} min={1} max={50} placeholder={t('defaultPlaceholder', { value: 3 })} value={previewAdmissionCap} onChange={(e) => setPreviewAdmissionCap(e.target.value)} />
           <span className={styles.toggleHint}>
-            Max preview runs one client can have in flight at once. Leave blank for the default (3).
+            {t('previewAdmissionCapHint')}
           </span>
         </div>
 
         <div className={styles.field}>
-          <label className={styles.label}>Scraping</label>
+          <label className={styles.label}>{t('scraping')}</label>
           <div className={styles.toggleRow}>
             <button
               type="button"
@@ -621,10 +623,10 @@ export default function ConfigPage() {
             </button>
             <div>
               <span className={styles.toggleLabel}>
-                {config.enabled ? 'Scraping enabled' : 'Scraping paused'}
+                {config.enabled ? t('scrapingEnabled') : t('scrapingPaused')}
               </span>
               <p className={styles.toggleHint}>
-                Pause to stop all background price checks, for example while away or over an API quota. Existing trackers and price history are kept.
+                {t('scrapingHint')}
               </p>
             </div>
           </div>
@@ -632,7 +634,7 @@ export default function ConfigPage() {
 
         <div className={styles.actions}>
           <button className={styles.saveButton} onClick={handleSave} disabled={saving}>
-            {saving ? 'Saving...' : 'Save Config'}
+            {saving ? t('saving') : t('saveConfig')}
           </button>
           {message && <span className={styles.message}>{message}</span>}
         </div>
@@ -640,16 +642,16 @@ export default function ConfigPage() {
 
 
       <div className={styles.form}>
-        <h2 className={styles.sectionTitle}>Admin Password</h2>
+        <h2 className={styles.sectionTitle}>{t('adminPassword')}</h2>
 
         <div className={styles.field}>
           <label className={styles.label}>
-            Password {config.hasAdminPassword && <span className={styles.passwordSet}>(set)</span>}
+            {t('password')} {config.hasAdminPassword && <span className={styles.passwordSet}>{t('passwordSet')}</span>}
           </label>
           <input
             type="password"
             className={styles.input}
-            placeholder={config.hasAdminPassword ? 'Leave blank to keep current' : 'Set admin password'}
+            placeholder={config.hasAdminPassword ? t('passwordKeepPlaceholder') : t('passwordSetPlaceholder')}
             value={adminPassword}
             onChange={(e) => setAdminPassword(e.target.value)}
           />
@@ -657,21 +659,17 @@ export default function ConfigPage() {
 
         <div className={styles.actions}>
           <button className={styles.saveButton} onClick={handleSavePassword} disabled={savingPassword || !adminPassword}>
-            {savingPassword ? 'Saving...' : 'Save Password'}
+            {savingPassword ? t('saving') : t('savePassword')}
           </button>
           {passwordMessage && <span className={styles.message}>{passwordMessage}</span>}
         </div>
       </div>
 
       <div className={styles.form}>
-        <h2 className={styles.sectionTitle}>Community Data Sharing</h2>
+        <h2 className={styles.sectionTitle}>{t('communityTitle')}</h2>
 
         <p className={styles.toggleHint}>
-          Flight Finder gets better when instances pool their price history. Turn on
-          sharing to contribute your anonymized data points (route, price, airline,
-          and date only, never anything personal) to a shared fare dataset everyone
-          can explore, and in return you see community prices on routes you have not
-          scraped yourself. It is fully opt-in and you can turn it off any time.
+          {t('communityIntro')}
         </p>
 
         <div className={styles.toggleRow}>
@@ -693,10 +691,10 @@ export default function ConfigPage() {
           </button>
           <div>
             <span className={styles.toggleLabel}>
-              {config.communitySharing ? 'Sharing enabled' : 'Sharing disabled'}
+              {config.communitySharing ? t('sharingEnabled') : t('sharingDisabled')}
             </span>
             <p className={styles.toggleHint}>
-              Contribute this instance&apos;s anonymized prices (route, price, airline, date) to the community dataset.
+              {t('sharingHint')}
             </p>
           </div>
         </div>
@@ -723,12 +721,10 @@ export default function ConfigPage() {
             </button>
             <div>
               <span className={styles.toggleLabel}>
-                Run a hub: {config.communityRegistrationOpen ? 'accepting contributors' : 'closed'}
+                {config.communityRegistrationOpen ? t('hubAccepting') : t('hubClosed')}
               </span>
               <p className={styles.toggleHint}>
-                Lets other Flight Finder instances register with this one and send their
-                anonymized data here. Only relevant for the central hub. New registrations
-                are rate limited and globally capped.
+                {t('hubHint')}
               </p>
             </div>
           </div>
@@ -736,7 +732,7 @@ export default function ConfigPage() {
 
         {config.communityApiKey && (
           <div className={styles.field}>
-            <label className={styles.label}>API Key</label>
+            <label className={styles.label}>{t('apiKey')}</label>
             <code className={styles.code}>
               {config.communityApiKey.slice(0, 8)}...{config.communityApiKey.slice(-4)}
             </code>
@@ -745,20 +741,20 @@ export default function ConfigPage() {
       </div>
 
       <div className={styles.info}>
-        <h2 className={styles.infoTitle}>Provider Details</h2>
+        <h2 className={styles.infoTitle}>{t('providerDetails')}</h2>
         <p className={styles.infoText}>
-          <strong>API key:</strong>{' '}
+          <strong>{t('apiKeyDetail')}</strong>{' '}
           {providerConfig?.envKey ? (
-            <>
-              entered above (stored encrypted), or read from{' '}
-              <code className={styles.code}>{providerConfig.envKey}</code> if none is set
-            </>
+            t.rich('apiKeyFromEnv', {
+              envKey: providerConfig.envKey,
+              code: (chunks) => <code className={styles.code}>{chunks}</code>,
+            })
           ) : (
-            'not required — this provider signs in through its local CLI, no API key needed'
+            t('apiKeyNotRequired')
           )}
         </p>
         <p className={styles.infoText}>
-          <strong>Models available:</strong> {models.length}
+          <strong>{t('modelsAvailable')}</strong> {models.length}
         </p>
       </div>
     </div>

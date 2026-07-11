@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { PriceHistorySection } from './PriceHistorySection';
 import styles from './PriceHistory.module.css';
 
@@ -20,8 +21,8 @@ export interface Snapshot {
   scrapedAt: string;
 }
 
-function countryLabel(key: string): string {
-  if (key === 'local' || key === 'all') return 'Local';
+function countryLabel(key: string, localLabel: string): string {
+  if (key === 'local' || key === 'all') return localLabel;
   return String.fromCodePoint(...key.split('').map((c) => 0x1f1e6 + c.charCodeAt(0) - 65)) + ' ' + key;
 }
 
@@ -31,7 +32,8 @@ function countryLabel(key: string): string {
  * scrape as a flat, cheapest-first snapshot of what is bookable right now, with
  * the full chronological log tucked behind a toggle. See PriceHistorySection.
  */
-export function PriceHistory({ snapshots }: { snapshots: Snapshot[] }) {
+export async function PriceHistory({ snapshots }: { snapshots: Snapshot[] }) {
+  const t = await getTranslations('PriceHistory');
   if (snapshots.length === 0) return null;
 
   const hasCountryData = snapshots.some((s) => s.vpnCountry);
@@ -54,10 +56,10 @@ export function PriceHistory({ snapshots }: { snapshots: Snapshot[] }) {
 
   return (
     <div className={styles.root}>
-      <h3 className={styles.title}>Price History</h3>
+      <h3 className={styles.title}>{t('title')}</h3>
       {countryGroups.map(([key, items]) => (
         <div key={key}>
-          {hasCountryData && <div className={styles.countryHeader}>{countryLabel(key)}</div>}
+          {hasCountryData && <div className={styles.countryHeader}>{countryLabel(key, t('local'))}</div>}
           <PriceHistorySection snapshots={items} />
         </div>
       ))}

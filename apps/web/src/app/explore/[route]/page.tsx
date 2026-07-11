@@ -2,6 +2,7 @@ export const dynamic = 'force-dynamic';
 
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import type { Metadata } from 'next';
 import { prisma } from '@/lib/prisma';
 import { formatCurrency } from '@/lib/currency';
@@ -36,6 +37,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 export default async function ExploreRoutePage({ params }: Props) {
+  const t = await getTranslations('ExploreRoute');
   const { route } = await params;
   const parsed = parseRoute(route);
   if (!parsed) notFound();
@@ -79,39 +81,39 @@ export default async function ExploreRoutePage({ params }: Props) {
           <span className={shell.titleAccent}>{origin} &rarr; {destination}</span>
         </h1>
         <p className={shell.tagline}>
-          Community-sourced flight prices on this route
+          {t('tagline')}
         </p>
         <p className={styles.crumb}>
-          <Link href="/explore" className={styles.crumbLink}>&larr; all routes</Link>
+          <Link href="/explore" className={styles.crumbLink}>{t('allRoutes')}</Link>
         </p>
       </div>
 
       <div className={styles.statsGrid}>
         <div className={styles.stat}>
-          <span className={styles.statLabel}>cheapest</span>
+          <span className={styles.statLabel}>{t('cheapest')}</span>
           <span className={styles.statValue}>{stat(min)}</span>
         </div>
         <div className={styles.stat}>
-          <span className={styles.statLabel}>average</span>
+          <span className={styles.statLabel}>{t('average')}</span>
           <span className={styles.statValue}>{stat(avg)}</span>
         </div>
         <div className={styles.stat}>
-          <span className={styles.statLabel}>highest</span>
+          <span className={styles.statLabel}>{t('highest')}</span>
           <span className={styles.statValue}>{stat(max)}</span>
         </div>
         <div className={styles.stat}>
-          <span className={styles.statLabel}>data points</span>
+          <span className={styles.statLabel}>{t('dataPoints')}</span>
           <span className={styles.statValue}>{snapshots.length}</span>
         </div>
       </div>
 
       <p className={styles.window}>
-        Data window: {dateFmt.format(oldest.scrapedAt)} to {dateFmt.format(newest.scrapedAt)}
-        {currencies.length === 1 ? ` (${currencies[0]})` : ` (mixed currencies: ${currencies.join(', ')})`}
+        {t('dataWindow', { from: dateFmt.format(oldest.scrapedAt), to: dateFmt.format(newest.scrapedAt) })}
+        {currencies.length === 1 ? ` (${currencies[0]})` : ` ${t('mixedCurrencies', { currencies: currencies.join(', ') })}`}
       </p>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>airlines</h2>
+        <h2 className={styles.sectionTitle}>{t('airlines')}</h2>
         <div className={styles.chipRow}>
           {airlines.map((a) => (
             <span key={a} className={styles.chip}>{a}</span>
@@ -120,7 +122,7 @@ export default async function ExploreRoutePage({ params }: Props) {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>cabin classes</h2>
+        <h2 className={styles.sectionTitle}>{t('cabinClasses')}</h2>
         <div className={styles.chipRow}>
           {cabins.map((c) => (
             <span key={c} className={styles.chip}>{c}</span>
@@ -129,17 +131,17 @@ export default async function ExploreRoutePage({ params }: Props) {
       </section>
 
       <section className={styles.section}>
-        <h2 className={styles.sectionTitle}>recent snapshots</h2>
+        <h2 className={styles.sectionTitle}>{t('recentSnapshots')}</h2>
         <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>scraped</th>
-                <th>travel date</th>
-                <th>airline</th>
-                <th>stops</th>
-                <th>cabin</th>
-                <th className={styles.priceCol}>price</th>
+                <th>{t('thScraped')}</th>
+                <th>{t('thTravelDate')}</th>
+                <th>{t('thAirline')}</th>
+                <th>{t('thStops')}</th>
+                <th>{t('thCabin')}</th>
+                <th className={styles.priceCol}>{t('thPrice')}</th>
               </tr>
             </thead>
             <tbody>
@@ -148,7 +150,7 @@ export default async function ExploreRoutePage({ params }: Props) {
                   <td>{dateFmt.format(s.scrapedAt)}</td>
                   <td>{dateFmt.format(s.travelDate)}</td>
                   <td>{s.airline}</td>
-                  <td>{s.stops === 0 ? 'nonstop' : String(s.stops)}</td>
+                  <td>{s.stops === 0 ? t('nonstop') : String(s.stops)}</td>
                   <td>{s.cabinClass}</td>
                   <td className={styles.priceCol}>{formatCurrency(s.price, s.currency)}</td>
                 </tr>
@@ -160,7 +162,7 @@ export default async function ExploreRoutePage({ params }: Props) {
 
       <div className={styles.cta}>
         <Link href={`/?prefill=${origin}+to+${destination}`} className={shell.emptyLink}>
-          Track this route
+          {t('trackRoute')}
         </Link>
       </div>
 

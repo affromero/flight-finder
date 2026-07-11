@@ -9,16 +9,18 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import type { BrowserBreakdown } from '@/lib/analytics/query';
 import styles from './ChartCard.module.css';
 
 export function BrowsersChart({ data }: { data: BrowserBreakdown[] }) {
+  const t = useTranslations('AdminAnalytics');
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Browsers</h2>
+      <h2 className={styles.cardTitle}>{t('browsers.title')}</h2>
       <div className={styles.chartContainer}>
         {data.length === 0 ? (
-          <p className={styles.empty}>No browser data</p>
+          <p className={styles.empty}>{t('browsers.empty')}</p>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data}>

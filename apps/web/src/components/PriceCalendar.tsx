@@ -1,5 +1,6 @@
 'use client';
 
+import { useTranslations } from 'next-intl';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { formatCurrency } from '@/lib/currency';
 import styles from './PriceCalendar.module.css';
@@ -26,6 +27,7 @@ interface DayData {
 }
 
 export function PriceCalendar({ snapshots, currency }: Props) {
+  const t = useTranslations('PriceCalendar');
   if (snapshots.length === 0) return null;
 
   // Group by travel date, keep cheapest per date
@@ -56,7 +58,7 @@ export function PriceCalendar({ snapshots, currency }: Props) {
 
   return (
     <div className={styles.root}>
-      <h3 className={styles.title}>Cheapest by Date</h3>
+      <h3 className={styles.title}>{t('title')}</h3>
       <div className={styles.grid}>
         {days.map((d) => {
           const intensity = 1 - (d.minPrice - minPrice) / range;
@@ -69,7 +71,7 @@ export function PriceCalendar({ snapshots, currency }: Props) {
               rel="noopener noreferrer"
               className={`${styles.cell} ${isMin ? styles.cellBest : ''}`}
               style={{ '--intensity': intensity } as React.CSSProperties}
-              title={`${formatDay(d.date)}: ${formatCurrency(d.minPrice, currency)} (${d.airline})`}
+              title={t('cellTitle', { date: formatDay(d.date), price: formatCurrency(d.minPrice, currency), airline: d.airline })}
             >
               <span className={styles.cellDate}>{formatDay(d.date)}</span>
               <span className={styles.cellPrice}>{formatCurrency(d.minPrice, currency)}</span>

@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import type { TotalStats } from '@/lib/analytics/query';
 import styles from './OverviewCards.module.css';
 
@@ -10,12 +11,13 @@ function formatDuration(ms: number | null): string {
   return `${minutes}m ${remaining}s`;
 }
 
-export function OverviewCards({ totals }: { totals: TotalStats }) {
+export async function OverviewCards({ totals }: { totals: TotalStats }) {
+  const t = await getTranslations('AdminAnalytics');
   const cards = [
-    { label: 'Page Views', value: totals.totalViews.toLocaleString() },
-    { label: 'Unique Visitors', value: totals.uniqueVisitors.toLocaleString() },
-    { label: 'Bounce Rate', value: `${totals.bounceRate}%` },
-    { label: 'Avg Duration', value: formatDuration(totals.avgDuration) },
+    { label: t('overview.pageViews'), value: totals.totalViews.toLocaleString() },
+    { label: t('overview.uniqueVisitors'), value: totals.uniqueVisitors.toLocaleString() },
+    { label: t('overview.bounceRate'), value: `${totals.bounceRate}%` },
+    { label: t('overview.avgDuration'), value: formatDuration(totals.avgDuration) },
   ];
 
   return (

@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './UpdateBanner.module.css';
 
 interface RenameAnnouncement {
@@ -26,6 +27,7 @@ function safeStorageSet(key: string, value: string): void {
 }
 
 export function UpdateBanner() {
+  const t = useTranslations('UpdateBanner');
   const [latest, setLatest] = useState<string | null>(null);
   const [rename, setRename] = useState<RenameAnnouncement | null>(null);
   const [dismissed, setDismissed] = useState(false);
@@ -50,13 +52,13 @@ export function UpdateBanner() {
     return (
       <div className={`${styles.root} ${styles.rename}`}>
         <span className={styles.text}>
-          Renamed to <strong>{rename.to}</strong>. Run the upgrade command to migrate your install.
+          {t.rich('renamed', { to: rename.to, strong: (chunks) => <strong>{chunks}</strong> })}
         </span>
         <code className={styles.cmd}>{rename.upgradeCommand}</code>
         <button
           type="button"
           className={styles.dismiss}
-          aria-label="Dismiss"
+          aria-label={t('dismiss')}
           onClick={() => {
             safeStorageSet(key, '1');
             setDismissed(true);
@@ -73,7 +75,7 @@ export function UpdateBanner() {
   return (
     <div className={styles.root}>
       <span className={styles.text}>
-        Flight Finder <strong>v{latest}</strong> is available.
+        {t.rich('updateAvailable', { version: latest, strong: (chunks) => <strong>{chunks}</strong> })}
       </span>
       <code className={styles.cmd}>flight-finder update</code>
     </div>

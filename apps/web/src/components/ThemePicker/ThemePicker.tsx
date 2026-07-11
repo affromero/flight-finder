@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, type CSSProperties } from 'react';
+import { useTranslations } from 'next-intl';
 import {
   THEME_FAMILIES,
   applyTheme,
@@ -33,6 +34,7 @@ export function ThemePicker({
   /** Optional "follow the instance default" escape hatch (per-user picker). */
   defaultOption?: { active: boolean; onSelect: () => void };
 }) {
+  const t = useTranslations('ThemePicker');
   const start = value && isThemeId(value) ? value : DEFAULT_THEME;
   const [family, setFamily] = useState(getThemeFamily(start));
   const [mode, setMode] = useState<ThemeMode>(getThemeMode(start));
@@ -58,7 +60,7 @@ export function ThemePicker({
 
   return (
     <div className={styles.root}>
-      <div className={styles.modeSwitch} role="group" aria-label="Light or dark">
+      <div className={styles.modeSwitch} role="group" aria-label={t('lightOrDark')}>
         {(['light', 'dark'] as ThemeMode[]).map((m) => (
           <button
             key={m}
@@ -67,7 +69,7 @@ export function ThemePicker({
             className={`${styles.modeBtn} ${!usingDefault && mode === m ? styles.modeBtnActive : ''}`}
             onClick={() => choose(family, m)}
           >
-            {m === 'light' ? '☀ Light' : '☾ Dark'}
+            {m === 'light' ? t('lightBtn') : t('darkBtn')}
           </button>
         ))}
       </div>
@@ -88,8 +90,8 @@ export function ThemePicker({
                 aria-hidden="true"
               />
               <span className={styles.swatchCaption} aria-hidden="true">
-                <span>Light</span>
-                <span>Dark</span>
+                <span>{t('light')}</span>
+                <span>{t('dark')}</span>
               </span>
               <span className={styles.name}>{f.label}</span>
               <span className={styles.desc}>{f.description}</span>
@@ -104,7 +106,7 @@ export function ThemePicker({
           className={`${styles.defaultBtn} ${usingDefault ? styles.defaultActive : ''}`}
           onClick={defaultOption.onSelect}
         >
-          {usingDefault ? '✓ Following the instance default' : 'Follow the instance default instead'}
+          {usingDefault ? t('followingDefault') : t('followDefault')}
         </button>
       )}
     </div>

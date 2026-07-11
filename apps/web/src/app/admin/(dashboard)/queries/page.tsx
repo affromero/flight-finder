@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { groupQueries } from '@/lib/query-grouping';
 import { QueryGroupRow, type AdminQuery } from './QueryRow';
@@ -6,6 +7,7 @@ import styles from './page.module.css';
 export const dynamic = 'force-dynamic';
 
 export default async function QueriesPage() {
+  const t = await getTranslations('AdminQueries');
   const queries = await prisma.query.findMany({
     orderBy: { createdAt: 'desc' },
     take: 500,
@@ -45,11 +47,11 @@ export default async function QueriesPage() {
 
   return (
     <div className={styles.root}>
-      <h1 className={styles.title}>Tracked Queries</h1>
+      <h1 className={styles.title}>{t('title')}</h1>
 
       {groups.length === 0 ? (
         <p className={styles.empty}>
-          No queries yet. Go to the <a href="/">home page</a> to create one.
+          {t.rich('empty', { link: (chunks) => <a href="/">{chunks}</a> })}
         </p>
       ) : (
         <div className={styles.list}>

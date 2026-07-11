@@ -1,9 +1,11 @@
+import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 
 export default async function AdminDashboard() {
+  const t = await getTranslations('AdminDashboard');
   const [activeQueries, totalRuns, recentRuns, costData, recentErrors] = await Promise.all([
     prisma.query.count({ where: { active: true, expiresAt: { gt: new Date() } } }),
     prisma.fetchRun.count(),
@@ -27,33 +29,33 @@ export default async function AdminDashboard() {
 
   return (
     <div className={styles.root}>
-      <h1 className={styles.title}>Dashboard</h1>
+      <h1 className={styles.title}>{t('title')}</h1>
 
       <div className={styles.stats}>
         <div className={styles.stat}>
           <span className={styles.statValue}>{activeQueries}</span>
-          <span className={styles.statLabel}>Active Queries</span>
+          <span className={styles.statLabel}>{t('stats.activeQueries')}</span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statValue}>{totalRuns}</span>
-          <span className={styles.statLabel}>Total Scrapes</span>
+          <span className={styles.statLabel}>{t('stats.totalScrapes')}</span>
         </div>
         <div className={styles.stat}>
           <span className={styles.statValue}>${monthlyCost.toFixed(2)}</span>
-          <span className={styles.statLabel}>LLM Cost (30d)</span>
+          <span className={styles.statLabel}>{t('stats.llmCost')}</span>
         </div>
       </div>
 
       {recentErrors.length > 0 && (
         <>
-          <h2 className={styles.sectionTitle}>Recent Errors</h2>
+          <h2 className={styles.sectionTitle}>{t('recentErrors')}</h2>
           <div className={styles.tableWrapper}>
             <table className={styles.table}>
               <thead>
                 <tr>
-                  <th>Time</th>
-                  <th>Operation</th>
-                  <th>Error</th>
+                  <th>{t('table.time')}</th>
+                  <th>{t('table.operation')}</th>
+                  <th>{t('table.error')}</th>
                 </tr>
               </thead>
               <tbody>
@@ -77,19 +79,19 @@ export default async function AdminDashboard() {
         </>
       )}
 
-      <h2 className={styles.sectionTitle}>Recent Runs</h2>
+      <h2 className={styles.sectionTitle}>{t('recentRuns')}</h2>
       {recentRuns.length === 0 ? (
-        <p className={styles.empty}>No scrape runs yet</p>
+        <p className={styles.empty}>{t('noRuns')}</p>
       ) : (
         <div className={styles.tableWrapper}>
           <table className={styles.table}>
             <thead>
               <tr>
-                <th>Time</th>
-                <th>Route</th>
-                <th>Status</th>
-                <th>Snapshots</th>
-                <th>Cost</th>
+                <th>{t('table.time')}</th>
+                <th>{t('table.route')}</th>
+                <th>{t('table.status')}</th>
+                <th>{t('table.snapshots')}</th>
+                <th>{t('table.cost')}</th>
               </tr>
             </thead>
             <tbody>

@@ -1,4 +1,5 @@
 import { Suspense } from 'react';
+import { getTranslations } from 'next-intl/server';
 import {
   getPageViewsOverTime,
   getTopPagesEngagement,
@@ -90,10 +91,12 @@ export default async function AnalyticsDashboard({ searchParams }: Props) {
     getHourlyHeatmap(opts),
   ];
 
+  const t = await getTranslations('AdminAnalytics');
+
   return (
     <div className={styles.dashboard}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Analytics</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <div className={styles.headerActions}>
           <Suspense>
             <BotFilterToggle current={botFilter} />

@@ -1,6 +1,7 @@
 import Link from 'next/link';
 import { notFound } from 'next/navigation';
 import { headers } from 'next/headers';
+import { getTranslations } from 'next-intl/server';
 import QRCode from 'qrcode';
 import { prisma } from '@/lib/prisma';
 import { getCurrentUser } from '@/lib/user-auth';
@@ -32,6 +33,8 @@ async function resolveInstanceUrl(): Promise<string> {
 export default async function ConnectPage() {
   if (process.env.SELF_HOSTED !== 'true') notFound();
 
+  const t = await getTranslations('Connect');
+
   const url = await resolveInstanceUrl();
   const user = await getCurrentUser();
   const isSecure = url.startsWith('https://');
@@ -46,15 +49,14 @@ export default async function ConnectPage() {
   return (
     <main className={styles.root}>
       <header className={styles.header}>
-        <h1 className={styles.title}>Connect from your phone</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <p className={styles.subtitle}>
-          Open this instance on a phone or tablet, then add it to the home screen
-          for an app-like experience.
+          {t('subtitle')}
         </p>
       </header>
 
       <section className={styles.urlCard}>
-        <span className={styles.urlLabel}>Your instance</span>
+        <span className={styles.urlLabel}>{t('yourInstance')}</span>
         <div className={styles.urlRow}>
           <code className={styles.url}>{url}</code>
           <CopyButton value={url} />
@@ -64,13 +66,12 @@ export default async function ConnectPage() {
       {!isSecure && (
         <div className={styles.warn}>
           <p className={styles.warnText}>
-            This URL is not <strong>https</strong>, so phones can open it but
-            can&apos;t install it as an app and the connection isn&apos;t
-            encrypted. Turn this machine into a proper host with a domain (Caddy)
-            or a Tailscale / Cloudflare tunnel.
+            {t.rich('insecureWarning', {
+              strong: (chunks) => <strong>{chunks}</strong>,
+            })}
           </p>
           <Link href="/settings#reach" className={styles.warnAction}>
-            Set up secure access →
+            {t('setupSecureAccess')}
           </Link>
         </div>
       )}
@@ -85,33 +86,33 @@ export default async function ConnectPage() {
             </span>
           )}
         </div>
-        <p className={styles.qrHint}>Scan with your phone camera to open it.</p>
+        <p className={styles.qrHint}>{t('qrHint')}</p>
         <ShareButtons url={url} />
       </section>
 
       <section className={styles.steps}>
         <div className={styles.step}>
-          <h2 className={styles.stepTitle}>iPhone / iPad (Safari)</h2>
+          <h2 className={styles.stepTitle}>{t('iosTitle')}</h2>
           <ol>
-            <li>Open the URL above in Safari.</li>
-            <li>Tap the Share button.</li>
-            <li>Tap <strong>Add to Home Screen</strong>.</li>
+            <li>{t('iosStep1')}</li>
+            <li>{t('iosStep2')}</li>
+            <li>{t.rich('iosStep3', { strong: (chunks) => <strong>{chunks}</strong> })}</li>
           </ol>
         </div>
         <div className={styles.step}>
-          <h2 className={styles.stepTitle}>Android (Chrome)</h2>
+          <h2 className={styles.stepTitle}>{t('androidTitle')}</h2>
           <ol>
-            <li>Open the URL above in Chrome.</li>
-            <li>Tap the menu (three dots).</li>
-            <li>Tap <strong>Install app</strong> or <strong>Add to Home screen</strong>.</li>
+            <li>{t('androidStep1')}</li>
+            <li>{t('androidStep2')}</li>
+            <li>{t.rich('androidStep3', { strong: (chunks) => <strong>{chunks}</strong> })}</li>
           </ol>
         </div>
       </section>
 
       <p className={styles.desktopNote}>
-        On a computer? Download the desktop app from{' '}
-        <a href="/download">the download page</a>, or just open the URL in any
-        browser.
+        {t.rich('desktopNote', {
+          link: (chunks) => <a href="/download">{chunks}</a>,
+        })}
       </p>
     </main>
   );

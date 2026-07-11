@@ -2,9 +2,11 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import styles from './page.module.css';
 
 export function SeedRouteForm() {
+  const t = useTranslations('AdminSeedRoutes');
   const router = useRouter();
   const [origin, setOrigin] = useState('');
   const [destination, setDestination] = useState('');
@@ -46,19 +48,19 @@ export function SeedRouteForm() {
       setOriginName('');
       setDestinationName('');
       setAirlines('');
-      setMessage('Seed route created');
+      setMessage(t('form.created'));
       router.refresh();
     } else {
-      setMessage(data.error ?? 'Failed to create');
+      setMessage(data.error ?? t('form.failed'));
     }
   };
 
   return (
     <form className={styles.form} onSubmit={handleSubmit}>
-      <h2 className={styles.formTitle}>Add Seed Route</h2>
+      <h2 className={styles.formTitle}>{t('form.title')}</h2>
       <div className={styles.formGrid}>
         <div className={styles.field}>
-          <label className={styles.label}>Origin (IATA)</label>
+          <label className={styles.label}>{t('form.origin')}</label>
           <input
             className={styles.input}
             value={origin}
@@ -69,7 +71,7 @@ export function SeedRouteForm() {
           />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Destination (IATA)</label>
+          <label className={styles.label}>{t('form.destination')}</label>
           <input
             className={styles.input}
             value={destination}
@@ -80,7 +82,7 @@ export function SeedRouteForm() {
           />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Origin Name</label>
+          <label className={styles.label}>{t('form.originName')}</label>
           <input
             className={styles.input}
             value={originName}
@@ -89,7 +91,7 @@ export function SeedRouteForm() {
           />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Destination Name</label>
+          <label className={styles.label}>{t('form.destinationName')}</label>
           <input
             className={styles.input}
             value={destinationName}
@@ -98,35 +100,35 @@ export function SeedRouteForm() {
           />
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Cabin Class</label>
+          <label className={styles.label}>{t('form.cabinClass')}</label>
           <select className={styles.select} value={cabinClass} onChange={(e) => setCabinClass(e.target.value)}>
-            <option value="economy">Economy</option>
-            <option value="premium_economy">Premium Economy</option>
-            <option value="business">Business</option>
-            <option value="first">First</option>
+            <option value="economy">{t('form.economy')}</option>
+            <option value="premium_economy">{t('form.premiumEconomy')}</option>
+            <option value="business">{t('form.business')}</option>
+            <option value="first">{t('form.first')}</option>
           </select>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Look-Ahead</label>
+          <label className={styles.label}>{t('form.lookAhead')}</label>
           <select className={styles.select} value={lookAheadDays} onChange={(e) => setLookAheadDays(Number(e.target.value))}>
-            <option value={7}>7 days</option>
-            <option value={14}>14 days</option>
-            <option value={21}>21 days</option>
-            <option value={30}>30 days</option>
+            <option value={7}>{t('form.days', { days: 7 })}</option>
+            <option value={14}>{t('form.days', { days: 14 })}</option>
+            <option value={21}>{t('form.days', { days: 21 })}</option>
+            <option value={30}>{t('form.days', { days: 30 })}</option>
           </select>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Scrape Interval</label>
+          <label className={styles.label}>{t('form.scrapeInterval')}</label>
           <select className={styles.select} value={scrapeInterval} onChange={(e) => setScrapeInterval(Number(e.target.value))}>
-            <option value={1}>Every 1h</option>
-            <option value={3}>Every 3h</option>
-            <option value={6}>Every 6h</option>
-            <option value={12}>Every 12h</option>
-            <option value={24}>Every 24h</option>
+            <option value={1}>{t('form.everyHours', { hours: 1 })}</option>
+            <option value={3}>{t('form.everyHours', { hours: 3 })}</option>
+            <option value={6}>{t('form.everyHours', { hours: 6 })}</option>
+            <option value={12}>{t('form.everyHours', { hours: 12 })}</option>
+            <option value={24}>{t('form.everyHours', { hours: 24 })}</option>
           </select>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Airlines (comma-sep)</label>
+          <label className={styles.label}>{t('form.airlines')}</label>
           <input
             className={styles.input}
             value={airlines}
@@ -137,7 +139,7 @@ export function SeedRouteForm() {
       </div>
       <div className={styles.formActions}>
         <button className={styles.createButton} type="submit" disabled={saving}>
-          {saving ? 'Creating...' : 'Create Seed Route'}
+          {saving ? t('form.creating') : t('form.create')}
         </button>
         {message && <span className={styles.message}>{message}</span>}
       </div>

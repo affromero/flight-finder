@@ -9,6 +9,7 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import type { CountryBreakdown } from '@/lib/analytics/query';
 import styles from './ChartCard.module.css';
 
@@ -23,12 +24,13 @@ function formatCountryLabel(code: string): string {
 }
 
 export function CountryChart({ data }: { data: CountryBreakdown[] }) {
+  const t = useTranslations('AdminAnalytics');
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Top Countries</h2>
+      <h2 className={styles.cardTitle}>{t('countries.title')}</h2>
       <div className={styles.chartContainer}>
         {data.length === 0 ? (
-          <p className={styles.empty}>No country data</p>
+          <p className={styles.empty}>{t('countries.empty')}</p>
         ) : (
           <ResponsiveContainer width="100%" height={Math.max(300, data.length * 30)}>
             <BarChart data={data} layout="vertical">
@@ -50,7 +52,7 @@ export function CountryChart({ data }: { data: CountryBreakdown[] }) {
                   borderRadius: '8px',
                   color: 'var(--text)',
                 }}
-                formatter={(value) => [value ?? 0, 'Visits']}
+                formatter={(value) => [value ?? 0, t('countries.visits')]}
                 labelFormatter={(label) => formatCountryLabel(String(label))}
               />
               <Bar dataKey="count" fill="var(--accent)" radius={[0, 4, 4, 0]} />

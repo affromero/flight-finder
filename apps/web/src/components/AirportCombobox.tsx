@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import type { AirportResult } from '@/app/api/airports/route';
 import styles from './AirportCombobox.module.css';
 
@@ -18,13 +19,14 @@ interface AirportComboboxProps {
 export function AirportCombobox({
   id,
   label,
-  placeholder = 'Search by city, airport, or code',
+  placeholder,
   value,
   onChange,
   error,
   autoFocus,
   excludeCode,
 }: AirportComboboxProps) {
+  const t = useTranslations('AirportCombobox');
   const [query, setQuery] = useState('');
   const [results, setResults] = useState<AirportResult[]>([]);
   const [open, setOpen] = useState(false);
@@ -139,7 +141,7 @@ export function AirportCombobox({
           id={id}
           className={`${styles.input} ${error ? styles.inputError : ''} ${value ? styles.inputSelected : ''}`}
           type="text"
-          placeholder={placeholder}
+          placeholder={placeholder ?? t('placeholder')}
           value={value ? displayValue : query}
           onChange={handleInputChange}
           onKeyDown={handleKeyDown}
@@ -160,7 +162,7 @@ export function AirportCombobox({
           id={`${id}-listbox`}
           className={styles.dropdown}
           role="listbox"
-          aria-label={`${label} suggestions`}
+          aria-label={t('suggestions', { label })}
         >
           {results.map((r, i) => (
             <li

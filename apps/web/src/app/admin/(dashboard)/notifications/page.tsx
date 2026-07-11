@@ -1,13 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './page.module.css';
 
 type ChannelType = 'telegram' | 'email' | 'ntfy' | 'webhook';
 
 interface FieldDef {
   key: string;
-  label: string;
   type: 'text' | 'password' | 'number' | 'checkbox';
   placeholder?: string;
   optional?: boolean;
@@ -16,35 +16,30 @@ interface FieldDef {
 
 const FIELD_DEFS: Record<ChannelType, FieldDef[]> = {
   telegram: [
-    { key: 'botToken', label: 'Bot token', type: 'password', secret: true },
-    { key: 'chatId', label: 'Chat ID', type: 'text' },
+    { key: 'botToken', type: 'password', secret: true },
+    { key: 'chatId', type: 'text' },
   ],
   email: [
-    { key: 'host', label: 'SMTP host', type: 'text', placeholder: 'smtp.gmail.com' },
-    { key: 'port', label: 'SMTP port', type: 'number', placeholder: '587' },
-    { key: 'secure', label: 'Use TLS (port 465)', type: 'checkbox' },
-    { key: 'user', label: 'SMTP username', type: 'text', optional: true },
-    { key: 'pass', label: 'SMTP password', type: 'password', optional: true, secret: true },
-    { key: 'from', label: 'From address', type: 'text', placeholder: 'alerts@you.com' },
-    { key: 'to', label: 'To address', type: 'text', placeholder: 'you@you.com' },
+    { key: 'host', type: 'text', placeholder: 'smtp.gmail.com' },
+    { key: 'port', type: 'number', placeholder: '587' },
+    { key: 'secure', type: 'checkbox' },
+    { key: 'user', type: 'text', optional: true },
+    { key: 'pass', type: 'password', optional: true, secret: true },
+    { key: 'from', type: 'text', placeholder: 'alerts@you.com' },
+    { key: 'to', type: 'text', placeholder: 'you@you.com' },
   ],
   ntfy: [
-    { key: 'server', label: 'Server', type: 'text', placeholder: 'https://ntfy.sh', optional: true },
-    { key: 'topic', label: 'Topic', type: 'text', placeholder: 'my-flight-alerts' },
-    { key: 'token', label: 'Access token', type: 'password', optional: true, secret: true },
+    { key: 'server', type: 'text', placeholder: 'https://ntfy.sh', optional: true },
+    { key: 'topic', type: 'text', placeholder: 'my-flight-alerts' },
+    { key: 'token', type: 'password', optional: true, secret: true },
   ],
   webhook: [
-    { key: 'url', label: 'Webhook URL', type: 'text', placeholder: 'https://...' },
-    { key: 'secret', label: 'HMAC signing secret', type: 'password', optional: true, secret: true },
+    { key: 'url', type: 'text', placeholder: 'https://...' },
+    { key: 'secret', type: 'password', optional: true, secret: true },
   ],
 };
 
-const TYPE_LABELS: Record<ChannelType, string> = {
-  telegram: 'Telegram',
-  email: 'Email',
-  ntfy: 'ntfy',
-  webhook: 'Webhook',
-};
+const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook'];
 
 type FormValues = Record<string, string | boolean>;
 
@@ -85,6 +80,7 @@ function buildConfig(type: ChannelType, values: FormValues): Record<string, unkn
 }
 
 export default function NotificationsPage() {
+  const t = useTranslations('AdminNotifications');
   const [channels, setChannels] = useState<Channel[]>([]);
   const [loading, setLoading] = useState(true);
 
@@ -168,7 +164,7 @@ export default function NotificationsPage() {
       }),
     });
     const data = await res.json();
-    setSettingsMsg(data.ok ? 'Settings saved' : data.error || 'Failed to save');
+    setSettingsMsg(data.ok ? t('thresholds.saved') : data.error || t('failedToSave'));
     setSavingSettings(false);
   };
 
@@ -190,7 +186,7 @@ export default function NotificationsPage() {
       resetForm();
       await loadChannels();
     } else {
-      setFormMsg(data.error || 'Failed to save channel');
+      setFormMsg(data.error || t('form.failedToSaveChannel'));
     }
     setSavingForm(false);
   };
@@ -205,14 +201,14 @@ export default function NotificationsPage() {
   };
 
   const sendTest = async (channel: Channel) => {
-    setRowMsg((m) => ({ ...m, [channel.id]: 'Sending...' }));
+    setRowMsg((m) => ({ ...m, [channel.id]: t('channels.sending') }));
     const res = await fetch(`/api/admin/notifications/${channel.id}/test`, { method: 'POST' });
     const data = await res.json();
-    setRowMsg((m) => ({ ...m, [channel.id]: data.ok ? 'Test sent' : data.error || 'Failed' }));
+    setRowMsg((m) => ({ ...m, [channel.id]: data.ok ? t('channels.testSent') : data.error || t('channels.failed') }));
   };
 
   const deleteChannel = async (channel: Channel) => {
-    if (!confirm(`Delete this ${TYPE_LABELS[channel.type]} channel?`)) return;
+    if (!confirm(t('channels.deleteConfirm', { type: t(`types.${channel.type}`) }))) return;
     const res = await fetch(`/api/admin/notifications/${channel.id}`, { method: 'DELETE' });
     if ((await res.json()).ok) {
       if (editingId === channel.id) resetForm();
@@ -221,21 +217,20 @@ export default function NotificationsPage() {
   };
 
   if (loading) {
-    return <div className={styles.root}><p className={styles.loading}>Loading...</p></div>;
+    return <div className={styles.root}><p className={styles.loading}>{t('loading')}</p></div>;
   }
 
   return (
     <div className={styles.root}>
-      <h1 className={styles.title}>Notifications</h1>
+      <h1 className={styles.title}>{t('title')}</h1>
       <p className={styles.intro}>
-        Get pushed an alert the moment a tracked flight hits a new low price. Add one or more
-        channels below. Alerts fire after each scrape, so a headless instance never misses a fare.
+        {t('intro')}
       </p>
 
       <section className={styles.card}>
-        <h2 className={styles.sectionTitle}>Alert thresholds</h2>
+        <h2 className={styles.sectionTitle}>{t('thresholds.title')}</h2>
         <div className={styles.field}>
-          <label className={styles.label}>Minimum price drop to alert</label>
+          <label className={styles.label}>{t('thresholds.minDrop')}</label>
           <input
             type="number"
             className={styles.input}
@@ -244,10 +239,10 @@ export default function NotificationsPage() {
             value={minDropAbs}
             onChange={(e) => setMinDropAbs(Number(e.target.value))}
           />
-          <span className={styles.hint}>Only alert when a new low beats the previous best by at least this much (in the tracker&apos;s currency). Default 5.</span>
+          <span className={styles.hint}>{t('thresholds.minDropHint')}</span>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Minimum percentage drop to alert</label>
+          <label className={styles.label}>{t('thresholds.minPct')}</label>
           <input
             type="number"
             className={styles.input}
@@ -257,10 +252,10 @@ export default function NotificationsPage() {
             value={minDropPct}
             onChange={(e) => setMinDropPct(Number(e.target.value))}
           />
-          <span className={styles.hint}>Extra gate on top of the absolute drop. 0 disables it.</span>
+          <span className={styles.hint}>{t('thresholds.minPctHint')}</span>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Public site URL</label>
+          <label className={styles.label}>{t('thresholds.publicUrl')}</label>
           <input
             type="url"
             className={styles.input}
@@ -268,37 +263,37 @@ export default function NotificationsPage() {
             value={publicBaseUrl}
             onChange={(e) => setPublicBaseUrl(e.target.value)}
           />
-          <span className={styles.hint}>Your instance&apos;s address, used for the chart link inside each alert. Set this (or the APP_URL environment variable) so alerts link back to your site; if left blank, alerts are sent without a link.</span>
+          <span className={styles.hint}>{t('thresholds.publicUrlHint')}</span>
         </div>
         <div className={styles.actions}>
           <button className={styles.primary} onClick={handleSaveSettings} disabled={savingSettings}>
-            {savingSettings ? 'Saving...' : 'Save thresholds'}
+            {savingSettings ? t('thresholds.saving') : t('thresholds.save')}
           </button>
           {settingsMsg && <span className={styles.msg}>{settingsMsg}</span>}
         </div>
       </section>
 
       <section className={styles.card}>
-        <h2 className={styles.sectionTitle}>Channels</h2>
-        {channels.length === 0 && <p className={styles.empty}>No channels yet. Add one below.</p>}
+        <h2 className={styles.sectionTitle}>{t('channels.title')}</h2>
+        {channels.length === 0 && <p className={styles.empty}>{t('channels.empty')}</p>}
         <ul className={styles.channelList}>
           {channels.map((c) => (
             <li key={c.id} className={styles.channelRow}>
               <div className={styles.channelInfo}>
-                <span className={styles.channelType}>{TYPE_LABELS[c.type]}</span>
+                <span className={styles.channelType}>{t(`types.${c.type}`)}</span>
                 {c.label && <span className={styles.channelLabel}>{c.label}</span>}
                 <span className={c.enabled ? styles.badgeOn : styles.badgeOff}>
-                  {c.enabled ? 'enabled' : 'disabled'}
+                  {c.enabled ? t('channels.enabled') : t('channels.disabled')}
                 </span>
                 {rowMsg[c.id] && <span className={styles.rowMsg}>{rowMsg[c.id]}</span>}
               </div>
               <div className={styles.channelActions}>
-                <button className={styles.ghost} onClick={() => sendTest(c)}>Send test</button>
+                <button className={styles.ghost} onClick={() => sendTest(c)}>{t('channels.sendTest')}</button>
                 <button className={styles.ghost} onClick={() => toggleEnabled(c)}>
-                  {c.enabled ? 'Disable' : 'Enable'}
+                  {c.enabled ? t('channels.disable') : t('channels.enable')}
                 </button>
-                <button className={styles.ghost} onClick={() => startEdit(c)}>Edit</button>
-                <button className={styles.danger} onClick={() => deleteChannel(c)}>Delete</button>
+                <button className={styles.ghost} onClick={() => startEdit(c)}>{t('channels.edit')}</button>
+                <button className={styles.danger} onClick={() => deleteChannel(c)}>{t('channels.delete')}</button>
               </div>
             </li>
           ))}
@@ -306,30 +301,30 @@ export default function NotificationsPage() {
       </section>
 
       <section className={styles.card}>
-        <h2 className={styles.sectionTitle}>{editingId ? 'Edit channel' : 'Add a channel'}</h2>
+        <h2 className={styles.sectionTitle}>{editingId ? t('form.editTitle') : t('form.addTitle')}</h2>
         <div className={styles.field}>
-          <label className={styles.label}>Type</label>
+          <label className={styles.label}>{t('form.type')}</label>
           <select
             className={styles.select}
             value={formType}
             disabled={!!editingId}
             onChange={(e) => {
-              const t = e.target.value as ChannelType;
-              setFormType(t);
-              setFormValues(initialValues(t));
+              const next = e.target.value as ChannelType;
+              setFormType(next);
+              setFormValues(initialValues(next));
             }}
           >
-            {(Object.keys(TYPE_LABELS) as ChannelType[]).map((t) => (
-              <option key={t} value={t}>{TYPE_LABELS[t]}</option>
+            {CHANNEL_TYPES.map((ct) => (
+              <option key={ct} value={ct}>{t(`types.${ct}`)}</option>
             ))}
           </select>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>Label (optional)</label>
+          <label className={styles.label}>{t('form.label')}</label>
           <input
             type="text"
             className={styles.input}
-            placeholder="e.g. My phone"
+            placeholder={t('form.labelPlaceholder')}
             value={formLabel}
             onChange={(e) => setFormLabel(e.target.value)}
           />
@@ -337,8 +332,8 @@ export default function NotificationsPage() {
         {FIELD_DEFS[formType].map((f) => (
           <div className={styles.field} key={f.key}>
             <label className={styles.label}>
-              {f.label}
-              {f.optional && <span className={styles.optional}> (optional)</span>}
+              {t(`fields.${f.key}`)}
+              {f.optional && <span className={styles.optional}>{t('form.optionalSuffix')}</span>}
             </label>
             {f.type === 'checkbox' ? (
               <input
@@ -354,9 +349,9 @@ export default function NotificationsPage() {
                   className={styles.input}
                   placeholder={
                     clearSecrets.has(f.key)
-                      ? 'Will be removed on save'
+                      ? t('form.removedOnSave')
                       : f.secret && editingId && secretsSet[f.key]
-                        ? 'Leave blank to keep current'
+                        ? t('form.keepCurrent')
                         : f.placeholder ?? ''
                   }
                   value={String(formValues[f.key] ?? '')}
@@ -377,7 +372,7 @@ export default function NotificationsPage() {
                         })
                       }
                     />
-                    Remove saved value
+                    {t('form.removeSaved')}
                   </label>
                 )}
               </>
@@ -386,10 +381,10 @@ export default function NotificationsPage() {
         ))}
         <div className={styles.actions}>
           <button className={styles.primary} onClick={handleSubmitForm} disabled={savingForm}>
-            {savingForm ? 'Saving...' : editingId ? 'Save changes' : 'Add channel'}
+            {savingForm ? t('form.saving') : editingId ? t('form.saveChanges') : t('form.addChannel')}
           </button>
           {editingId && (
-            <button className={styles.ghost} onClick={() => resetForm()}>Cancel</button>
+            <button className={styles.ghost} onClick={() => resetForm()}>{t('form.cancel')}</button>
           )}
           {formMsg && <span className={styles.msg}>{formMsg}</span>}
         </div>

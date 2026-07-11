@@ -1,6 +1,7 @@
 'use client';
 
 import Link from 'next/link';
+import { useTranslations } from 'next-intl';
 import { usePathname } from 'next/navigation';
 import styles from './HomeBrand.module.css';
 
@@ -13,6 +14,7 @@ import styles from './HomeBrand.module.css';
  * are pre-home entry flows with nowhere to go "back" to yet.
  */
 export function HomeBrand() {
+  const t = useTranslations('HomeBrand');
   const pathname = usePathname();
   if (
     pathname?.startsWith('/admin') ||
@@ -23,7 +25,7 @@ export function HomeBrand() {
   }
 
   return (
-    <Link href="/" className={styles.root} aria-label="Flight Finder home">
+    <Link href="/" className={styles.root} aria-label={t('home')}>
       <span className={styles.mark} aria-hidden="true" />
       <span className={styles.word}>Flight Finder</span>
     </Link>

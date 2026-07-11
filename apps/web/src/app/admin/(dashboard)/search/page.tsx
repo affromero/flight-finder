@@ -1,17 +1,17 @@
+import { getTranslations } from 'next-intl/server';
 import { SearchBar } from '@/components/SearchBar';
 import styles from './page.module.css';
 
 export const dynamic = 'force-dynamic';
 
-export default function AdminSearchPage() {
+export default async function AdminSearchPage() {
+  const t = await getTranslations('AdminSearch');
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <h1 className={styles.title}>Search</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <p className={styles.subtitle}>
-          Describe a flight in plain English (or enter details manually). This runs the same
-          flow as <code className={styles.code}>fairtrail</code> on the command line: parse,
-          preview Google Flights results, pick flights, start tracking.
+          {t.rich('subtitle', { code: (chunks) => <code className={styles.code}>{chunks}</code> })}
         </p>
       </div>
 

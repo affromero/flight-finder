@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter, usePathname, useSearchParams } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import styles from './DateRangePicker.module.css';
 
 interface Props {
@@ -9,6 +10,7 @@ interface Props {
 }
 
 export function DateRangePicker({ from, to }: Props) {
+  const t = useTranslations('AdminAnalytics');
   const router = useRouter();
   const pathname = usePathname();
   const searchParams = useSearchParams();
@@ -37,19 +39,19 @@ export function DateRangePicker({ from, to }: Props) {
     <div className={styles.picker}>
       <div className={styles.presets}>
         <button className={styles.preset} onClick={() => setSingleDay(0)}>
-          Today
+          {t('dateRange.today')}
         </button>
         <button className={styles.preset} onClick={() => setSingleDay(1)}>
-          Yesterday
+          {t('dateRange.yesterday')}
         </button>
         <button className={styles.preset} onClick={() => setPreset(7)}>
-          7d
+          {t('dateRange.last7d')}
         </button>
         <button className={styles.preset} onClick={() => setPreset(30)}>
-          30d
+          {t('dateRange.last30d')}
         </button>
         <button className={styles.preset} onClick={() => setPreset(90)}>
-          90d
+          {t('dateRange.last90d')}
         </button>
       </div>
       <div className={styles.inputs}>

@@ -1,4 +1,6 @@
 import type { Metadata, Viewport } from 'next';
+import { NextIntlClientProvider } from 'next-intl';
+import { getLocale, getMessages } from 'next-intl/server';
 import '@/styles/globals.css';
 import { ClientBeacon } from '@/components/analytics/ClientBeacon';
 import { HomeBrand } from '@/components/HomeBrand/HomeBrand';
@@ -122,17 +124,22 @@ export default async function RootLayout({
   }
   const perUserScript = `window.__ftPerUserTheme = ${perUserTheme};`;
 
+  const locale = await getLocale();
+  const messages = await getMessages();
+
   return (
-    <html lang="en" suppressHydrationWarning data-theme={theme} data-theme-mode={getThemeMode(theme)}>
+    <html lang={locale} suppressHydrationWarning data-theme={theme} data-theme-mode={getThemeMode(theme)}>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBootstrapScript }} />
         <script dangerouslySetInnerHTML={{ __html: perUserScript }} />
         <script dangerouslySetInnerHTML={{ __html: swScript }} />
       </head>
       <body>
-        <HomeBrand />
-        {children}
-        {!isSelfHosted && <ClientBeacon />}
+        <NextIntlClientProvider locale={locale} messages={messages}>
+          <HomeBrand />
+          {children}
+          {!isSelfHosted && <ClientBeacon />}
+        </NextIntlClientProvider>
       </body>
     </html>
   );

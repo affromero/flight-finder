@@ -1,9 +1,11 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './page.module.css';
 
 export function LoginForm() {
+  const t = useTranslations('AdminLogin');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -22,7 +24,7 @@ export function LoginForm() {
     if (res.ok) {
       window.location.href = '/admin';
     } else {
-      setError('Invalid password');
+      setError(t('invalidPassword'));
       setLoading(false);
     }
   };
@@ -30,18 +32,18 @@ export function LoginForm() {
   return (
     <main className={styles.root}>
       <form className={styles.form} onSubmit={handleSubmit}>
-        <h1 className={styles.title}>Flight Finder Admin</h1>
+        <h1 className={styles.title}>{t('title')}</h1>
         <input
           type="password"
           className={styles.input}
-          placeholder="Password"
+          placeholder={t('passwordPlaceholder')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoFocus
         />
         {error && <p className={styles.error}>{error}</p>}
         <button className={styles.button} type="submit" disabled={loading}>
-          {loading ? 'Signing in...' : 'Sign in'}
+          {loading ? t('signingIn') : t('signIn')}
         </button>
       </form>
     </main>

@@ -21,6 +21,7 @@
     "geoip-lite": "^2.0.3",
     "ioredis": "^5.11.1",
     "next": "^16.2.10",
+    "next-intl": "^4.13.2",
     "nodemailer": "^9.0.3",
     "openai": "^6.45.0",
     "playwright": "^1.61.1",

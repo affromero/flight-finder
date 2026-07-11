@@ -1,11 +1,12 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from './page.module.css';
 
-const MESSAGE = 'Track flight prices with me on Flight Finder';
-
 export function ShareButtons({ url }: { url: string }) {
+  const t = useTranslations('Connect');
+  const MESSAGE = t('shareMessage');
   const [canShare, setCanShare] = useState(false);
 
   useEffect(() => {
@@ -29,7 +30,7 @@ export function ShareButtons({ url }: { url: string }) {
         // the device has installed -- the explicit links below are the desktop
         // fallback where navigator.share is unavailable.
         <button type="button" className={styles.shareNative} onClick={nativeShare}>
-          Share…
+          {t('share')}
         </button>
       )}
       <a
@@ -49,7 +50,7 @@ export function ShareButtons({ url }: { url: string }) {
         Telegram
       </a>
       <a className={styles.shareBtn} href={`mailto:?subject=${enc('Flight Finder')}&body=${enc(`${MESSAGE}: ${url}`)}`}>
-        Email
+        {t('email')}
       </a>
     </div>
   );

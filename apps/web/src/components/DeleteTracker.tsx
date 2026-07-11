@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { getDeleteToken, removeSavedTracker } from '@/lib/tracker-storage';
 import styles from './DeleteTracker.module.css';
@@ -10,6 +11,7 @@ interface Props {
 }
 
 export function DeleteTracker({ queryId }: Props) {
+  const t = useTranslations('DeleteTracker');
   const router = useRouter();
   const [confirming, setConfirming] = useState(false);
   const [deleting, setDeleting] = useState(false);
@@ -31,7 +33,7 @@ export function DeleteTracker({ queryId }: Props) {
       const data = await res.json();
 
       if (!data.ok) {
-        setError(data.error || 'Failed to delete tracker');
+        setError(data.error || t('deleteFailed'));
         setDeleting(false);
         return;
       }
@@ -39,7 +41,7 @@ export function DeleteTracker({ queryId }: Props) {
       removeSavedTracker(queryId);
       router.push('/');
     } catch {
-      setError('Network error — please try again');
+      setError(t('networkError'));
       setDeleting(false);
     }
   };
@@ -48,7 +50,7 @@ export function DeleteTracker({ queryId }: Props) {
     return (
       <div className={styles.root}>
         <p className={styles.warning}>
-          This will permanently delete this tracker and all its price history. This cannot be undone.
+          {t('warning')}
         </p>
         {error && <p className={styles.error}>{error}</p>}
         <div className={styles.actions}>
@@ -57,14 +59,14 @@ export function DeleteTracker({ queryId }: Props) {
             onClick={() => { setConfirming(false); setError(null); }}
             disabled={deleting}
           >
-            Cancel
+            {t('cancel')}
           </button>
           <button
             className={styles.confirm}
             onClick={handleDelete}
             disabled={deleting}
           >
-            {deleting ? 'Deleting...' : 'Yes, delete'}
+            {deleting ? t('deleting') : t('confirmDelete')}
           </button>
         </div>
       </div>
@@ -73,7 +75,7 @@ export function DeleteTracker({ queryId }: Props) {
 
   return (
     <button className={styles.trigger} onClick={() => setConfirming(true)}>
-      Stop tracking
+      {t('stopTracking')}
     </button>
   );
 }

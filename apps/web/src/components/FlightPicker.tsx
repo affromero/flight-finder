@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import type { PriceData } from '@/lib/scraper/extract-prices';
 import { formatCurrency } from '@/lib/currency';
 import styles from './FlightPicker.module.css';
@@ -14,12 +15,6 @@ export interface RouteFlights {
   date?: string; // ISO date — outbound date when grouped by travel date
   returnDate?: string; // ISO date — return date for round trips
   error?: string;
-}
-
-function formatStops(stops: number): string {
-  if (stops === 0) return 'Nonstop';
-  if (stops === 1) return '1 stop';
-  return `${stops} stops`;
 }
 
 function formatRouteDate(iso: string): string {
@@ -50,6 +45,7 @@ export function FlightPicker({
   // practice by route.flights.length, since you can only pick extracted flights.
   maxSelectionsPerRoute?: number;
 }) {
+  const t = useTranslations('FlightPicker');
   const [selections, setSelections] = useState<Record<string, Set<number>>>(() => {
     const initial: Record<string, Set<number>> = {};
     for (const route of routes) {
@@ -120,25 +116,25 @@ export function FlightPicker({
                 )}
                 <h3 className={styles.title}>
                   {isSingleRoute
-                    ? route.date ? `Flights on ${formatRouteDate(route.date)}` : 'Available flights'
+                    ? route.date ? t('flightsOn', { date: formatRouteDate(route.date) }) : t('availableFlights')
                     : route.destinationName}
                 </h3>
                 <span className={styles.counter}>
-                  {selected.size} of {Math.min(route.flights.length, maxSelectionsPerRoute)} selected
+                  {t('selectedCount', { selected: selected.size, total: Math.min(route.flights.length, maxSelectionsPerRoute) })}
                 </span>
               </div>
               <div className={styles.headerActions}>
                 <button className={styles.selectAction} onClick={() => selectAll(key, route.flights)} disabled={loading}>
-                  Select all
+                  {t('selectAll')}
                 </button>
                 <button className={styles.selectAction} onClick={() => clearAll(key)} disabled={loading || selected.size === 0}>
-                  Clear
+                  {t('clear')}
                 </button>
               </div>
             </div>
 
             {isSingleRoute && (
-              <p className={styles.hint}>Select up to {maxSelectionsPerRoute} flights to track daily price changes</p>
+              <p className={styles.hint}>{t('hint', { count: maxSelectionsPerRoute })}</p>
             )}
 
             <div className={styles.list}>
@@ -164,7 +160,7 @@ export function FlightPicker({
                     <div className={styles.airline}>{flight.airline}</div>
                     <div className={styles.price}>{formatCurrency(flight.price, flight.currency)}</div>
                     <div className={styles.meta}>
-                      <span className={styles.stops}>{formatStops(flight.stops)}</span>
+                      <span className={styles.stops}>{flight.stops === 0 ? t('nonstop') : t('stops', { count: flight.stops })}</span>
                       {flight.duration && (
                         <span className={styles.duration}>{flight.duration}</span>
                       )}
@@ -193,13 +189,13 @@ export function FlightPicker({
           onClick={handleTrack}
           disabled={loading || totalSelected === 0}
         >
-          {loading ? 'Creating trackers...' : `Track ${totalSelected} flight${totalSelected !== 1 ? 's' : ''}`}
+          {loading ? t('creatingTrackers') : t('trackFlights', { count: totalSelected })}
         </button>
         <button className={styles.backButton} onClick={onBack} disabled={loading}>
-          Back
+          {t('back')}
         </button>
         <button className={styles.backButton} onClick={onEdit} disabled={loading}>
-          Edit search
+          {t('editSearch')}
         </button>
       </div>
     </div>

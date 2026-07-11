@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useRef } from 'react';
+import { useTranslations } from 'next-intl';
 import { getDeleteToken } from '@/lib/tracker-storage';
 import styles from './TrackerLabel.module.css';
 
@@ -13,6 +14,7 @@ interface Props {
 }
 
 export function TrackerLabel({ queryId, currentLabel, canEdit = false }: Props) {
+  const t = useTranslations('TrackerLabel');
   const [label, setLabel] = useState(currentLabel);
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(currentLabel ?? '');
@@ -77,7 +79,7 @@ export function TrackerLabel({ queryId, currentLabel, canEdit = false }: Props) 
             if (e.key === 'Escape') setEditing(false);
           }}
           maxLength={60}
-          placeholder="e.g. Paris via Skyscanner"
+          placeholder={t('placeholder')}
           disabled={saving}
         />
       </div>
@@ -87,7 +89,7 @@ export function TrackerLabel({ queryId, currentLabel, canEdit = false }: Props) 
   if (label) {
     return (
       <div className={styles.root}>
-        <span className={styles.display} onClick={startEditing} title="Click to edit label">
+        <span className={styles.display} onClick={startEditing} title={t('clickToEdit')}>
           {label}
         </span>
       </div>
@@ -97,7 +99,7 @@ export function TrackerLabel({ queryId, currentLabel, canEdit = false }: Props) 
   return (
     <div className={styles.root}>
       <button className={styles.addButton} onClick={startEditing} type="button">
-        + Add label
+        {t('addLabel')}
       </button>
     </div>
   );

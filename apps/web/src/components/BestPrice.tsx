@@ -1,3 +1,4 @@
+import { getTranslations } from 'next-intl/server';
 import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import styles from './BestPrice.module.css';
@@ -16,7 +17,8 @@ interface Snapshot {
   status?: string;
 }
 
-export function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
+export async function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
+  const t = await getTranslations('BestPrice');
   // Sold-out snapshots carry the last seen price (run-scrape.ts marks the row
   // sold_out but copies the prior price). The listing is no longer bookable,
   // so excluding them keeps a vanished cheap fare from outranking real ones
@@ -29,7 +31,7 @@ export function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <span className={styles.label}>Best price found</span>
+        <span className={styles.label}>{t('bestPriceFound')}</span>
       </div>
       <div className={styles.content}>
         <span className={styles.price}>
@@ -38,7 +40,7 @@ export function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
         <div className={styles.details}>
           <span className={styles.airline}>{best.airline}</span>
           <span className={styles.meta}>
-            {best.stops === 0 ? 'Nonstop' : `${best.stops} stop${best.stops > 1 ? 's' : ''}`}
+            {best.stops === 0 ? t('nonstop') : t('stops', { count: best.stops })}
             {best.duration && ` · ${best.duration}`}
             {(best.departureTime || best.arrivalTime) && ` · ${best.departureTime ?? '?'} - ${best.arrivalTime ?? '?'}`}
           </span>
@@ -50,7 +52,7 @@ export function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
             rel="noopener noreferrer"
             className={styles.bookButton}
           >
-            Book on {best.airline}
+            {t('bookOn', { airline: best.airline })}
           </a>
         )}
       </div>

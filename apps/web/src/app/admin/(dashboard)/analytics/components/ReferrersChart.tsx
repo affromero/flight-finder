@@ -9,16 +9,18 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
+import { useTranslations } from 'next-intl';
 import type { ReferrerDomain } from '@/lib/analytics/query';
 import styles from './ChartCard.module.css';
 
 export function ReferrersChart({ data }: { data: ReferrerDomain[] }) {
+  const t = useTranslations('AdminAnalytics');
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Top Referrers</h2>
+      <h2 className={styles.cardTitle}>{t('referrers.title')}</h2>
       <div className={styles.chartContainer}>
         {data.length === 0 ? (
-          <p className={styles.empty}>No referrer data</p>
+          <p className={styles.empty}>{t('referrers.empty')}</p>
         ) : (
           <ResponsiveContainer width="100%" height={300}>
             <BarChart data={data} layout="vertical">

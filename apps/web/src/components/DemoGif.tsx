@@ -1,10 +1,12 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useTranslations } from 'next-intl';
 import styles from '@/app/page.module.css';
 import { getThemeFromDom, isLightTheme, isThemeId, type ThemeId } from '@/lib/theme';
 
 export function DemoGif() {
+  const t = useTranslations('DemoGif');
   const [theme, setTheme] = useState<ThemeId>('default');
 
   useEffect(() => {
@@ -25,7 +27,7 @@ export function DemoGif() {
   return (
     <img
       src={isLightTheme(theme) ? '/demo-light.gif' : '/demo-dark.gif'}
-      alt="Price evolution charts - JFK to Paris, LAX to Tokyo, Chicago to Rome"
+      alt={t('alt')}
       className={styles.demoImg}
       width={1280}
       height={900}

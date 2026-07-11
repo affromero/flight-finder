@@ -1,4 +1,5 @@
 import { notFound } from 'next/navigation';
+import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { UsersClient } from './UsersClient';
@@ -11,6 +12,7 @@ export default async function UsersPage() {
   // collision ever lands here we don't want to leak user data.
   if (!(await isMultiUserEnabled())) notFound();
 
+  const t = await getTranslations('AdminUsers');
   const users = await prisma.user.findMany({
     orderBy: [{ isAdmin: 'desc' }, { username: 'asc' }],
     select: {
@@ -26,7 +28,7 @@ export default async function UsersPage() {
 
   return (
     <div className={styles.root}>
-      <h1 className={styles.title}>Users</h1>
+      <h1 className={styles.title}>{t('title')}</h1>
       <UsersClient
         initialUsers={users.map((u) => ({
           id: u.id,

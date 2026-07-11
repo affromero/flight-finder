@@ -1,12 +1,15 @@
 'use client';
 
 import { Fragment } from 'react';
+import { useTranslations } from 'next-intl';
 import type { HourlyHeatmapCell } from '@/lib/analytics/query';
 import styles from './HourlyHeatmap.module.css';
 
-const DAY_LABELS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const DAY_KEYS = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'] as const;
 
 export function HourlyHeatmap({ data }: { data: HourlyHeatmapCell[] }) {
+  const t = useTranslations('AdminAnalytics');
+  const dayLabels = DAY_KEYS.map((key) => t(`heatmap.days.${key}`));
   const maxCount = Math.max(1, ...data.map((c) => c.count));
 
   const cellMap = new Map<string, number>();
@@ -16,9 +19,9 @@ export function HourlyHeatmap({ data }: { data: HourlyHeatmapCell[] }) {
 
   return (
     <div className={styles.card}>
-      <h2 className={styles.cardTitle}>Hourly Traffic (UTC)</h2>
+      <h2 className={styles.cardTitle}>{t('heatmap.title')}</h2>
       {data.length === 0 ? (
-        <p className={styles.empty}>No traffic data</p>
+        <p className={styles.empty}>{t('heatmap.empty')}</p>
       ) : (
         <>
           <div className={styles.grid}>
@@ -29,7 +32,7 @@ export function HourlyHeatmap({ data }: { data: HourlyHeatmapCell[] }) {
               </div>
             ))}
 
-            {DAY_LABELS.map((label, day) => (
+            {dayLabels.map((label, day) => (
               <Fragment key={day}>
                 <div className={styles.dayLabel}>{label}</div>
                 {Array.from({ length: 24 }, (_, hour) => {
@@ -40,7 +43,7 @@ export function HourlyHeatmap({ data }: { data: HourlyHeatmapCell[] }) {
                       key={`${day}-${hour}`}
                       className={styles.cell}
                       style={{ opacity }}
-                      title={`${label} ${hour}:00 UTC \u2014 ${count} visit${count !== 1 ? 's' : ''}`}
+                      title={t('heatmap.cellTitle', { day: label, hour, count })}
                     />
                   );
                 })}
@@ -48,13 +51,13 @@ export function HourlyHeatmap({ data }: { data: HourlyHeatmapCell[] }) {
             ))}
           </div>
           <div className={styles.legend}>
-            <span>Less</span>
+            <span>{t('heatmap.less')}</span>
             <div className={styles.legendBar}>
               {[0.1, 0.3, 0.5, 0.7, 1.0].map((o) => (
                 <div key={o} className={styles.legendCell} style={{ opacity: o }} />
               ))}
             </div>
-            <span>More</span>
+            <span>{t('heatmap.more')}</span>
           </div>
         </>
       )}

@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { useTranslations } from 'next-intl';
 import { type QueryGroup, type GroupableQuery } from '@/lib/query-grouping';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
@@ -25,6 +26,7 @@ function formatDate(iso: string): string {
 }
 
 export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
+  const t = useTranslations('AdminQueries');
   const router = useRouter();
   const expired = group.allExpired;
   const runCount = group.queries.reduce((sum, q) => sum + q.runCount, 0);
@@ -51,8 +53,11 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
 
   const handleDelete = async () => {
     const label = `${group.origin} → ${group.destination}`;
-    const suffix = group.routeCount > 1 ? ` (${group.routeCount} charts)?` : '?';
-    if (!confirm(`Delete tracker for ${label}${suffix}`)) return;
+    const message =
+      group.routeCount > 1
+        ? t('deleteConfirmGroup', { label, count: group.routeCount })
+        : t('deleteConfirm', { label });
+    if (!confirm(message)) return;
     await fetch(`/api/admin/queries/${group.primaryId}`, {
       method: 'DELETE',
       headers: { 'Content-Type': 'application/json' },
@@ -78,10 +83,10 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
         <span className={styles.rowArrow}>→</span>
         <span className={styles.rowCode}>{group.destination}</span>
         {extraDestinations > 0 && (
-          <span className={styles.rowGroupTag}>+ {extraDestinations} more</span>
+          <span className={styles.rowGroupTag}>{t('moreDestinations', { count: extraDestinations })}</span>
         )}
         {group.routeCount > 1 && (
-          <span className={styles.rowGroupTag}>{group.routeCount} charts</span>
+          <span className={styles.rowGroupTag}>{t('charts', { count: group.routeCount })}</span>
         )}
         {primaryLabel && (
           <span className={styles.rowGroupTag}>{primaryLabel}</span>
@@ -100,9 +105,9 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
         />
         <span>{formatDate(group.dateFrom)} — {formatDate(group.dateTo)}</span>
         <span className={styles.rowSep}>·</span>
-        <span>{group.snapshotCount} snapshots</span>
+        <span>{t('snapshots', { count: group.snapshotCount })}</span>
         <span className={styles.rowSep}>·</span>
-        <span>{runCount} runs</span>
+        <span>{t('runs', { count: runCount })}</span>
       </div>
       <div className={styles.rowActions}>
         <select
@@ -110,18 +115,18 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
           value={group.scrapeInterval ?? ''}
           onChange={handleIntervalChange}
         >
-          <option value="">Follow global</option>
-          <option value={1}>Every 1h</option>
-          <option value={3}>Every 3h</option>
-          <option value={6}>Every 6h</option>
-          <option value={12}>Every 12h</option>
-          <option value={24}>Every 24h</option>
+          <option value="">{t('followGlobal')}</option>
+          <option value={1}>{t('everyHours', { hours: 1 })}</option>
+          <option value={3}>{t('everyHours', { hours: 3 })}</option>
+          <option value={6}>{t('everyHours', { hours: 6 })}</option>
+          <option value={12}>{t('everyHours', { hours: 12 })}</option>
+          <option value={24}>{t('everyHours', { hours: 24 })}</option>
         </select>
         {group.anyActive && !expired && (
           <ForceScrapeButton
             queryId={group.primaryId}
             onScraped={(result) => { if (result.accepted) router.refresh(); }}
-            ariaLabel="Refresh prices now"
+            ariaLabel={t('refreshAria')}
           />
         )}
         <button
@@ -129,13 +134,13 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
           onClick={handleToggle}
           disabled={expired}
         >
-          {expired ? 'Expired' : group.anyActive ? 'Pause' : 'Resume'}
+          {expired ? t('expired') : group.anyActive ? t('pause') : t('resume')}
         </button>
         <a href={`/q/${group.primaryId}`} className={styles.viewLink} target="_blank" rel="noopener noreferrer">
-          View
+          {t('view')}
         </a>
         <button className={styles.deleteButton} onClick={handleDelete}>
-          Delete
+          {t('delete')}
         </button>
       </div>
     </div>

@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { useTranslations } from 'next-intl';
 import Link from 'next/link';
 import styles from './InstallCommand.module.css';
 
 const COMMAND = 'curl -fsSL https://flight-finder.org/install.sh | bash';
 
 export function InstallCommand() {
+  const t = useTranslations('InstallCommand');
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
@@ -22,7 +24,7 @@ export function InstallCommand() {
         <button
           className={styles.copyButton}
           onClick={handleCopy}
-          aria-label="Copy to clipboard"
+          aria-label={t('copyToClipboard')}
         >
           {copied ? (
             <svg width="16" height="16" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -37,11 +39,10 @@ export function InstallCommand() {
         </button>
       </div>
       <p className={styles.hint}>
-        Works with Claude Code, Codex, or any LLM API key.
-        No account needed.
+        {t('hint')}
       </p>
       <Link href="/download" className={styles.desktopLink}>
-        Rather not use the terminal? Get the desktop app
+        {t('desktopLink')}
         <svg width="14" height="14" viewBox="0 0 16 16" fill="none" aria-hidden="true">
           <path d="M6 3.5 10.5 8 6 12.5" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
