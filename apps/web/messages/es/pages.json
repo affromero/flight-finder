@@ -266,6 +266,7 @@
     "settingUp": "Configurando...",
     "completeSetupAccounts": "Completar configuración y habilitar cuentas",
     "completeSetup": "Completar configuración",
-    "next": "Siguiente"
+    "next": "Siguiente",
+    "language": "Idioma"
   }
 }

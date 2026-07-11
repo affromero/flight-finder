@@ -266,6 +266,7 @@
     "settingUp": "Setting up...",
     "completeSetupAccounts": "Complete setup and enable accounts",
     "completeSetup": "Complete Setup",
-    "next": "Next"
+    "next": "Next",
+    "language": "Language"
   }
 }

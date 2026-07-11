@@ -8,6 +8,7 @@ import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { THEME_OPTIONS, getThemeMode, isThemeId, DEFAULT_THEME } from '@/lib/theme';
+import adminNamespaces from '../../messages/en/admin.json';
 
 const isSelfHosted = process.env.SELF_HOSTED === 'true';
 
@@ -125,7 +126,11 @@ export default async function RootLayout({
   const perUserScript = `window.__ftPerUserTheme = ${perUserTheme};`;
 
   const locale = await getLocale();
-  const messages = await getMessages();
+  // Admin-only namespaces stay out of the client payload on public pages;
+  // apps/web/src/app/admin/layout.tsx re-provides the full message set.
+  const messages = Object.fromEntries(
+    Object.entries(await getMessages()).filter(([namespace]) => !(namespace in adminNamespaces)),
+  );
 
   return (
     <html lang={locale} suppressHydrationWarning data-theme={theme} data-theme-mode={getThemeMode(theme)}>
