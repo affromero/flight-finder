@@ -1,4 +1,4 @@
-export const LOCALES = ['en', 'es', 'pt'] as const;
+export const LOCALES = ['en', 'es', 'pt', 'de', 'fr'] as const;
 
 export type Locale = (typeof LOCALES)[number];
 
@@ -10,6 +10,8 @@ export const LOCALE_LABELS: Record<Locale, string> = {
   en: 'English',
   es: 'Español',
   pt: 'Português',
+  de: 'Deutsch',
+  fr: 'Français',
 };
 
 export function isLocale(value: unknown): value is Locale {

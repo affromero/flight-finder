@@ -1,0 +1,378 @@
+{
+  "AggregatorPicker": {
+    "sources": "Quellen",
+    "disabledByAdmin": "Vom Admin deaktiviert"
+  },
+  "AirportCombobox": {
+    "placeholder": "Nach Stadt, Flughafen oder Code suchen",
+    "suggestions": "Vorschläge für {label}"
+  },
+  "Avatar": {
+    "fallbackLabel": "Avatar"
+  },
+  "AvatarPicker": {
+    "chooseAvatar": "Profil-Avatar wählen",
+    "initials": "Initialen"
+  },
+  "BestPrice": {
+    "bestPriceFound": "Bester gefundener Preis",
+    "nonstop": "Direktflug",
+    "stops": "{count, plural, one {# Zwischenstopp} other {# Zwischenstopps}}",
+    "bookOn": "Bei {airline} buchen"
+  },
+  "ChartActions": {
+    "copyShareableLink": "Teilbaren Link kopieren",
+    "copied": "Kopiert!",
+    "share": "Teilen",
+    "downloadCsv": "CSV herunterladen",
+    "csv": "CSV"
+  },
+  "ClarificationCard": {
+    "narrowing": "wird eingegrenzt...",
+    "historyLabel": "Verlauf der Rückfragen",
+    "you": "Du",
+    "orTypeAnswer": "Oder Antwort eintippen...",
+    "typeAnswer": "Antwort eintippen...",
+    "submitting": "Wird gesendet...",
+    "submitAnswers": "Antworten senden",
+    "startOver": "Neu beginnen"
+  },
+  "ConfirmationCard": {
+    "showAvailableFlights": "Verfügbare Flüge anzeigen",
+    "checkingGoogleFlights": "Google Flights wird geprüft...",
+    "oneWay": "Nur Hinflug",
+    "roundTrip": "Hin- und Rückflug",
+    "departure": "Abflug",
+    "outbound": "Hinflug",
+    "return": "Rückflug",
+    "travelWindow": "Reisezeitraum",
+    "flexibility": "Flexibilität",
+    "flexibilityDays": "± {days} Tage",
+    "linkExpires": "Link läuft ab",
+    "trackingInfo": "Preise täglich geprüft · Teilbares Diagramm · Verfolgung endet {date}",
+    "underPrice": "Unter {price}",
+    "nonstopOnly": "Nur Direktflüge",
+    "maxStops": "{count, plural, one {Max. # Zwischenstopp} other {Max. # Zwischenstopps}}",
+    "underHours": "Unter {hours}h",
+    "globalPriceCheck": "Globaler Preisvergleich",
+    "vpnReady": "VPN bereit",
+    "notSetUp": "Nicht eingerichtet",
+    "sidecarOffline": "Sidecar offline",
+    "vpnTeaser": "Beeinflusst dein Standort den Preis?",
+    "findOut": "Finde es heraus.",
+    "vpnNotConfigured": "VPN ist noch nicht konfiguriert. Richte ExpressVPN ein, um Preise aus verschiedenen Ländern zu vergleichen.",
+    "goToSettings": "Zu den Einstellungen",
+    "sidecarNotRunning": "Der ExpressVPN-Sidecar läuft nicht. Starte Flight Finder mit VPN-Unterstützung:",
+    "moreRegions": "+ {count} weitere Regionen",
+    "edit": "Bearbeiten"
+  },
+  "DeleteTracker": {
+    "deleteFailed": "Tracker konnte nicht gelöscht werden",
+    "networkError": "Netzwerkfehler — bitte versuche es erneut",
+    "warning": "Dieser Tracker und sein gesamter Preisverlauf werden dauerhaft gelöscht. Das lässt sich nicht rückgängig machen.",
+    "cancel": "Abbrechen",
+    "deleting": "Wird gelöscht...",
+    "confirmDelete": "Ja, löschen",
+    "stopTracking": "Verfolgung beenden"
+  },
+  "DemoGif": {
+    "alt": "Preisverlaufsdiagramme – JFK nach Paris, LAX nach Tokio, Chicago nach Rom"
+  },
+  "FlightPicker": {
+    "nonstop": "Direktflug",
+    "stops": "{count, plural, one {# Zwischenstopp} other {# Zwischenstopps}}",
+    "flightsOn": "Flüge am {date}",
+    "availableFlights": "Verfügbare Flüge",
+    "selectedCount": "{selected} von {total} ausgewählt",
+    "selectAll": "Alle auswählen",
+    "clear": "Leeren",
+    "hint": "Wähle bis zu {count} Flüge aus, um tägliche Preisänderungen zu verfolgen",
+    "creatingTrackers": "Tracker werden erstellt...",
+    "trackFlights": "{count, plural, one {# Flug verfolgen} other {# Flüge verfolgen}}",
+    "back": "Zurück",
+    "editSearch": "Suche bearbeiten"
+  },
+  "Footer": {
+    "tagline": "deine Daten, nicht ihre",
+    "explore": "Community-Daten erkunden",
+    "support": "Auf Ko-fi unterstützen"
+  },
+  "ForceScrapeButton": {
+    "tryAgain": "Versuche es in einer Minute erneut.",
+    "refreshFailed": "Aktualisierung fehlgeschlagen ({status})",
+    "networkError": "Netzwerkfehler",
+    "refreshNow": "Jetzt aktualisieren"
+  },
+  "HomeBrand": {
+    "home": "Flight Finder Startseite"
+  },
+  "InstallCommand": {
+    "copyToClipboard": "In die Zwischenablage kopieren",
+    "hint": "Funktioniert mit Claude Code, Codex oder jedem LLM-API-Key. Kein Konto nötig.",
+    "desktopLink": "Lieber ohne Terminal? Hol dir die Desktop-App"
+  },
+  "LinkBanner": {
+    "trackersCreated": "{count, plural, one {Tracker erstellt} other {# Tracker erstellt}}",
+    "copied": "Kopiert!",
+    "copy": "Kopieren",
+    "saveWarning": "{count, plural, one {Speichere diesen Link! Nur damit kommst du an deinen Tracker.} other {Speichere diese Links! Nur damit kommst du an deine Tracker.}}",
+    "deleteWarning": "{count, plural, one {Wenn du ihn nicht innerhalb von 24 Stunden öffnest, wird er automatisch gelöscht.} other {Wenn du sie nicht innerhalb von 24 Stunden öffnest, werden sie automatisch gelöscht.}}",
+    "copiedAll": "Alle kopiert!",
+    "copyAllLinks": "Alle Links kopieren",
+    "goToTracker": "Zum Tracker",
+    "done": "Fertig"
+  },
+  "ManualEntryForm": {
+    "origin": "Abflugort",
+    "originPlaceholder": "Nach Stadt, Flughafen oder Code suchen (z. B. JFK)",
+    "destination": "Ziel",
+    "destinationPlaceholder": "Nach Stadt, Flughafen oder Code suchen (z. B. CDG)",
+    "selectOrigin": "Wähle einen Abflughafen",
+    "selectDestination": "Wähle einen Zielflughafen",
+    "destinationDiffers": "Muss sich vom Abflugort unterscheiden",
+    "selectDeparture": "Wähle ein Abflugdatum",
+    "dateInPast": "Datum darf nicht in der Vergangenheit liegen",
+    "selectReturn": "Wähle ein Rückflugdatum",
+    "returnAfterDeparture": "Rückflug muss nach dem Hinflug liegen",
+    "durationRange": "Gib einen Wert zwischen 1 und 48 Stunden ein",
+    "roundTrip": "Hin- und Rückflug",
+    "oneWay": "Nur Hinflug",
+    "departure": "Abflug",
+    "return": "Rückflug",
+    "advancedOptions": "Erweiterte Optionen",
+    "flexibilityDays": "Flexibilität (Tage)",
+    "maxPrice": "Max. Preis",
+    "noLimit": "Kein Limit",
+    "timePreference": "Tageszeit",
+    "any": "Beliebig",
+    "morning": "Morgens",
+    "afternoon": "Nachmittags",
+    "evening": "Abends",
+    "redEye": "Nachtflug",
+    "cabinClass": "Kabinenklasse",
+    "economy": "Economy",
+    "premiumEconomy": "Premium Economy",
+    "business": "Business",
+    "first": "First Class",
+    "maxStops": "Max. Zwischenstopps",
+    "nonstopOnly": "Nur Direktflüge",
+    "maxOneStop": "Max. 1 Zwischenstopp",
+    "maxTwoStops": "Max. 2 Zwischenstopps",
+    "maxDuration": "Max. Reisedauer (Stunden)",
+    "currency": "Währung",
+    "autoDetect": "Automatisch erkennen",
+    "preferredAirlines": "Bevorzugte Airlines",
+    "airlinesPlaceholder": "z. B. Delta, United",
+    "showAvailableFlights": "Verfügbare Flüge anzeigen",
+    "cancel": "Abbrechen"
+  },
+  "PriceAlerts": {
+    "priceDrop": "{airline} · jetzt {current} (vorher {previous})"
+  },
+  "PriceCalendar": {
+    "title": "Günstigster Preis je Datum",
+    "cellTitle": "{date}: {price} ({airline})"
+  },
+  "PriceChart": {
+    "seatsLeft": "{count} Plätze übrig",
+    "scrapedFrom": "Abgerufen aus {country}",
+    "soldOut": "Ausverkauft",
+    "soldOutSuffix": "(ausverkauft)",
+    "cheapestFrom": "am günstigsten aus {location}",
+    "local": "Lokal",
+    "currentFilters": "Aktuelle Filter",
+    "allHistory": "Gesamter Verlauf",
+    "allCountries": "Alle Länder",
+    "countryComparison": "Ländervergleich (günstigster Preis)",
+    "localOnly": "Nur lokal",
+    "countryOnly": "Nur {country}",
+    "edited": "Bearbeitet",
+    "noPriceData": "Noch keine Preisdaten",
+    "noPriceDataHint": "Preise erscheinen nach dem ersten Abruf. Schau bald wieder vorbei.",
+    "noViewData": "Keine Preisdaten für diese Ansicht",
+    "noViewDataHint": "Wechsle die Ansicht oder warte auf den nächsten Abruf, um Preise mit den aktuellen Filtern zu sammeln."
+  },
+  "PriceHistory": {
+    "title": "Preisverlauf",
+    "local": "Lokal"
+  },
+  "PriceHistorySection": {
+    "latestCheck": "Letzte Prüfung",
+    "flightCount": "{count, plural, one {# Flug} other {# Flüge}}",
+    "airline": "Airline",
+    "times": "Zeiten",
+    "price": "Preis",
+    "change": "Änderung",
+    "stops": "Zwischenstopps",
+    "seats": "Plätze",
+    "date": "Datum",
+    "direct": "Direkt",
+    "stopCount": "{count, plural, one {# Zwischenstopp} other {# Zwischenstopps}}",
+    "soldOut": "Ausverkauft",
+    "seatsLeftShort": "{count} übrig",
+    "book": "Buchen",
+    "hideHistory": "Verlauf ausblenden",
+    "showHistory": "Gesamten Verlauf anzeigen ({count} Prüfungen)",
+    "truncation": "Angezeigt werden die letzten {shown} von {total} Prüfungen."
+  },
+  "ProfileMenu": {
+    "yourTrackers": "Deine Tracker",
+    "accountAppearance": "Konto & Design",
+    "connectDevice": "Gerät verbinden",
+    "instanceSettings": "Instanz-Einstellungen",
+    "manageHousehold": "Haushalt verwalten",
+    "adminDashboard": "Admin-Dashboard",
+    "switchUser": "Benutzer wechseln",
+    "logOut": "Abmelden"
+  },
+  "ReachGuide": {
+    "ariaLabel": "Zugriffsmethode",
+    "lan": {
+      "label": "Gleiches WLAN",
+      "badge": "http · nur lokal",
+      "blurb": "Am schnellsten eingerichtet. Erreichbar für Geräte in deinem Netzwerk. Nicht verschlüsselt, und Handys können es nicht als App installieren.",
+      "findIp": "Du siehst das gerade auf localhost, das Handys nicht erreichen können. Finde die Netzwerk-IP dieses Rechners:",
+      "openWithPort": "Öffne auf deinem Handy (gleiches WLAN) diese Adresse mit dem Port:",
+      "leaveEmpty": "Lass das Feld „Öffentliche URL“ unten für diesen Modus leer.",
+      "openExact": "Öffne genau diese Adresse auf deinem Handy (es muss im selben WLAN sein):"
+    },
+    "tailscale": {
+      "label": "Tailscale",
+      "badge": "https · privat",
+      "blurb": "Eine private, verschlüsselte URL, die nur deine eigenen Geräte erreichen. Keine öffentliche Freigabe, keine Domain nötig.",
+      "install": "Installiere Tailscale auf diesem Rechner und deinem Handy, angemeldet mit demselben Konto:",
+      "up": "Bringe diesen Rechner in dein Tailnet:",
+      "serve": "Stelle die App über HTTPS in deinem Tailnet bereit:",
+      "paste": "Tailscale gibt eine https-URL aus, die auf .ts.net endet — füge sie unten bei „Öffentliche URL“ ein."
+    },
+    "cloudflare": {
+      "label": "Cloudflare Tunnel",
+      "badge": "https · öffentlich",
+      "blurb": "Eine öffentliche https-URL. Ein Quick Tunnel ist in Sekunden ohne Konto bereit; ein benannter Tunnel gibt dir eine dauerhafte URL auf deiner Domain.",
+      "install": "Installiere cloudflared:",
+      "quick": "Schnelle, temporäre URL (ohne Konto): Starte einen Tunnel, kopiere dann die ausgegebene Adresse https://<name>.trycloudflare.com und füge sie unten ein.",
+      "permanent": "Dauerhafte URL auf deiner eigenen Domain (braucht ein kostenloses Cloudflare-Konto mit hinterlegter Domain): Melde dich an, erstelle einen benannten Tunnel, richte einen DNS-Eintrag darauf und starte ihn.",
+      "paste": "Füge deine https-URL unten bei „Öffentliche URL“ ein."
+    },
+    "domain": {
+      "label": "Eigene Domain",
+      "badge": "https · dauerhaft",
+      "blurb": "Eine dauerhafte https-URL auf deiner eigenen Domain via Caddy — Zertifikate werden automatisch ausgestellt.",
+      "dns": "Richte einen A-Record für deine (Sub-)Domain auf die öffentliche IP dieses Servers.",
+      "install": "Installiere Caddy:",
+      "caddyfile": "Erstelle ein Caddyfile:",
+      "run": "Starte Caddy — es holt automatisch ein Let's-Encrypt-Zertifikat:",
+      "paste": "Füge https://flights.example.com unten bei „Öffentliche URL“ ein."
+    }
+  },
+  "SavedTrackers": {
+    "justNow": "gerade eben",
+    "minutesAgo": "vor {count} Min.",
+    "hoursAgo": "vor {count} Std.",
+    "daysAgo": "vor {count} Tagen",
+    "confirmDelete": "{count, plural, =1 {Tracker für {route} löschen?} other {Tracker für {route} löschen ({count} Diagramme)?}}",
+    "noTrackers": "Noch keine Tracker. Suche oben nach einem Flug, um Preise zu verfolgen.",
+    "yourTrackers": "Deine Tracker",
+    "remove": "Entfernen",
+    "removeTracker": "Tracker entfernen",
+    "moreDestinations": "+ {count} weitere",
+    "charts": "{count} Diagramme",
+    "prices": "{count, plural, one {# Preis} other {# Preise}}",
+    "unavailable": "Nicht verfügbar",
+    "tracking": "Aktiv",
+    "paused": "Pausiert",
+    "expired": "Abgelaufen",
+    "refreshPrices": "Preise jetzt aktualisieren",
+    "pauseTracking": "Verfolgung pausieren",
+    "resumeTracking": "Verfolgung fortsetzen"
+  },
+  "ScrapeInterval": {
+    "checkEvery": "Prüfen alle",
+    "auto": "Auto"
+  },
+  "ScrapeStatusDot": {
+    "lastScrape": "Letzter Abruf: {status}",
+    "success": "erfolgreich",
+    "failed": "fehlgeschlagen",
+    "partial": "teilweise",
+    "inProgress": "läuft",
+    "justNow": "gerade eben",
+    "minutesAgo": "vor {count} Min.",
+    "hoursAgo": "vor {count} Std.",
+    "daysAgo": "vor {count} Tagen"
+  },
+  "SearchBar": {
+    "parseFailed": "Anfrage konnte nicht verarbeitet werden",
+    "networkError": "Netzwerkfehler – bitte versuche es erneut",
+    "beMoreSpecific": "Kannst du das genauer beschreiben?",
+    "searchTimeout": "Die Flugsuche hat zu lange gedauert. Bitte versuche es erneut.",
+    "searchFailed": "Flugsuche fehlgeschlagen",
+    "startFailed": "Flugsuche konnte nicht gestartet werden",
+    "createFailed": "Tracker konnte nicht erstellt werden",
+    "placeholder": "NYC nach Paris um den 15. Juni +/- 3 Tage",
+    "example1": "JFK nach CDG 15.–20. Juni",
+    "example2": "London nach Tokio nächsten Monat flexibel",
+    "example3": "SFO nach LAX 20. März +/- 2 Tage",
+    "tryRandomFlight": "Zufälligen Flug ausprobieren",
+    "enterManually": "Flugdaten manuell eingeben",
+    "useAiSearch": "KI-Suche verwenden",
+    "searchingGoogleFlights": "Google Flights wird durchsucht..."
+  },
+  "StackedSortControls": {
+    "sort": "Sortieren",
+    "byDate": "Nach Datum",
+    "lowestPriceFirst": "Niedrigster Preis zuerst",
+    "footnote": "{count, plural, one {# Route ans Ende gestellt — noch kein aktueller Preis.} other {# Routen ans Ende gestellt — noch kein aktueller Preis.}}"
+  },
+  "ThemePicker": {
+    "lightOrDark": "Hell oder dunkel",
+    "lightBtn": "☀ Hell",
+    "darkBtn": "☾ Dunkel",
+    "light": "Hell",
+    "dark": "Dunkel",
+    "followingDefault": "✓ Folgt dem Instanz-Standard",
+    "followDefault": "Stattdessen dem Instanz-Standard folgen"
+  },
+  "ThemeToggle": {
+    "toggleTheme": "Design umschalten"
+  },
+  "TrackerFilters": {
+    "maxPriceNegative": "Max. Preis darf nicht negativ sein.",
+    "maxStopsInvalid": "Max. Zwischenstopps muss eine ganze Zahl von 0 bis 10 sein.",
+    "maxDurationInvalid": "Max. Dauer muss eine ganze Zahl von 1 bis 48 sein.",
+    "updateFailed": "Filter konnten nicht aktualisiert werden.",
+    "networkError": "Netzwerkfehler. Bitte versuche es erneut.",
+    "filters": "Filter",
+    "maxStops": "Max. Zwischenstopps",
+    "maxPrice": "Max. Preis",
+    "maxDuration": "Max. Dauer",
+    "airlines": "Airlines",
+    "any": "Beliebig",
+    "anyAirline": "Beliebige Airline",
+    "clearFilters": "Filter zurücksetzen",
+    "cancel": "Abbrechen",
+    "saving": "Wird gespeichert...",
+    "apply": "Anwenden"
+  },
+  "TrackerLabel": {
+    "placeholder": "z. B. Paris via Skyscanner",
+    "clickToEdit": "Zum Bearbeiten klicken",
+    "addLabel": "+ Label hinzufügen"
+  },
+  "UpdateBanner": {
+    "renamed": "Umbenannt in <strong>{to}</strong>. Führe den Upgrade-Befehl aus, um deine Installation zu migrieren.",
+    "dismiss": "Ausblenden",
+    "updateAvailable": "Flight Finder <strong>v{version}</strong> ist verfügbar."
+  },
+  "UsageStats": {
+    "tracking": "Verfolgt",
+    "scrapes": "Abrufe",
+    "prices": "Preise",
+    "llmCost": "LLM-Kosten (30 Tage)",
+    "nextScrape": "Nächster Abruf {time} (alle {hours}h)",
+    "now": "jetzt",
+    "inMinutes": "in {minutes} Min.",
+    "inHours": "in {hours} Std.",
+    "inHoursMinutes": "in {hours} Std. {minutes} Min."
+  }
+}
