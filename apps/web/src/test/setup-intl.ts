@@ -8,12 +8,14 @@ import admin from '../../messages/en/admin.json';
 
 const messages = { ...common, ...components, ...pages, ...settings, ...admin };
 
+const translator = (namespace?: string) =>
+  createTranslator({ locale: 'en', messages, namespace: namespace as never });
+
 vi.mock('next-intl', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl')>();
   return {
     ...actual,
-    useTranslations: (namespace?: string) =>
-      createTranslator({ locale: 'en', messages, namespace: namespace as never }),
+    useTranslations: (namespace?: string) => translator(namespace),
     useLocale: () => 'en',
   };
 });
@@ -22,10 +24,8 @@ vi.mock('next-intl/server', async (importOriginal) => {
   const actual = await importOriginal<typeof import('next-intl/server')>();
   return {
     ...actual,
-    getTranslations: async (opts?: string | { namespace?: string }) => {
-      const namespace = typeof opts === 'string' ? opts : opts?.namespace;
-      return createTranslator({ locale: 'en', messages, namespace: namespace as never });
-    },
+    getTranslations: async (opts?: string | { namespace?: string }) =>
+      translator(typeof opts === 'string' ? opts : opts?.namespace),
     getLocale: async () => 'en',
     getMessages: async () => messages,
   };

@@ -3,8 +3,8 @@
 import { useState, useEffect, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
-import { useTranslations } from 'next-intl';
-import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, DEFAULT_LOCALE, isLocale, type Locale } from '@/i18n/locales';
+import { useTranslations, useLocale } from 'next-intl';
+import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, isLocale } from '@/i18n/locales';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
 import { ReachGuide } from '@/components/ReachGuide/ReachGuide';
@@ -62,18 +62,11 @@ export default function SettingsPage() {
   const [message, setMessage] = useState('');
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
   const [themeMessage, setThemeMessage] = useState('');
-  const [locale, setLocaleState] = useState<Locale>(DEFAULT_LOCALE);
+  const locale = useLocale();
   const router = useRouter();
-
-  useEffect(() => {
-    const match = document.cookie.match(new RegExp(`(?:^|; )${LOCALE_COOKIE}=([^;]*)`));
-    const value = match?.[1];
-    if (isLocale(value)) setLocaleState(value);
-  }, []);
 
   const changeLocale = (value: string) => {
     if (!isLocale(value)) return;
-    setLocaleState(value);
     document.cookie = `${LOCALE_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
     router.refresh();
   };
@@ -261,7 +254,7 @@ export default function SettingsPage() {
             <select
               id="language-select"
               className={styles.select}
-              value={locale}
+              defaultValue={locale}
               onChange={(e) => changeLocale(e.target.value)}
             >
               {LOCALES.map((l) => (
