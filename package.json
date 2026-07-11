@@ -21,7 +21,7 @@
   "engines": {
     "node": ">=22"
   },
-  "version": "0.13.0",
+  "version": "0.13.1",
   "dependencies": {
     "@anthropic-ai/sdk": "^0.110.0",
     "@google/generative-ai": "^0.24.1",
