@@ -63,6 +63,30 @@ jobs:
           npm install
           npm run icon
 
+      # tauri-action rewrites the release name and body when it attaches
+      # installers to an already published release (issue #173), so feed it the
+      # CHANGELOG section for this version instead of boilerplate that would
+      # clobber the notes set at release-creation time.
+      - name: Extract release notes from CHANGELOG
+        id: notes
+        shell: bash
+        run: |
+          VERSION="${GITHUB_REF_NAME#desktop-}"
+          VERSION="${VERSION#v}"
+          if ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
+            VERSION=$(node -p "require('./apps/web/package.json').version")
+          fi
+          {
+            echo "body<<NOTES_EOF"
+            awk -v ver="$VERSION" '
+              $0 ~ "^## \\[" ver "\\]" { flag=1; print; next }
+              flag && /^## \[/ { exit }
+              flag { print }
+            ' CHANGELOG.md
+            printf '\n### Desktop installers\n\nDownload the installer for your OS from the assets below, open it, and choose "Run it on this computer" or "Connect to an instance".\n'
+            echo "NOTES_EOF"
+          } >> "$GITHUB_OUTPUT"
+
       - uses: tauri-apps/tauri-action@v1.0.0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -75,10 +99,8 @@ jobs:
         with:
           projectPath: apps/desktop
           tagName: ${{ github.ref_name }}
-          releaseName: Flight Finder Desktop ${{ github.ref_name }}
-          releaseBody: |
-            Flight Finder desktop launcher. Download the installer for your OS below,
-            open it, and choose "Run it on this computer" or "Connect to an instance".
+          releaseName: ${{ github.ref_name }}
+          releaseBody: ${{ steps.notes.outputs.body }}
           releaseDraft: false
           prerelease: false
           args: ${{ matrix.args }}
