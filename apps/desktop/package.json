@@ -1,6 +1,6 @@
 {
   "name": "@flight-finder/desktop",
-  "version": "0.12.0",
+  "version": "0.13.0",
   "private": true,
   "description": "Flight Finder desktop launcher — run a self-hosted instance or connect to one, no terminal",
   "scripts": {

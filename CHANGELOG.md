@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.13.0] - 2026-07-10
+
+Editable trackers, honest prices in every currency, and provider keys managed from the admin UI.
+
+### Added
+* **Edit a running tracker in place.** Dates, stops, airlines, cabin, and price cap can be changed on an active tracker without deleting and recreating it, and the chart marks when the filters changed so price history stays interpretable. (requested by @garrynutter)
+* **Provider API keys from the admin UI.** Anthropic, OpenAI, and Google keys can be set in the admin config or the setup wizard and are stored encrypted at rest, so a key change no longer requires editing env files and restarting. (reported by @Relaxdaws)
+* Desktop app: a Restart action that recreates the stack and a visible path to the config file. (#151)
+
+### Fixed
+* **Prices now format correctly in every currency.** One Intl based formatter replaces the manual symbol table and six ad hoc code paths: ISO codes instead of the ambiguous `$`, correct grouping and decimals in each currency's own locale (a Colombian fare reads `COP 228.290`, not `$228,290`), applied across the app, notifications, community pages, and the chart. Thanks @ssantss.
+* High denomination fares (COP, JPY, VND) are no longer rejected by a price cap tuned for dollars, across search, ingest, preview, and the scraper. Thanks @ssantss.
+* Currency detection now resolves every browser locale through Intl instead of a partial region table, so regional and macro locales map to a real currency. Thanks @ssantss.
+* Follow ups to the 0.12.0 extraction report (reported by @Darth-Ness): Docker images ship `browsers.json` so the scraper can always launch Chromium, `OLLAMA_HOST` is respected inside Docker instead of being forced to localhost, extraction tolerates misspelled or aliased model output keys, and installs from before the project rename are prompted to migrate instead of silently freezing.
+
+### Changed
+* Dependency updates across web, desktop (Tauri 2.11.5), and CI actions.
+
 ## [0.12.0] - 2026-06-13
 
 Reliable price extraction across every model, a platform refresh (Next.js 16, Prisma 7), and clearer bug reports.

@@ -1,6 +1,6 @@
 [package]
 name = "flight-finder-desktop"
-version = "0.12.0"
+version = "0.13.0"
 description = "Flight Finder desktop launcher"
 authors = ["Flight Finder"]
 edition = "2021"
