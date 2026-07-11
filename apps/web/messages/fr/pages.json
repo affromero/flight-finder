@@ -266,6 +266,7 @@
     "settingUp": "Configuration...",
     "completeSetupAccounts": "Terminer la configuration et activer les comptes",
     "completeSetup": "Terminer la configuration",
-    "next": "Suivant"
+    "next": "Suivant",
+    "language": "Langue"
   }
 }

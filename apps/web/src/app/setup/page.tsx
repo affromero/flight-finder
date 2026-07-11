@@ -1,7 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
-import { useTranslations } from 'next-intl';
+import { useRouter } from 'next/navigation';
+import { useTranslations, useLocale } from 'next-intl';
+import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, isLocale } from '@/i18n/locales';
 import styles from './page.module.css';
 import { PROVIDER_METADATA, LOCAL_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
@@ -20,6 +22,15 @@ interface SetupStatus {
 
 export default function SetupPage() {
   const t = useTranslations('Setup');
+  const locale = useLocale();
+  const router = useRouter();
+  const changeLocale = (value: string) => {
+    if (!isLocale(value)) return;
+    document.cookie = `${LOCALE_COOKIE}=${value}; path=/; max-age=31536000; samesite=lax`;
+    // Soft refresh: re-renders server components with the new locale while
+    // preserving wizard state entered so far.
+    router.refresh();
+  };
   const [status, setStatus] = useState<SetupStatus | null>(null);
   const [step, setStep] = useState(0);
   const [password, setPassword] = useState('');
@@ -252,6 +263,22 @@ export default function SetupPage() {
             </>
           )}
         </div>
+
+        {step === (isSelfHosted ? 1 : 0) && (
+          <div className={styles.languageRow}>
+            <label className={styles.languageLabel} htmlFor="setup-language">{t('language')}</label>
+            <select
+              id="setup-language"
+              className={styles.languageSelect}
+              defaultValue={locale}
+              onChange={(e) => changeLocale(e.target.value)}
+            >
+              {LOCALES.map((l) => (
+                <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
+              ))}
+            </select>
+          </div>
+        )}
 
         {step === 0 && (
           <div className={styles.fields}>
