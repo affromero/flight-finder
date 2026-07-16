@@ -53,7 +53,7 @@ jobs:
         with:
           workspaces: ./apps/desktop/src-tauri -> target
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v6.4.0
         with:
           node-version: 22
 
