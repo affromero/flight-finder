@@ -17,6 +17,9 @@ on:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: affromero/flight-finder
+  # Stop docker/build-push-action uploading a *.dockerbuild record as an artifact on every run.
+  DOCKER_BUILD_RECORD_UPLOAD: false
+  DOCKER_BUILD_SUMMARY: false
 
 jobs:
   build:
