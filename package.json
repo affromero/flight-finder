@@ -23,9 +23,9 @@
   },
   "version": "0.13.1",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.110.0",
+    "@anthropic-ai/sdk": "^0.111.0",
     "@google/generative-ai": "^0.24.1",
-    "openai": "^6.45.0"
+    "openai": "^6.46.0"
   },
   "devDependencies": {
     "@copilotkit/llmock": "^1.3.1"
