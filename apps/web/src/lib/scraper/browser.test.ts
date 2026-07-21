@@ -6,22 +6,22 @@ afterEach(() => {
 });
 
 describe('buildBrowserArgs', () => {
-  it('keeps the single-process Docker workaround enabled by default', () => {
+  it('uses Chromium multi-process mode by default for native and desktop hosts', () => {
     vi.stubEnv('BROWSER_SINGLE_PROCESS', '');
-
-    const args = buildBrowserArgs();
-
-    expect(args).toContain('--single-process');
-    expect(args).toContain('--in-process-gpu');
-  });
-
-  it('uses Chromium multi-process mode when BROWSER_SINGLE_PROCESS is false', () => {
-    vi.stubEnv('BROWSER_SINGLE_PROCESS', 'false');
 
     const args = buildBrowserArgs();
 
     expect(args).not.toContain('--single-process');
     expect(args).not.toContain('--in-process-gpu');
+  });
+
+  it('enables the single-process Docker workaround when explicitly configured', () => {
+    vi.stubEnv('BROWSER_SINGLE_PROCESS', 'true');
+
+    const args = buildBrowserArgs();
+
+    expect(args).toContain('--single-process');
+    expect(args).toContain('--in-process-gpu');
     expect(args).toContain('--use-gl=angle');
     expect(args).toContain('--use-angle=swiftshader');
   });

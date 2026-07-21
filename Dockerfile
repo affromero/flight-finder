@@ -78,6 +78,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3003
 ENV HOSTNAME="0.0.0.0"
 ENV CHROME_PATH=/usr/bin/chromium-browser
+ENV BROWSER_SINGLE_PROCESS=true
 
 # CLI provider support: writable npm global prefix for node user
 # *-host dirs are read-only mount points; entrypoint copies into writable dirs
