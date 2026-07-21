@@ -89,15 +89,18 @@ export async function createStealthContext(browser: Browser, options: StealthCon
     geolocation: profile?.geolocation,
     permissions: profile?.geolocation ? ['geolocation'] : [],
     proxy,
+    // NOTE: do NOT set Sec-Fetch-* here. extraHTTPHeaders applies to *every*
+    // request, so hardcoding Sec-Fetch-Dest=document / Mode=navigate / Site=none
+    // poisons Google Flights' results XHR (which must send Mode=cors,
+    // Site=same-origin, Dest=empty). Google's backend then never resolves that
+    // fetch and the page hangs forever on "Loading results" — reproduced
+    // deterministically on MEL→TWU. Chromium already sets correct per-request
+    // Sec-Fetch-* values on its own, so overriding them adds no stealth value.
     extraHTTPHeaders: {
       'Accept-Language': profile?.acceptLanguage ?? 'en-US,en;q=0.9',
       'Accept-Encoding': 'gzip, deflate, br',
       'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8',
       'Upgrade-Insecure-Requests': '1',
-      'Sec-Fetch-Dest': 'document',
-      'Sec-Fetch-Mode': 'navigate',
-      'Sec-Fetch-Site': 'none',
-      'Sec-Fetch-User': '?1',
     },
   });
 
