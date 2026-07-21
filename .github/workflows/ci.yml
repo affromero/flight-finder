@@ -81,7 +81,7 @@ jobs:
           fi
           chmod 600 ~/.ssh/known_hosts
           STRICT_CHECKING="yes"
-          echo "Host fairtrail-prod" >> ~/.ssh/config
+          echo "Host flight-finder-staging" >> ~/.ssh/config
           echo "  HostName ${{ secrets.DEPLOY_HOST }}" >> ~/.ssh/config
           echo "  User ${{ secrets.DEPLOY_USER }}" >> ~/.ssh/config
           echo "  IdentityFile ~/.ssh/staging_key" >> ~/.ssh/config
@@ -91,7 +91,7 @@ jobs:
           echo "  TCPKeepAlive yes" >> ~/.ssh/config
       - name: Run staging tests
         env:
-          STAGING_HOST: fairtrail-prod
+          STAGING_HOST: flight-finder-staging
           # REPO_TOKEN is read from the environment by staging-test.sh; passing it
           # via env (not inline in the command) keeps it out of the process list.
           REPO_TOKEN: ${{ secrets.REPO_TOKEN }}

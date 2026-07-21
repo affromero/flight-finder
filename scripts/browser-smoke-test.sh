@@ -16,7 +16,7 @@ DIM='\033[2m'
 RESET='\033[0m'
 
 echo ""
-printf "${BOLD}Fairtrail browser smoke tests${RESET}\n"
+printf "${BOLD}Flight Finder browser smoke tests${RESET}\n"
 printf "${DIM}Target: ${BASE_URL}${RESET}\n"
 echo ""
 

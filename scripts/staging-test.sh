@@ -9,8 +9,8 @@ set -euo pipefail
 # cleans everything up. Production is never touched.
 #
 # Isolation:
-#   - Temp HOME (/tmp/fairtrail-staging-*) — no files touch ~
-#   - Unique Docker project name (fairtrail-staging-test)
+#   - Temp HOME (/tmp/flight-finder-staging-*) — no files touch ~
+#   - Unique Docker project name (flight-finder-staging-test)
 #   - Unique port (3098) — prod uses 3003
 #   - Unique volume prefix — no shared state with prod
 #   - Lock file — prevents concurrent staging runs
@@ -31,7 +31,7 @@ set -euo pipefail
 #   bash scripts/staging-test.sh --quick   # Skip image build (reuse existing)
 #
 # Secrets (env vars or GitHub Actions secrets):
-#   STAGING_HOST  — SSH config alias (default: fairtrail-prod)
+#   STAGING_HOST  — SSH config alias (default: flight-finder-staging)
 #   REPO_TOKEN    — GitHub PAT for cloning (fallback: Doppler)
 # ============================================================================
 
@@ -42,13 +42,13 @@ DIM='\033[2m'
 RESET='\033[0m'
 
 STAGING_PORT="${STAGING_PORT:-3097}"
-STAGING_PROJECT="fairtrail-staging-test"
-STAGING_HOST="${STAGING_HOST:-fairtrail-prod}"
+STAGING_PROJECT="flight-finder-staging-test"
+STAGING_HOST="${STAGING_HOST:-flight-finder-staging}"
 QUICK=false
 [[ "${1:-}" == "--quick" ]] && QUICK=true
 
 echo ""
-printf "${BOLD}Fairtrail staging test${RESET}\n"
+printf "${BOLD}Flight Finder staging test${RESET}\n"
 printf "${DIM}Target: ${STAGING_HOST}:${STAGING_PORT}${RESET}\n"
 echo ""
 
@@ -94,7 +94,7 @@ done
 echo "  Using port $STAGING_PORT"
 
 # --- Lock file to prevent concurrent staging runs ---
-LOCKFILE="/tmp/fairtrail-staging.lock"
+LOCKFILE="/tmp/flight-finder-staging.lock"
 if [ -f "$LOCKFILE" ]; then
   LOCK_PID=$(cat "$LOCKFILE" 2>/dev/null || echo "")
   if [ -n "$LOCK_PID" ] && kill -0 "$LOCK_PID" 2>/dev/null; then
@@ -121,7 +121,7 @@ cleanup() {
   [ -n "$TEST_HOME" ] && rm -rf "$TEST_HOME"
   [ -n "$REPO_DIR" ] && rm -rf "$REPO_DIR"
   # Remove staging image (save disk)
-  docker rmi fairtrail-staging:latest 2>/dev/null || true
+  docker rmi flight-finder-staging:latest 2>/dev/null || true
   # Release lock
   rm -f "$LOCKFILE"
   echo "  Done."
@@ -129,7 +129,7 @@ cleanup() {
 trap cleanup EXIT
 
 # --- Clone the branch ---
-REPO_DIR=$(mktemp -d /tmp/fairtrail-repo-XXXXXX)
+REPO_DIR=$(mktemp -d /tmp/flight-finder-repo-XXXXXX)
 git clone --depth 1 --branch "$BRANCH" \
   "https://x-access-token:${REPO_TOKEN}@github.com/affromero/flight-finder.git" \
   "$REPO_DIR" 2>&1 | tail -1
@@ -163,17 +163,17 @@ echo ""
 echo "  === Docker build ==="
 if [ "$QUICK" = "true" ]; then
   echo "  Skipping build (--quick), tagging existing image"
-  docker tag ghcr.io/affromero/flight-finder:latest fairtrail-staging:latest 2>/dev/null || \
-    docker build -t fairtrail-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
+  docker tag ghcr.io/affromero/flight-finder:latest flight-finder-staging:latest 2>/dev/null || \
+    docker build -t flight-finder-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
 else
-  docker build -t fairtrail-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
+  docker build -t flight-finder-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
 fi
 pass "Docker image built"
 
 # === Test 2: Install flow ===
 echo ""
 echo "  === Install flow ==="
-TEST_HOME=$(mktemp -d /tmp/fairtrail-staging-XXXXXX)
+TEST_HOME=$(mktemp -d /tmp/flight-finder-staging-XXXXXX)
 mkdir -p "$TEST_HOME/.local/bin"
 echo "# default" > "$TEST_HOME/.bashrc"
 echo "# default" > "$TEST_HOME/.profile"

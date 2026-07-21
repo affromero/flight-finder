@@ -42,7 +42,7 @@ if [ "$KEEP_ALIVE" = false ]; then
 fi
 
 echo ""
-printf "${BOLD}Fairtrail integration tests${RESET}\n"
+printf "${BOLD}Flight Finder integration tests${RESET}\n"
 echo ""
 
 # ── Build image (unless --no-build) ──────────────────────────────
