@@ -28,9 +28,7 @@ export interface LaunchBrowserOptions {
   proxyUrl?: string; // When set, DNS is forced through the SOCKS5 proxy
 }
 
-export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise<Browser> {
-  const { chromium } = await import('playwright');
-
+export function buildBrowserArgs(options: LaunchBrowserOptions = {}): string[] {
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -72,10 +70,16 @@ export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise
     }
   }
 
+  return args;
+}
+
+export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise<Browser> {
+  const { chromium } = await import('playwright');
+
   return chromium.launch({
     headless: true,
     executablePath: process.env.CHROME_PATH || undefined,
-    args,
+    args: buildBrowserArgs(options),
   });
 }
 
