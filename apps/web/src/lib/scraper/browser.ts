@@ -41,16 +41,25 @@ export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise
     '--disable-infobars',
     '--window-size=1440,900',
     // Docker Desktop (macOS/Windows) runs in a VM where Chromium's GPU
-    // crashes. These extra flags are safe everywhere but only needed in VMs.
-    // Always include them -- the perf cost is negligible for headless scraping.
-    '--single-process',
+    // crashes. The ANGLE/SwiftShader software-GL flags fix that and are safe
+    // everywhere, so they stay unconditional.
     '--use-gl=angle',
     '--use-angle=swiftshader',
-    '--in-process-gpu',
     // WebRTC leak prevention -- block ICE candidates from exposing real IP
     '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
     '--enforce-webrtc-ip-permission-check',
   ];
+
+  // --single-process (and its --in-process-gpu companion) were added for Docker
+  // Desktop macOS, but on a NATIVE host they make Chromium crash on heavy SPAs
+  // like Google Flights: a single renderer hiccup takes down the whole browser,
+  // surfacing as "Target page, context or browser has been closed" a few seconds
+  // into the load. Keep them ON by default so the containerized prod deployment
+  // is unchanged; a native/self-hosted run can set BROWSER_SINGLE_PROCESS=false
+  // to run the stable multi-process model.
+  if (process.env.BROWSER_SINGLE_PROCESS !== 'false') {
+    args.push('--single-process', '--in-process-gpu');
+  }
 
   // When proxying via SOCKS5, force DNS resolution through the proxy to prevent leaks.
   // Extract the proxy hostname to exclude it from the rule (it must resolve normally).
