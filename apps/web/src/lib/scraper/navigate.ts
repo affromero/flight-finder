@@ -375,15 +375,34 @@ export async function navigateGoogleFlights(
         // No consent dialog — continue
       }
 
-      // Wait for flight results — look for price elements
+      // Wait for flight results. [data-gs] is only the results *container* — it
+      // appears (empty) within ~20ms, long before Google renders priced flight
+      // rows, so gating on it alone captured the "Loading results…" shell and
+      // handed extraction a page with no prices (empty_extraction every run).
+      // Require [data-gs] AND an actual price signal (same two-criterion test as
+      // hasFlightPriceSignal, issue 65) before treating the attempt as loaded.
       let resultsFound = false;
       try {
         const selectorStart = Date.now();
         await page.waitForSelector('[data-gs]', { timeout: 15_000 });
         console.log(`[navigate] selector [data-gs] found in ${Date.now() - selectorStart}ms`);
+
+        // Container is present; now wait for prices to actually render.
+        const priceWaitStart = Date.now();
+        await page.waitForFunction(
+          (p: { mention: string; token: string; min: number }) => {
+            const text = document.body?.innerText ?? '';
+            const mentions = (text.match(new RegExp(p.mention, 'g')) || []).length;
+            if (mentions < p.min) return false;
+            return new RegExp(p.token).test(text);
+          },
+          { mention: CURRENCY_MENTION_PATTERN, token: PRICE_TOKEN_PATTERN, min: MIN_CURRENCY_MENTIONS },
+          { timeout: 15_000 }
+        );
+        console.log(`[navigate] price signal appeared in ${Date.now() - priceWaitStart}ms`);
         resultsFound = true;
       } catch {
-        console.log(`[navigate] selector [data-gs] not found after 15s`);
+        console.log(`[navigate] no priced results rendered within timeout (container may be a loading shell)`);
       }
 
       // Simulate human behavior only after results load — reduces time

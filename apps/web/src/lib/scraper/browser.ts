@@ -28,9 +28,7 @@ export interface LaunchBrowserOptions {
   proxyUrl?: string; // When set, DNS is forced through the SOCKS5 proxy
 }
 
-export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise<Browser> {
-  const { chromium } = await import('playwright');
-
+export function buildBrowserArgs(options: LaunchBrowserOptions = {}): string[] {
   const args = [
     '--no-sandbox',
     '--disable-setuid-sandbox',
@@ -41,16 +39,22 @@ export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise
     '--disable-infobars',
     '--window-size=1440,900',
     // Docker Desktop (macOS/Windows) runs in a VM where Chromium's GPU
-    // crashes. These extra flags are safe everywhere but only needed in VMs.
-    // Always include them -- the perf cost is negligible for headless scraping.
-    '--single-process',
+    // crashes. The ANGLE/SwiftShader software-GL flags fix that and are safe
+    // everywhere, so they stay unconditional.
     '--use-gl=angle',
     '--use-angle=swiftshader',
-    '--in-process-gpu',
     // WebRTC leak prevention -- block ICE candidates from exposing real IP
     '--force-webrtc-ip-handling-policy=disable_non_proxied_udp',
     '--enforce-webrtc-ip-permission-check',
   ];
+
+  // --single-process (and its --in-process-gpu companion) work around Docker
+  // Desktop GPU crashes, but can crash native Chromium on heavy SPAs such as
+  // Google Flights. Native and desktop runs use multi-process Chromium by
+  // default; the Docker image explicitly opts into the workaround.
+  if (process.env.BROWSER_SINGLE_PROCESS === 'true') {
+    args.push('--single-process', '--in-process-gpu');
+  }
 
   // When proxying via SOCKS5, force DNS resolution through the proxy to prevent leaks.
   // Extract the proxy hostname to exclude it from the rule (it must resolve normally).
@@ -63,10 +67,16 @@ export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise
     }
   }
 
+  return args;
+}
+
+export async function launchBrowser(options: LaunchBrowserOptions = {}): Promise<Browser> {
+  const { chromium } = await import('playwright');
+
   return chromium.launch({
     headless: true,
     executablePath: process.env.CHROME_PATH || undefined,
-    args,
+    args: buildBrowserArgs(options),
   });
 }
 
