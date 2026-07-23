@@ -21,7 +21,7 @@
     "@prisma/client": "^7.8.0",
     "chalk": "^5.4.0",
     "commander": "^15.0.0",
-    "ink": "^7.1.0",
+    "ink": "^7.1.1",
     "ink-select-input": "^6.0.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0"

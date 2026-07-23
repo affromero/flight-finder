@@ -13,7 +13,7 @@
     "test:coverage": "vitest run --coverage"
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.111.0",
+    "@anthropic-ai/sdk": "^0.112.1",
     "@google/generative-ai": "^0.24.1",
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
@@ -23,7 +23,7 @@
     "next": "^16.2.10",
     "next-intl": "^4.13.2",
     "nodemailer": "^9.0.3",
-    "openai": "^6.46.0",
+    "openai": "^6.47.0",
     "playwright": "^1.61.1",
     "qrcode": "^1.5.4",
     "react": "^19.2.7",
