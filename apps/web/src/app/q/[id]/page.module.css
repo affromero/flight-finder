@@ -34,8 +34,7 @@
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.75rem;
 }
 
 .route {
@@ -183,18 +182,20 @@
   text-align: center;
 }
 
-/* Footer meta (page-specific tracking info above shared Footer) */
-.footerMeta {
-  padding: 1rem 1.5rem 0;
+/* Top controls (status, check interval, filters, sources) */
+.topControls {
+  padding: 0.25rem 0 1rem;
+  border-bottom: 1px solid var(--border);
+  margin-top: -0.75rem;
 }
 
-.footerText {
+.topControlsText {
   font-size: 0.8125rem;
   color: var(--muted);
   font-family: var(--font-mono);
 }
 
-.footerRow {
+.topControlsRow {
   display: flex;
   align-items: center;
   justify-content: space-between;

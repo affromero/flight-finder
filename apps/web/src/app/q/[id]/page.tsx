@@ -460,22 +460,9 @@ export default async function ChartPage({ params }: Props) {
         </div>
       </header>
 
-      {expired ? (
-        <div className={styles.expiredNotice}>
-          <p>{t('expiredOn', { date: formatDate(groupExpiresAt) })}</p>
-          <p>{t('expiredSnapshot')}</p>
-        </div>
-      ) : null}
-
-      {isMultiRoute ? (
-        <StackedSortControls items={allQueries.map((q) => buildStackedItem(q, t))} />
-      ) : (
-        renderRouteBlock(primary, false, t)
-      )}
-
-      <div className={styles.footerMeta}>
-        <div className={styles.footerRow}>
-          <p className={styles.footerText}>
+      <div className={styles.topControls}>
+        <div className={styles.topControlsRow}>
+          <p className={styles.topControlsText}>
             <ScrapeStatusDot
               status={scrapeAggregate.status}
               error={scrapeAggregate.error}
@@ -513,6 +500,20 @@ export default async function ChartPage({ params }: Props) {
           )}
         </div>
       </div>
+
+      {expired ? (
+        <div className={styles.expiredNotice}>
+          <p>{t('expiredOn', { date: formatDate(groupExpiresAt) })}</p>
+          <p>{t('expiredSnapshot')}</p>
+        </div>
+      ) : null}
+
+      {isMultiRoute ? (
+        <StackedSortControls items={allQueries.map((q) => buildStackedItem(q, t))} />
+      ) : (
+        renderRouteBlock(primary, false, t)
+      )}
+
       <Footer />
     </main>
   );
