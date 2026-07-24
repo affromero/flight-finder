@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ParseAmbiguity, ParsedFlightQuery } from '@/lib/scraper/parse-query';
 import type { ConversationMessage } from '@/lib/clarification-types';
-import type { PreviewRunStatusPayload } from '@/lib/preview-run';
+import { PREVIEW_WALL_CLOCK_MS, type PreviewRunStatusPayload } from '@/lib/preview-run';
 import type { PriceData } from '@/lib/scraper/extract-prices';
 import { detectLocaleCurrency } from '@/lib/currency';
 import { addSavedTracker } from '@/lib/tracker-storage';
@@ -17,7 +17,7 @@ import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
 
 // "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const PREVIEW_STORAGE_KEY_BASE = 'ft-preview-run';
-const PREVIEW_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+const PREVIEW_POLL_TIMEOUT_MS = PREVIEW_WALL_CLOCK_MS + 2 * 60 * 1000;
 
 function previewStorageKey(surface: SearchSurface): string {
   return surface === 'admin' ? `${PREVIEW_STORAGE_KEY_BASE}-admin` : PREVIEW_STORAGE_KEY_BASE;

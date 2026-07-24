@@ -117,3 +117,35 @@ export function previewTooFarInFutureMessage(maxDays = PREVIEW_MAX_FUTURE_DAYS):
   const months = Math.round(maxDays / 30);
   return `Preview searches more than ${months} months out often fail on Google Flights. Pick nearer dates or fewer options.`;
 }
+
+/** Google returned the empty shell with a spinner but no price cards. */
+export function isGoogleFlightsLoadingShell(text: string, resultsFound?: boolean): boolean {
+  if (resultsFound === true) return false;
+  if (!/loading results/i.test(text)) return false;
+  // Prefer phrase + lack of price/result signal over a brittle length gate.
+  // Short shells still match; longer chrome with only the spinner phrase also matches
+  // when resultsFound is false/undefined and no price-like tokens appear early.
+  const head = text.slice(0, 4000);
+  if (/[€$£]\s?\d|\d[\d,]*(?:\.\d+)?\s*(?:USD|EUR|GBP|CAD|AUD)/i.test(head)) return false;
+  if (/\b(?:nonstop|1 stop|2 stops|\d+\s*stops?)\b/i.test(head) && /\d{1,2}:\d{2}\s*[AP]M/i.test(head)) {
+    return false;
+  }
+  return true;
+}
+
+export function googleFlightsLoadingShellMessage(origin: string, destination: string): string {
+  return `Google Flights did not return results for ${origin}→${destination} on these dates. Try a shorter stay (under ~2 weeks), nearer dates, or one outbound/return pair.`;
+}
+
+export class GoogleFlightsLoadingShellError extends Error {
+  readonly routeKey: string;
+  constructor(origin: string, destination: string) {
+    super(googleFlightsLoadingShellMessage(origin, destination));
+    this.name = 'GoogleFlightsLoadingShellError';
+    this.routeKey = `${origin}-${destination}`;
+  }
+}
+
+export function isGoogleFlightsLoadingShellError(error: unknown): error is GoogleFlightsLoadingShellError {
+  return error instanceof GoogleFlightsLoadingShellError;
+}
