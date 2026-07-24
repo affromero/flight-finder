@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.13.2] - 2026-07-24
+
+Tracker controls where you can reach them, and a scraper that waits for real prices.
+
+### Added
+* **Tracker controls above the chart.** Scrape status, check interval, filters, sources, and delete now sit directly under the route header on chart pages instead of below the chart, so tweaking a tracker no longer means scrolling past the price history. Thanks @Alien10140.
+
+### Fixed
+* **Google Flights results load reliably again.** Sec-Fetch stealth headers were leaking onto the results request and hanging the page, and the loading gate now waits for a real price signal instead of the empty results container. Native hosts also run Chromium multi process by default, ending sporadic crashes. Thanks @gwendolinw.
+* The sources picker no longer pushes chart pages wider than the screen on phones; on narrow screens it wraps as individual chips.
+* Update checks now resolve the latest web release correctly by ignoring desktop tags.
+
+### Changed
+* Dependency updates across npm and GitHub Actions.
+
 ## [0.13.1] - 2026-07-11
 
 The interface now speaks five languages.
