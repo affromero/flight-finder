@@ -2,6 +2,8 @@
   display: inline-flex;
   align-items: center;
   gap: 0.5rem;
+  max-width: 100%;
+  min-width: 0;
 }
 
 .label {
@@ -16,7 +18,8 @@
   gap: 0;
   border: 1px solid var(--border);
   border-radius: 100px;
-  overflow: hidden;
+  overflow-x: auto;
+  min-width: 0;
 }
 
 .option {
