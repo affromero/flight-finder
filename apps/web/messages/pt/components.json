@@ -64,7 +64,13 @@
     "goToSettings": "Ir para Configurações",
     "sidecarNotRunning": "O sidecar da ExpressVPN não está em execução. Inicie o Flight Finder com suporte a VPN:",
     "moreRegions": "+ {count} outras regiões",
-    "edit": "Editar"
+    "edit": "Editar",
+    "previewTaskCount": "Esta busca executa {count} consultas no Google Flights ({origins} origens × {destinations} destinos × {dates} pares de datas).",
+    "previewTaskCountWarn": "Pré-visualização grande ({count} consultas) — o Google pode limitar. Tente uma origem ou menos datas.",
+    "previewOverComboCap": "Demasiadas combinações ({count}). O limite é {cap} — reduza datas ou aeroportos.",
+    "previewFarFutureWarn": "As datas estão a mais de cerca de 4 meses — o Google Flights muitas vezes não carrega. Tente datas mais próximas.",
+    "previewFarFutureBlock": "As datas estão a mais de cerca de 9 meses — o Google Flights normalmente não devolve resultados. Escolha datas mais próximas.",
+    "previewUnequalDates": "As listas de ida e volta não coincidem. Use uma única data de ida ou volta, ou listas com o mesmo comprimento."
   },
   "DeleteTracker": {
     "deleteFailed": "Falha ao excluir o rastreador",

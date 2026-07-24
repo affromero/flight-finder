@@ -21,9 +21,13 @@ import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
 import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navigate';
 import type { Airport } from '@/lib/scraper/parse-query';
-import { expandContinuousRangeToDates } from '@/lib/scraper/scrape-dates';
+import {
+  buildPreviewDatePairs,
+  isPreviewTooFarInFuture,
+  previewTooFarInFutureMessage,
+  type PreviewDatePair,
+} from '@/lib/preview-utils';
 
-const PREVIEW_MAX_DATES = 7;
 const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
   'empty_extraction',
   'page_not_loaded',
@@ -235,6 +239,8 @@ export function buildCacheKey(
   return `preview:${hash}`;
 }
 
+export { buildPreviewDatePairs, type PreviewDatePair };
+
 export function validatePreviewPayload(
   payload: PreviewRequestPayload,
   maxCombos = 24,
@@ -269,22 +275,17 @@ export function validatePreviewPayload(
   }
 
   const combos = origins.length * destinations.length;
-  // For continuous one-way ranges (no enumerated outboundDates), expand
-  // [dateFrom, dateTo] into per-day samples capped at PREVIEW_MAX_DATES so
-  // a +/- N flex query scrapes every day of the window. Round-trip continuous
-  // preview stays single-pair to fit the combos * dates <= 24 budget; the
-  // cron path does the wider grid.
-  const datesToScrape = outboundDates ?? (isOneWay
-    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
-    : [dateFrom]);
-  const totalTasks = combos * datesToScrape.length;
+  // buildPreviewDatePairs expands one-way continuous ranges and broadcasts
+  // singleton RT legs (common LLM output). Unequal multi×multi still throws.
+  const datePairs = buildPreviewDatePairs(outboundDates, returnDates, dateFrom, dateTo, isOneWay);
+  const totalTasks = combos * datePairs.length;
 
   if (totalTasks > maxCombos) {
     throw new Error(`Too many date/route combinations (${totalTasks}). Cap is ${maxCombos} (combos x dates).`);
   }
 
-  if (returnDates && outboundDates && !isOneWay && returnDates.length !== outboundDates.length) {
-    throw new Error('Return dates must match outbound dates');
+  if (isPreviewTooFarInFuture({ dateFrom, dateTo, tripType, outboundDates, returnDates })) {
+    throw new Error(previewTooFarInFutureMessage());
   }
 
   return { origins, destinations, isOneWay };
@@ -441,8 +442,13 @@ export async function runPreview(
     apiKey: resolveApiKey(provider, config),
     costs: getModelCosts(provider, model),
   };
-  const outboundDates = payload.outboundDates;
-  const returnDates = payload.returnDates;
+  const datePairs = buildPreviewDatePairs(
+    payload.outboundDates,
+    payload.returnDates,
+    dateFrom,
+    dateTo,
+    isOneWay,
+  );
 
   const combos: Array<{ origin: Airport; destination: Airport }> = [];
   for (const origin of origins) {
@@ -451,19 +457,14 @@ export async function runPreview(
     }
   }
 
-  const datesToScrape = outboundDates ?? (isOneWay
-    ? expandContinuousRangeToDates(dateFrom, dateTo, PREVIEW_MAX_DATES)
-    : [dateFrom]);
   const tasks: Array<{ combo: { origin: Airport; destination: Airport }; outboundDate: string; returnDate: string }> = [];
 
   for (const combo of combos) {
-    for (let i = 0; i < datesToScrape.length; i++) {
-      const outboundDate = datesToScrape[i]!;
-      const resolvedReturnDate = isOneWay ? outboundDate : (returnDates?.[i] ?? dateTo);
+    for (const { outboundDate, returnDate } of datePairs) {
       tasks.push({
         combo,
         outboundDate,
-        returnDate: resolvedReturnDate,
+        returnDate,
       });
     }
   }

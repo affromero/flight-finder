@@ -378,6 +378,24 @@
   color: var(--text);
 }
 
+.previewNotices {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.previewNotice {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.previewNoticeWarn {
+  color: var(--warning);
+}
+
 @media (max-width: 480px) {
   .route {
     gap: 1rem;

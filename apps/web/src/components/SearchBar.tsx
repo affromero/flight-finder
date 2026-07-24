@@ -110,6 +110,7 @@ export function SearchBar({
   const [vpnCountries, setVpnCountries] = useState<string[]>([]);
   const [adminCurrency, setAdminCurrency] = useState<string | null>(null);
   const [maxTrackedPerRoute, setMaxTrackedPerRoute] = useState(10);
+  const [previewMaxCombos, setPreviewMaxCombos] = useState(24);
 
   const [createdTrackers, setCreatedTrackers] = useState<CreatedTracker[] | null>(null);
 
@@ -119,12 +120,23 @@ export function SearchBar({
   const [manualFormValues, setManualFormValues] = useState<ManualFormValues | null>(null);
 
   useEffect(() => {
+    fetch('/api/preview')
+      .then((r) => r.json())
+      .then((d) => {
+        if (!d.ok) return;
+        if (typeof d.data.previewMaxCombos === 'number') setPreviewMaxCombos(d.data.previewMaxCombos);
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
     fetch('/api/admin/config')
       .then((r) => r.json())
       .then((d) => {
         if (!d.ok) return;
         if (d.data.defaultCurrency) setAdminCurrency(d.data.defaultCurrency);
         if (typeof d.data.maxTrackedPerRoute === 'number') setMaxTrackedPerRoute(d.data.maxTrackedPerRoute);
+        if (typeof d.data.previewMaxCombos === 'number') setPreviewMaxCombos(d.data.previewMaxCombos);
         const searchMethod = d.data.defaultSearchMethod === 'manual' ? 'manual' : 'ai';
         setActiveSearchMethod(searchMethod);
         setManualMode(searchMethod === 'manual');
@@ -647,6 +659,7 @@ export function SearchBar({
           loading={loading}
           vpnCountries={vpnCountries}
           onVpnCountriesChange={setVpnCountries}
+          previewMaxCombos={previewMaxCombos}
         />
       )}
 

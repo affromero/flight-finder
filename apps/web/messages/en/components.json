@@ -64,7 +64,13 @@
     "goToSettings": "Go to Settings",
     "sidecarNotRunning": "ExpressVPN sidecar is not running. Start Flight Finder with VPN support:",
     "moreRegions": "+ {count} more regions",
-    "edit": "Edit"
+    "edit": "Edit",
+    "previewTaskCount": "This search runs {count} Google Flights lookups ({origins} origins × {destinations} destinations × {dates} date pairs).",
+    "previewTaskCountWarn": "Large preview ({count} lookups) — Google may throttle. Try one origin or fewer date options.",
+    "previewOverComboCap": "Too many combinations ({count}). Cap is {cap} — edit to narrow dates or airports.",
+    "previewFarFutureWarn": "Dates are more than about 4 months out — Google Flights often won't load results for some routes. Try nearer dates or one date pair.",
+    "previewFarFutureBlock": "Dates are more than about 9 months out — Google Flights usually will not return results. Pick nearer dates.",
+    "previewUnequalDates": "Outbound and return date lists don't line up. Use a single outbound or return date, or matching-length lists."
   },
   "DeleteTracker": {
     "deleteFailed": "Failed to delete tracker",

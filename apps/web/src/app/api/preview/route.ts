@@ -30,6 +30,17 @@ const PREVIEW_RUN_TTL_MS = 24 * 60 * 60 * 1000;
  */
 const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 
+/** Public, non-sensitive preview limits for client-side validation. */
+export async function GET() {
+  const config = await prisma.extractionConfig.findFirst({
+    where: { id: 'singleton' },
+    select: { previewMaxCombos: true },
+  });
+  return apiSuccess({
+    previewMaxCombos: config?.previewMaxCombos ?? 24,
+  });
+}
+
 interface PreviewRunRow {
   id: string;
   requestHash: string;

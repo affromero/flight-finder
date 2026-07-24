@@ -82,7 +82,9 @@ import {
   validatePreviewPayload,
   acquirePreviewAdmission,
   releasePreviewAdmission,
+  buildPreviewDatePairs,
 } from './preview-runner';
+import { countPreviewTasks, PREVIEW_MAX_FUTURE_DAYS, UNEQUAL_MULTI_DATE_ERROR } from './preview-utils';
 
 function makePayload(overrides: Partial<PreviewRequestPayload> = {}): PreviewRequestPayload {
   return {
@@ -394,6 +396,145 @@ describe('parsePreviewConcurrency (audit D1)', () => {
     expect(parsePreviewConcurrency('0')).toBe(3);
     expect(parsePreviewConcurrency('-5')).toBe(3);
     expect(parsePreviewConcurrency('')).toBe(3);
+  });
+});
+
+describe('buildPreviewDatePairs', () => {
+  it('broadcasts a single return date across multiple outbound dates', () => {
+    expect(
+      buildPreviewDatePairs(
+        ['2026-08-01', '2026-08-02'],
+        ['2026-08-10'],
+        '2026-08-01',
+        '2026-08-10',
+        false,
+      ),
+    ).toEqual([
+      { outboundDate: '2026-08-01', returnDate: '2026-08-10' },
+      { outboundDate: '2026-08-02', returnDate: '2026-08-10' },
+    ]);
+  });
+
+  it('broadcasts a single outbound date across multiple return dates', () => {
+    expect(
+      buildPreviewDatePairs(
+        ['2026-08-01'],
+        ['2026-08-10', '2026-08-11'],
+        '2026-08-01',
+        '2026-08-11',
+        false,
+      ),
+    ).toEqual([
+      { outboundDate: '2026-08-01', returnDate: '2026-08-10' },
+      { outboundDate: '2026-08-01', returnDate: '2026-08-11' },
+    ]);
+  });
+
+  it('pairs equal-length multi-date legs by index', () => {
+    expect(
+      buildPreviewDatePairs(
+        ['2026-08-05', '2026-08-06'],
+        ['2026-08-20', '2026-08-21'],
+        '2026-08-05',
+        '2026-08-21',
+        false,
+      ),
+    ).toEqual([
+      { outboundDate: '2026-08-05', returnDate: '2026-08-20' },
+      { outboundDate: '2026-08-06', returnDate: '2026-08-21' },
+    ]);
+  });
+
+  it('rejects unequal multi×multi date lists instead of cartesian explosion', () => {
+    expect(() =>
+      buildPreviewDatePairs(
+        ['2026-08-01', '2026-08-02'],
+        ['2026-08-10', '2026-08-11', '2026-08-12'],
+        '2026-08-01',
+        '2026-08-12',
+        false,
+      ),
+    ).toThrow(UNEQUAL_MULTI_DATE_ERROR);
+  });
+});
+
+describe('validatePreviewPayload mismatched date arrays', () => {
+  it('accepts multiple outbound dates with a single return date', () => {
+    expect(() =>
+      validatePreviewPayload(
+        makePayload({
+          tripType: 'round_trip',
+          dateFrom: '2026-08-01',
+          dateTo: '2026-08-10',
+          outboundDates: ['2026-08-01', '2026-08-02'],
+          returnDates: ['2026-08-10'],
+        }),
+      ),
+    ).not.toThrow();
+  });
+
+  it('rejects unequal multi×multi outbound/return lists', () => {
+    expect(() =>
+      validatePreviewPayload(
+        makePayload({
+          tripType: 'round_trip',
+          dateFrom: '2026-08-01',
+          dateTo: '2026-08-12',
+          outboundDates: ['2026-08-01', '2026-08-02'],
+          returnDates: ['2026-08-10', '2026-08-11', '2026-08-12'],
+        }),
+      ),
+    ).toThrow(UNEQUAL_MULTI_DATE_ERROR);
+  });
+});
+
+describe('validatePreviewPayload far-future dates', () => {
+  it(`rejects previews more than ${PREVIEW_MAX_FUTURE_DAYS} days out`, () => {
+    expect(() =>
+      validatePreviewPayload(
+        makePayload({
+          tripType: 'round_trip',
+          dateFrom: '2027-08-01',
+          dateTo: '2027-08-10',
+          outboundDates: ['2027-08-01'],
+          returnDates: ['2027-08-10'],
+        }),
+      ),
+    ).toThrow(/more than 9 months out/);
+  });
+
+  it('accepts dates inside the hard future limit', () => {
+    expect(() =>
+      validatePreviewPayload(
+        makePayload({
+          tripType: 'round_trip',
+          dateFrom: '2026-09-01',
+          dateTo: '2026-09-10',
+          outboundDates: ['2026-09-01'],
+          returnDates: ['2026-09-10'],
+        }),
+      ),
+    ).not.toThrow();
+  });
+});
+
+describe('countPreviewTasks parity with validatePreviewPayload', () => {
+  it('matches the server task count for a broadcast round-trip', () => {
+    const payload = makePayload({
+      tripType: 'round_trip',
+      dateFrom: '2026-08-01',
+      dateTo: '2026-08-10',
+      outboundDates: ['2026-08-01', '2026-08-02'],
+      returnDates: ['2026-08-10'],
+      origins: [
+        { code: 'LAX', name: 'Los Angeles' },
+        { code: 'SFO', name: 'San Francisco' },
+      ],
+      destinations: [{ code: 'YOW', name: 'Ottawa' }],
+    });
+    const count = countPreviewTasks(payload.origins.length, payload.destinations.length, payload);
+    expect(count).toBe(4);
+    expect(() => validatePreviewPayload(payload)).not.toThrow();
   });
 });
 
