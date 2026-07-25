@@ -106,7 +106,8 @@ export function daysUntilPreviewDate(date: Date, now = new Date()): number {
 }
 
 export function isPreviewTooFarInFuture(fields: PreviewDateFields, now = new Date()): boolean {
-  return daysUntilPreviewDate(farthestPreviewDate(fields), now) > PREVIEW_MAX_FUTURE_DAYS;
+  const daysUntil = daysUntilPreviewDate(farthestPreviewDate(fields), now);
+  return !Number.isFinite(daysUntil) || daysUntil > PREVIEW_MAX_FUTURE_DAYS;
 }
 
 export function isPreviewFarFutureWarn(fields: PreviewDateFields, now = new Date()): boolean {

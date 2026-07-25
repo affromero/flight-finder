@@ -84,7 +84,12 @@ import {
   releasePreviewAdmission,
   buildPreviewDatePairs,
 } from './preview-runner';
-import { countPreviewTasks, PREVIEW_MAX_FUTURE_DAYS, UNEQUAL_MULTI_DATE_ERROR } from './preview-utils';
+import {
+  countPreviewTasks,
+  isPreviewTooFarInFuture,
+  PREVIEW_MAX_FUTURE_DAYS,
+  UNEQUAL_MULTI_DATE_ERROR,
+} from './preview-utils';
 
 function makePayload(overrides: Partial<PreviewRequestPayload> = {}): PreviewRequestPayload {
   return {
@@ -489,32 +494,55 @@ describe('validatePreviewPayload mismatched date arrays', () => {
 });
 
 describe('validatePreviewPayload far-future dates', () => {
+  const dateFromNow = (days: number): string => {
+    const date = new Date();
+    date.setUTCHours(0, 0, 0, 0);
+    date.setUTCDate(date.getUTCDate() + days);
+    return date.toISOString().split('T')[0]!;
+  };
+
   it(`rejects previews more than ${PREVIEW_MAX_FUTURE_DAYS} days out`, () => {
+    const outbound = dateFromNow(PREVIEW_MAX_FUTURE_DAYS + 30);
+    const returnDate = dateFromNow(PREVIEW_MAX_FUTURE_DAYS + 39);
     expect(() =>
       validatePreviewPayload(
         makePayload({
           tripType: 'round_trip',
-          dateFrom: '2027-08-01',
-          dateTo: '2027-08-10',
-          outboundDates: ['2027-08-01'],
-          returnDates: ['2027-08-10'],
+          dateFrom: outbound,
+          dateTo: returnDate,
+          outboundDates: [outbound],
+          returnDates: [returnDate],
         }),
       ),
     ).toThrow(/more than 9 months out/);
   });
 
   it('accepts dates inside the hard future limit', () => {
+    const outbound = dateFromNow(60);
+    const returnDate = dateFromNow(69);
     expect(() =>
       validatePreviewPayload(
         makePayload({
           tripType: 'round_trip',
-          dateFrom: '2026-09-01',
-          dateTo: '2026-09-10',
-          outboundDates: ['2026-09-01'],
-          returnDates: ['2026-09-10'],
+          dateFrom: outbound,
+          dateTo: returnDate,
+          outboundDates: [outbound],
+          returnDates: [returnDate],
         }),
       ),
     ).not.toThrow();
+  });
+
+  it('rejects an unparseable date instead of bypassing the future guard', () => {
+    expect(
+      isPreviewTooFarInFuture({
+        tripType: 'one_way',
+        dateFrom: 'not-a-date',
+        dateTo: 'not-a-date',
+        outboundDates: ['not-a-date'],
+        returnDates: [],
+      }),
+    ).toBe(true);
   });
 });
 

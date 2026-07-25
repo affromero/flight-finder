@@ -65,7 +65,7 @@
     "sidecarNotRunning": "El sidecar de ExpressVPN no está en ejecución. Inicia Flight Finder con soporte de VPN:",
     "moreRegions": "+ {count} regiones más",
     "edit": "Editar",
-    "previewTaskCount": "Esta búsqueda ejecuta {count} consultas en Google Flights ({origins} orígenes × {destinations} destinos × {dates} pares de fechas).",
+    "previewTaskCount": "Esta búsqueda ejecuta {count, plural, one {# consulta en Google Flights} other {# consultas en Google Flights}} ({origins, plural, one {# origen} other {# orígenes}} × {destinations, plural, one {# destino} other {# destinos}} × {dates, plural, one {# par de fechas} other {# pares de fechas}}).",
     "previewTaskCountWarn": "Vista previa grande ({count} consultas) — Google puede limitar. Prueba un origen o menos fechas.",
     "previewOverComboCap": "Demasiadas combinaciones ({count}). El tope es {cap} — reduce fechas o aeropuertos.",
     "previewFarFutureWarn": "Las fechas están a más de unos 4 meses — Google Flights a menudo no carga resultados. Prueba fechas más cercanas.",

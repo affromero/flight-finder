@@ -65,7 +65,7 @@
     "sidecarNotRunning": "ExpressVPN sidecar is not running. Start Flight Finder with VPN support:",
     "moreRegions": "+ {count} more regions",
     "edit": "Edit",
-    "previewTaskCount": "This search runs {count} Google Flights lookups ({origins} origins × {destinations} destinations × {dates} date pairs).",
+    "previewTaskCount": "This search runs {count, plural, one {# Google Flights lookup} other {# Google Flights lookups}} ({origins, plural, one {# origin} other {# origins}} × {destinations, plural, one {# destination} other {# destinations}} × {dates, plural, one {# date pair} other {# date pairs}}).",
     "previewTaskCountWarn": "Large preview ({count} lookups) — Google may throttle. Try one origin or fewer date options.",
     "previewOverComboCap": "Too many combinations ({count}). Cap is {cap} — edit to narrow dates or airports.",
     "previewFarFutureWarn": "Dates are more than about 4 months out — Google Flights often won't load results for some routes. Try nearer dates or one date pair.",
