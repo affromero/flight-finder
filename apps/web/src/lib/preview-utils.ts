@@ -127,7 +127,13 @@ export function isGoogleFlightsLoadingShell(text: string, resultsFound?: boolean
   // Short shells still match; longer chrome with only the spinner phrase also matches
   // when resultsFound is false/undefined and no price-like tokens appear early.
   const head = text.slice(0, 4000);
-  if (/[€$£]\s?\d|\d[\d,]*(?:\.\d+)?\s*(?:USD|EUR|GBP|CAD|AUD)/i.test(head)) return false;
+  if (
+    /(?:[€$£¥₹₩₱₽]|R\$)\s?\d|\d[\d,.\u00a0 ]*\s*(?:USD|EUR|GBP|CAD|AUD|JPY|CNY|SEK|NOK|DKK|INR|KRW|BRL|MXN|NZD|CHF|SGD|HKD)\b/i.test(
+      head,
+    )
+  ) {
+    return false;
+  }
   if (/\b(?:nonstop|1 stop|2 stops|\d+\s*stops?)\b/i.test(head) && /\d{1,2}:\d{2}\s*[AP]M/i.test(head)) {
     return false;
   }

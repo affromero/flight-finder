@@ -17,6 +17,11 @@ describe('isGoogleFlightsLoadingShell', () => {
     expect(isGoogleFlightsLoadingShell('Loading results… from $499 round trip')).toBe(false);
   });
 
+  it('recognizes price signals from non-Western currencies', () => {
+    expect(isGoogleFlightsLoadingShell('Loading results… from ¥49,900 round trip')).toBe(false);
+    expect(isGoogleFlightsLoadingShell('Loading results… from 4 990 NOK round trip')).toBe(false);
+  });
+
   it('returns true for long chrome that only mentions Loading results', () => {
     const chrome = `${'x'.repeat(3500)}Loading results${'y'.repeat(500)}`;
     expect(isGoogleFlightsLoadingShell(chrome)).toBe(true);

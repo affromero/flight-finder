@@ -17,6 +17,9 @@ import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
 
 // "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const PREVIEW_STORAGE_KEY_BASE = 'ft-preview-run';
+// This is an inactivity cutoff, not a hard runtime cap. A successful active
+// status response renews the timestamp so an in-flight final task cannot make
+// the client give up while the server is still healthy.
 const PREVIEW_POLL_TIMEOUT_MS = PREVIEW_WALL_CLOCK_MS + 2 * 60 * 1000;
 
 function previewStorageKey(surface: SearchSurface): string {
@@ -264,6 +267,15 @@ export function SearchBar({
           setPreviewRunId(null);
           clearSavedPreview(storageKey);
           return;
+        }
+
+        // The server can finish a task that started just before its 12-minute
+        // scheduling deadline. Keep the client attached while status polling
+        // confirms that run is still active; the cutoff remains effective for
+        // sustained network failures and abandoned saved runs.
+        const saved = readSavedPreview(storageKey);
+        if (saved) {
+          writeSavedPreview(storageKey, { ...saved, startedAt: Date.now() });
         }
 
         if (checkCutoff()) return;

@@ -312,6 +312,7 @@ async function scrapeGoogleOneWayLeg(
   inputTokens: number;
   outputTokens: number;
 }> {
+  const startedAt = Date.now();
   const searchParams = {
     origin,
     destination,
@@ -349,15 +350,31 @@ async function scrapeGoogleOneWayLeg(
     },
   );
 
+  const { provider, model, costs } = params.context;
+  const inputTokens = usage.inputTokens;
+  const outputTokens = usage.outputTokens;
+  const cost = (inputTokens / 1000) * costs.costPer1kInput + (outputTokens / 1000) * costs.costPer1kOutput;
+  await prisma.apiUsageLog.create({
+    data: {
+      provider,
+      model,
+      inputTokens,
+      outputTokens,
+      costUsd: cost,
+      operation: 'preview-flights',
+      durationMs: Date.now() - startedAt,
+    },
+  });
+
   if (failureReason === 'page_not_loaded' && isGoogleFlightsLoadingShell(nav.html, nav.resultsFound)) {
-    throw new GoogleFlightsLoadingShellError(origin, destination);
+    throw new GoogleFlightsLoadingShellError(params.origin, params.destination);
   }
 
   return {
     prices,
     failureReason,
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
+    inputTokens,
+    outputTokens,
   };
 }
 
@@ -370,28 +387,11 @@ async function scrapeGoogleOneWayLeg(
 async function scrapeLongStaySplitOneWays(params: ScrapeRouteParams): Promise<PriceData[]> {
   const { origin, destination, dateFrom, dateTo, dateFromStr } = params;
   const dateToStr = dateTo.toISOString().split('T')[0]!;
-  const { provider, model, costs } = params.context;
 
   console.log(`[preview] ${origin}->${destination} using split one-way scrape for long stay (${dateFromStr} / ${dateToStr})`);
 
   const outbound = await scrapeGoogleOneWayLeg(params, origin, destination, dateFrom, dateFromStr);
   const inbound = await scrapeGoogleOneWayLeg(params, destination, origin, dateTo, dateToStr);
-
-  const inputTokens = outbound.inputTokens + inbound.inputTokens;
-  const outputTokens = outbound.outputTokens + inbound.outputTokens;
-  const cost = (inputTokens / 1000) * costs.costPer1kInput + (outputTokens / 1000) * costs.costPer1kOutput;
-
-  await prisma.apiUsageLog.create({
-    data: {
-      provider,
-      model,
-      inputTokens,
-      outputTokens,
-      costUsd: cost,
-      operation: 'preview-flights',
-      durationMs: 0,
-    },
-  });
 
   if (outbound.failureReason || outbound.prices.length === 0) {
     throw new Error(`Could not load outbound flights for ${origin}→${destination}`);
