@@ -3,6 +3,7 @@ import type { Prisma } from '@/generated/prisma/client';
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { cached } from '@/lib/redis';
 import { getClientIp } from '@/lib/trusted-ip';
 import {
   ACTIVE_PREVIEW_STATUSES,
@@ -32,13 +33,18 @@ const HEARTBEAT_INTERVAL_MS = 60 * 1000;
 
 /** Public, non-sensitive preview limits for client-side validation. */
 export async function GET() {
-  const config = await prisma.extractionConfig.findFirst({
-    where: { id: 'singleton' },
-    select: { previewMaxCombos: true },
-  });
-  return apiSuccess({
-    previewMaxCombos: config?.previewMaxCombos ?? 24,
-  });
+  const config = await cached(
+    'preview:public-config',
+    async () => {
+      const stored = await prisma.extractionConfig.findFirst({
+        where: { id: 'singleton' },
+        select: { previewMaxCombos: true },
+      });
+      return { previewMaxCombos: stored?.previewMaxCombos ?? 24 };
+    },
+    300,
+  );
+  return apiSuccess(config);
 }
 
 interface PreviewRunRow {
