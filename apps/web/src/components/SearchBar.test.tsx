@@ -79,6 +79,12 @@ describe('SearchBar preview polling', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/admin/config') return configResponse();
+      if (url === '/api/preview') {
+        return new Response(JSON.stringify({ ok: true, data: { previewMaxCombos: 24 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (url.includes('/api/preview/')) {
         return previewResponse({
           id: PREVIEW_RUN_ID,
@@ -116,6 +122,12 @@ describe('SearchBar preview polling', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/admin/config') return configResponse();
+      if (url === '/api/preview') {
+        return new Response(JSON.stringify({ ok: true, data: { previewMaxCombos: 24 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (url.includes('/api/preview/')) {
         return previewResponse({
           id: PREVIEW_RUN_ID,
@@ -146,6 +158,12 @@ describe('SearchBar preview polling', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/admin/config') return configResponse();
+      if (url === '/api/preview') {
+        return new Response(JSON.stringify({ ok: true, data: { previewMaxCombos: 24 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (url.includes('/api/preview/')) {
         return previewResponse({
           id: PREVIEW_RUN_ID,
@@ -172,6 +190,12 @@ describe('SearchBar preview polling', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/admin/config') return configResponse();
+      if (url === '/api/preview') {
+        return new Response(JSON.stringify({ ok: true, data: { previewMaxCombos: 24 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (url.includes('/api/preview/')) {
         return previewResponse({
           id: PREVIEW_RUN_ID,
@@ -208,6 +232,12 @@ describe('SearchBar preview polling', () => {
     const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
       const url = typeof input === 'string' ? input : input.toString();
       if (url === '/api/admin/config') return configResponse();
+      if (url === '/api/preview') {
+        return new Response(JSON.stringify({ ok: true, data: { previewMaxCombos: 24 } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       if (url.includes('/api/preview/')) {
         // Throw to land in the SearchBar poll's catch branch.
         throw new Error('network down');

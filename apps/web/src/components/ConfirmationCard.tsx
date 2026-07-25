@@ -4,6 +4,14 @@ import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import type { Airport } from '@/lib/scraper/parse-query';
 import { formatCurrency } from '@/lib/currency';
+import {
+  buildPreviewDatePairs,
+  countPreviewTasks,
+  isPreviewFarFutureWarn,
+  isPreviewTooFarInFuture,
+  PREVIEW_COMBO_WARN_THRESHOLD,
+  UNEQUAL_MULTI_DATE_ERROR,
+} from '@/lib/preview-utils';
 import styles from './ConfirmationCard.module.css';
 
 export interface ParsedQuery {
@@ -89,6 +97,7 @@ export function ConfirmationCard({
   loadingLabel,
   vpnCountries,
   onVpnCountriesChange,
+  previewMaxCombos = 24,
 }: {
   parsed: ParsedQuery;
   onTrack: () => void;
@@ -98,6 +107,7 @@ export function ConfirmationCard({
   loadingLabel?: string;
   vpnCountries?: string[];
   onVpnCountriesChange?: (countries: string[]) => void;
+  previewMaxCombos?: number;
 }) {
   const t = useTranslations('ConfirmationCard');
   const [vpnOpen, setVpnOpen] = useState(false);
@@ -120,6 +130,34 @@ export function ConfirmationCard({
       onVpnCountriesChange([...vpnCountries, code]);
     }
   };
+
+  let previewTaskCount = 0;
+  let previewDatePairCount = 0;
+  let unequalDateError = false;
+  try {
+    previewTaskCount = countPreviewTasks(parsed.origins.length, parsed.destinations.length, parsed);
+    previewDatePairCount = buildPreviewDatePairs(
+      parsed.outboundDates,
+      parsed.returnDates,
+      parsed.dateFrom,
+      parsed.dateTo,
+      parsed.tripType === 'one_way',
+    ).length;
+  } catch (error) {
+    unequalDateError = error instanceof Error && error.message === UNEQUAL_MULTI_DATE_ERROR;
+  }
+  const showComboWarn = previewTaskCount >= PREVIEW_COMBO_WARN_THRESHOLD;
+  const showFarFutureWarn = !unequalDateError && isPreviewFarFutureWarn(parsed);
+  const overFarFuture = !unequalDateError && isPreviewTooFarInFuture(parsed);
+  const overComboCap = previewTaskCount > previewMaxCombos;
+  const blockTrack = unequalDateError || overComboCap || overFarFuture;
+  const showNotices =
+    unequalDateError ||
+    previewTaskCount > 1 ||
+    showComboWarn ||
+    showFarFutureWarn ||
+    overFarFuture ||
+    overComboCap;
 
   return (
     <div className={styles.root}>
@@ -320,11 +358,51 @@ export function ConfirmationCard({
         </div>
       )}
 
+      {(showNotices) && (
+        <div className={styles.previewNotices}>
+          {unequalDateError && (
+            <p className={`${styles.previewNotice} ${styles.previewNoticeWarn}`}>
+              {t('previewUnequalDates')}
+            </p>
+          )}
+          {!unequalDateError && previewTaskCount > 1 && (
+            <p className={styles.previewNotice}>
+              {t('previewTaskCount', {
+                count: previewTaskCount,
+                origins: parsed.origins.length,
+                destinations: parsed.destinations.length,
+                dates: previewDatePairCount,
+              })}
+            </p>
+          )}
+          {showComboWarn && !overComboCap && (
+            <p className={`${styles.previewNotice} ${styles.previewNoticeWarn}`}>
+              {t('previewTaskCountWarn', { count: previewTaskCount })}
+            </p>
+          )}
+          {overComboCap && (
+            <p className={`${styles.previewNotice} ${styles.previewNoticeWarn}`}>
+              {t('previewOverComboCap', { count: previewTaskCount, cap: previewMaxCombos })}
+            </p>
+          )}
+          {overFarFuture && (
+            <p className={`${styles.previewNotice} ${styles.previewNoticeWarn}`}>
+              {t('previewFarFutureBlock')}
+            </p>
+          )}
+          {showFarFutureWarn && !overFarFuture && (
+            <p className={`${styles.previewNotice} ${styles.previewNoticeWarn}`}>
+              {t('previewFarFutureWarn')}
+            </p>
+          )}
+        </div>
+      )}
+
       <div className={styles.actions}>
         <button
           className={styles.trackButton}
           onClick={onTrack}
-          disabled={loading}
+          disabled={loading || blockTrack}
         >
           {loading ? loadingLabel ?? t('checkingGoogleFlights') : actionLabel ?? t('showAvailableFlights')}
         </button>
