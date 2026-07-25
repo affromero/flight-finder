@@ -566,6 +566,70 @@ describe('countPreviewTasks parity with validatePreviewPayload', () => {
   });
 });
 
+describe('runPreview long-stay split one-way failures', () => {
+  it('keeps return-shell errors on the canonical route and logs both extracted legs', async () => {
+    mockExtractionConfigFindFirst.mockResolvedValue({
+      id: 'singleton',
+      provider: 'anthropic',
+      model: 'claude-haiku-4-5-20251001',
+      defaultCurrency: 'USD',
+      previewConcurrency: 1,
+    });
+    mockNavigateGoogleFlights
+      .mockResolvedValueOnce({
+        html: '<html>outbound results</html>',
+        url: 'https://google.com/flights/outbound',
+        source: 'google_flights',
+        resultsFound: true,
+      })
+      .mockResolvedValueOnce({
+        html: '<html>Loading results…</html>',
+        url: 'https://google.com/flights/return',
+        source: 'google_flights',
+        resultsFound: false,
+      });
+    mockExtractPrices
+      .mockResolvedValueOnce({
+        prices: [priceData('AA', 250)],
+        usage: { inputTokens: 100, outputTokens: 50 },
+        failureReason: undefined,
+      })
+      .mockResolvedValueOnce({
+        prices: [],
+        usage: { inputTokens: 80, outputTokens: 20 },
+        failureReason: 'page_not_loaded',
+      });
+
+    await expect(
+      runPreview(
+        makePayload({
+          tripType: 'round_trip',
+          dateFrom: '2026-08-01',
+          dateTo: '2026-09-01',
+          outboundDates: ['2026-08-01', '2026-08-02'],
+          returnDates: ['2026-09-01'],
+          origins: [{ code: 'LAX', name: 'Los Angeles' }],
+          destinations: [{ code: 'YOW', name: 'Ottawa' }],
+        }),
+        { concurrency: 1 },
+      ),
+    ).rejects.toThrow('LAX→YOW');
+
+    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(2);
+    expect(mockApiUsageLogCreate).toHaveBeenCalledTimes(2);
+    expect(mockApiUsageLogCreate).toHaveBeenNthCalledWith(
+      2,
+      expect.objectContaining({
+        data: expect.objectContaining({
+          inputTokens: 80,
+          outputTokens: 20,
+          durationMs: expect.any(Number),
+        }),
+      }),
+    );
+  });
+});
+
 describe('validatePreviewPayload combo cap (issue #89, configurable)', () => {
   // 5 origins x 6 destinations x 1 date = 30 combos.
   const wideFlexPayload = makePayload({

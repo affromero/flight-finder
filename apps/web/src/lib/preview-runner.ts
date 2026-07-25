@@ -11,6 +11,8 @@ import { prisma } from '@/lib/prisma';
 import { cached, redis } from '@/lib/redis';
 import {
   PREVIEW_ACTIVE_TIMEOUT_MS,
+  PREVIEW_WALL_CLOCK_MS,
+  PREVIEW_WALL_CLOCK_ERROR,
   type PreviewRequestPayload,
   type PreviewResultPayload,
   type RouteResultPayload,
@@ -23,6 +25,10 @@ import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navi
 import type { Airport } from '@/lib/scraper/parse-query';
 import {
   buildPreviewDatePairs,
+  GoogleFlightsLoadingShellError,
+  googleFlightsLoadingShellMessage,
+  isGoogleFlightsLoadingShell,
+  isGoogleFlightsLoadingShellError,
   isPreviewTooFarInFuture,
   previewTooFarInFutureMessage,
   type PreviewDatePair,
@@ -38,6 +44,9 @@ const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
 const MAX_ATTEMPTS = 2;
 const DEBUG_DIR = '/tmp/flight-finder-debug';
 const PREVIEW_MAX_RESULTS = 20;
+/** Google Flights round-trip phrase URLs hang on "Loading results" past this stay length. */
+const GOOGLE_RT_LONG_STAY_DAYS = 14;
+const MS_PER_DAY = 1000 * 60 * 60 * 24;
 
 /**
  * Default max concurrent scrapeRoute calls. Each scrapeRoute launches a
@@ -291,8 +300,129 @@ export function validatePreviewPayload(
   return { origins, destinations, isOneWay };
 }
 
+async function scrapeGoogleOneWayLeg(
+  params: ScrapeRouteParams,
+  origin: string,
+  destination: string,
+  travelDate: Date,
+  travelDateStr: string,
+): Promise<{
+  prices: PriceData[];
+  failureReason?: ExtractionFailureReason;
+  inputTokens: number;
+  outputTokens: number;
+}> {
+  const startedAt = Date.now();
+  const searchParams = {
+    origin,
+    destination,
+    dateFrom: travelDate,
+    dateTo: travelDate,
+    cabinClass: params.cabinClass,
+    tripType: 'one_way' as const,
+    currency: params.currency,
+  };
+  const filters = {
+    maxPrice: params.maxPrice,
+    maxStops: params.maxStops,
+    maxDurationHours: params.maxDurationHours,
+    preferredAirlines: params.preferredAirlines,
+    timePreference: params.timePreference,
+    cabinClass: params.cabinClass,
+  };
+
+  const nav = await navigateGoogleFlights(searchParams);
+  const { prices, usage, failureReason } = await extractPrices(
+    nav.html,
+    nav.url,
+    travelDateStr,
+    filters,
+    PREVIEW_MAX_RESULTS,
+    nav.resultsFound,
+    nav.source,
+    params.currency,
+    {
+      provider: params.context.provider,
+      model: params.context.model,
+      customBaseUrl: params.context.customBaseUrl,
+      extractTimeoutSeconds: params.context.extractTimeoutSeconds,
+      apiKey: params.context.apiKey,
+    },
+  );
+
+  const { provider, model, costs } = params.context;
+  const inputTokens = usage.inputTokens;
+  const outputTokens = usage.outputTokens;
+  const cost = (inputTokens / 1000) * costs.costPer1kInput + (outputTokens / 1000) * costs.costPer1kOutput;
+  await prisma.apiUsageLog.create({
+    data: {
+      provider,
+      model,
+      inputTokens,
+      outputTokens,
+      costUsd: cost,
+      operation: 'preview-flights',
+      durationMs: Date.now() - startedAt,
+    },
+  });
+
+  if (failureReason === 'page_not_loaded' && isGoogleFlightsLoadingShell(nav.html, nav.resultsFound)) {
+    throw new GoogleFlightsLoadingShellError(params.origin, params.destination);
+  }
+
+  return {
+    prices,
+    failureReason,
+    inputTokens,
+    outputTokens,
+  };
+}
+
+/**
+ * Google Flights round-trip phrase URLs hang forever on stays longer than
+ * ~14 days. One-way legs for the same dates still load, so we scrape outbound
+ * + return separately and sum the cheapest return into each outbound option
+ * as an approximate round-trip total.
+ */
+async function scrapeLongStaySplitOneWays(params: ScrapeRouteParams): Promise<PriceData[]> {
+  const { origin, destination, dateFrom, dateTo, dateFromStr } = params;
+  const dateToStr = dateTo.toISOString().split('T')[0]!;
+
+  console.log(`[preview] ${origin}->${destination} using split one-way scrape for long stay (${dateFromStr} / ${dateToStr})`);
+
+  const outbound = await scrapeGoogleOneWayLeg(params, origin, destination, dateFrom, dateFromStr);
+  const inbound = await scrapeGoogleOneWayLeg(params, destination, origin, dateTo, dateToStr);
+
+  if (outbound.failureReason || outbound.prices.length === 0) {
+    throw new Error(`Could not load outbound flights for ${origin}→${destination}`);
+  }
+  if (inbound.failureReason || inbound.prices.length === 0) {
+    throw new Error(`Could not load return flights for ${destination}→${origin}`);
+  }
+
+  const cheapestReturn = Math.min(...inbound.prices.map((f) => f.price));
+  const returnAirline = inbound.prices.find((f) => f.price === cheapestReturn)?.airline ?? 'return';
+  // Booking URL is outbound-only; OW+OW totals are approximate (true RT may differ).
+  const combined = outbound.prices.map((flight) => ({
+    ...flight,
+    price: flight.price + cheapestReturn,
+    airline: `${flight.airline} + ${returnAirline} (approx OW+OW)`,
+  }));
+
+  console.log(
+    `[preview] ${origin}->${destination} OK via split one-ways - ${combined.length} options (cheapest return $${cheapestReturn})`,
+  );
+  return combined;
+}
+
 async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
   const { origin, destination, dateFrom, dateTo, dateFromStr, cabinClass, tripType } = params;
+
+  const stayDays = Math.round((dateTo.getTime() - dateFrom.getTime()) / MS_PER_DAY);
+  const isLongStayRoundTrip = tripType !== 'one_way' && stayDays > GOOGLE_RT_LONG_STAY_DAYS;
+  if (isLongStayRoundTrip) {
+    return scrapeLongStaySplitOneWays(params);
+  }
 
   const searchParams = { origin, destination, dateFrom, dateTo, cabinClass, tripType, currency: params.currency };
   const airlines = params.preferredAirlines;
@@ -312,6 +442,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
   let totalOutputTokens = 0;
   let lastFailureReason: ExtractionFailureReason | undefined;
   let lastSource = 'google_flights';
+  let hitLoadingShell = false;
 
   for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
     console.log(`[preview] ${origin}->${destination} attempt ${attempt}/${MAX_ATTEMPTS}`);
@@ -372,6 +503,12 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
 
     lastFailureReason = failureReason;
 
+    if (failureReason === 'page_not_loaded' && isGoogleFlightsLoadingShell(nav.html, nav.resultsFound)) {
+      hitLoadingShell = true;
+      console.log(`[preview] ${origin}->${destination} stuck on Google loading shell — trying split one-way fallback`);
+      break;
+    }
+
     try {
       await mkdir(DEBUG_DIR, { recursive: true });
       const ts = new Date().toISOString().replace(/[:.]/g, '-');
@@ -394,6 +531,12 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     }
   }
 
+  // Loading-shell on a shorter RT (or edge-case long stay that slipped past
+  // the proactive path): split into one-ways before surfacing an error.
+  if (hitLoadingShell && tripType !== 'one_way') {
+    return scrapeLongStaySplitOneWays(params);
+  }
+
   const totalCost =
     (totalInputTokens / 1000) * costs.costPer1kInput +
     (totalOutputTokens / 1000) * costs.costPer1kOutput;
@@ -410,6 +553,10 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
       error: `[${lastFailureReason}] ${origin} -> ${destination}`,
     },
   });
+
+  if (hitLoadingShell && lastFailureReason === 'page_not_loaded') {
+    throw new GoogleFlightsLoadingShellError(origin, destination);
+  }
 
   const sourceName = lastSource === 'airline_direct' ? 'The airline website' : 'Google Flights';
   const messages: Record<string, string> = {
@@ -471,10 +618,34 @@ export async function runPreview(
 
   const routes: RouteResult[] = new Array(tasks.length);
   let nextIndex = 0;
+  const loadingShellRoutes = new Set<string>();
 
   const runOne = async (taskIndex: number): Promise<void> => {
     const task = tasks[taskIndex]!;
     const { combo, outboundDate, returnDate } = task;
+    const routeKey = `${combo.origin.code}-${combo.destination.code}`;
+
+    if (loadingShellRoutes.has(routeKey)) {
+      routes[taskIndex] = {
+        origin: combo.origin.code,
+        originName: combo.origin.name,
+        destination: combo.destination.code,
+        destinationName: combo.destination.name,
+        flights: [],
+        date: outboundDate,
+        returnDate,
+        error: googleFlightsLoadingShellMessage(combo.origin.code, combo.destination.code),
+      };
+      if (options.onTaskComplete) {
+        try {
+          await options.onTaskComplete();
+        } catch (callbackError) {
+          console.error('[preview] onTaskComplete callback threw', callbackError);
+        }
+      }
+      return;
+    }
+
     const taskFrom = new Date(outboundDate + 'T00:00:00Z');
     const taskTo = new Date(returnDate + 'T00:00:00Z');
     const cacheKey = buildCacheKey(
@@ -518,6 +689,9 @@ export async function runPreview(
         returnDate,
       };
     } catch (error) {
+      if (isGoogleFlightsLoadingShellError(error)) {
+        loadingShellRoutes.add(error.routeKey);
+      }
       routes[taskIndex] = {
         origin: combo.origin.code,
         originName: combo.origin.name,
@@ -544,8 +718,10 @@ export async function runPreview(
   // matches input task order regardless of which worker finishes first.
   // JS is single threaded, so nextIndex++ is atomic.
   const concurrency = Math.max(1, Math.min(options.concurrency ?? PREVIEW_CONCURRENCY, tasks.length));
+  const deadline = Date.now() + PREVIEW_WALL_CLOCK_MS;
   const worker = async () => {
     while (true) {
+      if (Date.now() >= deadline) return;
       const taskIndex = nextIndex++;
       if (taskIndex >= tasks.length) return;
       await runOne(taskIndex);
@@ -553,7 +729,26 @@ export async function runPreview(
   };
   await Promise.all(Array.from({ length: concurrency }, worker));
 
-  if (!routes.some((route) => route.flights.length > 0)) {
+  for (let i = 0; i < routes.length; i++) {
+    if (routes[i]) continue;
+    const task = tasks[i]!;
+    routes[i] = {
+      origin: task.combo.origin.code,
+      originName: task.combo.origin.name,
+      destination: task.combo.destination.code,
+      destinationName: task.combo.destination.name,
+      flights: [],
+      date: task.outboundDate,
+      returnDate: task.returnDate,
+      error: PREVIEW_WALL_CLOCK_ERROR,
+    };
+  }
+
+  if (Date.now() >= deadline && !routes.some((route) => (route?.flights?.length ?? 0) > 0)) {
+    throw new Error(PREVIEW_WALL_CLOCK_ERROR);
+  }
+
+  if (!routes.some((route) => (route?.flights?.length ?? 0) > 0)) {
     const firstError = routes.find((route) => route.error)?.error ?? 'No flights found for any route';
     throw new Error(firstError);
   }

@@ -4,7 +4,7 @@ import { useState, useCallback, useRef, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ParseAmbiguity, ParsedFlightQuery } from '@/lib/scraper/parse-query';
 import type { ConversationMessage } from '@/lib/clarification-types';
-import type { PreviewRunStatusPayload } from '@/lib/preview-run';
+import { PREVIEW_WALL_CLOCK_MS, type PreviewRunStatusPayload } from '@/lib/preview-run';
 import type { PriceData } from '@/lib/scraper/extract-prices';
 import { detectLocaleCurrency } from '@/lib/currency';
 import { addSavedTracker } from '@/lib/tracker-storage';
@@ -17,7 +17,10 @@ import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
 
 // "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const PREVIEW_STORAGE_KEY_BASE = 'ft-preview-run';
-const PREVIEW_POLL_TIMEOUT_MS = 30 * 60 * 1000;
+// This is an inactivity cutoff, not a hard runtime cap. A successful active
+// status response renews the timestamp so an in-flight final task cannot make
+// the client give up while the server is still healthy.
+const PREVIEW_POLL_TIMEOUT_MS = PREVIEW_WALL_CLOCK_MS + 2 * 60 * 1000;
 
 function previewStorageKey(surface: SearchSurface): string {
   return surface === 'admin' ? `${PREVIEW_STORAGE_KEY_BASE}-admin` : PREVIEW_STORAGE_KEY_BASE;
@@ -264,6 +267,15 @@ export function SearchBar({
           setPreviewRunId(null);
           clearSavedPreview(storageKey);
           return;
+        }
+
+        // The server can finish a task that started just before its 12-minute
+        // scheduling deadline. Keep the client attached while status polling
+        // confirms that run is still active; the cutoff remains effective for
+        // sustained network failures and abandoned saved runs.
+        const saved = readSavedPreview(storageKey);
+        if (saved) {
+          writeSavedPreview(storageKey, { ...saved, startedAt: Date.now() });
         }
 
         if (checkCutoff()) return;

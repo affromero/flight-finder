@@ -150,8 +150,9 @@ describe('SearchBar preview polling', () => {
     expect(screen.queryByText(/took too long/i)).not.toBeInTheDocument();
   });
 
-  it('fires cutoff error when status is still running past the 30 min window', async () => {
-    // startedAt one second past the 30 min window, status stays running.
+  it('renews the cutoff lease while the backend still reports an active run', async () => {
+    // A final task may continue past the scheduling deadline. A healthy status
+    // response keeps the client attached instead of discarding its later result.
     const past = Date.now() - POLL_TIMEOUT_MS - 1000;
     window.sessionStorage.setItem(PREVIEW_STORAGE_KEY, JSON.stringify(savedPreview({ startedAt: past })));
 
@@ -180,8 +181,10 @@ describe('SearchBar preview polling', () => {
     render(<SearchBar />);
 
     await waitFor(() => {
-      expect(screen.getByText(/took too long/i)).toBeInTheDocument();
+      const saved = JSON.parse(window.sessionStorage.getItem(PREVIEW_STORAGE_KEY) ?? '{}');
+      expect(saved.startedAt).toBeGreaterThan(past);
     });
+    expect(screen.queryByText(/took too long/i)).not.toBeInTheDocument();
   });
 
   it('keeps polling without firing cutoff when status is running within the window', async () => {
