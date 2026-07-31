@@ -96,6 +96,8 @@ export async function createTrackedQueries(
           bookingUrl: f.bookingUrl || '',
           stops: f.stops ?? 0,
           duration: f.duration ?? null,
+          // Prisma treats an explicit null on a Json column as ambiguous.
+          ...(f.layovers ? { layovers: f.layovers } : {}),
         })),
       });
     }

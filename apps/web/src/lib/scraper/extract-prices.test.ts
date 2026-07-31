@@ -106,6 +106,33 @@ describe('extractPrices', () => {
     expect(result.failureReason).toBeUndefined();
   });
 
+  it('captures layovers, tolerating the shapes models drift into (issue #190)', async () => {
+    mockExtract.mockResolvedValue({
+      content: JSON.stringify([
+        // Clean, as prompted.
+        { travelDate: '2026-06-15', price: 300, currency: 'USD', airline: 'American', stops: 1, duration: '5h 55m', layovers: [{ duration: '1 hr 35 min', airport: 'ORD' }] },
+        // The raw page line, unparsed, under an aliased key.
+        { travelDate: '2026-06-15', price: 310, currency: 'USD', airline: 'United', stops: 1, duration: '6h 10m', layover: '55 min layover · Chicago ORD' },
+        // Nonstop: no layover data at all.
+        { travelDate: '2026-06-15', price: 320, currency: 'USD', airline: 'Delta', stops: 0, duration: '3h 05m', layovers: [] },
+      ]),
+      usage: { inputTokens: 400, outputTokens: 100 },
+    });
+
+    const result = await extractPrices('page content', 'https://flights.google.com', '2026-06-15');
+    expect(result.prices.map((p) => p.layovers)).toEqual([
+      [{ duration: '1h 35m', airport: 'ORD' }],
+      [{ duration: '55m', airport: 'Chicago ORD' }],
+      null,
+    ]);
+  });
+
+  it('asks the model for layovers', async () => {
+    mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 1, outputTokens: 1 } });
+    await extractPrices('page content', 'https://flights.google.com', '2026-06-15');
+    expect(mockExtract.mock.calls[0]![2] as string).toContain('layovers');
+  });
+
   it('filters out entries with zero price', async () => {
     mockExtract.mockResolvedValue({
       content: JSON.stringify([

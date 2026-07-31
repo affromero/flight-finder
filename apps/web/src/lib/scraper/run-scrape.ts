@@ -408,7 +408,7 @@ async function scrapeQueryForCountry(
     },
     orderBy: { scrapedAt: 'desc' },
     distinct: ['flightId'],
-    select: { flightId: true, price: true, airline: true, travelDate: true, currency: true, bookingUrl: true, stops: true, duration: true, departureTime: true, arrivalTime: true, flightNumber: true, status: true },
+    select: { flightId: true, price: true, airline: true, travelDate: true, currency: true, bookingUrl: true, stops: true, duration: true, layovers: true, departureTime: true, arrivalTime: true, flightNumber: true, status: true },
   });
 
   // Match prior rows against BOTH the new and the legacy id forms so the
@@ -437,6 +437,9 @@ async function scrapeQueryForCountry(
       bookingUrl: prev.bookingUrl,
       stops: prev.stops,
       duration: prev.duration,
+      // Prisma treats an explicit null on a Json column as ambiguous, so carry
+      // the value only when the prior row had one.
+      ...(prev.layovers == null ? {} : { layovers: prev.layovers }),
       departureTime: prev.departureTime,
       arrivalTime: prev.arrivalTime,
       flightId: prev.flightId,
@@ -459,6 +462,7 @@ async function scrapeQueryForCountry(
         bookingUrl: p.bookingUrl,
         stops: p.stops,
         duration: p.duration,
+        ...(p.layovers ? { layovers: p.layovers } : {}),
         departureTime: p.departureTime ?? null,
         arrivalTime: p.arrivalTime ?? null,
         flightId: p.flightId,

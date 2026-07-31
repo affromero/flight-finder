@@ -65,7 +65,7 @@ describe('createTrackedQueries', () => {
       [{
         route: { ...baseRoute, flights: [] },
         flights: [
-          { travelDate: '2026-11-07', price: 431, currency: 'EUR', airline: 'Turkish Airlines', bookingUrl: 'https://turkishairlines.com', stops: 1, duration: '12h 30m', departureTime: '10:25 AM', arrivalTime: '4:45 PM', seatsLeft: null, flightNumber: 'TK 1' },
+          { travelDate: '2026-11-07', price: 431, currency: 'EUR', airline: 'Turkish Airlines', bookingUrl: 'https://turkishairlines.com', stops: 1, duration: '12h 30m', layovers: [{ duration: '2h', airport: 'IST' }], departureTime: '10:25 AM', arrivalTime: '4:45 PM', seatsLeft: null, flightNumber: 'TK 1' },
         ],
       }],
     );
@@ -80,7 +80,7 @@ describe('createTrackedQueries', () => {
       [{
         route: { ...baseRoute, flights: [] },
         flights: [
-          { travelDate: '2026-11-07', price: 431, currency: 'EUR', airline: 'Turkish Airlines', bookingUrl: 'https://turkishairlines.com', stops: 1, duration: '12h 30m', departureTime: '10:25 AM', arrivalTime: '4:45 PM', seatsLeft: null, flightNumber: 'TK 1' },
+          { travelDate: '2026-11-07', price: 431, currency: 'EUR', airline: 'Turkish Airlines', bookingUrl: 'https://turkishairlines.com', stops: 1, duration: '12h 30m', layovers: [{ duration: '2h', airport: 'IST' }], departureTime: '10:25 AM', arrivalTime: '4:45 PM', seatsLeft: null, flightNumber: 'TK 1' },
         ],
       }],
     );

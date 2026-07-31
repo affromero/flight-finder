@@ -18,7 +18,8 @@
     "bestPriceFound": "Melhor preço encontrado",
     "nonstop": "Direto",
     "stops": "{count, plural, one {# escala} other {# escalas}}",
-    "bookOn": "Reservar na {airline}"
+    "bookOn": "Reservar na {airline}",
+    "airTime": "{time} em voo"
   },
   "ChartActions": {
     "copyShareableLink": "Copiar link compartilhável",
@@ -96,7 +97,8 @@
     "creatingTrackers": "Criando rastreadores...",
     "trackFlights": "Rastrear {count, plural, one {# voo} other {# voos}}",
     "back": "Voltar",
-    "editSearch": "Editar busca"
+    "editSearch": "Editar busca",
+    "layover": "escala de {time}"
   },
   "Footer": {
     "tagline": "seus dados, não os deles",
@@ -196,7 +198,9 @@
     "noPriceData": "Ainda não há dados de preços",
     "noPriceDataHint": "Os preços aparecerão após a primeira extração. Volte em breve.",
     "noViewData": "Sem dados de preços para esta visualização",
-    "noViewDataHint": "Troque de visualização ou aguarde a próxima extração coletar preços com os filtros atuais."
+    "noViewDataHint": "Troque de visualização ou aguarde a próxima extração coletar preços com os filtros atuais.",
+    "layover": "escala de {time}",
+    "airTime": "{time} em voo"
   },
   "PriceHistory": {
     "title": "Histórico de Preços",
@@ -219,7 +223,8 @@
     "book": "Reservar",
     "hideHistory": "Ocultar histórico completo",
     "showHistory": "Mostrar histórico completo ({count} verificações)",
-    "truncation": "Mostrando as {shown} verificações mais recentes de {total}."
+    "truncation": "Mostrando as {shown} verificações mais recentes de {total}.",
+    "layover": "escala de {time}"
   },
   "ProfileMenu": {
     "yourTrackers": "Seus rastreadores",

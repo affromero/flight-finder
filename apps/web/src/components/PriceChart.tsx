@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
+import { airTimeMinutes, formatMinutes, layoverLabel } from '@/lib/scraper/duration';
 import styles from './PriceChart.module.css';
 
 const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
@@ -18,6 +19,7 @@ interface Snapshot {
   bookingUrl: string | null;
   stops: number;
   duration: string | null;
+  layovers?: unknown;
   flightId: string | null;
   departureTime: string | null;
   arrivalTime: string | null;
@@ -161,6 +163,10 @@ function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: 
           lines.push(`${p.departureTime ?? '?'} - ${p.arrivalTime ?? '?'}`);
         }
         if (p.duration) lines.push(p.duration);
+        const layover = layoverLabel(p.layovers);
+        if (layover) lines.push(t('layover', { time: layover }));
+        const air = airTimeMinutes(p.duration, p.layovers);
+        if (air !== null) lines.push(t('airTime', { time: formatMinutes(air) }));
         if (p.seatsLeft) lines.push(t('seatsLeft', { count: p.seatsLeft }));
         if (p.vpnCountry) lines.push(`${countryFlag(p.vpnCountry)} ${t('scrapedFrom', { country: p.vpnCountry })}`);
         return lines.join('<br>');

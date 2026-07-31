@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { useHydrated } from '@/lib/use-hydrated';
+import { layoverLabel } from '@/lib/scraper/duration';
 import styles from './PriceHistory.module.css';
 import type { Snapshot } from './PriceHistory';
 
@@ -100,6 +101,7 @@ function FlightRow({
   showDate: boolean;
 }) {
   const t = useTranslations('PriceHistorySection');
+  const layover = layoverLabel(s.layovers);
   return (
     <tr>
       {showDate && <td className={styles.date}><ScrapeTime iso={s.scrapedAt} /></td>}
@@ -109,7 +111,10 @@ function FlightRow({
         {formatCurrency(s.price, s.currency)}
       </td>
       <TrendCell current={s} previous={previous} />
-      <td className={styles.stops}>{s.stops === 0 ? t('direct') : t('stopCount', { count: s.stops })}</td>
+      <td className={styles.stops}>
+        {s.stops === 0 ? t('direct') : t('stopCount', { count: s.stops })}
+        {layover && <span className={styles.layover}>{t('layover', { time: layover })}</span>}
+      </td>
       <td className={styles.seats}>
         {s.status === 'sold_out' ? (
           <span className={styles.soldOut}>{t('soldOut')}</span>

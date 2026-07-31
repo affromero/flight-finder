@@ -165,8 +165,9 @@ GET /api/queries/{id}/prices
         "price": 487,
         "currency": "USD",
         "airline": "Delta",
-        "stops": 0,
+        "stops": 1,
         "duration": "7h 30m",
+        "layovers": [{ "duration": "1h 35m", "airport": "ORD" }],
         "bookingUrl": "https://...",
         "scrapedAt": "2026-03-08T12:00:00Z"
       }
