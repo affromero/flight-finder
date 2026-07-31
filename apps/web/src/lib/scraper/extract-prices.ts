@@ -148,7 +148,7 @@ ${currencyInstruction}
 ${bookingUrlRule}
 - stops: 0 for nonstop, 1 for 1 stop, etc.
 - duration: human-readable format like "8h 30m" — the full gate-to-gate time as shown, including time spent connecting
-- layovers: one entry per stop, in travel order, read from the connection text on the result (e.g. "1 hr 35 min layover · Chicago ORD"). duration in "1h 35m" form; airport is the IATA code when shown, otherwise the city name, otherwise null. Use [] for nonstop flights and when no layover text is visible
+- layovers: one entry per stop, in travel order. The connection line sits right under the stop count and is usually just a duration plus the airport ("55 min DTW", "1 hr 35 min layover · Chicago ORD"). duration in "1h 35m" form; airport is the IATA code when shown, otherwise the city name, otherwise null. Use [] for nonstop flights and whenever no connection line is visible — never infer a layover from the total duration or the departure and arrival times
 - departureTime: the departure time as shown (e.g. "10:25 AM", "7:50 PM"). Use null if not visible
 - arrivalTime: the arrival time as shown (e.g. "4:45 PM", "11:30 AM"). Use null if not visible
 - seatsLeft: if the page shows "N seats left" or "N seats left at this price", extract the number. Use null if not shown

@@ -42,6 +42,15 @@ const fixture = readFileSync(
   'utf-8',
 );
 
+// A real ALB->CMH capture (issue #190). Google's compact result list writes the
+// connection as a bare duration plus airport under the stop count ("55 min
+// DTW") — no "layover" wording at all — and the one 2-stop itinerary has no
+// connection line whatsoever. Both shapes are what the prompt has to survive.
+const layoverFixture = readFileSync(
+  join(__dirname, '../../test/fixtures/google-flights-layovers.txt'),
+  'utf-8',
+);
+
 const CONFIG = {
   provider: 'claude-code',
   model: process.env.LLM_INTEGRATION_MODEL ?? 'sonnet',
@@ -128,6 +137,40 @@ describe.skipIf(!claudeIsUsable())('extractPrices live (claude-code) — issue #
     // 7h cap keeps the ~6h15m nonstops, drops the 8h30m / 9h45m one-stops.
     for (const p of result.prices) {
       expect(p.stops).toBe(0);
+    }
+  }, 120_000);
+
+  it('reads layovers off a real connecting-route page, and invents none (issue #190)', async () => {
+    const result = await extractPrices(
+      layoverFixture,
+      'https://www.google.com/travel/flights?q=flights+from+ALB+to+CMH',
+      '2026-09-14',
+      noFilters,
+      10,
+      true,
+      'google_flights',
+      'USD',
+      CONFIG,
+    );
+
+    expect(result.failureReason).toBeUndefined();
+    const oneStop = result.prices.filter((p) => p.stops === 1);
+    expect(oneStop.length).toBeGreaterThanOrEqual(4);
+
+    // Every one-stop row on this page has a connection line, and each layover
+    // must match one that is actually printed — not one derived from the total
+    // duration or the departure/arrival times.
+    const onPage = new Set(['55m DTW', '59m ORD', '2h 5m BNA', '1h 17m PHL', '1h 43m ATL', '1h 30m ORD', '1h 15m ORD', '1h 8m PHL', '2h 50m ORD', '1h 50m BWI', '1h 14m IAD']);
+    for (const p of oneStop) {
+      expect(p.layovers).toHaveLength(1);
+      const [leg] = p.layovers!;
+      expect(onPage).toContain(`${leg!.duration} ${leg!.airport}`);
+    }
+
+    // The 11h 35m two-stop itinerary prints no connection line at all, so the
+    // model must leave it empty rather than guess at one.
+    for (const p of result.prices.filter((x) => x.stops === 2)) {
+      expect(p.layovers ?? []).toHaveLength(0);
     }
   }, 120_000);
 });
