@@ -9,6 +9,7 @@ import { getClientIp } from '@/lib/trusted-ip';
 import { redis } from '@/lib/redis';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { isValidPriceAmount } from '@/lib/limits';
+import { coerceLayovers } from '@/lib/scraper/duration';
 
 const MAX_ROUTES = 20;
 const MAX_FLIGHTS_PER_ROUTE = 50;
@@ -47,6 +48,7 @@ interface RouteInput {
     bookingUrl: string | null;
     stops?: number;
     duration?: string | null;
+    layovers?: unknown; // shape-checked by coerceLayovers before persistence
     flightNumber?: string | null;
   }>;
 }
@@ -363,20 +365,27 @@ export async function POST(request: NextRequest) {
 
     if (flights.length > 0) {
       await prisma.priceSnapshot.createMany({
-        data: flights.map((f) => ({
-          queryId: query.id,
-          travelDate: new Date(f.travelDate + 'T00:00:00Z'),
-          // Store the coerced numeric values (validated above), not the raw
-          // input, so a numeric string like "300" cannot reach Prisma as a string.
-          price: Number(f.price),
-          currency: f.currency || 'USD',
-          airline: f.airline,
-          // safeHttpUrl drops non-http(s) URLs to prevent javascript:/data:/file: injection
-          bookingUrl: safeHttpUrl(f.bookingUrl) || '',
-          stops: f.stops != null ? Number(f.stops) : 0,
-          duration: f.duration ?? null,
-          flightNumber: f.flightNumber ?? null,
-        })),
+        data: flights.map((f) => {
+          // coerceLayovers bounds the client-supplied value (entry count, field
+          // types, string lengths) before it reaches the Json column. Prisma
+          // treats an explicit null on Json as ambiguous, so omit it instead.
+          const layovers = coerceLayovers(f.layovers);
+          return {
+            queryId: query.id,
+            travelDate: new Date(f.travelDate + 'T00:00:00Z'),
+            // Store the coerced numeric values (validated above), not the raw
+            // input, so a numeric string like "300" cannot reach Prisma as a string.
+            price: Number(f.price),
+            currency: f.currency || 'USD',
+            airline: f.airline,
+            // safeHttpUrl drops non-http(s) URLs to prevent javascript:/data:/file: injection
+            bookingUrl: safeHttpUrl(f.bookingUrl) || '',
+            stops: f.stops != null ? Number(f.stops) : 0,
+            duration: f.duration ?? null,
+            ...(layovers ? { layovers } : {}),
+            flightNumber: f.flightNumber ?? null,
+          };
+        }),
       });
     }
 

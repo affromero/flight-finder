@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { PriceData } from '@/lib/scraper/extract-prices';
 import { formatCurrency } from '@/lib/currency';
+import { layoverLabel } from '@/lib/scraper/duration';
 import styles from './FlightPicker.module.css';
 
 export interface RouteFlights {
@@ -163,6 +164,11 @@ export function FlightPicker({
                       <span className={styles.stops}>{flight.stops === 0 ? t('nonstop') : t('stops', { count: flight.stops })}</span>
                       {flight.duration && (
                         <span className={styles.duration}>{flight.duration}</span>
+                      )}
+                      {layoverLabel(flight.layovers) && (
+                        <span className={styles.layover}>
+                          {t('layover', { time: layoverLabel(flight.layovers)! })}
+                        </span>
                       )}
                     </div>
                   </button>

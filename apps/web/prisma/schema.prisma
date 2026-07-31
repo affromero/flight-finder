@@ -78,6 +78,7 @@ model PriceSnapshot {
   bookingUrl        String?
   stops             Int      @default(0)
   duration          String?
+  layovers          Json?    // [{ duration: "1h 35m", airport: "ORD" }] in travel order
   flightId          String?  // stable identity: airline-(flightNumber|HHMM)-origin-dest-date
   flightNumber      String?  // human-readable flight identifier (e.g. "DL 345")
   departureTime     String?

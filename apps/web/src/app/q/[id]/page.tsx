@@ -82,6 +82,7 @@ interface ChartSnapshot {
   bookingUrl: string | null;
   stops: number;
   duration: string | null;
+  layovers?: unknown;
   flightId: string | null;
   flightNumber: string | null;
   departureTime: string | null;
@@ -243,6 +244,7 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
       bookingUrl: true,
       stops: true,
       duration: true,
+      layovers: true,
       flightId: true,
       flightNumber: true,
       departureTime: true,

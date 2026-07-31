@@ -1,6 +1,7 @@
 import { getTranslations } from 'next-intl/server';
 import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
+import { airTimeMinutes, formatMinutes } from '@/lib/scraper/duration';
 import styles from './BestPrice.module.css';
 
 interface Snapshot {
@@ -9,6 +10,7 @@ interface Snapshot {
   airline: string;
   bookingUrl: string | null;
   stops: number;
+  layovers?: unknown;
   departureTime: string | null;
   arrivalTime: string | null;
   duration: string | null;
@@ -27,6 +29,9 @@ export async function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
   if (bookable.length === 0) return null;
 
   const best = bookable.reduce((min, s) => (s.price < min.price ? s : min), bookable[0]!);
+  // Duration is gate-to-gate, so on a connecting fare most of the difference
+  // between two similar itineraries is ground time. Issue #190.
+  const airTime = airTimeMinutes(best.duration, best.layovers);
 
   return (
     <div className={styles.root}>
@@ -42,6 +47,7 @@ export async function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
           <span className={styles.meta}>
             {best.stops === 0 ? t('nonstop') : t('stops', { count: best.stops })}
             {best.duration && ` · ${best.duration}`}
+            {airTime !== null && ` (${t('airTime', { time: formatMinutes(airTime) })})`}
             {(best.departureTime || best.arrivalTime) && ` · ${best.departureTime ?? '?'} - ${best.arrivalTime ?? '?'}`}
           </span>
         </div>

@@ -200,8 +200,13 @@
 }
 
 .stops,
-.duration {
+.duration,
+.layover {
   white-space: nowrap;
+}
+
+.layover {
+  opacity: 0.75;
 }
 
 .actions {

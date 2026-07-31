@@ -12,6 +12,7 @@ interface Snap {
   departureTime: string | null;
   arrivalTime: string | null;
   duration: string | null;
+  layovers?: unknown;
   vpnCountry: string | null;
   scrapedAt: string;
   status?: string;
@@ -96,5 +97,28 @@ describe('BestPrice — sold-out exclusion (issue #64)', () => {
       </>,
     );
     expect(screen.getByText(/90/)).toBeTruthy();
+  });
+});
+
+describe('BestPrice — air time (issue #190)', () => {
+  it('breaks the gate-to-gate duration down into time actually in the air', async () => {
+    render(
+      <>
+        {await BestPrice({
+          snapshots: [
+            snap({ stops: 1, duration: '5h 55m', layovers: [{ duration: '1h 35m', airport: 'ORD' }] }),
+          ],
+        })}
+      </>
+    );
+    expect(screen.getByText(/5h 55m/)).toBeTruthy();
+    expect(screen.getByText(/4h 20m in air/)).toBeTruthy();
+  });
+
+  it('shows the duration alone when there is no layover data', async () => {
+    render(
+      <>{await BestPrice({ snapshots: [snap({ stops: 0, duration: '3h 05m' })] })}</>
+    );
+    expect(screen.queryByText(/in air/)).toBeNull();
   });
 });

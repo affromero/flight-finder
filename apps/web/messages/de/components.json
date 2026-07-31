@@ -18,7 +18,8 @@
     "bestPriceFound": "Bester gefundener Preis",
     "nonstop": "Direktflug",
     "stops": "{count, plural, one {# Zwischenstopp} other {# Zwischenstopps}}",
-    "bookOn": "Bei {airline} buchen"
+    "bookOn": "Bei {airline} buchen",
+    "airTime": "{time} in der Luft"
   },
   "ChartActions": {
     "copyShareableLink": "Teilbaren Link kopieren",
@@ -96,7 +97,8 @@
     "creatingTrackers": "Tracker werden erstellt...",
     "trackFlights": "{count, plural, one {# Flug verfolgen} other {# Flüge verfolgen}}",
     "back": "Zurück",
-    "editSearch": "Suche bearbeiten"
+    "editSearch": "Suche bearbeiten",
+    "layover": "{time} Umsteigezeit"
   },
   "Footer": {
     "tagline": "deine Daten, nicht ihre",
@@ -196,7 +198,9 @@
     "noPriceData": "Noch keine Preisdaten",
     "noPriceDataHint": "Preise erscheinen nach dem ersten Abruf. Schau bald wieder vorbei.",
     "noViewData": "Keine Preisdaten für diese Ansicht",
-    "noViewDataHint": "Wechsle die Ansicht oder warte auf den nächsten Abruf, um Preise mit den aktuellen Filtern zu sammeln."
+    "noViewDataHint": "Wechsle die Ansicht oder warte auf den nächsten Abruf, um Preise mit den aktuellen Filtern zu sammeln.",
+    "layover": "{time} Umsteigezeit",
+    "airTime": "{time} in der Luft"
   },
   "PriceHistory": {
     "title": "Preisverlauf",
@@ -219,7 +223,8 @@
     "book": "Buchen",
     "hideHistory": "Verlauf ausblenden",
     "showHistory": "Gesamten Verlauf anzeigen ({count} Prüfungen)",
-    "truncation": "Angezeigt werden die letzten {shown} von {total} Prüfungen."
+    "truncation": "Angezeigt werden die letzten {shown} von {total} Prüfungen.",
+    "layover": "{time} Umsteigezeit"
   },
   "ProfileMenu": {
     "yourTrackers": "Deine Tracker",

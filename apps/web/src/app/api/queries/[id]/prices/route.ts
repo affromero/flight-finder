@@ -71,6 +71,7 @@ export async function GET(
           bookingUrl: true,
           stops: true,
           duration: true,
+          layovers: true,
           flightId: true,
           flightNumber: true,
           departureTime: true,

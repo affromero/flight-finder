@@ -17,6 +17,7 @@ function flight(n: number): PriceData {
     bookingUrl: null,
     stops: 0,
     duration: '5h 30m',
+    layovers: null,
     departureTime: null,
     arrivalTime: null,
     seatsLeft: null,

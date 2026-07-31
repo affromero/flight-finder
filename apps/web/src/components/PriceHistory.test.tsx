@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { PriceHistory, type Snapshot } from './PriceHistory';
+import { PriceHistorySection } from './PriceHistorySection';
 
 // Issue #89: the grouped-by-flight view ordered parent rows by lifetime-cheapest
 // price, so a flight last seen days ago (or a stale "cheapest ever") interleaved
@@ -37,6 +38,39 @@ const SNAPSHOTS: Snapshot[] = [
   snap({ id: 'b3', flightId: 'B', airline: 'Beta', price: 200, scrapedAt: '2026-05-03T08:00:00.000Z' }),
   snap({ id: 'c1', flightId: 'C', airline: 'Gamma', price: 150, scrapedAt: '2026-05-01T08:00:00.000Z' }),
 ];
+
+describe('layover capture (issue #190)', () => {
+  it('shows total ground time and where it is spent next to the stop count', () => {
+    render(
+      <PriceHistorySection
+        snapshots={[
+          snap({
+            id: 'l1',
+            flightId: 'L',
+            airline: 'American',
+            price: 300,
+            scrapedAt: '2026-05-03T08:00:00.000Z',
+            stops: 1,
+            duration: '5h 55m',
+            layovers: [{ duration: '1h 35m', airport: 'ORD' }],
+          }),
+        ]}
+      />
+    );
+    expect(screen.getByText('1h 35m ORD layover')).toBeTruthy();
+  });
+
+  it('says nothing for a nonstop flight', () => {
+    render(
+      <PriceHistorySection
+        snapshots={[
+          snap({ id: 'n1', flightId: 'N', airline: 'Delta', price: 300, scrapedAt: '2026-05-03T08:00:00.000Z' }),
+        ]}
+      />
+    );
+    expect(screen.queryByText(/layover/)).toBeNull();
+  });
+});
 
 describe('PriceHistory: latest snapshot + full history (issue #89)', () => {
   it('shows only the latest scrape by default, hiding earlier checks', async () => {

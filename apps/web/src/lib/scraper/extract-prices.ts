@@ -1,7 +1,7 @@
 import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionUsage } from './ai-registry';
 import { MAX_PRICE_VALUE } from '@/lib/limits';
 import { prisma } from '@/lib/prisma';
-import { parseDurationToMinutes } from './duration';
+import { coerceLayovers, parseDurationToMinutes, type Layover } from './duration';
 import type { NavigationSource } from './navigate';
 import { acquireProviderToken } from './rate-limit';
 
@@ -13,6 +13,7 @@ export interface PriceData {
   bookingUrl: string | null;
   stops: number;
   duration: string | null;
+  layovers: Layover[] | null; // one entry per stop, in travel order
   departureTime: string | null; // e.g. "10:25 AM"
   arrivalTime: string | null; // e.g. "4:45 PM"
   seatsLeft: number | null; // e.g. 3 when "3 seats left" shown
@@ -131,6 +132,7 @@ Return ONLY valid JSON — an array of UP TO ${maxResults} objects with this exa
     "bookingUrl": "https://...",
     "stops": 1,
     "duration": "11h 20m",
+    "layovers": [{ "duration": "1h 35m", "airport": "ORD" }],
     "departureTime": "10:25 AM",
     "arrivalTime": "4:45 PM",
     "seatsLeft": 3,
@@ -145,7 +147,8 @@ General rules:
 ${currencyInstruction}
 ${bookingUrlRule}
 - stops: 0 for nonstop, 1 for 1 stop, etc.
-- duration: human-readable format like "8h 30m"
+- duration: human-readable format like "8h 30m" — the full gate-to-gate time as shown, including time spent connecting
+- layovers: one entry per stop, in travel order. The connection line sits right under the stop count and is usually just a duration plus the airport ("55 min DTW", "1 hr 35 min layover · Chicago ORD"). duration in "1h 35m" form; airport is the IATA code when shown, otherwise the city name, otherwise null. Use [] for nonstop flights and whenever no connection line is visible — never infer a layover from the total duration or the departure and arrival times
 - departureTime: the departure time as shown (e.g. "10:25 AM", "7:50 PM"). Use null if not visible
 - arrivalTime: the arrival time as shown (e.g. "4:45 PM", "11:30 AM"). Use null if not visible
 - seatsLeft: if the page shows "N seats left" or "N seats left at this price", extract the number. Use null if not shown
@@ -374,6 +377,7 @@ function normalizeEntry(entry: unknown, travelDateFallback: string, currency: st
     bookingUrl: typeof bookingUrl === 'string' ? bookingUrl : '',
     stops: coerceStops(readField(e, 'stops', ['stopCount', 'numStops'])),
     duration: typeof duration === 'string' ? duration : null,
+    layovers: coerceLayovers(readField(e, 'layovers', ['layover', 'connections', 'stopDetails'])),
     departureTime: typeof departureTime === 'string' ? departureTime : null,
     arrivalTime: typeof arrivalTime === 'string' ? arrivalTime : null,
     seatsLeft: coerceSeatsLeft(readField(e, 'seatsLeft', ['seats', 'seatsRemaining'])),

@@ -85,6 +85,15 @@
   color: var(--text-secondary);
 }
 
+.layover {
+  display: block;
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  color: var(--text-tertiary, var(--text-secondary));
+  opacity: 0.8;
+  white-space: nowrap;
+}
+
 .trendUp {
   color: var(--price-up);
   font-family: var(--font-mono);

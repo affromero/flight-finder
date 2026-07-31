@@ -10,6 +10,7 @@ export interface Snapshot {
   bookingUrl: string | null;
   stops: number;
   duration: string | null;
+  layovers?: unknown;
   flightId: string | null;
   flightNumber: string | null;
   departureTime: string | null;

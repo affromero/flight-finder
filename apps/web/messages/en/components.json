@@ -18,7 +18,8 @@
     "bestPriceFound": "Best price found",
     "nonstop": "Nonstop",
     "stops": "{count, plural, one {# stop} other {# stops}}",
-    "bookOn": "Book on {airline}"
+    "bookOn": "Book on {airline}",
+    "airTime": "{time} in air"
   },
   "ChartActions": {
     "copyShareableLink": "Copy shareable link",
@@ -96,7 +97,8 @@
     "creatingTrackers": "Creating trackers...",
     "trackFlights": "Track {count, plural, one {# flight} other {# flights}}",
     "back": "Back",
-    "editSearch": "Edit search"
+    "editSearch": "Edit search",
+    "layover": "{time} layover"
   },
   "Footer": {
     "tagline": "your data, not theirs",
@@ -196,7 +198,9 @@
     "noPriceData": "No price data yet",
     "noPriceDataHint": "Prices will appear after the first scrape runs. Check back soon.",
     "noViewData": "No price data for this view",
-    "noViewDataHint": "Switch views or wait for the next scrape to collect prices under the current filters."
+    "noViewDataHint": "Switch views or wait for the next scrape to collect prices under the current filters.",
+    "layover": "{time} layover",
+    "airTime": "{time} in air"
   },
   "PriceHistory": {
     "title": "Price History",
@@ -219,7 +223,8 @@
     "book": "Book",
     "hideHistory": "Hide full history",
     "showHistory": "Show full history ({count} checks)",
-    "truncation": "Showing the latest {shown} of {total} checks."
+    "truncation": "Showing the latest {shown} of {total} checks.",
+    "layover": "{time} layover"
   },
   "ProfileMenu": {
     "yourTrackers": "Your trackers",
