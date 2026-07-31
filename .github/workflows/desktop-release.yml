@@ -33,7 +33,7 @@ jobs:
             args: ''
     runs-on: ${{ matrix.platform }}
     steps:
-      - uses: actions/checkout@v7.0.0
+      - uses: actions/checkout@v7.0.1
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'ubuntu-22.04'
