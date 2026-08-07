@@ -79,6 +79,22 @@ function buildSystemPrompt(filters: QueryFilters, maxResults: number, source: Na
     };
     filterRules.push(`- Prefer flights ${timeMap[filters.timePreference] ?? ''}`);
   }
+  if (filters.cabinClass && filters.cabinClass !== 'economy') {
+    const cabinLabel: Record<string, string> = {
+      premium_economy: 'Premium Economy',
+      business: 'Business',
+      first: 'First',
+    };
+    // Known labels only — cabinClass reaches here from request bodies that are
+    // not enum-validated, so an unknown value must not be interpolated into
+    // the system prompt (prompt injection).
+    const label = cabinLabel[filters.cabinClass];
+    if (label) {
+      filterRules.push(
+        `- ONLY include ${label} class fares. If the page shows Economy prices, it was not fetched with the ${label} filter applied — do not report those Economy prices as ${label}.`
+      );
+    }
+  }
 
   const filterSection = filterRules.length > 0
     ? `\nFiltering rules (STRICT — do not include flights that violate these):\n${filterRules.join('\n')}\n`

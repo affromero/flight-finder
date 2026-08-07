@@ -75,6 +75,50 @@ describe('buildGoogleFlightsUrl', () => {
       expect(url).not.toContain('one+way');
     });
   });
+
+  describe('cabin class phrase (regression: cabinClass was silently dropped for Google Flights)', () => {
+    // Verified live against Google Flights: prepending "business class " (etc.)
+    // to the q= phrase makes Google's NLU apply the cabin filter to results —
+    // confirmed by a real search showing Business fares (~$3,561) instead of
+    // the Economy default (~$1,083) for the same TLV-LAX route/dates.
+    it('prepends "business class " when cabinClass is business', () => {
+      const url = buildGoogleFlightsUrl({ ...base, cabinClass: 'business' });
+      expect(url).toContain('q=business+class+flights+from+JFK+to+LAX+on+2026-06-15+to+2026-06-22');
+    });
+
+    it('prepends "premium economy " when cabinClass is premium_economy', () => {
+      const url = buildGoogleFlightsUrl({ ...base, cabinClass: 'premium_economy' });
+      expect(url).toContain('q=premium+economy+flights+from+JFK+to+LAX');
+    });
+
+    it('prepends "first class " when cabinClass is first', () => {
+      const url = buildGoogleFlightsUrl({ ...base, cabinClass: 'first' });
+      expect(url).toContain('q=first+class+flights+from+JFK+to+LAX');
+    });
+
+    it('adds no phrase when cabinClass is economy', () => {
+      const url = buildGoogleFlightsUrl({ ...base, cabinClass: 'economy' });
+      expect(url).toContain('q=flights+from+JFK+to+LAX+on+2026-06-15+to+2026-06-22');
+      expect(url).not.toContain('economy');
+    });
+
+    it('adds no phrase when cabinClass is undefined (default, matches every pre-existing test above)', () => {
+      const url = buildGoogleFlightsUrl({ ...base });
+      expect(url).toContain('q=flights+from+JFK+to+LAX+on+2026-06-15+to+2026-06-22');
+    });
+
+    it('places the cabin phrase before the one-way token', () => {
+      const url = buildGoogleFlightsUrl({
+        origin: 'BDS',
+        destination: 'JFK',
+        dateFrom: new Date('2026-11-09T00:00:00Z'),
+        dateTo: new Date('2026-11-09T00:00:00Z'),
+        tripType: 'one_way',
+        cabinClass: 'business',
+      });
+      expect(url).toContain('q=business+class+one+way+flights+from+BDS+to+JFK+on+2026-11-09');
+    });
+  });
 });
 
 describe('buildGoogleFlightsUrlCandidates (regression: #65)', () => {
@@ -146,6 +190,22 @@ describe('buildGoogleFlightsUrlCandidates (regression: #65)', () => {
     // No candidate should announce one-way intent on a round trip.
     for (const url of candidates) {
       expect(url).not.toContain('one+way');
+    }
+  });
+
+  it('propagates the cabin phrase to every candidate (verbose, terse, reworded)', () => {
+    // Verified live against Google Flights for all three phrasings — each
+    // independently makes Google's NLU apply the Business filter.
+    const candidates = buildGoogleFlightsUrlCandidates({ ...oneWay, cabinClass: 'business' });
+    expect(candidates[0]).toContain('business+class+one+way+flights+from+BDS+to+JFK');
+    expect(candidates[1]).toContain('business+class+one+way+BDS+to+JFK+2026-11-09');
+    expect(candidates[2]).toContain('business+class+one+way+flights+to+JFK+from+BDS+departing+2026-11-09');
+  });
+
+  it('adds no cabin phrase to any candidate when cabinClass is economy or unset', () => {
+    const candidates = buildGoogleFlightsUrlCandidates(oneWay);
+    for (const url of candidates) {
+      expect(url).not.toContain('class');
     }
   });
 });

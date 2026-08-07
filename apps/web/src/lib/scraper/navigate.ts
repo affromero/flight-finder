@@ -98,6 +98,23 @@ export function hasFlightPriceSignal(text: string): boolean {
   return new RegExp(PRICE_TOKEN_PATTERN).test(text);
 }
 
+// Cabin phrase prepended to the q= text query. Google Flights' NLU picks up
+// "business class" / "first class" / "premium economy" as a cabin filter on
+// the results (verified live: "business class flights from TLV to LAX on ..."
+// returns Business-cabin fares starting ~3x the Economy default). Economy
+// needs no phrase — it is already Google's default, and every existing test
+// assumes an unmodified phrase for a missing/economy cabinClass.
+const CABIN_PHRASE: Record<string, string> = {
+  economy: '',
+  premium_economy: 'premium economy ',
+  business: 'business class ',
+  first: 'first class ',
+};
+
+function cabinPhrase(cabinClass: string | undefined): string {
+  return CABIN_PHRASE[cabinClass ?? 'economy'] ?? '';
+}
+
 function buildFlightsUrl(qPhrase: string, params: FlightSearchParams): string {
   const url = new URL('https://www.google.com/travel/flights');
   url.searchParams.set('q', qPhrase);
@@ -120,9 +137,10 @@ export function buildGoogleFlightsUrl(params: FlightSearchParams): string {
   const oneWay = params.tripType === 'one_way';
   const oneWayPrefix = oneWay ? 'one way ' : '';
   const datePart = oneWay ? `on ${dateFrom}` : `on ${dateFrom} to ${dateTo}`;
+  const cabin = cabinPhrase(params.cabinClass);
 
   return buildFlightsUrl(
-    `${oneWayPrefix}flights from ${params.origin} to ${params.destination} ${datePart}`,
+    `${cabin}${oneWayPrefix}flights from ${params.origin} to ${params.destination} ${datePart}`,
     params,
   );
 }
@@ -145,6 +163,7 @@ export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): str
   const dateTo = isoDate(params.dateTo);
   const oneWay = params.tripType === 'one_way';
   const oneWayPrefix = oneWay ? 'one way ' : '';
+  const cabin = cabinPhrase(params.cabinClass);
 
   // Variant 1: verbose phrase, fixed for one-way (above).
   const verbose = buildGoogleFlightsUrl(params);
@@ -153,7 +172,7 @@ export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): str
   // Always include the one-way token so Google does not infer round trip.
   const terseDate = oneWay ? dateFrom : `${dateFrom} to ${dateTo}`;
   const terse = buildFlightsUrl(
-    `${oneWayPrefix}${params.origin} to ${params.destination} ${terseDate}`,
+    `${cabin}${oneWayPrefix}${params.origin} to ${params.destination} ${terseDate}`,
     params,
   );
 
@@ -165,7 +184,7 @@ export function buildGoogleFlightsUrlCandidates(params: FlightSearchParams): str
     ? `departing ${dateFrom}`
     : `departing ${dateFrom} returning ${dateTo}`;
   const reworded = buildFlightsUrl(
-    `${oneWayPrefix}flights to ${params.destination} from ${params.origin} ${dateClause}`,
+    `${cabin}${oneWayPrefix}flights to ${params.destination} from ${params.origin} ${dateClause}`,
     params,
   );
 
