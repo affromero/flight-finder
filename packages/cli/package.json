@@ -17,9 +17,9 @@
     "test:e2e": "doppler run -- node --import tsx/esm --import ./register.mjs src/e2e-test.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.9.0",
-    "@prisma/client": "^7.9.0",
-    "chalk": "^5.4.0",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
+    "chalk": "^6.0.0",
     "commander": "^15.0.0",
     "ink": "^7.1.1",
     "ink-select-input": "^6.0.0",
@@ -28,9 +28,9 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.1",
-    "@types/react": "^19.2.17",
-    "eslint": "^10.7.0",
+    "@types/node": "^26.1.2",
+    "@types/react": "^19.2.18",
+    "eslint": "^10.8.0",
     "tsup": "^8.0.0",
     "tsx": "^4.23.1",
     "typescript": "^6.0.3",
