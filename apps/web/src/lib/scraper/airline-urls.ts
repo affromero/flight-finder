@@ -184,7 +184,13 @@ const AIRLINE_URL_SPECS: Record<string, AirlineSpec> = {
     departureDate: 'outbound',
     returnDate: 'inbound',
     passengers: { key: 'adt', value: '1' },
-    extra: { cabin: 'Y' },
+    // No `cabin` spec: this used to hardcode `extra: { cabin: 'Y' }` (Economy
+    // fare basis code), which silently forced every LATAM search to Economy
+    // regardless of the requested cabinClass — worse than the other airlines
+    // below with no cabin key at all, which at least don't actively override
+    // a business/first request. LATAM's current cabin query param and value
+    // set are unverified, so no replacement mapping is added here; see
+    // cabin-class investigation notes for airline_direct reliability caveats.
   },
 
   copa: {

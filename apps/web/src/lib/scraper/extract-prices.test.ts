@@ -133,6 +133,32 @@ describe('extractPrices', () => {
     expect(mockExtract.mock.calls[0]![2] as string).toContain('layovers');
   });
 
+  describe('cabin class filter rule (defense in depth: the scrape URL should already be cabin-filtered, but the prompt should not silently accept Economy fares as a substitute)', () => {
+    const filtersWithCabin = (cabinClass: string): QueryFilters => ({
+      maxPrice: null, maxStops: null, maxDurationHours: null, preferredAirlines: [], timePreference: 'any', cabinClass,
+    });
+
+    it('adds a Business filter rule and instructs against reporting Economy fares as Business', async () => {
+      mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 1, outputTokens: 1 } });
+      await extractPrices('page content', 'https://flights.google.com', '2026-06-15', filtersWithCabin('business'));
+      const systemPrompt = mockExtract.mock.calls[0]![2] as string;
+      expect(systemPrompt).toContain('ONLY include Business class fares');
+      expect(systemPrompt).toContain('do not report those Economy prices as Business');
+    });
+
+    it('adds a Premium Economy filter rule', async () => {
+      mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 1, outputTokens: 1 } });
+      await extractPrices('page content', 'https://flights.google.com', '2026-06-15', filtersWithCabin('premium_economy'));
+      expect(mockExtract.mock.calls[0]![2] as string).toContain('ONLY include Premium Economy class fares');
+    });
+
+    it('adds no cabin rule for economy (the default — matches every other test in this file)', async () => {
+      mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 1, outputTokens: 1 } });
+      await extractPrices('page content', 'https://flights.google.com', '2026-06-15', filtersWithCabin('economy'));
+      expect(mockExtract.mock.calls[0]![2] as string).not.toContain('class fares');
+    });
+  });
+
   it('filters out entries with zero price', async () => {
     mockExtract.mockResolvedValue({
       content: JSON.stringify([
