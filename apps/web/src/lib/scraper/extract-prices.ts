@@ -85,10 +85,15 @@ function buildSystemPrompt(filters: QueryFilters, maxResults: number, source: Na
       business: 'Business',
       first: 'First',
     };
-    const label = cabinLabel[filters.cabinClass] ?? filters.cabinClass;
-    filterRules.push(
-      `- ONLY include ${label} class fares. If the page shows Economy prices, it was not fetched with the ${label} filter applied — do not report those Economy prices as ${label}.`
-    );
+    // Known labels only — cabinClass reaches here from request bodies that are
+    // not enum-validated, so an unknown value must not be interpolated into
+    // the system prompt (prompt injection).
+    const label = cabinLabel[filters.cabinClass];
+    if (label) {
+      filterRules.push(
+        `- ONLY include ${label} class fares. If the page shows Economy prices, it was not fetched with the ${label} filter applied — do not report those Economy prices as ${label}.`
+      );
+    }
   }
 
   const filterSection = filterRules.length > 0
