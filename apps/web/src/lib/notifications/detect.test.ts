@@ -99,6 +99,28 @@ describe('detectNewLow', () => {
     expect(await run()).toBeNull();
   });
 
+  it('bounds the prior-baseline query when baselineFrom is set (mislabeled pre-fix history excluded)', async () => {
+    const cutoff = new Date('2026-06-01T00:00:00Z');
+    arrange({ current: { price: 3400 }, priorMin: 3600 });
+    await run({ baselineFrom: cutoff });
+    expect(mockAggregate.mock.calls[0]![0].where.scrapedAt).toEqual({ lt: CYCLE_START, gte: cutoff });
+  });
+
+  it('leaves the prior-baseline query unbounded when baselineFrom is null or absent', async () => {
+    arrange({ current: { price: 250 }, priorMin: 300 });
+    await run({ baselineFrom: null });
+    expect(mockAggregate.mock.calls[0]![0].where.scrapedAt).toEqual({ lt: CYCLE_START });
+  });
+
+  it('treats a bounded query with no post-cutoff history as first sight (silent baseline)', async () => {
+    // The realistic post-fix scenario: all history is pre-cutoff, so the
+    // aggregate returns no min, and there is no prior alert; the first correct
+    // scrape must establish the baseline silently instead of alerting.
+    arrange({ current: { price: 3400 }, priorMin: null });
+    const alert = await run({ baselineFrom: new Date('2026-06-01T00:00:00Z') });
+    expect(alert).toBeNull();
+  });
+
   it('returns null when no available fares were found this cycle', async () => {
     arrange({ current: null, priorMin: 300 });
     expect(await run()).toBeNull();

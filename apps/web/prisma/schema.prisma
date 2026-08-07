@@ -144,6 +144,7 @@ model ExtractionConfig {
   vpnActivationCode    String?   // encrypted VPN activation code
   multiUserMode        Boolean   @default(false) // self-hosted only; admin manages User table for households
   adminSessionsValidFrom DateTime? // admin sessions issued before this instant are revoked (set on admin password change)
+  cabinAlertBaselineCutoff DateTime? // set once on the first notify cycle after the cabin-class scrape fix; non-economy queries ignore snapshots scraped before it for the new-low baseline (pre-fix snapshots are Economy fares mislabeled as the requested cabin)
   updatedAt            DateTime  @updatedAt
   extractTimeoutSeconds Int @default(90)
   maxFlightsPerDate     Int @default(10) // max flights the LLM extracts per date pair; raise for busy routes

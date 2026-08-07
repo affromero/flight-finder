@@ -1,17 +1,23 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockExtractionFindFirst = vi.fn();
+const mockExtractionUpdate = vi.fn();
 const mockQueryFindUnique = vi.fn();
 const mockQueryUpdate = vi.fn();
+const mockQueryUpdateMany = vi.fn();
 const mockDetectNewLow = vi.fn();
 const mockDispatch = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    extractionConfig: { findFirst: (...a: unknown[]) => mockExtractionFindFirst(...a) },
+    extractionConfig: {
+      findFirst: (...a: unknown[]) => mockExtractionFindFirst(...a),
+      update: (...a: unknown[]) => mockExtractionUpdate(...a),
+    },
     query: {
       findUnique: (...a: unknown[]) => mockQueryFindUnique(...a),
       update: (...a: unknown[]) => mockQueryUpdate(...a),
+      updateMany: (...a: unknown[]) => mockQueryUpdateMany(...a),
     },
   },
 }));
@@ -32,13 +38,16 @@ const ALERT = {
   flightNumber: null,
 };
 const CYCLE = new Date('2026-06-04T00:00:00Z');
+const CUTOFF = new Date('2026-06-01T00:00:00Z');
 
 beforeEach(() => {
   vi.clearAllMocks();
-  mockExtractionFindFirst.mockResolvedValue({ notifyMinDropAbs: 5, notifyMinDropPct: 0, publicBaseUrl: 'https://x.example' });
-  mockQueryFindUnique.mockResolvedValue({ id: 'q1', origin: 'MAD', destination: 'JFK', currency: 'USD', userId: null, lastNotifiedLowPrice: null });
+  mockExtractionFindFirst.mockResolvedValue({ id: 'singleton', notifyMinDropAbs: 5, notifyMinDropPct: 0, publicBaseUrl: 'https://x.example', cabinAlertBaselineCutoff: CUTOFF });
+  mockExtractionUpdate.mockResolvedValue({});
+  mockQueryFindUnique.mockResolvedValue({ id: 'q1', origin: 'MAD', destination: 'JFK', currency: 'USD', userId: null, lastNotifiedLowPrice: null, cabinClass: 'economy' });
   mockDetectNewLow.mockResolvedValue(ALERT);
   mockQueryUpdate.mockResolvedValue({});
+  mockQueryUpdateMany.mockResolvedValue({ count: 0 });
 });
 
 describe('notifyNewLows dedupe marker', () => {
@@ -75,6 +84,38 @@ describe('notifyNewLows dedupe marker', () => {
     mockDispatch.mockResolvedValue([{ channelId: 'c1', type: 'telegram', ok: true }]);
     await notifyNewLows(['q1', 'q2'], CYCLE);
     expect(mockDispatch).toHaveBeenCalledTimes(1); // q2 still ran
+  });
+});
+
+describe('notifyNewLows cabin baseline cutoff (pre-fix Economy fares mislabeled as premium cabins)', () => {
+  it('arms the cutoff once and clears poisoned dedupe markers on non-economy queries', async () => {
+    mockExtractionFindFirst.mockResolvedValue({ id: 'singleton', notifyMinDropAbs: 5, notifyMinDropPct: 0, cabinAlertBaselineCutoff: null });
+    mockDispatch.mockResolvedValue([]);
+    await notifyNewLows(['q1'], CYCLE);
+    expect(mockExtractionUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ data: { cabinAlertBaselineCutoff: expect.any(Date) } }),
+    );
+    expect(mockQueryUpdateMany).toHaveBeenCalledWith({
+      where: { cabinClass: { not: 'economy' } },
+      data: { lastNotifiedLowPrice: null, lastNotifiedAt: null },
+    });
+  });
+
+  it('does not re-arm when the cutoff is already set', async () => {
+    mockDispatch.mockResolvedValue([]);
+    await notifyNewLows(['q1'], CYCLE);
+    expect(mockExtractionUpdate).not.toHaveBeenCalled();
+    expect(mockQueryUpdateMany).not.toHaveBeenCalled();
+  });
+
+  it('bounds the baseline for non-economy queries and leaves economy unbounded', async () => {
+    mockDispatch.mockResolvedValue([]);
+    mockQueryFindUnique
+      .mockResolvedValueOnce({ id: 'q1', origin: 'MAD', destination: 'JFK', currency: 'USD', userId: null, lastNotifiedLowPrice: null, cabinClass: 'business' })
+      .mockResolvedValueOnce({ id: 'q2', origin: 'MAD', destination: 'JFK', currency: 'USD', userId: null, lastNotifiedLowPrice: null, cabinClass: 'economy' });
+    await notifyNewLows(['q1', 'q2'], CYCLE);
+    expect(mockDetectNewLow.mock.calls[0]![0].baselineFrom).toEqual(CUTOFF);
+    expect(mockDetectNewLow.mock.calls[1]![0].baselineFrom).toBeNull();
   });
 });
 
