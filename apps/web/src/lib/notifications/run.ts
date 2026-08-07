@@ -36,6 +36,26 @@ export async function notifyNewLows(queryIds: string[], cycleStartedAt: Date): P
   const floorPct = config?.notifyMinDropPct ?? 0;
   const baseUrl = resolveBaseUrl(config?.publicBaseUrl);
 
+  // One-time arming of the cabin baseline cutoff. Snapshots scraped before the
+  // cabin-class scrape fix are Economy fares mislabeled as the requested cabin;
+  // their fake lows sit permanently below any real business/first fare and
+  // would suppress every future new-low alert. On the first notify cycle after
+  // the fix: stamp the cutoff and clear the (equally poisoned) dedupe markers
+  // on non-economy queries. History is deliberately kept — only the alert
+  // baseline is bounded. Harmless on fresh installs: everything is post-cutoff.
+  let baselineCutoff = config?.cabinAlertBaselineCutoff ?? null;
+  if (config && baselineCutoff === null) {
+    baselineCutoff = new Date();
+    await prisma.extractionConfig.update({
+      where: { id: config.id },
+      data: { cabinAlertBaselineCutoff: baselineCutoff },
+    });
+    await prisma.query.updateMany({
+      where: { cabinClass: { not: 'economy' } },
+      data: { lastNotifiedLowPrice: null, lastNotifiedAt: null },
+    });
+  }
+
   for (const queryId of ids) {
     try {
       const query = await prisma.query.findUnique({
@@ -47,6 +67,7 @@ export async function notifyNewLows(queryIds: string[], cycleStartedAt: Date): P
           currency: true,
           userId: true,
           lastNotifiedLowPrice: true,
+          cabinClass: true,
         },
       });
       if (!query) continue;
@@ -60,6 +81,7 @@ export async function notifyNewLows(queryIds: string[], cycleStartedAt: Date): P
         cycleStartedAt,
         floorAbs,
         floorPct,
+        baselineFrom: query.cabinClass !== 'economy' ? baselineCutoff : null,
       });
       if (!alert) continue;
 

@@ -3,6 +3,7 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { isValidIATA } from '@/lib/iata-codes';
 import { isValidPriceAmount } from '@/lib/limits';
 import { redis } from '@/lib/redis';
+import { ALLOWED_CABIN_CLASSES } from '@/lib/cabin-class';
 import { timingSafeEqual } from 'crypto';
 
 const MAX_BATCH_SIZE = 1000;
@@ -16,12 +17,6 @@ const RATE_LIMIT_WINDOW = 3600; // 1 hour per API key
 const MAX_STOPS = 5;
 const MAX_AIRLINE_LEN = 100;
 const MAX_CABIN_LEN = 20;
-const ALLOWED_CABIN_CLASSES = new Set([
-  'economy',
-  'premium_economy',
-  'business',
-  'first',
-]);
 // travelDate must land in a believable window: airlines do not sell tickets
 // years out, and a far-past date is meaningless for a price tracker.
 const TRAVEL_PAST_MS = 2 * 365 * 24 * 3600 * 1000; // 2 years back

@@ -2,6 +2,7 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { requireAdminApi } from '@/lib/admin-guard';
+import { CABIN_CLASSES, isCabinClass } from '@/lib/cabin-class';
 
 export async function GET() {
   const denial = await requireAdminApi();
@@ -42,6 +43,10 @@ export async function POST(request: NextRequest) {
     return apiError('origin and destination must be 3-letter IATA codes', 400);
   }
 
+  if (cabinClass !== undefined && cabinClass !== null && !isCabinClass(cabinClass)) {
+    return apiError(`cabinClass must be one of: ${CABIN_CLASSES.join(', ')}`, 400);
+  }
+
   const now = new Date();
   const days = typeof lookAheadDays === 'number' && [7, 14, 21, 30].includes(lookAheadDays) ? lookAheadDays : 14;
   const interval = typeof scrapeInterval === 'number' && [1, 3, 6, 12, 24].includes(scrapeInterval) ? scrapeInterval : 3;
@@ -55,7 +60,7 @@ export async function POST(request: NextRequest) {
       destinationName: typeof destinationName === 'string' && destinationName.trim() ? destinationName.trim() : destCode,
       dateFrom: now,
       dateTo: new Date(now.getTime() + days * 24 * 60 * 60 * 1000),
-      cabinClass: typeof cabinClass === 'string' ? cabinClass : 'economy',
+      cabinClass: isCabinClass(cabinClass) ? cabinClass : 'economy',
       preferredAirlines: Array.isArray(preferredAirlines) ? preferredAirlines : [],
       isSeed: true,
       lookAheadDays: days,

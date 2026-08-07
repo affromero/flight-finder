@@ -9,6 +9,7 @@ import { getClientIp } from '@/lib/trusted-ip';
 import { redis } from '@/lib/redis';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { isValidPriceAmount } from '@/lib/limits';
+import { CABIN_CLASSES, isCabinClass } from '@/lib/cabin-class';
 import { coerceLayovers } from '@/lib/scraper/duration';
 
 const MAX_ROUTES = 20;
@@ -160,6 +161,13 @@ export async function POST(request: NextRequest) {
       return apiError(`maxStops must be an integer between 0 and ${MAX_STOPS_VALUE}`, 400);
     }
     maxStopsValidated = n;
+  }
+
+  // Validate cabinClass: absent falls back to economy at the create site; a
+  // present value must be a known enum member (it names the cabin every stored
+  // price is labeled with, and it reaches the extraction prompt).
+  if (cabinClass !== undefined && cabinClass !== null && !isCabinClass(cabinClass)) {
+    return apiError(`cabinClass must be one of: ${CABIN_CLASSES.join(', ')}`, 400);
   }
 
   const vpnCountries: string[] = Array.isArray(bodyVpnCountries)

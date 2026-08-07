@@ -22,6 +22,12 @@ export interface DetectNewLowParams {
   floorAbs: number;
   /** Minimum fractional drop (0..1) required to fire; 0 disables the percentage gate. */
   floorPct: number;
+  /** When set, snapshots scraped before this instant are excluded from the
+   * prior-best baseline. Used for non-economy queries whose pre-fix history is
+   * Economy fares mislabeled as the requested cabin (see
+   * ExtractionConfig.cabinAlertBaselineCutoff) — those fake lows would
+   * otherwise suppress every real new-low alert. */
+  baselineFrom?: Date | null;
 }
 
 /**
@@ -36,7 +42,7 @@ export interface DetectNewLowParams {
  * the create-time preview scrape from firing a spurious alert.
  */
 export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAlert | null> {
-  const { query, cycleStartedAt, floorAbs, floorPct } = params;
+  const { query, cycleStartedAt, floorAbs, floorPct, baselineFrom } = params;
 
   // Only ever compare prices in the same currency. When the query has an
   // explicit currency, scope both queries to it so a stray or pre-change
@@ -72,7 +78,7 @@ export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAl
     where: {
       queryId: query.id,
       status: 'available',
-      scrapedAt: { lt: cycleStartedAt },
+      scrapedAt: baselineFrom ? { lt: cycleStartedAt, gte: baselineFrom } : { lt: cycleStartedAt },
       currency: query.currency ?? cheapest.currency,
     },
     _min: { price: true },

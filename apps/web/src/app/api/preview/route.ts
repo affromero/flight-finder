@@ -2,6 +2,7 @@ import { createHash } from 'crypto';
 import type { Prisma } from '@/generated/prisma/client';
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
+import { normalizeCabinClass } from '@/lib/cabin-class';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
 import { getClientIp } from '@/lib/trusted-ip';
@@ -106,7 +107,7 @@ function toPreviewRequestPayload(body: Record<string, unknown>): PreviewRequestP
     maxDurationHours: body.maxDurationHours === undefined || body.maxDurationHours === null ? null : Number(body.maxDurationHours),
     preferredAirlines: Array.isArray(body.preferredAirlines) ? body.preferredAirlines.map(String) : [],
     timePreference: typeof body.timePreference === 'string' ? body.timePreference : 'any',
-    cabinClass: typeof body.cabinClass === 'string' ? body.cabinClass : 'economy',
+    cabinClass: normalizeCabinClass(body.cabinClass),
     tripType: typeof body.tripType === 'string' ? body.tripType : 'round_trip',
     currency: typeof body.currency === 'string' && body.currency ? body.currency : null,
     outboundDates: Array.isArray(body.outboundDates) ? body.outboundDates.map(String) : undefined,

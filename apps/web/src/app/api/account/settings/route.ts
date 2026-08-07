@@ -6,6 +6,7 @@ import { getCurrentUser } from '@/lib/user-auth';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { isPresetSlug } from '@/lib/avatars';
 import { isThemeId } from '@/lib/theme';
+import { CABIN_CLASSES, isCabinClass } from '@/lib/cabin-class';
 
 async function requireUser() {
   if (!(await isMultiUserEnabled())) return { ok: false as const, status: 404 };
@@ -104,9 +105,8 @@ export async function PATCH(request: NextRequest) {
   if (body.cabinClass === null) {
     data.cabinClass = null;
   } else if (typeof body.cabinClass === 'string') {
-    const allowed = ['economy', 'premium_economy', 'business', 'first'];
-    if (!allowed.includes(body.cabinClass)) {
-      return apiError(`cabinClass must be one of: ${allowed.join(', ')}`, 400);
+    if (!isCabinClass(body.cabinClass)) {
+      return apiError(`cabinClass must be one of: ${CABIN_CLASSES.join(', ')}`, 400);
     }
     data.cabinClass = body.cabinClass;
   }
