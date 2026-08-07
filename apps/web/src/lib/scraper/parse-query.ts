@@ -1,5 +1,6 @@
 import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionResult } from './ai-registry';
 import { prisma } from '@/lib/prisma';
+import { normalizeCabinClass } from '@/lib/cabin-class';
 
 export interface Airport {
   code: string; // IATA 3-letter code
@@ -211,6 +212,10 @@ function normalizeAirports(parsed: Record<string, unknown>): ParsedFlightQuery {
     destinationName: destinations[0]?.name ?? '',
     currency: typeof p.currency === 'string' && p.currency ? p.currency : null,
     maxDurationHours: typeof p.maxDurationHours === 'number' && p.maxDurationHours > 0 ? p.maxDurationHours : null,
+    // Clamp LLM-emitted cabin to the enum. Load-bearing for the CLI, which
+    // writes parsed.cabinClass straight to Prisma without hitting the API
+    // routes' validation.
+    cabinClass: normalizeCabinClass(p.cabinClass),
     dateFrom,
     dateTo,
     outboundDates: outboundDates?.length ? outboundDates : undefined,
