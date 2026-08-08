@@ -1,5 +1,22 @@
 # Changelog
 
+## [0.14.0] - 2026-08-07
+
+Premium cabins finally mean premium prices, and layovers show up in the data.
+
+### Added
+* **Layover capture.** Price snapshots now record each itinerary's layover legs (airport and duration) straight from the results page, so connections are part of the price history instead of a mystery.
+* **Sturdier create-time previews.** Long-stay scrapes get a wall-clock completion budget, unequal outbound/return date ranges are handled correctly, and combo guardrails are surfaced instead of silently truncating. Thanks @Alien10140.
+
+### Fixed
+* **Cabin class now reaches Google Flights.** Tracking business, premium economy, or first previously stored Economy fares mislabeled as the requested cabin, for previews, recurring scrapes, and the CLI alike. The search query now carries the cabin, the extraction prompt refuses to pass Economy fares off as premium, and LATAM direct booking no longer hardcodes Economy. Thanks @RomJ25.
+* **New-low alerts recover on premium-cabin trackers.** Mislabeled pre-fix history sat permanently below any real business or first fare and silently suppressed every future alert; a one-time baseline cutoff clears the poisoned markers while keeping chart history intact.
+* Preview split scrape failures and token usage are preserved instead of dropped, and preview cache limits and date guardrails are stabilized. Thanks @Alien10140.
+
+### Changed
+* `cabinClass` is validated at every trust boundary: API routes reject unknown values, the natural language parser clamps model drift, and the extraction prompt only accepts known cabin labels.
+* Dependency updates across npm, GitHub Actions, and Tauri, including the OpenAI SDK v7.
+
 ## [0.13.2] - 2026-07-24
 
 Tracker controls where you can reach them, and a scraper that waits for real prices.
