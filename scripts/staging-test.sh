@@ -122,6 +122,10 @@ cleanup() {
   [ -n "$REPO_DIR" ] && rm -rf "$REPO_DIR"
   # Remove staging image (save disk)
   docker rmi flight-finder-staging:latest 2>/dev/null || true
+  # Trim buildkit cache. The image is removed above, but the cache the build
+  # created is not, and it accumulated ~7.5G per run until the disk precheck
+  # started failing. 4GB is the established cap for this 75G shared host.
+  docker builder prune -f --keep-storage=4GB 2>/dev/null | tail -1 || true
   # Release lock
   rm -f "$LOCKFILE"
   echo "  Done."
