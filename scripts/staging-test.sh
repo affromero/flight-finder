@@ -135,6 +135,24 @@ git clone --depth 1 --branch "$BRANCH" \
   "$REPO_DIR" 2>&1 | tail -1
 echo "  Checked out $BRANCH"
 
+# === Disk precheck ===
+# The build needs several GB of headroom on a shared 75G box. Without this the
+# shortfall surfaces as `npm ci ... exit code: 1` deep inside the Dockerfile,
+# which reads like a lockfile bug. Fail here instead, while the cause is still
+# obvious. Threshold is 12G: a measured run drew the host from 20G down to 11G
+# free at peak, so the build itself needs ~9G of transient headroom.
+AVAIL_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+echo ""
+echo "  === Disk precheck ==="
+if [ "$QUICK" != "true" ] && [ "$AVAIL_GB" -lt 12 ]; then
+  echo "  FAIL only ${AVAIL_GB}G free on / (need 12G for the build)"
+  df -h /
+  echo "  Reclaim with: docker image prune -a --filter until=24h --force"
+  echo "  Stale per-SHA tags of other apps on this host are usually the bulk."
+  exit 1
+fi
+echo "  PASS ${AVAIL_GB}G free on /"
+
 # === Test 0: Artifact freshness (non-fatal -- deploy may be pending) ===
 echo ""
 echo "  === Artifact freshness ==="
