@@ -161,12 +161,30 @@ fi
 # === Test 1: Docker build ===
 echo ""
 echo "  === Docker build ==="
+# Keep the full build output. `-q | tail -1` used to discard it, so a failure
+# inside the image (npm ci, apt, Chromium download) surfaced only as buildkit's
+# final "exit code: 1" line with no reason attached.
+build_image() {
+  local log
+  log=$(mktemp /tmp/flight-finder-staging-build-XXXXXX.log)
+  if docker build -t flight-finder-staging:latest "$REPO_DIR" >"$log" 2>&1; then
+    tail -1 "$log"
+    rm -f "$log"
+    return 0
+  fi
+  echo "  Build failed. Last 40 lines:"
+  tail -40 "$log"
+  echo "  Disk on $(hostname):"
+  df -h /
+  rm -f "$log"
+  return 1
+}
+
 if [ "$QUICK" = "true" ]; then
   echo "  Skipping build (--quick), tagging existing image"
-  docker tag ghcr.io/affromero/flight-finder:latest flight-finder-staging:latest 2>/dev/null || \
-    docker build -t flight-finder-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
+  docker tag ghcr.io/affromero/flight-finder:latest flight-finder-staging:latest 2>/dev/null || build_image
 else
-  docker build -t flight-finder-staging:latest "$REPO_DIR" -q 2>&1 | tail -1
+  build_image
 fi
 pass "Docker image built"
 
