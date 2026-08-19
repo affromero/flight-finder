@@ -9,6 +9,7 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
       - uses: actions/setup-node@v7.0.0
@@ -29,6 +30,7 @@ jobs:
 
   install-smoke:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v7.0.1
       - run: docker build -f scripts/Dockerfile.install-test -t flight-finder-install-test .
@@ -36,6 +38,7 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
       - run: docker build -t flight-finder-test:latest .
@@ -51,6 +54,7 @@ jobs:
 
   staging:
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     if: github.ref == 'refs/heads/main'
     needs: [ci, install-smoke, integration]
     # Staging SSHes into the single shared prod host and takes a lock there.
