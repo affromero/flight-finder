@@ -23,7 +23,7 @@
   },
   "version": "0.14.0",
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.115.0",
+    "@anthropic-ai/sdk": "^0.116.0",
     "@google/generative-ai": "^0.24.1",
     "openai": "^7.4.0"
   },
