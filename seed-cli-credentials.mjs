@@ -57,6 +57,8 @@ if (generation(candidate) < 0) process.exit(0); // Never install an unreadable f
 
 if (!existsSync(dirname(runtimePath))) mkdirSync(dirname(runtimePath), { recursive: true });
 const temporary = `${runtimePath}.${randomUUID()}.tmp`;
-writeFileSync(temporary, candidate, { mode: 0o600 });
+// 0660: the volume is shared with Sotto, whose image runs as a different uid;
+// the directory is setgid to the group these images have in common.
+writeFileSync(temporary, candidate, { mode: 0o660 });
 renameSync(temporary, runtimePath);
 console.log(`[setup] Restored the newer ${provider} credentials the host copy would have replaced`);
