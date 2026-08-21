@@ -1,3 +1,8 @@
+# Two stacks run from this file on the same host: the public site and a private
+# instance. Everything a second copy would collide on is parameterized — the
+# published ports, the image tag, and the compose project name (set through
+# `docker compose -p`, which also scopes every volume below). Defaults reproduce
+# the public stack exactly, so an unparameterized `up` is unchanged.
 services:
   db:
     image: docker.io/library/postgres:16-alpine
@@ -9,7 +14,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "127.0.0.1:5433:5432"
+      - "127.0.0.1:${DB_PORT:-5433}:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U postgres"]
       interval: 5s
@@ -22,7 +27,7 @@ services:
     volumes:
       - redisdata:/data
     ports:
-      - "127.0.0.1:6380:6379"
+      - "127.0.0.1:${REDIS_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -30,7 +35,7 @@ services:
       retries: 5
 
   web:
-    image: ghcr.io/affromero/flight-finder:latest
+    image: ${FF_IMAGE:-ghcr.io/affromero/flight-finder}:${FF_IMAGE_TAG:-latest}
     restart: unless-stopped
     init: true
     ipc: host
@@ -40,7 +45,7 @@ services:
       redis:
         condition: service_healthy
     ports:
-      - "127.0.0.1:3003:3003"
+      - "127.0.0.1:${WEB_PORT:-3003}:3003"
     volumes:
       # Read-only seeds. They can never receive a rotation, which is why the
       # entrypoint keeps whichever credential is further along instead of
