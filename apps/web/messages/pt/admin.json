@@ -258,7 +258,14 @@
       "note": "Deixe a senha em branco para um membro que entra com um toque. Qualquer pessoa que alcance esta instância pode entrar como um membro sem senha, então adicione uma senha se ela for pública. Administradores sempre precisam de senha.",
       "adding": "Adicionando...",
       "submit": "Adicionar usuário"
-    }
+    },
+    "inviteTitle": "Convidar alguém para esta instância",
+    "inviteHint": "Gera um link que abre o acesso por 24 horas. Compartilhe ou deixe escanearem o código.",
+    "inviteAction": "Criar link de convite",
+    "inviteWorking": "Criando…",
+    "inviteFailed": "Não foi possível criar o convite.",
+    "inviteCopy": "Copiar link",
+    "inviteCopied": "Copiado"
   },
   "AdminInsights": {
     "title": "Insights de Companhias Aéreas",

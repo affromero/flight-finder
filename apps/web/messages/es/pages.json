@@ -86,6 +86,16 @@
     "manualSignIn": "Iniciar sesión con nombre de usuario",
     "invalidCredentials": "Usuario o contraseña inválidos"
   },
+  "Gate": {
+    "title": "Esta instancia es privada",
+    "subtitle": "Escribe la contraseña de acceso o abre el enlace de invitación que te compartió el propietario.",
+    "passwordLabel": "Contraseña de acceso",
+    "submit": "Desbloquear",
+    "unlocking": "Desbloqueando…",
+    "wrongPassword": "Esa contraseña no abre esta instancia.",
+    "tooMany": "Demasiados intentos. Espera unos minutos e inténtalo de nuevo.",
+    "failed": "No se pudo conectar con la instancia. Inténtalo de nuevo."
+  },
   "Account": {
     "changeAvatar": "Cambiar avatar",
     "yourTrackers": "Tus rastreadores",

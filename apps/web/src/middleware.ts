@@ -1,5 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { classifyBot, classifyByHeaders, isMaliciousPath } from '@/lib/analytics/bots';
+import {
+  GATE_COOKIE,
+  gateEnabled,
+  verifyMachineToken,
+  verifySessionToken,
+} from '@/lib/access/gate';
 
 // "ft-" prefix kept across the Flight Finder rename so existing sessions survive.
 // Mirrors SESSION_COOKIE in lib/admin-auth.ts. The two are kept separate on
@@ -65,6 +71,46 @@ async function verifyHmacToken(token: string): Promise<boolean> {
   }
 }
 
+/**
+ * Paths that stay reachable on a gated instance.
+ *
+ * Each one is here because something that is not a logged-in browser depends on
+ * it: the container healthcheck, the deploy's version probe, the gate's own
+ * login round-trip, callers that carry their own credential (cron with
+ * CRON_SECRET, community sync with a bearer key, the middleware's internal
+ * analytics POST), and the assets a browser fetches without cookies — the
+ * service worker, the manifest, icons and the OG image, or the login page
+ * renders bare and the PWA silently stops updating.
+ *
+ * `/sitemap.xml` is deliberately absent: it enumerates active query IDs, which
+ * is exactly what a private instance must not publish. `/robots.txt` is present
+ * but answers Disallow when the gate is on.
+ */
+const GATE_EXEMPT_EXACT = new Set([
+  '/api/health',
+  '/api/version',
+  '/api/gate',
+  '/api/analytics/track',
+  '/api/cron/scrape',
+  '/api/community/register',
+  '/api/community/ingest',
+  '/sw.js',
+  '/manifest.json',
+  '/robots.txt',
+  '/og-hero.png',
+  '/og-hero.svg',
+  '/apple-icon.png',
+]);
+
+function isGateExempt(pathname: string): boolean {
+  if (pathname === '/gate') return true;
+  if (GATE_EXEMPT_EXACT.has(pathname)) return true;
+  // Icon variants (icon-192.png, icon-512-maskable.png, …) are fetched without
+  // cookies; a gated icon makes the browser fall back to another site's favicon.
+  if (pathname.startsWith('/icon-')) return true;
+  return false;
+}
+
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
 
@@ -76,6 +122,27 @@ export async function middleware(request: NextRequest) {
   // Block malicious paths (WordPress probes, .env, etc.)
   if (isMaliciousPath(pathname)) {
     return new NextResponse(null, { status: 404, headers: { 'X-Robots-Tag': 'noindex' } });
+  }
+
+  // --- Instance access gate (private deployments only) ---
+  // Runs before admin auth: on a gated instance nothing should be reachable
+  // without a credential, including the admin login page itself. This is not
+  // authentication — admin auth below still applies to whoever gets through.
+  if (gateEnabled() && !isGateExempt(pathname)) {
+    const admitted =
+      (await verifySessionToken(request.cookies.get(GATE_COOKIE)?.value)) ||
+      (await verifyMachineToken(request.headers.get('authorization')));
+    if (!admitted) {
+      // Non-browser callers get a status they can act on; a browser gets the
+      // gate, with where it was heading so the round-trip is not a dead end.
+      if (pathname.startsWith('/api/')) {
+        return NextResponse.json({ ok: false, error: 'Locked' }, { status: 401 });
+      }
+      const gate = new URL('/gate', request.url);
+      const target = `${pathname}${request.nextUrl.search}`;
+      if (target !== '/') gate.searchParams.set('next', target);
+      return NextResponse.redirect(gate);
+    }
   }
 
   // Self-hosted: no login page, redirect straight to dashboard

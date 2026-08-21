@@ -258,7 +258,14 @@
       "note": "Laisse le mot de passe vide pour un membre qui se connecte d’un simple tap. Quiconque peut atteindre cette instance peut se connecter comme membre sans mot de passe : ajoute un mot de passe si elle est publique. Les admins ont toujours besoin d’un mot de passe.",
       "adding": "Ajout...",
       "submit": "Ajouter l’utilisateur"
-    }
+    },
+    "inviteTitle": "Inviter quelqu'un sur cette instance",
+    "inviteHint": "Génère un lien qui ouvre l'accès pendant 24 heures. Partage-le ou fais scanner le code.",
+    "inviteAction": "Créer un lien d'invitation",
+    "inviteWorking": "Création…",
+    "inviteFailed": "Impossible de créer une invitation.",
+    "inviteCopy": "Copier le lien",
+    "inviteCopied": "Copié"
   },
   "AdminInsights": {
     "title": "Analyses des compagnies",

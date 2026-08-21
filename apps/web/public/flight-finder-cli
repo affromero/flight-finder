@@ -35,6 +35,19 @@ FLIGHT_FINDER_DIR="$HOME/.flight-finder"
 PORT="${HOST_PORT:-${PORT:-3003}}"
 BASE_URL="${FLIGHT_FINDER_URL:-https://flight-finder.org}"
 
+# A private instance sets FF_ACCESS_PASSWORD, and its middleware then refuses
+# anything without a credential — localhost included, since the gate does not
+# care where the request came from. Export FLIGHT_FINDER_TOKEN (matching the
+# instance's FF_MACHINE_TOKEN) and every API call below carries it. Unset on a
+# public instance, where it is not needed and costs nothing.
+ff_curl() {
+  if [ -n "${FLIGHT_FINDER_TOKEN:-}" ]; then
+    curl -H "Authorization: Bearer ${FLIGHT_FINDER_TOKEN}" "$@"
+  else
+    curl "$@"
+  fi
+}
+
 # Compose-flavor flag helpers (issue #72). Lives next to this script so
 # `command -v flight-finder` and dev-mode (bin/flight-finder → apps/web/public/) both
 # resolve it via dirname "$0". Required, not optional — a missing helper on
@@ -129,7 +142,7 @@ format_time() {
 }
 
 fetch_health() {
-  curl -sf "http://localhost:${PORT}/api/health" 2>/dev/null
+  ff_curl -sf "http://localhost:${PORT}/api/health" 2>/dev/null
 }
 
 show_tracking_info() {
@@ -167,7 +180,7 @@ cmd_start_foreground() {
 
   printf "${CYAN}${BOLD}▸${RESET} Starting...\n"
   RETRIES=60
-  until curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; do
+  until ff_curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; do
     RETRIES=$((RETRIES - 1))
     if [ "$RETRIES" -le 0 ]; then
       printf "${YELLOW}${BOLD}!${RESET} Took too long — check: flight-finder logs\n"
@@ -343,7 +356,7 @@ cmd_search() {
 
   # Step 1: Parse natural language query
   local parse_res
-  parse_res=$(curl -sf "http://localhost:${PORT}/api/parse" \
+  parse_res=$(ff_curl -sf "http://localhost:${PORT}/api/parse" \
     -H 'Content-Type: application/json' \
     -d "{\"query\": $(printf '%s' "$input" | python3 -c 'import json,sys; print(json.dumps(sys.stdin.read()))')}" 2>/dev/null)
 
@@ -394,7 +407,7 @@ print(json.dumps({'parsed': p, 'confidence': conf}))
   preview_body=$(echo "$parsed_json" | python3 -c "import json,sys; print(json.dumps(json.load(sys.stdin)['parsed']))" 2>/dev/null)
 
   local preview_res
-  preview_res=$(curl -sf "http://localhost:${PORT}/api/preview" \
+  preview_res=$(ff_curl -sf "http://localhost:${PORT}/api/preview" \
     -H 'Content-Type: application/json' \
     -d "$preview_body" 2>/dev/null)
 
@@ -435,7 +448,7 @@ print(json.dumps(body))
 " <<< "$preview_res" 2>/dev/null)
 
   local create_res
-  create_res=$(curl -sf "http://localhost:${PORT}/api/queries" \
+  create_res=$(ff_curl -sf "http://localhost:${PORT}/api/queries" \
     -H 'Content-Type: application/json' \
     -d "$create_body" 2>/dev/null)
 
@@ -489,7 +502,7 @@ cmd_uninstall() {
 
 cmd_version() {
   local version_json
-  version_json=$(curl -sf "http://localhost:${PORT}/api/version" 2>/dev/null)
+  version_json=$(ff_curl -sf "http://localhost:${PORT}/api/version" 2>/dev/null)
   if [ -n "$version_json" ]; then
     local ver commit
     ver=$(echo "$version_json" | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['current'])" 2>/dev/null)

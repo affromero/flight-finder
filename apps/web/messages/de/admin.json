@@ -258,7 +258,14 @@
       "note": "Lass das Passwort leer für ein Mitglied mit Tipp-Anmeldung. Jeder, der diese Instanz erreichen kann, kann sich als passwortloses Mitglied anmelden — vergib also ein Passwort, wenn sie öffentlich ist. Admins brauchen immer ein Passwort.",
       "adding": "Wird hinzugefügt...",
       "submit": "Benutzer hinzufügen"
-    }
+    },
+    "inviteTitle": "Jemanden zu dieser Instanz einladen",
+    "inviteHint": "Erzeugt einen Link, der den Zugang 24 Stunden lang öffnet. Teile ihn oder lass den Code scannen.",
+    "inviteAction": "Einladungslink erstellen",
+    "inviteWorking": "Wird erstellt…",
+    "inviteFailed": "Einladung konnte nicht erstellt werden.",
+    "inviteCopy": "Link kopieren",
+    "inviteCopied": "Kopiert"
   },
   "AdminInsights": {
     "title": "Airline-Einblicke",
