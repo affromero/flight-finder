@@ -2,7 +2,7 @@
  * End-to-end test: Frankfurt → Bogota, December 2026
  * Runs the full CLI pipeline without TUI: parse → preview → create → display chart
  *
- * Usage: doppler run -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/e2e-test.ts
+ * Usage: infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/e2e-test.ts
  */
 import { parseFlightQuery } from '../../../apps/web/src/lib/scraper/parse-query.js';
 import { previewFlights, type RouteResult } from './lib/preview.js';

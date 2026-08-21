@@ -11,7 +11,7 @@
     "lint": "npm run lint --workspace=@flight-finder/web && npm run lint --workspace=@flight-finder/cli",
     "typecheck": "npm run typecheck --workspace=@flight-finder/web && npm run typecheck --workspace=@flight-finder/cli",
     "test": "npm run test --workspace=@flight-finder/web && npm run test --workspace=@flight-finder/cli",
-    "cli": "doppler run -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/index.tsx --headless",
+    "cli": "infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/index.tsx --headless",
     "cli:dev": "npm run dev --workspace=@flight-finder/cli",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build && npm run build --workspace=@flight-finder/cli",
     "db:push": "npx prisma db push --schema=apps/web/prisma/schema.prisma",

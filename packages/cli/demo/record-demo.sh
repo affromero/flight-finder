@@ -148,7 +148,7 @@ tmux send-keys -t "$P2" "echo '  ⏩  Fast-forwarding 5 days of price tracking..
 tmux send-keys -t "$P2" "echo '      (scraping every 3 hours via cron)'" Enter
 sleep 2
 
-doppler run -- node --import tsx/esm --import ./packages/cli/register.mjs -e "
+infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node --import tsx/esm --import ./packages/cli/register.mjs -e "
 import { prisma } from '@/lib/prisma';
 const queryIds = ['$L_ID', '$R_ID'];
 const now = Date.now();

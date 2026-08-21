@@ -39,7 +39,7 @@ function buildViewCommand(queryId: string): string {
     execSync('which flightfinder', { stdio: 'ignore' });
     return `cd ${cwd} && flightfinder --headless --view ${queryId}${backendFlag}`;
   } catch {
-    return `cd ${cwd} && doppler run -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/index.tsx --headless --view ${queryId}${backendFlag}`;
+    return `cd ${cwd} && infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node --import tsx/esm --import ./packages/cli/register.mjs packages/cli/src/index.tsx --headless --view ${queryId}${backendFlag}`;
   }
 }
 

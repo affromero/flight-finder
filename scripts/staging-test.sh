@@ -32,7 +32,7 @@ set -euo pipefail
 #
 # Secrets (env vars or GitHub Actions secrets):
 #   STAGING_HOST  — SSH config alias (default: flight-finder-staging)
-#   REPO_TOKEN    — GitHub PAT for cloning (fallback: Doppler)
+#   REPO_TOKEN    — GitHub PAT for cloning (fallback: Infisical)
 # ============================================================================
 
 BOLD='\033[1m'
@@ -52,12 +52,12 @@ printf "${BOLD}Flight Finder staging test${RESET}\n"
 printf "${DIM}Target: ${STAGING_HOST}:${STAGING_PORT}${RESET}\n"
 echo ""
 
-# Secrets from env (GitHub Actions) or Doppler (local)
+# Secrets from env (GitHub Actions) or Infisical (local)
 if [ -z "${REPO_TOKEN:-}" ]; then
-  REPO_TOKEN=$(doppler secrets get REPO_TOKEN --plain --project flight-finder --config prd 2>/dev/null || echo "")
+  REPO_TOKEN=$(infisical secrets get REPO_TOKEN --plain --silent --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env prod 2>/dev/null || echo "")
 fi
 if [ -z "${REPO_TOKEN:-}" ]; then
-  printf "${RED}REPO_TOKEN not set. Set via env or Doppler.${RESET}\n"
+  printf "${RED}REPO_TOKEN not set. Set via env or Infisical.${RESET}\n"
   exit 1
 fi
 

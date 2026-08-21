@@ -4,8 +4,8 @@
  * drop into apps/web/public/avatars/, replacing the emoji fallback tiles
  * automatically (the picker prefers /avatars/{slug}.png when present).
  *
- * Run once a key is available, for example through Doppler:
- *   doppler run --project flight-finder --config dev -- node scripts/generate-avatars.mjs
+ * Run once a key is available, for example through Infisical:
+ *   infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node scripts/generate-avatars.mjs
  *
  * Needs GEMINI_API_KEY (Sotto's var name) or GOOGLE_AI_API_KEY (this project's
  * existing var) in the environment. Optional GEMINI_IMAGE_MODEL override.
@@ -17,7 +17,7 @@ import { dirname, join } from 'node:path';
 const KEY = process.env.GEMINI_API_KEY ?? process.env.GOOGLE_AI_API_KEY;
 if (!KEY) {
   console.error(
-    'No image key found. Set GEMINI_API_KEY or GOOGLE_AI_API_KEY (add it to the flight-finder Doppler config).',
+    'No image key found. Set GEMINI_API_KEY or GOOGLE_AI_API_KEY (add it to the flight-finder Infisical project).',
   );
   process.exit(1);
 }

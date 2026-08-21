@@ -8,13 +8,13 @@
     "flightfinder-tui": "./dist/index.js"
   },
   "scripts": {
-    "dev": "doppler run -- node --import tsx/esm --import ./register.mjs src/index.tsx",
+    "dev": "infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node --import tsx/esm --import ./register.mjs src/index.tsx",
     "build": "tsup",
     "typecheck": "tsc --noEmit",
     "lint": "eslint . --max-warnings 0",
     "test": "vitest run",
     "test:watch": "vitest",
-    "test:e2e": "doppler run -- node --import tsx/esm --import ./register.mjs src/e2e-test.ts"
+    "test:e2e": "infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node --import tsx/esm --import ./register.mjs src/e2e-test.ts"
   },
   "dependencies": {
     "@prisma/adapter-pg": "^7.9.1",
