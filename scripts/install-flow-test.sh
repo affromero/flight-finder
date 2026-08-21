@@ -326,11 +326,16 @@ test_entrypoint_self_hosted_default() {
     fail "docker-entrypoint.sh must gate CLI provider install on INSTALL_CLI_PROVIDERS, decoupled from SELF_HOSTED (#89)"
   fi
 
-  # 3. The one hosted deployment opts out explicitly and keeps CLI install.
-  if grep -qE '^\s*SELF_HOSTED:\s*"false"' "$prod" && grep -qE '^\s*INSTALL_CLI_PROVIDERS:\s*"true"' "$prod"; then
-    pass "docker-compose.prod.yml sets SELF_HOSTED=false + INSTALL_CLI_PROVIDERS=true (#89)"
+  # 3. The hosted deployment stays hosted by DEFAULT. The same file now also
+  #    serves a private self-hosted stack, so the value is an override with a
+  #    false default rather than a constant — what #89 protects against is a
+  #    compose that leaves the app self-hosted by accident, and a `:-false`
+  #    default cannot do that. A bare `${SELF_HOSTED}` would, so reject it.
+  if grep -qE '^\s*SELF_HOSTED:\s*("false"|\$\{SELF_HOSTED:-false\})' "$prod" \
+    && grep -qE '^\s*INSTALL_CLI_PROVIDERS:\s*"true"' "$prod"; then
+    pass "docker-compose.prod.yml defaults SELF_HOSTED to false + INSTALL_CLI_PROVIDERS=true (#89)"
   else
-    fail "docker-compose.prod.yml must explicitly set SELF_HOSTED=\"false\" and INSTALL_CLI_PROVIDERS=\"true\" (#89)"
+    fail "docker-compose.prod.yml must default SELF_HOSTED to \"false\" (literal or \${SELF_HOSTED:-false}) and set INSTALL_CLI_PROVIDERS=\"true\" (#89)"
   fi
 }
 
