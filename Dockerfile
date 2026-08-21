@@ -139,7 +139,8 @@ RUN printf '#!/bin/sh\nexec node /app/packages/cli/dist/index.js "$@"\n' > /home
 RUN mkdir -p /app/data && chown node:node /app/data
 
 COPY --chown=node:node docker-entrypoint.sh ./
-RUN chmod +x docker-entrypoint.sh
+COPY --chown=node:node seed-cli-credentials.mjs ./
+RUN chmod +x docker-entrypoint.sh seed-cli-credentials.mjs
 USER node
 RUN flight-finder-tui --help >/dev/null
 # Guard: the recovery commands depend on tsup's `@`->apps/web/src alias inlining

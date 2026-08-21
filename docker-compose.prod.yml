@@ -42,7 +42,17 @@ services:
     ports:
       - "127.0.0.1:3003:3003"
     volumes:
+      # Read-only seeds. They can never receive a rotation, which is why the
+      # entrypoint keeps whichever credential is further along instead of
+      # blindly overlaying these.
       - /home/sotto/.claude:/home/node/.claude-host:ro
+      - /home/sotto/.codex:/home/node/.codex-host:ro
+      # The live credentials, shared with every other app on this host that
+      # drives the same CLI login: the CLIs rotate their refresh token in place
+      # and the server retires the previous one, so two copies of one login kill
+      # each other. One file, one lineage, and it outlives the container.
+      - agent-claude-home:/home/node/.claude
+      - agent-codex-home:/home/node/.codex
       - analytics-data:/app/data
       - cli-cache:/home/node/.npm-global
     environment:
@@ -68,6 +78,12 @@ services:
       INSTALL_CLI_PROVIDERS: "true"
 
 volumes:
+  # Host-wide, shared with the other apps driving the same CLI login. Create
+  # them once with `docker volume create agent-claude-home agent-codex-home`.
+  agent-claude-home:
+    external: true
+  agent-codex-home:
+    external: true
   pgdata:
   redisdata:
   analytics-data:
