@@ -144,7 +144,16 @@ echo "  Checked out $BRANCH"
 # shortfall surfaces as `npm ci ... exit code: 1` deep inside the Dockerfile,
 # which reads like a lockfile bug. Fail here instead, while the cause is still
 # obvious. Threshold is 12G: a measured run drew the host from 20G down to 11G
-# free at peak, so the build itself needs ~9G of transient headroom.
+# free at peak, so the build itself needs ~9G of transient headroom. That 12G is
+# now measured AFTER the trim below, which is what makes it mean what it says.
+# Trim the buildkit cache BEFORE measuring, not only in cleanup. The build adds
+# ~7.5G of cache as it runs, which is the same headroom the precheck is trying
+# to guarantee: starting at exactly the threshold means finishing at zero, and
+# the failure lands on whichever container writes next (postgres, usually,
+# reported as an unhealthy dependency rather than a disk error). This host also
+# carries a second Flight Finder stack now, so the slack it used to have is gone.
+docker builder prune -f --keep-storage=2GB 2>/dev/null | tail -1 || true
+
 AVAIL_GB=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
 echo ""
 echo "  === Disk precheck ==="
