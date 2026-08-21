@@ -258,7 +258,14 @@
       "note": "Leave the password blank for a tap-to-sign-in member. Anyone who can reach this instance can sign in as a passwordless member, so add a password if it's public. Admins always need a password.",
       "adding": "Adding...",
       "submit": "Add user"
-    }
+    },
+    "inviteTitle": "Invite someone to this instance",
+    "inviteHint": "Generates a link that opens the access gate for 24 hours. Share it, or let them scan the code.",
+    "inviteAction": "Create invite link",
+    "inviteWorking": "Creating…",
+    "inviteFailed": "Could not create an invite.",
+    "inviteCopy": "Copy link",
+    "inviteCopied": "Copied"
   },
   "AdminInsights": {
     "title": "Airline Insights",

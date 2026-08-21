@@ -86,6 +86,16 @@
     "manualSignIn": "Sign in with a username instead",
     "invalidCredentials": "Invalid username or password"
   },
+  "Gate": {
+    "title": "This instance is private",
+    "subtitle": "Enter the access password, or open the invite link the owner shared with you.",
+    "passwordLabel": "Access password",
+    "submit": "Unlock",
+    "unlocking": "Unlocking…",
+    "wrongPassword": "That password does not open this instance.",
+    "tooMany": "Too many attempts. Wait a few minutes and try again.",
+    "failed": "Could not reach the instance. Try again."
+  },
   "Account": {
     "changeAvatar": "Change avatar",
     "yourTrackers": "Your trackers",

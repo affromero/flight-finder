@@ -1,0 +1,42 @@
+# Caddy site fragment for the PRIVATE Flight Finder instance.
+#
+# Deployed to /etc/caddy/conf.d/ff.afromero.co. The shared /etc/caddy/Caddyfile
+# imports conf.d/* — never overwrite that file, only this fragment.
+#
+# The public site lives in flight-finder.org and proxies port 3003; this one is
+# a second compose project on the same host with its own database, its own
+# ports, and the in-app access gate (FF_ACCESS_PASSWORD) in front of everything.
+
+ff.afromero.co {
+	reverse_proxy localhost:3060
+
+	header {
+		Strict-Transport-Security "max-age=31536000; includeSubDomains; preload"
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=()"
+		# Mirrors the public site: unsafe-inline is required for the theme
+		# bootstrap snippet, JSON-LD, the service worker registration, and
+		# Plotly's runtime inline styles.
+		Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https:; object-src 'none'; base-uri 'self'; frame-ancestors 'none';"
+		# A private instance should never be indexed, even if a page slips past
+		# the gate through an exemption.
+		X-Robots-Tag "noindex, nofollow"
+		-Server
+	}
+
+	# Only assets the gate leaves reachable are worth caching at the edge; the
+	# gated pages themselves must never be cached by a shared proxy.
+	@static path /_next/static/* /favicon.ico /icon-*.png /manifest.json /sw.js
+	header @static Cache-Control "public, max-age=31536000, immutable"
+
+	encode gzip zstd
+
+	log {
+		output file /var/log/caddy/ff-private-access.log {
+			roll_size 50MiB
+			roll_keep 5
+		}
+	}
+}

@@ -342,6 +342,53 @@ describe('ai-registry', () => {
     });
   });
 
+  describe('CLI failures that print on stdout', () => {
+    it('surfaces the claude failure when stderr is empty', async () => {
+      const fakeProc = createFakeProc();
+      mockSpawn.mockReturnValue(fakeProc);
+
+      const extractPromise = EXTRACTION_PROVIDERS['claude-code']!.extract(
+        '',
+        'sonnet',
+        'system',
+        'user'
+      );
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalled();
+      });
+
+      // How an expired OAuth session actually reports: stdout carries the
+      // reason, stderr is empty, exit code is 1.
+      fakeProc.stdout!.emit(
+        'data',
+        Buffer.from('Failed to authenticate: OAuth session expired and could not be refreshed')
+      );
+      fakeProc.emit('close', 1);
+
+      await expect(extractPromise).rejects.toThrow(/OAuth session expired/);
+    });
+
+    it('surfaces the codex failure when stderr is empty', async () => {
+      const fakeProc = createFakeProc();
+      mockSpawn.mockReturnValue(fakeProc);
+
+      const extractPromise = EXTRACTION_PROVIDERS['codex']!.extract(
+        '',
+        'gpt-5.5',
+        'system',
+        'user'
+      );
+      await vi.waitFor(() => {
+        expect(mockSpawn).toHaveBeenCalled();
+      });
+
+      fakeProc.stdout!.emit('data', Buffer.from('Not logged in. Run codex auth.'));
+      fakeProc.emit('close', 1);
+
+      await expect(extractPromise).rejects.toThrow(/Not logged in/);
+    });
+  });
+
   describe('filterCliStderr', () => {
     it('strips PATH warning lines from stderr', () => {
       const stderr = 'could not update PATH\nError: something went wrong\ncould not update PATH to include /usr/bin';

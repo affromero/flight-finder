@@ -86,6 +86,16 @@
     "manualSignIn": "Stattdessen mit Benutzernamen anmelden",
     "invalidCredentials": "Benutzername oder Passwort ungültig"
   },
+  "Gate": {
+    "title": "Diese Instanz ist privat",
+    "subtitle": "Gib das Zugangspasswort ein oder öffne den Einladungslink, den der Eigentümer geteilt hat.",
+    "passwordLabel": "Zugangspasswort",
+    "submit": "Entsperren",
+    "unlocking": "Wird entsperrt…",
+    "wrongPassword": "Mit diesem Passwort lässt sich diese Instanz nicht öffnen.",
+    "tooMany": "Zu viele Versuche. Warte ein paar Minuten und versuche es erneut.",
+    "failed": "Die Instanz war nicht erreichbar. Versuche es erneut."
+  },
   "Account": {
     "changeAvatar": "Avatar ändern",
     "yourTrackers": "Deine Tracker",

@@ -101,6 +101,15 @@ if [ "$INSTALL_CLI_PROVIDERS" = "true" ]; then
   # Copy CLI auth from read-only host mounts into writable directories.
   # The installer mounts host ~/.claude and ~/.codex as read-only at *-host paths.
   # CLIs need write access (models cache, sessions), so we copy into writable dirs.
+  # The host mount is read-only, so it never receives a rotation. Preserve the
+  # credential the CLI rotated before letting the overlay run, then keep
+  # whichever generation is newer: restoring the host's retired token would lock
+  # this container out of its own subscription until someone pastes new ones.
+  rotated_claude=""
+  if [ -f /home/node/.claude/.credentials.json ]; then
+    rotated_claude="$(mktemp)"
+    cp /home/node/.claude/.credentials.json "$rotated_claude" 2>/dev/null || rotated_claude=""
+  fi
   if [ -d /home/node/.claude-host ] && [ "$(ls -A /home/node/.claude-host 2>/dev/null)" ]; then
     if cp -r /home/node/.claude-host/. /home/node/.claude/ 2>/dev/null; then
       echo "[setup] Copied Claude Code auth from host"
@@ -109,9 +118,18 @@ if [ "$INSTALL_CLI_PROVIDERS" = "true" ]; then
       echo "[setup]   Fix: run 'chmod -R a+rX ~/.claude' on the host, then restart"
     fi
   fi
+  if [ -n "$rotated_claude" ]; then
+    node /app/seed-cli-credentials.mjs claude "$rotated_claude" /home/node/.claude/.credentials.json || true
+    rm -f "$rotated_claude"
+  fi
   if [ -f /home/node/.claude-host.json ]; then
     cp /home/node/.claude-host.json /home/node/.claude.json
     echo "[setup] Copied Claude credentials file from host"
+  fi
+  rotated_codex=""
+  if [ -f /home/node/.codex/auth.json ]; then
+    rotated_codex="$(mktemp)"
+    cp /home/node/.codex/auth.json "$rotated_codex" 2>/dev/null || rotated_codex=""
   fi
   if [ -d /home/node/.codex-host ] && [ "$(ls -A /home/node/.codex-host 2>/dev/null)" ]; then
     if cp -r /home/node/.codex-host/. /home/node/.codex/ 2>/dev/null; then
@@ -120,6 +138,10 @@ if [ "$INSTALL_CLI_PROVIDERS" = "true" ]; then
       echo "[setup] WARNING: Could not copy Codex auth — host files may not be readable"
       echo "[setup]   Fix: run 'chmod -R a+rX ~/.codex' on the host, then restart"
     fi
+  fi
+  if [ -n "$rotated_codex" ]; then
+    node /app/seed-cli-credentials.mjs codex "$rotated_codex" /home/node/.codex/auth.json || true
+    rm -f "$rotated_codex"
   fi
 
 

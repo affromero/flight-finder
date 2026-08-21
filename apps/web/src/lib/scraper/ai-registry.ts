@@ -359,7 +359,11 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
         });
         proc.on('close', (code) => {
           if (code !== 0) {
-            const filtered = filterCliStderr(stderr);
+            // The CLI prints authentication failures ("Not logged in", "OAuth
+            // session expired and could not be refreshed") on stdout in print
+            // mode, leaving stderr empty — so stderr alone yields a blank
+            // message and the real cause never reaches the operator.
+            const filtered = filterCliStderr(stderr) || filterCliStderr(stdout) || '(no output)';
             reject(new Error(`claude CLI exited ${code}: ${filtered}`));
           } else {
             resolve(stdout.trim());
@@ -414,11 +418,17 @@ export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
         });
 
         let stderr = '';
+        let stdout = '';
         proc.stderr.on('data', (d: Buffer) => {
           stderr += d.toString();
         });
+        // Same blind spot as the claude path: an auth failure lands on stdout
+        // with nothing on stderr, so the error would read "codex CLI exited 1:".
+        proc.stdout.on('data', (d: Buffer) => {
+          stdout += d.toString();
+        });
         proc.on('close', (code) => {
-          const filtered = filterCliStderr(stderr);
+          const filtered = filterCliStderr(stderr) || filterCliStderr(stdout) || '(no output)';
           const hint = filtered.includes('401') || filtered.includes('Unauthorized')
             ? ' (ensure codex is authenticated on the host via `codex auth` and ~/.codex is readable)'
             : '';

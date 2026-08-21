@@ -258,7 +258,14 @@
       "note": "Deja la contraseña en blanco para un miembro que inicia sesión con un toque. Cualquiera que pueda acceder a esta instancia puede entrar como un miembro sin contraseña, así que agrega una si es pública. Los administradores siempre necesitan contraseña.",
       "adding": "Agregando...",
       "submit": "Agregar usuario"
-    }
+    },
+    "inviteTitle": "Invitar a alguien a esta instancia",
+    "inviteHint": "Genera un enlace que abre el acceso durante 24 horas. Compártelo o deja que escaneen el código.",
+    "inviteAction": "Crear enlace de invitación",
+    "inviteWorking": "Creando…",
+    "inviteFailed": "No se pudo crear la invitación.",
+    "inviteCopy": "Copiar enlace",
+    "inviteCopied": "Copiado"
   },
   "AdminInsights": {
     "title": "Estadísticas de aerolíneas",

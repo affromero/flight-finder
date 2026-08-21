@@ -2,6 +2,8 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
+import { gateEnabled } from '@/lib/access/gate';
+import { GateInvite } from './GateInvite';
 import { UsersClient } from './UsersClient';
 import styles from './page.module.css';
 
@@ -29,6 +31,7 @@ export default async function UsersPage() {
   return (
     <div className={styles.root}>
       <h1 className={styles.title}>{t('title')}</h1>
+      {gateEnabled() && <GateInvite />}
       <UsersClient
         initialUsers={users.map((u) => ({
           id: u.id,

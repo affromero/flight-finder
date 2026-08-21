@@ -86,6 +86,16 @@
     "manualSignIn": "Se connecter avec un nom d’utilisateur",
     "invalidCredentials": "Nom d’utilisateur ou mot de passe invalide"
   },
+  "Gate": {
+    "title": "Cette instance est privée",
+    "subtitle": "Saisis le mot de passe d'accès ou ouvre le lien d'invitation partagé par le propriétaire.",
+    "passwordLabel": "Mot de passe d'accès",
+    "submit": "Déverrouiller",
+    "unlocking": "Déverrouillage…",
+    "wrongPassword": "Ce mot de passe n'ouvre pas cette instance.",
+    "tooMany": "Trop de tentatives. Attends quelques minutes et réessaie.",
+    "failed": "Impossible de joindre l'instance. Réessaie."
+  },
   "Account": {
     "changeAvatar": "Changer d’avatar",
     "yourTrackers": "Tes suivis",

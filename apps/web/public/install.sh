@@ -413,12 +413,19 @@ $EXTRA_HOSTS_BLOCK
     volumes:
       - app-data:/app/data
       - cli-cache:/home/node/.npm-global
+      # The CLI rotates its OAuth refresh token in place and the server retires
+      # the previous one, so the rotated file has to outlive the container or
+      # every redeploy hands back a dead credential.
+      - agent-claude-home:/home/node/.claude
+      - agent-codex-home:/home/node/.codex
 
 volumes:
   pgdata:
   redisdata:
   app-data:
   cli-cache:
+  agent-claude-home:
+  agent-codex-home:
 COMPOSE
 
 ok "Created ~/.flight-finder"

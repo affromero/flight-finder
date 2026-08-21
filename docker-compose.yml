@@ -59,12 +59,19 @@ services:
       - "host.docker.internal:host-gateway"
     volumes:
       - app-data:/app/data
-      # Uncomment to use Claude Code CLI from your host machine:
+      # The live CLI credentials. They must outlive the container: the CLIs
+      # rotate their refresh token in place and the server retires the previous
+      # one, so a container-local copy is dead after the next recreate.
+      - agent-claude-home:/home/node/.claude
+      - agent-codex-home:/home/node/.codex
+      # Uncomment to seed from the Claude Code CLI on your host machine:
       # - ~/.claude:/home/node/.claude-host:ro
-      # Uncomment to use Codex CLI from your host machine:
+      # Uncomment to seed from the Codex CLI on your host machine:
       # - ~/.codex:/home/node/.codex-host:ro
 
 volumes:
   pgdata:
   redisdata:
   app-data:
+  agent-claude-home:
+  agent-codex-home:

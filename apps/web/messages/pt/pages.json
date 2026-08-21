@@ -86,6 +86,16 @@
     "manualSignIn": "Entrar com nome de usuário",
     "invalidCredentials": "Nome de usuário ou senha inválidos"
   },
+  "Gate": {
+    "title": "Esta instância é privada",
+    "subtitle": "Digite a senha de acesso ou abra o link de convite que o proprietário compartilhou.",
+    "passwordLabel": "Senha de acesso",
+    "submit": "Desbloquear",
+    "unlocking": "Desbloqueando…",
+    "wrongPassword": "Essa senha não abre esta instância.",
+    "tooMany": "Tentativas demais. Espere alguns minutos e tente de novo.",
+    "failed": "Não foi possível acessar a instância. Tente novamente."
+  },
   "Account": {
     "changeAvatar": "Alterar avatar",
     "yourTrackers": "Seus rastreadores",
