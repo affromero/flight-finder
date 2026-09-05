@@ -5,6 +5,8 @@ import { googleSearchUrl, selectGoogleTotal } from './google';
 import type { HotelPageCapture } from './extraction';
 import { extractBookingOffers } from './booking-extraction';
 import { extractGoogleOffers } from './google-extraction';
+import { navigateHotelPage } from './navigation';
+import { captureBookingRates } from './booking-capture';
 import type { HotelOffer, HotelSearch, HotelSelection, HotelSource, HotelStay } from './types';
 
 export const HOTEL_DISCOVERY_LIMIT = 8;
@@ -23,22 +25,7 @@ export async function captureHotelSource(search: HotelSearch, stay: HotelStay, s
     const profile = COUNTRY_PROFILES.GB!;
     const context = await createStealthContext(browser, { countryProfile: profile });
     const page = await context.newPage();
-    await page.route('**/*', async route => {
-      const request = route.request();
-      const destination = new URL(request.url());
-      const host = source === 'booking' ? 'www.booking.com' : 'www.google.com';
-      if (request.isNavigationRequest() && request.frame() === page.mainFrame() && (destination.protocol !== 'https:' || destination.hostname !== host)) {
-        await route.abort('blockedbyclient');
-        return;
-      }
-      await route.continue();
-    });
-    const response = await page.goto(url, { waitUntil: 'domcontentloaded', timeout: 45000 });
-    if (!response || response.status() >= 400) throw new Error(`${source} returned HTTP ${response?.status() ?? 'unknown'}`);
-    await page.locator('body').waitFor({ state: 'visible' });
-    await page.waitForTimeout(5000);
-    const consent = page.getByRole('button', { name: /^(Accept all|Reject all|Accept)$/i }).first();
-    if (await consent.isVisible()) await consent.click();
+    await navigateHotelPage(page, url, source);
     const totalPriceBasis = source === 'google_hotels' ? await selectGoogleTotal(page) : '';
     await page.waitForTimeout(1500);
     const text = await page.locator('body').innerText();
@@ -58,20 +45,7 @@ export async function captureHotelSource(search: HotelSearch, stay: HotelStay, s
       const e = element as HTMLImageElement;
       return { alt: e.alt, url: e.currentSrc || e.src };
     }));
-    const rates = source === 'booking' ? await page.locator('table tr').evaluateAll(rows => {
-      let roomName = '';
-      let roomOccupancy = '';
-      return rows.flatMap(row => {
-        const name = row.querySelector('.hprt-roomtype-icon-link,.hprt-roomtype-link,[data-testid="room-name"]')?.textContent?.trim();
-        if (name) {
-          roomName = name;
-          roomOccupancy = (row as HTMLElement).innerText.match(/Sleeps:\s*\d+ adults?(?:[^\n]*children?)?/i)?.[0] ?? '';
-        }
-        const select = row.querySelector<HTMLSelectElement>('select[name^="nr_rooms_"]');
-        const occupancy = `${roomOccupancy}\n${[...row.querySelectorAll('[title],[aria-label]')].map(element => `${element.getAttribute('title') ?? ''} ${element.getAttribute('aria-label') ?? ''}`).join('\n')}`;
-        return select ? [{ id: select.name.replace(/^nr_rooms_/, ''), roomName, text: (row as HTMLElement).innerText, occupancy, available: Math.max(...[...select.options].map(option => Number(option.value)).filter(Number.isFinite)) }] : [];
-      });
-    }) : [];
+    const rates = source === 'booking' ? await captureBookingRates(page) : [];
     const metadata = await page.evaluate(() => ({
       propertyName: ((document.querySelector('#hp_hotel_name h2') ?? document.querySelector('.pp-header__title h2') ?? document.querySelector('#hp_hotel_name') ?? document.querySelector('.pp-header__title') ?? document.querySelector('h1')) as HTMLElement | null)?.innerText?.trim().split('\n').filter(Boolean).at(-1),
       address: (document.querySelector('.hp_address_subtitle') as HTMLElement | null)?.innerText?.trim(),

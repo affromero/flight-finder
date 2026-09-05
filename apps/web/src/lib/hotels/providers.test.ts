@@ -49,6 +49,23 @@ describe('hotel provider requests', () => {
 const family = { ...search, rooms: [{ adults: 2, children: [6] }, { adults: 1, children: [] }] };
 
 describe('captured Booking property rates', () => {
+  const headerPriced = {
+    ...fixtures.booking,
+    controls: fixtures.booking.controls.replace('room1=A,A,6\nroom2=A', 'room1=A,A'),
+    rates: [
+      { id: '24138030_442483970_2_2_0', roomName: 'Double Room with Private Bathroom', available: 9, priceBasis: 'Price for 3 nights', text: 'Sleeps: 2 adults\nUS$588\nUS$529\nOriginal price US$588 Current price US$529\nIncludes taxes and charges\nBreakfast US$11 (optional)\nFree cancellation before 6 October 2026' },
+      { id: '24138030_442483970_2_1_0', roomName: 'Double Room with Private Bathroom', available: 9, priceBasis: 'Price for 3 nights', text: 'Sleeps: 2 adults\nUS$611\nIncludes taxes and charges\nBreakfast included\nFree cancellation before 6 October 2026' },
+    ],
+  };
+  it('uses the corresponding whole-stay table header for rates without repeated stay lengths', () => {
+    const offers = extractBookingOffers(headerPriced, search, stay);
+    expect(offers.map(offer => ({ price: offer.totalPrice, breakfast: offer.breakfast, taxes: offer.taxesIncluded }))).toEqual([
+      { price: 529, breakfast: false, taxes: true }, { price: 611, breakfast: true, taxes: true },
+    ]);
+  });
+  it.each([undefined, '', 'Price', 'Price for 2 nights', 'Price per night', 'Price for 3 nights, per night'])('rejects unverified or conflicting table price basis: %s', priceBasis => {
+    expect(() => extractBookingOffers({ ...headerPriced, rates: headerPriced.rates.map(rate => ({ ...rate, priceBasis })) }, search, stay)).toThrow(/tax-inclusive/);
+  });
   it('removes the provider SEO suffix without changing the property name', () => {
     const offers = extractBookingOffers({ ...fixtures.booking, propertyName: 'Strand Palace (Hotel) (UK) deals' }, family, stay);
     expect(offers.every(offer => offer.hotelName === 'Strand Palace')).toBe(true);

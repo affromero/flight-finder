@@ -78,6 +78,7 @@ jobs:
       - run: npx prisma generate --schema=apps/web/prisma/schema.prisma
       - run: npx prisma db push --schema=apps/web/prisma/schema.prisma
       - run: npx playwright install chromium --with-deps
+      - run: node --import tsx scripts/hotel-navigation-test.ts
       - run: npm run build
       - name: Exercise hotel browser workflows
         run: |

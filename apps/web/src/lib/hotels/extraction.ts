@@ -11,7 +11,7 @@ export interface HotelPageCapture {
   address?: string;
   totalPriceBasis?: string;
   starsLabel?: string;
-  rates?: { id: string; text: string; roomName: string; occupancy?: string; available?: number }[];
+  rates?: { id: string; text: string; roomName: string; occupancy?: string; priceBasis?: string; available?: number }[];
 }
 
 

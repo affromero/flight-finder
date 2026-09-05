@@ -63,8 +63,8 @@ describe('natural-language hotel parsing through the provider HTTP boundary', ()
     content = JSON.stringify({ result: [parsed] });
     await expect(parseHotelQuery('London hotel')).rejects.toThrow(/date|check-in|check-out/i);
   });
-  it('requires an age for each child instead of accepting an unspecified age', async () => {
-    content = JSON.stringify({ result: [{ ...criteria, rooms: [{ adults: 2, children: [null] }] }] });
+  it.each([[null], [8, null]])('requires an age for every child: %j', async (...children) => {
+    content = JSON.stringify({ result: [{ ...criteria, rooms: [{ adults: 2, children }] }] });
     await expect(parseHotelQuery('London, two adults and a child')).rejects.toThrow(/Child age/);
   });
   it('rejects multiple proposed searches instead of silently selecting one', async () => {

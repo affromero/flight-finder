@@ -14,7 +14,9 @@ function priceRate(rate: CapturedRate, room: HotelRoom, search: HotelSearch, sta
   if (adults < room.adults || children < room.children.length || !rate.available) return null;
   if (room.children.length && !/Free stay for your child/i.test(rate.text)) return null;
   const nights = Math.round((Date.parse(stay.checkOut) - Date.parse(stay.checkIn)) / 86400000);
-  if (!new RegExp(`\\b${nights} nights?\\b`).test(rate.text)) return null;
+  const headerNights = rate.priceBasis?.match(/\bPrice for (\d+) nights?\b/i)?.[1];
+  if (rate.priceBasis && (Number(headerNights) !== nights || /\b(?:per|each) night\b|nightly/i.test(rate.priceBasis))) return null;
+  if (!headerNights && !new RegExp(`\\b${nights} nights?\\b`).test(rate.text)) return null;
   const currencies: Record<string, string> = { USD: '(?:US\\$|\\$)', GBP: '£', EUR: '€', CAD: 'CAD', AUD: 'AUD' };
   const symbol = currencies[search.currency] ?? search.currency;
   const current = rate.text.match(new RegExp(`Current price\\s*${symbol}\\s*([\\d,]+(?:\\.\\d{1,2})?)`, 'i'));
