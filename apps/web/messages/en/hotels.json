@@ -1,5 +1,7 @@
 {
   "Hotels": {
+    "historyTable": "Detailed price history",
+    "historyScroll": "Scroll sideways for room details and policies. Keyboard: focus the table and use the arrow keys.",
     "statusInterrupted": "Status updates interrupted. Your search may still be running. Retry status updates or cancel the search.",
     "retryStatus": "Retry status updates",
     "progress": "{completed} of {total} checks complete. Tracking becomes available when the search finishes.",

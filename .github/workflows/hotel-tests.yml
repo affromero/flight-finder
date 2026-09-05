@@ -37,3 +37,63 @@ jobs:
       - run: npx prisma generate --schema=apps/web/prisma/schema.prisma
       - run: npx prisma db push --schema=apps/web/prisma/schema.prisma
       - run: npm run test --workspace=@flight-finder/web -- src/lib/hotels/hotel.integration.test.ts
+
+  hotel-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hotel_test
+          POSTGRES_PASSWORD: hotel_ci_test
+          POSTGRES_DB: hotel_browser
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hotel_test -d hotel_browser"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+    env:
+      DATABASE_URL: postgresql://hotel_test:hotel_ci_test@127.0.0.1:5432/hotel_browser
+      REDIS_URL: redis://127.0.0.1:6379
+      SELF_HOSTED: 'true'
+      CRON_ENABLED: 'false'
+      ADMIN_PASSWORD: hotel-browser-ci-only
+      ADMIN_SESSION_SECRET: hotel-browser-ci-session-not-a-production-secret
+      HOTEL_BROWSER_URL: http://127.0.0.1:3014
+      HOTEL_BROWSER_OUTPUT: /tmp/flight-finder-hotel-browser
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema=apps/web/prisma/schema.prisma
+      - run: npx prisma db push --schema=apps/web/prisma/schema.prisma
+      - run: npx playwright install chromium --with-deps
+      - run: npm run build
+      - name: Exercise hotel browser workflows
+        run: |
+          mkdir -p "$HOTEL_BROWSER_OUTPUT"
+          npm exec --workspace=@flight-finder/web -- next start -p 3014 > "$HOTEL_BROWSER_OUTPUT/server.log" 2>&1 &
+          hotel_server_pid=$!
+          trap 'kill "$hotel_server_pid"' EXIT
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent "$HOTEL_BROWSER_URL/api/health"; then break; fi
+            kill -0 "$hotel_server_pid"
+            sleep 2
+          done
+          curl --fail --silent "$HOTEL_BROWSER_URL/api/health"
+          node scripts/hotel-browser-test.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: hotel-browser-evidence
+          path: /tmp/flight-finder-hotel-browser

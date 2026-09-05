@@ -1,5 +1,7 @@
 {
   "Hotels": {
+    "historyTable": "Historial de precios detallado",
+    "historyScroll": "Desplázate horizontalmente para ver las habitaciones y condiciones. Con el teclado, enfoca la tabla y usa las flechas.",
     "statusInterrupted": "Se interrumpieron las actualizaciones. La búsqueda puede seguir en curso. Reintenta consultar el estado o cancela la búsqueda.",
     "retryStatus": "Reintentar estado",
     "progress": "{completed} de {total} comprobaciones completadas. El seguimiento estará disponible al terminar la búsqueda.",

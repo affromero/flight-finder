@@ -1,5 +1,7 @@
 {
   "Hotels": {
+    "historyTable": "Historique détaillé des prix",
+    "historyScroll": "Faites défiler horizontalement pour voir les chambres et les conditions. Au clavier, sélectionnez le tableau et utilisez les flèches.",
     "statusInterrupted": "Les mises à jour sont interrompues. La recherche est peut-être toujours en cours. Réessayez ou annulez la recherche.",
     "retryStatus": "Réessayer les mises à jour",
     "progress": "{completed} vérifications sur {total} terminées. Le suivi sera disponible à la fin de la recherche.",

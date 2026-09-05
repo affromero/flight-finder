@@ -117,6 +117,15 @@ describe('Hotel offers and saved trackers', () => {
     const current = detail(); current.snapshots = [{ id: 'p1', runId: 'r1', scrapedAt: '2027-09-02T12:00:00Z', eligible: false, offer: { ...offer, match: 'approximate', checkIn: '2027-10-16', checkOut: '2027-10-19' } }]; vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(current)));
     render(<HotelDetail id="tracker1" />); const table = await screen.findByRole('table'); await waitFor(() => expect(within(table).getByText(/2027-10-16/)).toBeInTheDocument()); expect(within(table).getByText(/Not eligible for alerts/)).toBeInTheDocument(); expect(within(table).getByText('Double room')).toBeInTheDocument(); expect(within(table).getByText('Flexible')).toBeInTheDocument(); expect(within(table).getByText('Unknown')).toBeInTheDocument();
   });
+  it('makes detailed history keyboard-focusable and explains sideways scrolling', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(detail())));
+    render(<HotelDetail id="tracker1" />);
+    const region = await screen.findByRole('region', { name: 'Detailed price history' });
+    expect(within(region).getByRole('table')).toBeInTheDocument();
+    expect(region).toHaveAccessibleDescription(/Scroll sideways.*arrow keys/);
+    region.focus();
+    expect(region).toHaveFocus();
+  });
   it('requires confirmation before deleting a hotel and returns to search after deletion', async () => {
     const confirm = vi.spyOn(window, 'confirm').mockReturnValue(false);
     const fetcher = vi.fn().mockImplementation(async (url: string, init?: RequestInit) => init?.method === 'DELETE' ? response({ deleted: true }) : response(detail())); vi.stubGlobal('fetch', fetcher);
