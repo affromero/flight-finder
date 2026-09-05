@@ -43,6 +43,7 @@ export async function navigateHotelPage(page: Page, url: string, source: HotelSo
       ]);
     } catch { throw new Error('Google Hotels consent did not return to hotel results'); }
   } else if (await consent.isVisible()) await consent.click();
+  await page.waitForFunction(() => !document.documentElement.hasAttribute('data-hotel-redirect'), undefined, { timeout: 45000 });
   const final = new URL(page.url());
   if (finalStatus >= 400) throw new Error(`${source} returned HTTP ${finalStatus}`);
   if (final.protocol !== 'https:' || final.hostname !== providerHost || final.port || (source === 'google_hotels' && !final.pathname.startsWith('/travel/'))) throw new Error(`${source} did not return to an allowed hotel page`);

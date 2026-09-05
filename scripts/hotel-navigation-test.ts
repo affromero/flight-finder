@@ -17,6 +17,7 @@ async function main() {
     { name: 'blocks insecure consent destinations', target: 'http://www.google.com/travel/hotels' },
     { name: 'blocks internal consent destinations', target: 'https://127.0.0.1/private' },
     { name: 'rejects unresolved consent', target: '' },
+    { name: 'rejects a delayed final error after an allowed intermediate redirect', target: `${hotelUrl}/intermediate`, error: /HTTP 503/ },
   ];
   try {
     for (const scenario of cases) {
@@ -26,6 +27,14 @@ async function main() {
       const server = createServer((request, response) => {
         const url = new URL(new URL(request.url!, 'http://localhost').searchParams.get('destination')!);
         visited.push(url.href);
+        if (url.pathname.endsWith('/intermediate')) {
+          response.writeHead(302, { location: `${hotelUrl}/unavailable` });
+          return response.end();
+        }
+        if (url.pathname.endsWith('/unavailable')) {
+          setTimeout(() => { response.writeHead(503, { 'content-type': 'text/html' }); response.end('<main>Temporarily unavailable</main>'); }, 1000);
+          return;
+        }
         if (url.hostname === 'consent.google.com') {
           consentVisited = true;
           if (url.pathname === '/save') {
@@ -62,8 +71,8 @@ async function main() {
           assert.equal(new URL(page.url()).hostname, 'www.google.com');
           assert.equal(await page.locator('main').innerText(), scenario.expected);
         } else {
-          await assert.rejects(navigateHotelPage(page, hotelUrl, 'google_hotels'), /consent/);
-          if (scenario.target) assert.equal(visited.includes(scenario.target), false, 'Unsafe redirect must never reach the network');
+          await assert.rejects(navigateHotelPage(page, hotelUrl, 'google_hotels'), scenario.error ?? /consent/);
+          if (scenario.target && !scenario.error) assert.equal(visited.includes(scenario.target), false, 'Unsafe redirect must never reach the network');
         }
         console.log(`PASS ${scenario.name}`);
       } finally { await context.close(); server.close(); }
