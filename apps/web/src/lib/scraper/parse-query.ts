@@ -1,6 +1,7 @@
 import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionResult } from './ai-registry';
 import { prisma } from '@/lib/prisma';
 import { normalizeCabinClass } from '@/lib/cabin-class';
+import { matchingJsonEnd } from './extract-prices';
 
 export interface Airport {
   code: string; // IATA 3-letter code
@@ -223,6 +224,37 @@ function normalizeAirports(parsed: Record<string, unknown>): ParsedFlightQuery {
   };
 }
 
+/** Extract a query object from reasoning, prose, fences, or a JSON wrapper. */
+export function extractJsonObject(
+  content: string,
+): { ok: true; value: Record<string, unknown> } | { ok: false; reason: 'no_json_in_response' | 'json_parse_error' } {
+  const text = content.replace(/<think>[\s\S]*?<\/think>/gi, '');
+  let sawBrace = false;
+  let firstObject: Record<string, unknown> | null = null;
+  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
+    sawBrace = true;
+    const end = matchingJsonEnd(text, start, '{', '}');
+    if (end === -1) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(text.slice(start, end + 1));
+    } catch {
+      continue;
+    }
+    if (typeof parsed !== 'object' || parsed === null || Array.isArray(parsed)) continue;
+    const object = parsed as Record<string, unknown>;
+    // A draft or wrapper may parse before the answer. Prefer the envelope
+    // (including parsed:null) or a flat route; validation stays downstream.
+    const isEnvelope = 'confidence' in object && 'parsed' in object;
+    const isFlatQuery = ('origin' in object || 'origins' in object)
+      && ('destination' in object || 'destinations' in object);
+    if (isEnvelope || isFlatQuery) return { ok: true, value: object };
+    if (firstObject === null) firstObject = object;
+  }
+  if (firstObject !== null) return { ok: true, value: firstObject };
+  return { ok: false, reason: sawBrace ? 'json_parse_error' : 'no_json_in_response' };
+}
+
 export async function parseFlightQuery(
   rawInput: string,
   conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
@@ -282,7 +314,7 @@ export async function parseFlightQuery(
         ? { timeoutMs: config.extractTimeoutSeconds * 1000 }
         : {}),
       // Constrain local providers to emit a JSON object. Without this, small
-      // Ollama models occasionally return prose or a refusal and the regex
+      // Ollama models occasionally return prose or a refusal and extraction
       // below finds nothing (issue #84). Gated to LOCAL_PROVIDERS only because
       // custom OpenAI compatible endpoints (OPENAI_BASE_URL, OpenRouter, etc.)
       // may route to models that reject `response_format` outright; the
@@ -291,26 +323,16 @@ export async function parseFlightQuery(
     }
   );
 
-  const jsonMatch = result.content.match(/\{[\s\S]*\}/);
-  if (!jsonMatch) {
+  const extracted = extractJsonObject(result.content);
+  if (!extracted.ok) {
     const preview = result.content.slice(0, 200).replace(/\s+/g, ' ');
     console.error(
-      `[parse-query] FAIL no_json_in_response provider=${provider} model=${model} length=${result.content.length} preview=${preview}`,
+      `[parse-query] FAIL ${extracted.reason} provider=${provider} model=${model} length=${result.content.length} preview=${preview}`,
     );
     throw new Error('Failed to parse LLM response as JSON');
   }
 
-  let raw: Record<string, unknown>;
-  try {
-    raw = JSON.parse(jsonMatch[0]) as Record<string, unknown>;
-  } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    const preview = jsonMatch[0].slice(0, 200).replace(/\s+/g, ' ');
-    console.error(
-      `[parse-query] FAIL json_parse_error provider=${provider} model=${model} length=${jsonMatch[0].length} err=${msg} preview=${preview}`,
-    );
-    throw new Error('Failed to parse LLM response as JSON', { cause: err });
-  }
+  const raw = extracted.value;
 
   // Handle both old format (flat ParsedFlightQuery) and new format (with confidence envelope)
   let parsed: ParsedFlightQuery | null;

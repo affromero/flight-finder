@@ -655,6 +655,14 @@ describe('extractJsonArray (issue #139 — wrappers around the array)', () => {
     const r = extractJsonArray('[{"airline":"Spirit [LCC]","price":98}]');
     expect(r.ok && r.value).toEqual([{ airline: 'Spirit [LCC]', price: 98 }]);
   });
+  it('preserves escaped quotes, backslashes and nested arrays in flight rows', () => {
+    const flights = [{ airline: 'Spirit "] {LCC}" \\', price: 98, layovers: [{ airport: 'ORD' }] }];
+    const r = extractJsonArray(`Results:\n${JSON.stringify(flights)}\nNotes: [not JSON]`);
+    expect(r).toEqual({ ok: true, value: flights });
+  });
+  it('finds flight rows after an unclosed prose bracket', () => {
+    expect(extractJsonArray('Notes [unfinished\n[{"price":98}]')).toEqual({ ok: true, value: [{ price: 98 }] });
+  });
   it('reports no_json_in_response when there is no array at all', () => {
     const r = extractJsonArray('I could not find any flights.');
     expect(r).toEqual({ ok: false, reason: 'no_json_in_response' });

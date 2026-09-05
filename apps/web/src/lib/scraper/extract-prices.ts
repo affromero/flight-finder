@@ -190,10 +190,10 @@ export interface ExtractionResult {
 }
 
 /**
- * Find the index of the ']' that closes the '[' at `start`, ignoring brackets
+ * Find the index of the closing delimiter for the opening one at `start`, ignoring delimiters
  * that appear inside JSON string literals. Returns -1 when unbalanced.
  */
-function matchingArrayEnd(text: string, start: number): number {
+export function matchingJsonEnd(text: string, start: number, open: string, close: string): number {
   let depth = 0;
   let inStr = false;
   let escaped = false;
@@ -206,8 +206,8 @@ function matchingArrayEnd(text: string, start: number): number {
       continue;
     }
     if (ch === '"') inStr = true;
-    else if (ch === '[') depth++;
-    else if (ch === ']' && --depth === 0) return i;
+    else if (ch === open) depth++;
+    else if (ch === close && --depth === 0) return i;
   }
   return -1;
 }
@@ -235,7 +235,7 @@ export function extractJsonArray(
   let firstArray: unknown[] | null = null;
   for (let start = text.indexOf('['); start !== -1; start = text.indexOf('[', start + 1)) {
     sawBracket = true;
-    const end = matchingArrayEnd(text, start);
+    const end = matchingJsonEnd(text, start, '[', ']');
     if (end === -1) continue;
     let parsed: unknown;
     try {

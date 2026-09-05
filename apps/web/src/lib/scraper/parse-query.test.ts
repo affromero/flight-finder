@@ -45,13 +45,85 @@ vi.mock('./ai-registry', async (importOriginal) => {
 // Provide a fake API key so the provider check passes
 process.env.ANTHROPIC_API_KEY = 'test-key';
 
-import { parseFlightQuery } from './parse-query';
+import { extractJsonObject, parseFlightQuery } from './parse-query';
 
 function makeLlmResponse(data: Record<string, unknown>): string {
   return JSON.stringify(data);
 }
 
 describe('parseFlightQuery', () => {
+  const query = {
+    origins: [{ code: 'JFK', name: 'New York {JFK} "Terminal" \\' }],
+    destinations: [{ code: 'BKK', name: 'Bangkok [BKK]' }],
+    dateFrom: '2026-12-20', dateTo: '2026-12-26', cabinClass: 'economy',
+  };
+  const envelope = {
+    confidence: 'medium', parsed: query,
+    ambiguities: [{ field: 'origin', question: 'Which New York airport?', options: ['JFK', 'EWR'] }],
+  };
+  const answer = JSON.stringify(envelope);
+  it.each([
+    { name: 'reasoning with a conflicting query', content: `<ThInK>${JSON.stringify({ ...envelope, parsed: { origin: 'LAX', destination: 'SFO' } })}</ThInK>\n${answer}` },
+    { name: 'a trailing explanation and another object', content: `${answer}\nI used economy as requested. {"note":"1 seat"}` },
+    { name: 'a markdown fence', content: `\`\`\`json\n${answer}\n\`\`\`` },
+    { name: 'nested wrapper metadata', content: JSON.stringify({ confidence: 'high', result: envelope }) },
+    { name: 'an unclosed reasoning block with a draft', content: `<think>Draft: {"origin":"NYC"}\nFinal answer:\n${answer}` },
+    { name: 'differently tagged reasoning', content: `<analysis>{"confidence":"low","note":"draft"}</analysis>\n${answer}` },
+    { name: 'a malformed prefix and stray closing brace', content: `I need { valid JSON. {"broken": }\n${answer}\nDone }` },
+    { name: 'several unrelated objects', content: `{} {"note":"NYC means New York"}\n${answer}` },
+  ])('preserves the query and clarification in $name (issue #201)', async ({ content }) => {
+    mockExtract.mockResolvedValueOnce({ content, usage: { inputTokens: 100, outputTokens: 50 } });
+    const { response, usage } = await parseFlightQuery('NYC to Bangkok December 20-26th, Eco, 1 seat');
+    expect(response).toMatchObject({
+      confidence: 'medium', ambiguities: envelope.ambiguities, dateSpanDays: 6,
+      parsed: { ...query, origin: 'JFK', destination: 'BKK' },
+    });
+    expect(usage).toEqual({ inputTokens: 100, outputTokens: 50 });
+  });
+  it.each([
+    { origin: 'JFK', destination: 'BKK' },
+    { origins: query.origins, destinations: query.destinations },
+  ])('finds legacy routes inside a wrapper: %j', async (route) => {
+    const content = JSON.stringify({ note: { origin: 'draft' }, result: { ...route, dateFrom: query.dateFrom, dateTo: query.dateTo } });
+    mockExtract.mockResolvedValueOnce({ content, usage: { inputTokens: 100, outputTokens: 50 } });
+    const { response } = await parseFlightQuery('NYC to Bangkok December 20-26');
+    expect(response).toMatchObject({ confidence: 'high', parsed: { origin: 'JFK', destination: 'BKK', dateFrom: query.dateFrom, dateTo: query.dateTo } });
+  });
+  it('preserves a wrapped null answer and its clarification', async () => {
+    const value = { confidence: 'low', parsed: null, ambiguities: [{ field: 'general', question: 'Where do you want to fly?' }] };
+    mockExtract.mockResolvedValueOnce({ content: JSON.stringify({ result: value }), usage: { inputTokens: 10, outputTokens: 10 } });
+    expect((await parseFlightQuery('hello')).response).toEqual({ ...value, dateSpanDays: 0 });
+  });
+  it('prefers incomplete routes and leaves required-field validation to the parser', async () => {
+    const value = { origin: 'JFK', destination: 'BKK' };
+    const content = `{"note":"dates missing"}\n${JSON.stringify(value)}`;
+    expect(extractJsonObject(content)).toEqual({ ok: true, value });
+    mockExtract.mockResolvedValueOnce({ content, usage: { inputTokens: 10, outputTokens: 10 } });
+    expect((await parseFlightQuery('JFK to BKK')).response).toMatchObject({ parsed: null, confidence: 'low', ambiguities: [{ field: 'general' }] });
+  });
+  it('retains the first generic object when no query-shaped candidate exists', () => {
+    expect(extractJsonObject('{"note":"first"} {"note":"second"}')).toEqual({ ok: true, value: { note: 'first' } });
+  });
+  it('turns an empty answer into a clarification', async () => {
+    mockExtract.mockResolvedValueOnce({ content: '{}', usage: { inputTokens: 10, outputTokens: 10 } });
+    expect((await parseFlightQuery('hello')).response).toMatchObject({ parsed: null, confidence: 'low', ambiguities: [{ field: 'general' }] });
+  });
+  it.each([
+    ['<think>{"draft":true}</think>Sorry, I cannot parse that.', 'no_json_in_response'],
+    ['{"origin":', 'json_parse_error'],
+    ['{broken} {"invalid": }', 'json_parse_error'],
+  ])('reports failed extraction for %s', async (content, reason) => {
+    const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      mockExtract.mockResolvedValueOnce({ content, usage: { inputTokens: 10, outputTokens: 10 } });
+      await expect(parseFlightQuery('hello')).rejects.toThrow('parse LLM response');
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining(`FAIL ${reason}`));
+      expect(spy).toHaveBeenCalledWith(expect.stringContaining('provider=anthropic'));
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   beforeEach(() => {
     mockExtract.mockReset();
   });
@@ -454,7 +526,7 @@ describe('parseFlightQuery', () => {
 
   it('logs a preview when JSON parse fails on a malformed block (issue #84)', async () => {
     const spy = vi.spyOn(console, 'error').mockImplementation(() => {});
-    // Regex finds { ... } but the contents are not valid JSON (unquoted keys).
+    // The braces balance but the contents are not valid JSON (unquoted keys).
     mockExtract.mockResolvedValue({
       content: 'Here is the result: { foo: bar } and more',
       usage: { inputTokens: 50, outputTokens: 20 },
