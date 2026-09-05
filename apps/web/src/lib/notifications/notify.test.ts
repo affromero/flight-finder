@@ -31,6 +31,12 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllGlobals());
 
 describe('dispatchNotifications', () => {
+  it('excludes channels already delivered when retrying a hotel alert', async () => {
+    mockFindMany.mockResolvedValue([{ id: 'remaining', type: 'webhook', config: { url: 'http://127.0.0.1/hook' }, userId: null }]);
+    const outcomes = await dispatchNotifications(null, MESSAGE, ['delivered']);
+    expect(mockFindMany).toHaveBeenCalledWith(expect.objectContaining({ where: { enabled: true, userId: null, id: { notIn: ['delivered'] } } }));
+    expect(outcomes).toEqual([{ channelId: 'remaining', type: 'webhook', ok: true }]);
+  });
   it('includes the global channels for an owned query (so multi-user alerts still fire)', async () => {
     mockFindMany.mockResolvedValue([]);
     await dispatchNotifications('user-1', MESSAGE);

@@ -5,6 +5,8 @@ import styles from './page.module.css';
 import { SearchBar } from '@/components/SearchBar';
 import { ThemeToggle } from '@/components/ThemeToggle';
 import { SavedTrackers } from '@/components/SavedTrackers';
+import { HotelTrackers } from '@/components/hotels/HotelTrackers';
+import { TravelNav } from '@/components/hotels/TravelNav';
 import { SetupRedirect } from '@/components/SetupRedirect';
 import { UsageStats } from '@/components/UsageStats';
 import { PriceAlerts } from '@/components/PriceAlerts';
@@ -113,10 +115,12 @@ export default async function HomePage() {
         )}
         {isSelfHosted ? (
           <>
+            <TravelNav active="flights" />
             <SearchBar />
             <UpdateBanner />
             <PriceAlerts />
             <SavedTrackers isAuthenticated={multiUserEnabled && !!user} />
+            <HotelTrackers />
             <UsageStats />
           </>
         ) : (

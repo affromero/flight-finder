@@ -299,6 +299,32 @@ flight-finder --headless --view <id> --tmux           # Split grouped routes int
 
 Without `--headless`, `--view` opens the chart in your browser and `--list` opens the admin dashboard.
 
+Hotel tracking is available on self-hosted servers, independently of flights.
+The terminal client uses the same account-scoped hotel API as the web app:
+
+```bash
+flight-finder hotels search --query "London, October 15–18 2027, two adults, refundable, GBP" --wait --json
+flight-finder hotels track <searchId> <offerId> --mode best --target 800
+flight-finder hotels browse
+flight-finder hotels history <id> --json
+flight-finder hotels alerts <id> --target 750 --no-approximate
+flight-finder hotels pause <id>
+```
+
+Use `--server <url>` or `FLIGHT_FINDER_URL` to select your server. For an
+authenticated instance, supply your `ft-session` cookie value through
+`FLIGHT_FINDER_SESSION` in the process environment. Private instances additionally
+accept the existing `FLIGHT_FINDER_TOKEN` machine access token. Credentials are sent only to the
+selected server; redirects are rejected. Hotel commands never change the flight
+backend or model configuration. `hotels --help` lists search polling,
+cancellation, resume, refresh, delete, and other commands. Structured searches
+use `hotels search --file search.json --wait`; see [API.md](API.md) for the full
+search format, including multiple rooms, children, flexible dates, and filters.
+Hotel searches with `--wait` allow up to 120 minutes by default. Use
+`--timeout <minutes>` to change this hotel-only limit; expiration or Ctrl-C
+cancels the server search. Flexible dates can take longer because each stay
+requires separate provider visits.
+
 **Features:**
 - Natural language search, same as the web
 - Braille chart with per-airline colored trend lines

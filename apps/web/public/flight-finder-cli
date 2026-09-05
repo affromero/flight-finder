@@ -537,6 +537,7 @@ cmd_help() {
   echo "    disable-accounts                       Turn multi user mode off (no login required)"
   echo ""
   echo "  Terminal UI flags (forwarded to flight-finder-tui inside the container):"
+  echo "    hotels <command>        Search, track, and manage hotels (hotels --help)"
   echo "    --headless              Render the Ink terminal UI"
   echo "    --list                  List tracked queries (with --headless)"
   echo "    --view <id>             View a tracker (with --headless)"
@@ -564,7 +565,36 @@ cmd_tui() {
   # `exec` cannot run shell functions, so call $_DC directly instead of dc().
   # $exec_flags is intentionally unquoted: empty string must word-split to
   # nothing, otherwise podman-compose receives an empty arg and rejects it.
+  if [ "${1:-}" = "hotels" ]; then
+    local hotel_env=(-e FLIGHT_FINDER_URL=http://localhost:3003)
+    [ -n "${FLIGHT_FINDER_URL:-}" ] && hotel_env=(-e FLIGHT_FINDER_URL)
+    [ -n "${FLIGHT_FINDER_SESSION:-}" ] && hotel_env+=(-e FLIGHT_FINDER_SESSION)
+    [ -n "${FLIGHT_FINDER_TOKEN:-}" ] && hotel_env+=(-e FLIGHT_FINDER_TOKEN)
+    exec $_DC $COMPOSE_FILES exec $exec_flags "${hotel_env[@]}" web flight-finder-tui "$@"
+  fi
   exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui "$@"
+}
+
+cmd_hotels() {
+  local hotel_args=(hotels) hotel_file=""
+  shift
+  while [ "$#" -gt 0 ]; do
+    if [ "$1" = "--file" ]; then
+      if [ "$#" -lt 2 ]; then printf 'Error: --file requires a path\n' >&2; exit 1; fi
+      hotel_file="$2"
+      hotel_args+=(--file -)
+      shift 2
+    else
+      hotel_args+=("$1")
+      shift
+    fi
+  done
+  if [ -n "$hotel_file" ] && [ "$hotel_file" != "-" ]; then
+    if [ ! -r "$hotel_file" ]; then printf 'Error: cannot read hotel search file: %s\n' "$hotel_file" >&2; exit 1; fi
+    cmd_tui "${hotel_args[@]}" < "$hotel_file"
+  else
+    cmd_tui "${hotel_args[@]}"
+  fi
 }
 
 # Recover a locked out multi user mode account by setting a new password.
@@ -623,6 +653,7 @@ cmd_migrate() {
 }
 
 case "${1:-}" in
+  hotels) cmd_hotels "$@" ;;
   --headless|--list|--view|--backend|--model)
     cmd_tui "$@" ;;
   --tmux)

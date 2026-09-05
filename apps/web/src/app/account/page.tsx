@@ -1,4 +1,5 @@
 import Link from 'next/link';
+import { HotelTrackers } from '@/components/hotels/HotelTrackers';
 import { redirect, notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
@@ -154,7 +155,7 @@ export default async function AccountPage() {
           </div>
         )}
       </section>
+      <HotelTrackers />
     </main>
   );
 }
-

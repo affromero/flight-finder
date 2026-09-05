@@ -6,6 +6,8 @@ const mockConfigUpsert = vi.fn();
 const mockConfigUpdateMany = vi.fn();
 const mockUserCreate = vi.fn();
 const mockQueryUpdateMany = vi.fn();
+const mockHotelTrackerUpdateMany = vi.fn();
+const mockHotelSearchUpdateMany = vi.fn();
 
 const mockHashPassword = vi.fn();
 const mockInvalidateCache = vi.fn();
@@ -38,6 +40,8 @@ vi.mock('@/lib/prisma', () => ({
           updateMany: (...args: unknown[]) => mockConfigUpdateMany(...args),
         },
         query: { updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args) },
+        hotelTracker: { updateMany: (...args: unknown[]) => mockHotelTrackerUpdateMany(...args) },
+        hotelSearchRun: { updateMany: (...args: unknown[]) => mockHotelSearchUpdateMany(...args) },
       }),
   },
 }));
@@ -93,6 +97,8 @@ describe('POST /api/admin/multi-user', () => {
     mockConfigUpsert.mockResolvedValue({});
     mockConfigUpdateMany.mockResolvedValue({ count: 1 });
     mockQueryUpdateMany.mockResolvedValue({ count: 0 });
+    mockHotelTrackerUpdateMany.mockResolvedValue({ count: 0 });
+    mockHotelSearchUpdateMany.mockResolvedValue({ count: 0 });
   });
 
   it('rejects when SELF_HOSTED is not true', async () => {
@@ -151,6 +157,13 @@ describe('POST /api/admin/multi-user', () => {
     expect(res.status).toBe(201);
     const args = mockUserCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
     expect(args.data.avatar).toBe('compass');
+  });
+
+  it('assigns solo hotel trackers and search jobs to the first account', async () => {
+    const response = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
+    expect(response.status).toBe(201);
+    expect(mockHotelTrackerUpdateMany).toHaveBeenCalledWith({ where: { userId: null }, data: { userId: 'user_1' } });
+    expect(mockHotelSearchUpdateMany).toHaveBeenCalledWith({ where: { userId: null }, data: { userId: 'user_1' } });
   });
 
   it('drops an unknown avatar slug to null on the first admin', async () => {

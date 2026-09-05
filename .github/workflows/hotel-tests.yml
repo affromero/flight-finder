@@ -1,0 +1,39 @@
+name: Hotel integration
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  hotel-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hotel_test
+          POSTGRES_PASSWORD: hotel_ci_test
+          POSTGRES_DB: hotel_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hotel_test -d hotel_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hotel_test:hotel_ci_test@127.0.0.1:5432/hotel_test
+      HOTEL_INTEGRATION_TESTS: '1'
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema=apps/web/prisma/schema.prisma
+      - run: npx prisma db push --schema=apps/web/prisma/schema.prisma
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/hotels/hotel.integration.test.ts

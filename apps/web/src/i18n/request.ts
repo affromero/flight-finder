@@ -2,7 +2,7 @@ import { cookies } from 'next/headers';
 import { getRequestConfig } from 'next-intl/server';
 import { DEFAULT_LOCALE, LOCALE_COOKIE, isLocale, type Locale } from './locales';
 
-const AREAS = ['common', 'components', 'pages', 'settings', 'admin'] as const;
+const AREAS = ['common', 'components', 'pages', 'settings', 'admin', 'hotels'] as const;
 
 type Messages = Record<string, unknown>;
 

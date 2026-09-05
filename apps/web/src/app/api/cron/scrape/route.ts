@@ -64,5 +64,11 @@ export async function GET(request: NextRequest) {
     results,
   };
 
+  if (process.env.SELF_HOSTED === 'true') {
+    const { after } = await import('next/server');
+    const { runHotelJobsSafely } = await import('@/lib/hotels/runner');
+    after(runHotelJobsSafely);
+  }
+
   return apiSuccess(summary);
 }
