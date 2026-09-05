@@ -17,8 +17,8 @@
     "test:e2e": "infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- node --import tsx/esm --import ./register.mjs src/e2e-test.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.9.1",
-    "@prisma/client": "^7.9.1",
+    "@prisma/adapter-pg": "^7.10.0",
+    "@prisma/client": "^7.10.0",
     "chalk": "^6.0.0",
     "commander": "^15.0.0",
     "ink": "^7.1.1",
@@ -28,13 +28,13 @@
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.1.2",
+    "@types/node": "^26.4.0",
     "@types/react": "^19.2.18",
-    "eslint": "^10.8.0",
+    "eslint": "^10.9.1",
     "tsup": "^8.0.0",
-    "tsx": "^4.23.9",
+    "tsx": "^4.23.12",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.66.0",
+    "typescript-eslint": "^8.68.0",
     "vitest": "^4.1.8"
   }
 }
