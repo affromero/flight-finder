@@ -3,6 +3,8 @@ import { chromium } from 'playwright';
 import { createServer } from 'node:http';
 import { navigateHotelPage } from '../apps/web/src/lib/hotels/navigation';
 import { captureBookingRates } from '../apps/web/src/lib/hotels/booking-capture';
+import { captureHotelLinks } from '../apps/web/src/lib/hotels/link-capture';
+import { extractGoogleOffers } from '../apps/web/src/lib/hotels/google-extraction';
 import { extractBookingOffers } from '../apps/web/src/lib/hotels/booking-extraction';
 import fixtures from '../apps/web/src/lib/hotels/provider-fixtures.json';
 import { DEFAULT_HOTEL_FILTERS, type HotelSearch } from '../apps/web/src/lib/hotels/types';
@@ -18,6 +20,7 @@ async function main() {
     { name: 'blocks internal consent destinations', target: 'https://127.0.0.1/private' },
     { name: 'rejects unresolved consent', target: '' },
     { name: 'rejects a delayed final error after an allowed intermediate redirect', target: `${hotelUrl}/intermediate`, error: /HTTP 503/ },
+    { name: 'times out when the provider document never becomes visible', target: `${hotelUrl}/hidden`, error: /Timeout/ },
   ];
   try {
     for (const scenario of cases) {
@@ -27,6 +30,10 @@ async function main() {
       const server = createServer((request, response) => {
         const url = new URL(new URL(request.url!, 'http://localhost').searchParams.get('destination')!);
         visited.push(url.href);
+        if (scenario.target.endsWith('/hidden')) {
+          response.writeHead(200, { 'content-type': 'text/html' });
+          return response.end('<body style="display:none">Unavailable</body>');
+        }
         if (url.pathname.endsWith('/intermediate')) {
           response.writeHead(302, { location: `${hotelUrl}/unavailable` });
           return response.end();
@@ -91,6 +98,14 @@ async function main() {
     assert.deepEqual(extractBookingOffers(capture, search, search).map(offer => offer.totalPrice), [529, 611]);
     console.log('PASS Booking keeps table-local whole-stay and neutral-header rates, rejects wrong duration');
     await booking.close();
+    const google = await browser.newPage();
+    const seller = (hidden: boolean) => `<a href="https://example.com/book"${hidden ? ' style="display:none"' : ''}><div>Premierinn.com</div><span style="display:none">US$81US$81US$81</span><div>US$242</div><span aria-label="Visit site for Premierinn.com">Visit site</span></a>`;
+    await google.setContent(seller(true).repeat(160) + seller(false));
+    const links = await captureHotelLinks(google, 'google_hotels');
+    const googleOffers = extractGoogleOffers({ ...fixtures.google, links }, search, search);
+    assert.deepEqual(googleOffers.map(offer => ({ seller: offer.seller, total: offer.totalPrice })), [{ seller: 'Premierinn.com', total: 242 }]);
+    console.log('PASS Google ignores hidden nightly anchors before the capture limit and accepts only visible stay totals');
+    await google.close();
   } finally { await browser.close(); }
 }
 

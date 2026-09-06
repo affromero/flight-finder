@@ -37,7 +37,7 @@ export function googleSelectedDates(value: string): string[] {
   return dates;
 }
 
-function replaceSelectedStay(encoded: string, stay: HotelStay): string {
+function replaceSelectedSearch(encoded: string, stay: HotelStay, currency: string): string {
   const dates = [stay.checkIn, stay.checkOut];
   let dateIndex = 0;
   const integer = (value: number): number[] => {
@@ -45,8 +45,10 @@ function replaceSelectedStay(encoded: string, stay: HotelStay): string {
     do { const byte = value % 128; value = Math.floor(value / 128); bytes.push(byte | (value ? 128 : 0)); } while (value);
     return bytes;
   };
-  const rewrite = (bytes: Uint8Array, depth: number): Uint8Array => {
-    if (depth > 8) return bytes;
+  const rewrite = (bytes: Uint8Array, path: number[]): Uint8Array => {
+    if (path.length > 8) return bytes;
+    // Google prioritizes this selected currency over the URL's curr parameter.
+    if (path.join('.') === '5.1.7' && /^[A-Z]{3}$/.test(Buffer.from(bytes).toString('utf8'))) return Buffer.from(currency);
     let offset = 0;
     const read = () => {
       let value = 0;
@@ -72,7 +74,7 @@ function replaceSelectedStay(encoded: string, stay: HotelStay): string {
       for (const field of fields) if ((field.tag >> 3) <= 3) field.value = date[(field.tag >> 3) - 1]!;
     } else {
       const before = dateIndex;
-      for (const field of fields) if (field.value instanceof Uint8Array) field.value = rewrite(field.value, depth + 1);
+      for (const field of fields) if (field.value instanceof Uint8Array) field.value = rewrite(field.value, [...path, field.tag >> 3]);
       if (dateIndex - before === 2) {
         const nights = fields.find(field => field.tag === 24);
         if (nights && typeof nights.value === 'number') nights.value = Math.round((Date.parse(stay.checkOut) - Date.parse(stay.checkIn)) / 86400000);
@@ -80,7 +82,7 @@ function replaceSelectedStay(encoded: string, stay: HotelStay): string {
     }
     return Uint8Array.from(fields.flatMap(field => typeof field.value === 'number' ? [...integer(field.tag), ...integer(field.value)] : [...integer(field.tag), ...integer(field.value.length), ...field.value]));
   };
-  const result = rewrite(Buffer.from(encoded, 'base64url'), 0);
+  const result = rewrite(Buffer.from(encoded, 'base64url'), []);
   if (dateIndex !== 2) throw new Error('Google Hotels saved date state is not supported');
   return Buffer.from(result).toString('base64url');
 }
@@ -89,7 +91,7 @@ export function googleSearchUrl(search: HotelSearch, stay: HotelStay, selection?
   const url = new URL(selection?.propertyUrl ?? `https://www.google.com/travel/hotels/${encodeURIComponent(search.destination)}`);
   if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hostname !== 'www.google.com' || !url.pathname.startsWith('/travel/')) throw new Error('Invalid Google Hotels property URL');
   const selectedState = url.searchParams.get('ts');
-  if (selectedState) url.searchParams.set('ts', replaceSelectedStay(selectedState, stay));
+  if (selectedState) url.searchParams.set('ts', replaceSelectedSearch(selectedState, stay, search.currency));
   for (const key of ['ved', 'utm_campaign', 'utm_medium', 'utm_source']) url.searchParams.delete(key);
   if (url.pathname.includes('/entity/')) url.searchParams.delete('qs');
   url.searchParams.set('hl', 'en');

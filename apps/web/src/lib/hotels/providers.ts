@@ -7,6 +7,7 @@ import { extractBookingOffers } from './booking-extraction';
 import { extractGoogleOffers } from './google-extraction';
 import { navigateHotelPage } from './navigation';
 import { captureBookingRates } from './booking-capture';
+import { captureHotelLinks } from './link-capture';
 import type { HotelOffer, HotelSearch, HotelSelection, HotelSource, HotelStay } from './types';
 
 export const HOTEL_DISCOVERY_LIMIT = 8;
@@ -36,11 +37,7 @@ export async function captureHotelSource(search: HotelSearch, stay: HotelStay, s
       const guests = /^(Add|Remove) (adult|child)$/.test(label) ? e.parentElement?.parentElement?.textContent ?? '' : '';
       return `${label} ${value} ${guests}`;
     }).join('\n'));
-    const links = await page.locator('a[href]').evaluateAll(elements => elements.map(element => {
-      const e = element as HTMLAnchorElement;
-      const seller = e.querySelector('[aria-label^="Visit site for"]')?.getAttribute('aria-label')?.replace(/^Visit site for\s*/, '');
-      return { text: e.innerText ?? '', url: e.href, seller };
-    }));
+    const links = await captureHotelLinks(page, source);
     const images = await page.locator('img').evaluateAll(elements => elements.map(element => {
       const e = element as HTMLImageElement;
       return { alt: e.alt, url: e.currentSrc || e.src };

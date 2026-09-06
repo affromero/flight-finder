@@ -2,6 +2,8 @@ import type { Page } from 'playwright';
 import type { HotelSource } from './types';
 
 export async function navigateHotelPage(page: Page, url: string, source: HotelSource) {
+  page.setDefaultTimeout(15000);
+  page.setDefaultNavigationTimeout(45000);
   const providerHost = source === 'booking' ? 'www.booking.com' : 'www.google.com';
   const allowed = (destination: URL) => destination.protocol === 'https:' && !destination.port && !destination.username && !destination.password
     && (destination.hostname === providerHost || (source === 'google_hotels' && destination.hostname === 'consent.google.com'));

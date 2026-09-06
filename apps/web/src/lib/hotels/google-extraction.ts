@@ -10,10 +10,14 @@ export function extractGoogleOffers(capture: HotelPageCapture, search: HotelSear
   const nights = Math.round((Date.parse(stay.checkOut) - Date.parse(stay.checkIn)) / 86400000);
   if (!new RegExp(`Stay totalPrice for ${nights} nights? with taxes \\+ fees`).test(capture.totalPriceBasis ?? '') || !capture.controls.includes('Stay total')) throw new Error('Google Hotels did not verify stay total including taxes and fees');
   const entity = capture.links.find(link => new URL(link.url).pathname.includes('/hotels/entity/') && /^Open .* in a new tab/.test(link.text));
-  const propertyUrl = new URL(capture.url).pathname.includes('/hotels/entity/') ? capture.url : entity?.url;
-  const hotelName = entity?.text.replace(/^Open /, '').replace(/ in a new tab\.?$/, '') || (new URL(capture.url).pathname.includes('/hotels/entity/') ? capture.propertyName : undefined);
+  const propertyPage = new URL(capture.url).pathname.includes('/hotels/entity/');
+  const propertyUrl = propertyPage ? capture.url : entity?.url;
+  const hotelName = entity?.text.replace(/^Open /, '').replace(/ in a new tab\.?$/, '') || (propertyPage ? capture.propertyName : undefined);
   if (!propertyUrl || !hotelName) throw new Error('Google Hotels did not provide a stable hotel identity');
   const propertyId = `google_hotels:${new URL(propertyUrl).pathname}`;
+  // Search pages also contain unrelated hotels; their metadata is not evidence
+  // about the selected property's seller panel.
+  const propertyText = propertyPage ? capture.text : '';
   const currencyMarkers: Record<string, string> = { USD: 'US$', GBP: '£', EUR: '€', CAD: 'CA$', AUD: 'A$' };
   const marker = currencyMarkers[search.currency] ?? search.currency;
   if (!capture.text.includes(marker) && !capture.controls.includes(`Currency\u200b${search.currency}`)) throw new Error('Google Hotels did not verify selected currency');
@@ -35,13 +39,13 @@ export function extractGoogleOffers(capture: HotelPageCapture, search: HotelSear
     seen.add(key);
     offers.push({
       id: createHash('sha256').update(JSON.stringify([key, stay, search.rooms])).digest('hex').slice(0, 24),
-      source: 'google_hotels', propertyId, hotelName, address: capture.address ?? '',
-      imageUrl: capture.images[0]?.url ?? null, propertyUrl, bookingUrl: link.url, seller: link.seller,
+      source: 'google_hotels', propertyId, hotelName, address: propertyPage ? capture.address ?? '' : '',
+      imageUrl: propertyPage ? capture.images[0]?.url ?? null : null, propertyUrl, bookingUrl: link.url, seller: link.seller,
       ...stay, roomName, rateName: null, totalPrice: price, currency: search.currency,
       taxesIncluded: true, occupancyVerified: true, rooms: search.rooms, refundable, breakfast,
-      stars: Number(capture.text.slice(0, 1000).match(/([1-5])-star hotel/)?.[1]) || null,
-      rating: (() => { const rating = Number(capture.text.slice(0, 1200).match(/\n(\d(?:\.\d)?)\n(?:Excellent|Very good|Good|Fair|Poor)/)?.[1]); return rating > 0 && rating <= 5 ? rating * 2 : null; })(),
-      amenities: hotelAmenities(capture.text.match(/(?:Popular amenities|Hotel amenities|Amenities)\n([\s\S]*?)(?:View more hotel details|Web results|Sponsored|$)/i)?.[1] ?? ''), match: 'approximate',
+      stars: Number(propertyText.slice(0, 1000).match(/([1-5])-star hotel/)?.[1]) || null,
+      rating: (() => { const rating = Number(propertyText.slice(0, 1200).match(/\n(\d(?:\.\d)?)\n(?:Excellent|Very good|Good|Fair|Poor)/)?.[1]); return rating > 0 && rating <= 5 ? rating * 2 : null; })(),
+      amenities: hotelAmenities(propertyText.match(/(?:Popular amenities|Hotel amenities|Amenities)\n([\s\S]*?)(?:View more hotel details|Web results|Sponsored|$)/i)?.[1] ?? ''), match: 'approximate',
     });
   }
   if (!offers.length) throw new Error('Google Hotels did not render verifiable public seller totals');

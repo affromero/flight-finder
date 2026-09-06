@@ -43,6 +43,17 @@ describe('hotel provider requests', () => {
     expect(googleSelectedDates(url)).toEqual([newStay.checkIn, newStay.checkOut]);
     expect(new URL(url).pathname).toBe(new URL(fixtures.google.url).pathname);
   });
+  it.each(['USD', 'GBP', 'CAD'])('overrides embedded EUR discovery currency with requested %s without changing destination or occupancy', currency => {
+    const state = 'CAEaMgoUEhIKCC9tLzA0anBsOgZMb25kb24SGhIUCgcI6g8QChgUEgcI6g8QChgXGAMyAggBKgcKBToDRVVS';
+    const propertyUrl = `https://www.google.com/travel/search?curr=USD&ts=${state}`;
+    const url = new URL(googleSearchUrl({ ...search, currency }, stay, { ...selection, source: 'google_hotels', propertyUrl }));
+    const selectedState = Buffer.from(url.searchParams.get('ts')!, 'base64url');
+    const original = Buffer.from(state, 'base64url');
+    expect(selectedState.subarray(0, -3)).toEqual(original.subarray(0, -3));
+    expect(selectedState.subarray(-3).toString('utf8')).toBe(currency);
+    expect(url.searchParams.get('curr')).toBe(currency);
+    expect(googleSelectedDates(url.href)).toEqual([stay.checkIn, stay.checkOut]);
+  });
 });
 
 
@@ -116,6 +127,14 @@ describe('captured Booking property rates', () => {
 });
 
 describe('captured Google visible seller totals', () => {
+  it('does not assign another search-result hotel’s photo, classification or amenities to a selected offer', () => {
+    const url = new URL(fixtures.google.url);
+    url.pathname = '/travel/search';
+    const page = { ...fixtures.google, url: url.href, text: 'Unrelated hotel\n5-star hotel\n4.9\nExcellent\nAmenities\nIndoor pool\nView more hotel details\n' + fixtures.google.text, address: 'Another hotel address', images: [{ alt: 'Another hotel', url: 'https://example.com/other.jpg' }], links: [...fixtures.google.links, { text: "Open Mimi's Hotel Soho in a new tab.", url: fixtures.google.url }] };
+    const offers = extractGoogleOffers(page, search, stay);
+    expect(offers.length).toBeGreaterThan(0);
+    expect(offers.every(offer => offer.hotelName === "Mimi's Hotel Soho" && offer.imageUrl === null && offer.stars === null && offer.rating === null && offer.address === '' && Object.keys(offer.amenities).length === 0)).toBe(true);
+  });
   it('uses the verified hotel entity label instead of the destination search heading', () => {
     const page = { ...fixtures.google, propertyName: 'London · 15,000 results', links: [...fixtures.google.links, { text: "Open Mimi's Hotel Soho in a new tab.", url: fixtures.google.url }] };
     expect(extractGoogleOffers(page, search, stay).every(offer => offer.hotelName === "Mimi's Hotel Soho")).toBe(true);
