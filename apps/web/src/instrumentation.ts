@@ -3,5 +3,7 @@ export async function register() {
   if (process.env.NEXT_RUNTIME === 'nodejs') {
     const { startCron } = await import('./lib/cron');
     await startCron();
+    const { startHotelScheduler } = await import('./lib/hotels/schedule');
+    startHotelScheduler();
   }
 }

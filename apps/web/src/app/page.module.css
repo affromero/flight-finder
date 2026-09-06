@@ -84,6 +84,76 @@
   border-color: var(--accent);
 }
 
+.travelOverview {
+  width: 100%;
+  padding: 2rem 0;
+  border-top: 1px solid var(--accent-dim);
+  border-bottom: 1px solid var(--border);
+}
+
+.travelLabel {
+  font-family: var(--font-mono);
+  font-size: 0.6875rem;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--accent);
+  margin-bottom: 0.75rem;
+}
+
+.travelTitle {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 4vw, 2.5rem);
+  line-height: 1.15;
+  color: var(--text);
+}
+
+.travelIntro,
+.travelColumns p,
+.travelHousehold {
+  color: var(--text-secondary);
+  font-size: 0.9375rem;
+  line-height: 1.65;
+  margin-top: 0.75rem;
+}
+
+.travelColumns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 2rem;
+  margin: 1.75rem 0;
+}
+
+.travelColumns > div + div {
+  border-left: 1px solid var(--border);
+  padding-left: 2rem;
+}
+
+.travelColumns h3 {
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  color: var(--text);
+}
+
+.travelAvailability {
+  font-size: 0.8125rem;
+  line-height: 1.6;
+  color: var(--muted);
+  margin-top: 1rem;
+}
+
+@media (max-width: 480px) {
+  .travelColumns {
+    grid-template-columns: 1fr;
+    gap: 1.25rem;
+  }
+
+  .travelColumns > div + div {
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    padding: 1.25rem 0 0;
+  }
+}
+
 .providers {
   width: 100%;
   max-width: 560px;
@@ -434,4 +504,3 @@
     font-size: 2.5rem;
   }
 }
-

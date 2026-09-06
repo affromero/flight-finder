@@ -116,7 +116,7 @@
   },
   "InstallCommand": {
     "copyToClipboard": "In die Zwischenablage kopieren",
-    "hint": "Funktioniert mit Claude Code, Codex oder jedem LLM-API-Key. Kein Konto nötig.",
+    "hint": "Für Anfragen in natürlicher Sprache wird dein KI-Anbieter verwendet. Das Hotelformular funktioniert ohne KI.",
     "desktopLink": "Lieber ohne Terminal? Hol dir die Desktop-App"
   },
   "LinkBanner": {
@@ -282,8 +282,8 @@
     "hoursAgo": "vor {count} Std.",
     "daysAgo": "vor {count} Tagen",
     "confirmDelete": "{count, plural, =1 {Tracker für {route} löschen?} other {Tracker für {route} löschen ({count} Diagramme)?}}",
-    "noTrackers": "Noch keine Tracker. Suche oben nach einem Flug, um Preise zu verfolgen.",
-    "yourTrackers": "Deine Tracker",
+    "noTrackers": "Noch keine Flugtracker. Suche oben einen Flug oder wähle Hotels, um einen Aufenthalt zu verfolgen.",
+    "yourTrackers": "Deine Flugtracker",
     "remove": "Entfernen",
     "removeTracker": "Tracker entfernen",
     "moreDestinations": "+ {count} weitere",

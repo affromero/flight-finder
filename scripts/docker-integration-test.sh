@@ -115,7 +115,7 @@ test_landing_page() {
 
   local body
   body=$(curl -sf "http://localhost:${PORT}/")
-  if echo "$body" | grep -qi "flight finder"; then
+  if grep -qi "flight finder" <<< "$body"; then
     pass "Landing page contains 'Flight Finder'"
   else
     fail "Landing page" "missing 'Flight Finder' in HTML"

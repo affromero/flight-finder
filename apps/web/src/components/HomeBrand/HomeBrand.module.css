@@ -23,6 +23,13 @@
   border-color: var(--accent);
 }
 
+.hotel {
+  position: relative;
+  top: auto;
+  left: auto;
+  margin: 1rem 1rem 0;
+}
+
 /* The real logo mark (plane + price trail + mountain) as a rounded tile. Uses
    the same icon.svg the favicon does, so the brand and the tab icon match. */
 .mark {

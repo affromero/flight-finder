@@ -401,6 +401,29 @@ test_tui_headless_docker_v2() {
     'docker compose -f docker-compose.yml exec -i web flight-finder-tui --headless'
 }
 
+test_hotels_use_server_api_in_every_runtime() {
+  for runtime in docker_v2 docker_v1 podman_native podman_pc podman_delegated; do
+    setup_runtime "$runtime"
+    run_cli hotels list --json
+    assert_recorded "hotels reaches the HTTP client in $runtime" \
+      'exec .* -e FLIGHT_FINDER_URL web flight-finder-tui hotels list --json'
+    assert_not_recorded "hotels does not set flight backend in $runtime" 'flight-finder-tui .*--backend'
+  done
+}
+
+test_hotels_forward_files_and_credentials() {
+  setup_runtime docker_v2
+  FLIGHT_FINDER_SESSION=hotel-test-session FLIGHT_FINDER_TOKEN=hotel-test-token run_cli hotels list --json
+  assert_recorded "hotel credentials are forwarded by environment name" \
+    'exec .* -e FLIGHT_FINDER_SESSION -e FLIGHT_FINDER_TOKEN web flight-finder-tui hotels list --json'
+  assert_not_recorded "hotel credentials are absent from compose arguments" 'compose .*hotel-test-(session|token)'
+  run_cli hotels search --file "$REPO_ROOT/API.md" --wait
+  assert_recorded "local hotel search file is streamed through container stdin" 'flight-finder-tui hotels search --file - --wait'
+  EXPECT_NONZERO=1 run_cli hotels search --file "$SANDBOX/nonexistent-hotel-search.json"
+  if [ "$LAST_EXIT" -ne 0 ]; then pass "missing hotel search file fails before container execution"; else fail "missing hotel search file was accepted"; fi
+  assert_not_recorded "missing hotel search file never starts a container command" 'exec .*flight-finder-tui'
+}
+
 test_tui_headless_docker_v1() {
   setup_runtime docker_v1
   run_cli --headless
@@ -851,6 +874,8 @@ trap 'teardown_sandbox' EXIT
 setup_sandbox
 
 test_tui_headless_docker_v2
+test_hotels_use_server_api_in_every_runtime
+test_hotels_forward_files_and_credentials
 test_tui_headless_docker_v1
 test_tui_headless_podman_native
 test_tui_headless_podman_pc

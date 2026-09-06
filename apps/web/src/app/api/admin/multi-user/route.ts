@@ -141,6 +141,8 @@ export async function POST(request: NextRequest) {
         where: { userId: null, isSeed: false },
         data: { userId: user.id },
       });
+      await tx.hotelTracker.updateMany({ where: { userId: null }, data: { userId: user.id } });
+      await tx.hotelSearchRun.updateMany({ where: { userId: null }, data: { userId: user.id } });
 
       return { user, backfillCount: backfill.count };
     });

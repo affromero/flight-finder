@@ -19,6 +19,7 @@ export interface NotifyOutcome {
 export async function dispatchNotifications(
   ownerUserId: string | null,
   message: ChannelMessage,
+  deliveredChannelIds: string[] = [],
 ): Promise<NotifyOutcome[]> {
   // A query owned by a user must still fire the global (userId:null) channels:
   // those are the only channels the current UI can create. Without OR-ing in the
@@ -29,6 +30,7 @@ export async function dispatchNotifications(
   const channels = await prisma.notificationChannel.findMany({
     where: {
       enabled: true,
+      ...(deliveredChannelIds.length ? { id: { notIn: deliveredChannelIds } } : {}),
       // SQL `IN (id, NULL)` never matches NULL rows, so OR the two explicitly.
       ...(ownerUserId === null
         ? { userId: null }

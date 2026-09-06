@@ -1,4 +1,6 @@
 import Link from 'next/link';
+import { HotelTrackers } from '@/components/hotels/HotelTrackers';
+import { TravelNav } from '@/components/hotels/TravelNav';
 import { redirect, notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
@@ -101,6 +103,7 @@ export default async function AccountPage() {
         </div>
       </header>
 
+      <TravelNav />
       <section className={styles.section}>
         <h2 className={styles.sectionTitle}>{t('yourTrackers')}</h2>
         {groups.length === 0 ? (
@@ -154,7 +157,7 @@ export default async function AccountPage() {
           </div>
         )}
       </section>
+      <HotelTrackers />
     </main>
   );
 }
-

@@ -8,6 +8,9 @@ import { render } from 'ink';
 import React from 'react';
 import { App } from './app.js';
 import { launchTmuxView } from './lib/tmux-view.js';
+import { registerHotelCommands } from './lib/hotel-cli.js';
+
+const hotelCommandHandled = registerHotelCommands(program);
 
 program
   .name('flightfinder')
@@ -21,8 +24,10 @@ program
   .option('--model <model>', 'Model override (e.g. sonnet, opus, gpt-4.1-mini, codex)')
   .option('--reset-password <username>', "Reset a user's password (multi user mode); pair with --new-password")
   .option('--new-password <password>', 'New password to set (use with --reset-password)')
-  .option('--disable-accounts', 'Disable multi user mode and clear stored credentials (self hosted)')
-  .parse();
+  .option('--disable-accounts', 'Disable multi user mode and clear stored credentials (self hosted)');
+
+await program.parseAsync();
+if (hotelCommandHandled()) process.exit(process.exitCode ?? 0);
 
 const opts = program.opts() as { headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string; resetPassword?: string; newPassword?: string; disableAccounts?: boolean };
 

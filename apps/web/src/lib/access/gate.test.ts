@@ -68,7 +68,8 @@ describe('access gate', () => {
     const token = (await createSessionToken())!;
     const [scope, expiry, sig] = token.split('.');
 
-    expect(await verifySessionToken(`${scope}.${expiry}.${sig!.slice(0, -1)}0`)).toBe(false);
+    const changedDigit = sig!.endsWith('0') ? '1' : '0';
+    expect(await verifySessionToken(`${scope}.${expiry}.${sig!.slice(0, -1)}${changedDigit}`)).toBe(false);
     // Pushing the expiry out invalidates the signature, which covers it.
     expect(await verifySessionToken(`${scope}.${Number(expiry) + 60_000}.${sig}`)).toBe(false);
   });

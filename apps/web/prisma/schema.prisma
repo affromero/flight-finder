@@ -180,9 +180,87 @@ model User {
   updatedAt         DateTime @updatedAt
 
   queries  Query[]
+  hotelTrackers HotelTracker[]
+  hotelSearches HotelSearchRun[]
   channels NotificationChannel[]
 
   @@index([isAdmin])
+}
+
+model HotelTracker {
+  id          String @id @default(cuid())
+  userId      String?
+  hotelName   String
+  search      Json
+  selection   Json
+  options     Json
+  active      Boolean @default(true)
+  targetArmed Boolean @default(true)
+  historicalLow Decimal? @db.Decimal(16, 4)
+  latestPrice Decimal? @db.Decimal(16, 4)
+  lastCheckedAt DateTime?
+  lastError   String?
+  nextCheckAt DateTime @default(now())
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  user        User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  snapshots   HotelSnapshot[]
+  runs        HotelSearchRun[]
+  alerts      HotelAlert[]
+  @@index([userId])
+  @@index([active, nextCheckAt])
+}
+
+model HotelSearchRun {
+  id          String @id @default(cuid())
+  userId      String?
+  trackerId   String?
+  request     Json
+  result      Json?
+  status      String @default("queued")
+  error       String?
+  claimedAt   DateTime?
+  heartbeatAt DateTime?
+  createdAt   DateTime @default(now())
+  completedAt DateTime?
+  user        User? @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tracker     HotelTracker? @relation(fields: [trackerId], references: [id], onDelete: Cascade)
+  snapshots   HotelSnapshot[]
+  @@index([status, createdAt])
+  @@index([userId, createdAt])
+  @@index([trackerId, createdAt])
+}
+
+model HotelSnapshot {
+  id          String @id @default(cuid())
+  trackerId   String
+  runId       String
+  offer       Json
+  eligible    Boolean
+  scrapedAt   DateTime @default(now())
+  tracker     HotelTracker @relation(fields: [trackerId], references: [id], onDelete: Cascade)
+  run         HotelSearchRun @relation(fields: [runId], references: [id], onDelete: Cascade)
+  @@index([trackerId, scrapedAt])
+}
+
+model HotelAlert {
+  id           String @id @default(cuid())
+  trackerId    String
+  message      Json
+  deliveredIds String[] @default([])
+  pending      Boolean @default(true)
+  lastError    String?
+  nextAttemptAt DateTime @default(now())
+  createdAt    DateTime @default(now())
+  tracker      HotelTracker @relation(fields: [trackerId], references: [id], onDelete: Cascade)
+  @@index([pending, createdAt])
+  @@index([pending, nextAttemptAt])
+}
+
+model HotelLease {
+  id        String @id
+  owner     String
+  expiresAt DateTime
 }
 
 model NotificationChannel {

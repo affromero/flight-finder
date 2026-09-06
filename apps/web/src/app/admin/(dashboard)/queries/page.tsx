@@ -1,4 +1,5 @@
 import { getTranslations } from 'next-intl/server';
+import { HotelTrackers } from '@/components/hotels/HotelTrackers';
 import { prisma } from '@/lib/prisma';
 import { groupQueries } from '@/lib/query-grouping';
 import { QueryGroupRow, type AdminQuery } from './QueryRow';
@@ -48,6 +49,7 @@ export default async function QueriesPage() {
   return (
     <div className={styles.root}>
       <h1 className={styles.title}>{t('title')}</h1>
+      {process.env.SELF_HOSTED === 'true' && <HotelTrackers admin />}
 
       {groups.length === 0 ? (
         <p className={styles.empty}>

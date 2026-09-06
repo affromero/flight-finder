@@ -294,6 +294,86 @@ The built-in cron (default: every 3 hours) handles step 3 automatically. You onl
 
 ## Data model
 
+### Self-hosted hotel tracking
+
+Hotel routes require a self-hosted instance. When accounts are enabled, include
+the current account session (`Cookie: ft-session=<value>`). Ownership is enforced by the server.
+The public Flight Finder website does not expose these routes.
+
+Structured searches read Google Hotels and Booking.com in a headless browser;
+they do not call an AI backend. Natural-language parsing uses the existing
+configured provider and model without changing flight settings. Packages and
+hotel bookings are not supported; offers link to the seller to complete a booking.
+
+| Method and path | Purpose |
+|---|---|
+| `POST /api/hotels/parse` | Parse `{ "text": "hotel request" }` into `{ search }` |
+| `POST /api/hotels/search` | Start a structured search; returns HTTP 202 with `{ id, status }` |
+| `GET /api/hotels/search/:id` | Read status, offers, provider errors, and progress |
+| `DELETE /api/hotels/search/:id` | Cancel a search |
+| `POST /api/hotels` | Track `{ searchId, offerId, mode, targetPrice, notifyLows, allowApproximateAlerts, scrapeInterval }` |
+| `GET /api/hotels` | List the current user's trackers |
+| `GET /api/hotels/:id` | Read tracker, snapshots, check runs, and notification readiness |
+| `PATCH /api/hotels/:id` | Update `active`, `targetPrice`, `notifyLows`, `allowApproximateAlerts`, or `scrapeInterval` |
+| `DELETE /api/hotels/:id` | Delete a tracker and its history |
+| `POST /api/hotels/:id/scrape` | Queue a fresh check |
+
+All responses use `{ "ok": true, "data": ... }` or
+`{ "ok": false, "error": "..." }`. Search states are `queued`, `running`,
+`success`, `partial`, `unavailable`, `failed`, and `cancelled`. A partial result
+includes usable offers alongside explicit provider errors; unavailable inventory
+is separate from an extraction failure. A result contains `offers`, `errors`,
+`completed`, and `total`.
+
+Example structured hotel search (also accepted by the CLI's `--file` option):
+
+```json
+{
+  "destination": "London",
+  "dateMode": "fixed",
+  "checkIn": "2027-10-15",
+  "checkOut": "2027-10-18",
+  "flexibility": 0,
+  "minNights": 3,
+  "maxNights": 3,
+  "rooms": [{ "adults": 2, "children": [8] }, { "adults": 1, "children": [] }],
+  "currency": "GBP",
+  "sources": ["google_hotels", "booking"],
+  "filters": {
+    "maxTotal": null,
+    "refundable": true,
+    "breakfast": false,
+    "minStars": 4,
+    "minRating": 8,
+    "excludedSellers": [],
+    "amenities": ["parking"]
+  }
+}
+```
+
+Children are represented by ages within their room. `dateMode` can also be
+`nearby` (shift dates by `flexibility` days) or `window` (stays between
+`minNights` and `maxNights` within the date window). The server bounds the number
+of date/source combinations to 24 and checks up to eight discovered properties
+per source and stay. This is bounded discovery, not a complete inventory scan.
+Saved trackers revisit their selected property. Google Hotels supports one room;
+Booking.com supports up to four, with child ages assigned to each room. A source
+that cannot verify the requested allocation reports an error. Amenities are
+`parking`, `pool`, `pets`, and `accessible`.
+Unknown offer details do not satisfy an active filter. Prices and targets refer
+to the total stay for the requested room allocation, including mandatory taxes.
+
+Tracking mode `best` follows the cheapest qualifying offer for a hotel; `room`
+follows the selected room/rate. `scrapeInterval` is in hours. Set `targetPrice`
+to `null` to remove a target. Target alerts fire on the first valid observation
+at or below target and rearm after a complete, valid above-target observation. Approximate
+matches require explicit `allowApproximateAlerts: true` to trigger alerts.
+Failed channel deliveries retry after five minutes; successful channels are
+remembered so a retry does not resend to them. An instance crash between sending
+and saving the delivery acknowledgement can still produce a duplicate.
+
+### Flight records
+
 - **Query**: A tracked flight route with date range, cabin class, and preferences
 - **PriceSnapshot**: A single price observation (airline, price, date, stops, booking URL)
 - **FetchRun**: Metadata for each scrape run (status, timing, cost)

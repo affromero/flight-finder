@@ -1,7 +1,7 @@
 {
   "name": "Flight Finder",
   "short_name": "Flight Finder",
-  "description": "The price trail airlines don't show you",
+  "description": "Self-host flight and hotel price tracking, independently or together.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#faf6ed",
