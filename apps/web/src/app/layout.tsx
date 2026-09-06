@@ -15,15 +15,15 @@ const isSelfHosted = process.env.SELF_HOSTED === 'true';
 export const metadata: Metadata = {
   metadataBase: new URL('https://flight-finder.org'),
   title: {
-    default: 'Flight Finder — The price trail airlines don\'t show you',
+    default: 'Flight Finder — Flight and hotel price tracking',
     template: '%s | Flight Finder',
   },
   description:
-    'Track flight prices over time with shareable charts. See how fares evolve, compare airlines, and book at the right moment.',
+    'Self-host flight and hotel price tracking. Follow either independently or both, compare price history, and receive price alerts.',
   openGraph: {
-    title: 'Flight Finder — The price trail airlines don\'t show you',
+    title: 'Flight Finder — Flight and hotel price tracking',
     description:
-      'Track flight prices over time with shareable charts. See how fares evolve, compare airlines, and book at the right moment.',
+      'Self-host flight and hotel price tracking. Follow either independently or both, compare price history, and receive price alerts.',
     siteName: 'Flight Finder',
     type: 'website',
     locale: 'en_US',

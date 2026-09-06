@@ -116,7 +116,7 @@
   },
   "InstallCommand": {
     "copyToClipboard": "Copiar al portapapeles",
-    "hint": "Funciona con Claude Code, Codex o cualquier clave de API de LLM. No necesitas cuenta.",
+    "hint": "Usa tu proveedor de IA para solicitudes en lenguaje natural. El formulario de hoteles funciona sin IA.",
     "desktopLink": "¿Prefieres no usar la terminal? Descarga la app de escritorio"
   },
   "LinkBanner": {
@@ -282,8 +282,8 @@
     "hoursAgo": "hace {count}h",
     "daysAgo": "hace {count}d",
     "confirmDelete": "{count, plural, =1 {¿Eliminar el rastreador de {route}?} other {¿Eliminar el rastreador de {route} ({count} gráficos)?}}",
-    "noTrackers": "Aún no hay rastreadores. Busca un vuelo arriba para empezar a rastrear precios.",
-    "yourTrackers": "Tus rastreadores",
+    "noTrackers": "Aún no sigues ningún vuelo. Busca uno arriba o elige Hoteles para seguir una estancia.",
+    "yourTrackers": "Tus seguimientos de vuelos",
     "remove": "Quitar",
     "removeTracker": "Quitar rastreador",
     "moreDestinations": "+ {count} más",

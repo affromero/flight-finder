@@ -7,6 +7,45 @@ on:
     branches: [main]
 
 jobs:
+  travel-surfaces:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: hotel_test
+          POSTGRES_PASSWORD: hotel_ci_test
+          POSTGRES_DB: hotel_surfaces
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U hotel_test -d hotel_surfaces"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://hotel_test:hotel_ci_test@127.0.0.1:5432/hotel_surfaces
+      CRON_ENABLED: 'false'
+      TRAVEL_BROWSER_OUTPUT: /tmp/flight-finder-travel-surfaces
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx prisma generate --schema=apps/web/prisma/schema.prisma
+      - run: npx prisma db push --schema=apps/web/prisma/schema.prisma
+      - run: npx playwright install chromium --with-deps
+      - run: npm run build
+      - run: node scripts/travel-surfaces-test.mjs
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: travel-surfaces-evidence
+          path: /tmp/flight-finder-travel-surfaces
+
   hotel-workflows:
     runs-on: ubuntu-latest
     timeout-minutes: 10

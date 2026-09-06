@@ -5,6 +5,7 @@ import { HotelSearchExperience } from './HotelSearchExperience';
 import { HotelTrackers } from './HotelTrackers';
 import { HotelDetail } from './HotelDetail';
 import { HotelOfferCard } from './HotelOfferCard';
+import { TravelNav } from './TravelNav';
 import type { HotelOffer, HotelSearch } from '@/lib/hotels/types';
 import { hotelHistoryObservations, type HotelDetailView } from './client';
 
@@ -19,6 +20,16 @@ beforeEach(() => { push.mockReset(); });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Hotel search and tracking', () => {
+  it('offers both travel sections from an account without marking either as the current page', () => {
+    render(<TravelNav />);
+    expect(screen.getByRole('link', { name: 'Flights' })).toHaveAttribute('href', '/');
+    expect(screen.getByRole('link', { name: 'Hotels' })).toHaveAttribute('href', '/hotels');
+    expect(screen.getAllByRole('link').every(link => !link.hasAttribute('aria-current'))).toBe(true);
+  });
+  it.each(['flights', 'hotels'] as const)('marks only the active %s section as the current page', active => {
+    render(<TravelNav active={active} />);
+    expect(screen.getByRole('link', { current: 'page' })).toHaveAttribute('href', active === 'flights' ? '/' : '/hotels');
+  });
   it('submits room allocation, child ages and filters without requiring a flight', async () => {
     const fetcher = vi.fn().mockResolvedValue(response({ id: 's1', status: 'unavailable', result: { offers: [], errors: [], completed: 2, total: 2 } })); vi.stubGlobal('fetch', fetcher);
     render(<HotelSearchExperience />); fillSearch();

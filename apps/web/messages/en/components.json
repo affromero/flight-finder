@@ -116,7 +116,7 @@
   },
   "InstallCommand": {
     "copyToClipboard": "Copy to clipboard",
-    "hint": "Works with Claude Code, Codex, or any LLM API key. No account needed.",
+    "hint": "Uses your existing AI provider for plain-language requests. The hotel search form works without AI.",
     "desktopLink": "Rather not use the terminal? Get the desktop app"
   },
   "LinkBanner": {
@@ -282,8 +282,8 @@
     "hoursAgo": "{count}h ago",
     "daysAgo": "{count}d ago",
     "confirmDelete": "{count, plural, =1 {Delete tracker for {route}?} other {Delete tracker for {route} ({count} charts)?}}",
-    "noTrackers": "No trackers yet. Search for a flight above to start tracking prices.",
-    "yourTrackers": "Your Trackers",
+    "noTrackers": "No flight trackers yet. Search for a flight above, or choose Hotels to track a stay.",
+    "yourTrackers": "Your flight trackers",
     "remove": "Remove",
     "removeTracker": "Remove tracker",
     "moreDestinations": "+ {count} more",

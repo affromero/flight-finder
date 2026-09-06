@@ -48,7 +48,7 @@ export default async function HomePage() {
     name: 'Flight Finder',
     url: 'https://flight-finder.org',
     description:
-      'Track flight prices over time with shareable charts. See how fares evolve, compare airlines, and book at the right moment.',
+      'Self-host flight and hotel price tracking. Follow either independently or both, compare price history, and receive price alerts.',
     applicationCategory: 'TravelApplication',
     operatingSystem: 'Any',
     offers: {
@@ -103,7 +103,7 @@ export default async function HomePage() {
       <div className={styles.hero}>
         <h1 className={styles.title}><Link href="/">Flight Finder</Link></h1>
         <p className={styles.tagline}>
-          {t('tagline')}
+          {t('travelTagline')}
         </p>
         {!isSelfHosted && (
           <a href="https://github.com/affromero/flight-finder" target="_blank" rel="noopener noreferrer" className={styles.githubLink}>
@@ -126,6 +126,23 @@ export default async function HomePage() {
         ) : (
           <>
             <InstallCommand />
+            <section className={styles.travelOverview} aria-labelledby="travel-title">
+              <p className={styles.travelLabel}>{t('travelLabel')}</p>
+              <h2 id="travel-title" className={styles.travelTitle}>{t('travelTitle')}</h2>
+              <p className={styles.travelIntro}>{t('travelIntro')}</p>
+              <div className={styles.travelColumns}>
+                <div>
+                  <h3>{t('flightsTitle')}</h3>
+                  <p>{t('flightsText')}</p>
+                </div>
+                <div>
+                  <h3>{t('hotelsTitle')}</h3>
+                  <p>{t('hotelsText')}</p>
+                </div>
+              </div>
+              <p className={styles.travelHousehold}>{t('travelHousehold')}</p>
+              <p className={styles.travelAvailability}>{t('travelAvailability')}</p>
+            </section>
             <div className={styles.providers}>
               <h2 className={styles.providersTitle}>{t('byoLlmTitle')}</h2>
               <div className={styles.providerGrid}>

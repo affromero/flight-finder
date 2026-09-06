@@ -116,7 +116,7 @@
   },
   "InstallCommand": {
     "copyToClipboard": "Copier dans le presse-papiers",
-    "hint": "Fonctionne avec Claude Code, Codex ou n’importe quelle clé API LLM. Aucun compte requis.",
+    "hint": "Ton fournisseur d’IA traite les demandes en langage naturel. Le formulaire d’hôtels fonctionne sans IA.",
     "desktopLink": "Pas envie d’utiliser le terminal ? Télécharge l’appli de bureau"
   },
   "LinkBanner": {
@@ -282,8 +282,8 @@
     "hoursAgo": "il y a {count} h",
     "daysAgo": "il y a {count} j",
     "confirmDelete": "{count, plural, =1 {Supprimer le suivi pour {route} ?} other {Supprimer le suivi pour {route} ({count} graphiques) ?}}",
-    "noTrackers": "Aucun suivi pour l’instant. Recherche un vol ci-dessus pour commencer à suivre les prix.",
-    "yourTrackers": "Tes suivis",
+    "noTrackers": "Aucun suivi de vol pour l’instant. Recherche un vol ci-dessus ou choisis Hôtels pour suivre un séjour.",
+    "yourTrackers": "Tes suivis de vols",
     "remove": "Retirer",
     "removeTracker": "Retirer le suivi",
     "moreDestinations": "+ {count} autres",
