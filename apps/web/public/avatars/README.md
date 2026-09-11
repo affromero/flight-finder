@@ -8,7 +8,7 @@ so the feature works with no assets committed.
 To generate the real images:
 
 ```bash
-doppler run --project flight-finder --config dev -- node scripts/generate-avatars.mjs
+node scripts/generate-avatars.mjs
 ```
 
 Needs `GEMINI_API_KEY` (or `GOOGLE_AI_API_KEY`) in the environment. Override the

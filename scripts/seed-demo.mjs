@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // Seed realistic demo data for screenshots.
-// Run: infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env prod -- node scripts/seed-demo.mjs
-// Clean: infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env prod -- node scripts/seed-demo.mjs --clean
+// Run: node scripts/seed-demo.mjs
+// Clean: node scripts/seed-demo.mjs --clean
 
 import { PrismaClient } from '@prisma/client';
 

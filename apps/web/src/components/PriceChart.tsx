@@ -8,7 +8,13 @@ import { safeHttpUrl } from '@/lib/safe-url';
 import { airTimeMinutes, formatMinutes, layoverLabel } from '@/lib/scraper/duration';
 import styles from './PriceChart.module.css';
 
-const Plot = dynamic(() => import('react-plotly.js'), { ssr: false });
+const Plot = dynamic(async () => {
+  const [{ default: createPlot }, { default: plotly }] = await Promise.all([
+    import('react-plotly.js/factory'),
+    import('plotly.js'),
+  ]);
+  return createPlot(plotly);
+}, { ssr: false });
 
 interface Snapshot {
   id: string;

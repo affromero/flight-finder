@@ -8,8 +8,12 @@ const cliRoot = path.dirname(fileURLToPath(import.meta.url));
 // By pointing @/ here, those imports resolve to our local shims in packages/cli/src/lib/
 // which are framework-agnostic copies (no Next.js dependencies).
 const cliSrc = path.resolve(cliRoot, 'src');
+const generatedSrc = path.resolve(cliRoot, '../../apps/web/src/generated');
 
 export function resolve(specifier, context, nextResolve) {
+  if (specifier.startsWith('@/generated/')) {
+    return nextResolve(pathToFileURL(path.join(generatedSrc, specifier.slice('@/generated/'.length))).href, context);
+  }
   if (specifier.startsWith('@/')) {
     const absolute = path.join(cliSrc, specifier.slice(2));
     return nextResolve(pathToFileURL(absolute).href, context);

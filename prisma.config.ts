@@ -5,9 +5,7 @@ import { defineConfig } from 'prisma/config';
 // push, migrate) reads the URL from here; the runtime PrismaClient connects via
 // the @prisma/adapter-pg driver adapter wired up in lib/prisma.ts instead.
 //
-// Secrets come from Infisical (no .env files), so DATABASE_URL is already on
-// process.env when the CLI needs to connect (infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- ... locally, the
-// entrypoint's generated env in Docker).
+// The caller or container supplies DATABASE_URL through the environment.
 export default defineConfig({
   schema: 'apps/web/prisma/schema.prisma',
   migrations: {
@@ -17,7 +15,7 @@ export default defineConfig({
     // process.env (not the strict env() helper) so config-loading contexts that
     // don't connect -- prisma generate in CI and the Docker builder -- don't
     // throw on a missing DATABASE_URL. db push/migrate get the real value at
-    // runtime (infisical locally; --url in the container entrypoint).
+    // runtime (the caller's environment or --url in the container entrypoint).
     url: process.env.DATABASE_URL,
   },
 });

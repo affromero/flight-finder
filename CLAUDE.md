@@ -26,8 +26,8 @@ The CLI bundles the shared scraper (`apps/web/src/lib/scraper/*`) via relative i
 
 ## Environment Variables
 
-All secrets via **Doppler** — NEVER use `.env` files. Project: `flight-finder`, config: `dev`.
-Scripts wrap with `doppler run --`. Shared LLM keys from `pricetoken` Doppler project.
+Supply secrets through the caller's environment. Never use `.env` files or commit credentials.
+Keep shared scripts independent of secret-manager accounts. Operators can wrap commands externally with their preferred secret manager.
 
 Critical: `DATABASE_URL`, `REDIS_URL`, `ANTHROPIC_API_KEY`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `CRON_SECRET`.
 
@@ -38,7 +38,7 @@ npm install                    # All workspaces
 docker compose -f docker-compose.prod.yml up -d db redis
 npm run db:push                # schema plus shared travel constraints
 npx prisma generate --schema=apps/web/prisma/schema.prisma
-npm run dev                    # Web app on :3003 (next dev --port 3003, no doppler wrapper at workspace level)
+npm run dev                    # Web app on :3003 (next dev --port 3003)
 npm run ci                     # lint + typecheck + test + build (both web and cli workspaces)
 ```
 
@@ -194,7 +194,7 @@ Other themes (cyberpunk, tron, autumn, solar-red) remain as user-selectable alte
 - Use Server Components by default
 - Return proper HTTP status codes
 - Cache API responses in Redis (5min TTL)
-- Use `doppler run --` for all scripts that need secrets
+- Read secrets from the supplied environment without hardcoded secret-manager wrappers
 
 ## Pre-Release Gate (MANDATORY before `/create-release`)
 
@@ -220,5 +220,5 @@ invocations — every CLI command across every compose flavor.
 
 - Use Tailwind, inline styles, or styled-components
 - Use `any` type
-- Use `.env` files — always Doppler
+- Use `.env` files. Supply secrets through the caller environment.
 - Commit API keys or secrets

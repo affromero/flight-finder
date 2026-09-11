@@ -10,8 +10,8 @@ call against a running instance.
 
 TypeScript (strict) monorepo on **Node >= 22**, npm workspaces. Next.js 16 (App
 Router, React 19) web app, Prisma 7 over PostgreSQL 16, Redis 7 for caching and
-rate limiting, Playwright for scraping, Vitest for tests. Secrets come from
-**Doppler**, never `.env` files.
+rate limiting, Playwright for scraping, Vitest for tests. The caller supplies
+secrets through the environment, never committed files.
 
 ## Setup
 
@@ -66,8 +66,9 @@ in lockstep; the `/create-release` flow bumps them together.
 
 ## Secrets
 
-Never use `.env` files and never commit secrets. Everything flows through Doppler
-(`doppler run -- <command>`). Provider API keys (Anthropic, OpenAI, Gemini, local)
+Never use `.env` files and never commit secrets. Shared scripts must accept the
+caller's environment without hardcoded secret-manager accounts or wrappers.
+Provider API keys (Anthropic, OpenAI, Gemini, local)
 resolve through `resolveApiKey()` in `apps/web/src/lib/scraper/ai-registry.ts`,
 where DB-stored encrypted keys take precedence over env vars. Do not read
 `process.env.<PROVIDER>_API_KEY` directly; go through the registry.

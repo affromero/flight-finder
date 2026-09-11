@@ -2,7 +2,7 @@
  * Capture demo-light.gif — seeds mock data, screenshots query page in light mode,
  * converts to GIF with ffmpeg, then cleans up.
  *
- * Usage: infisical run --projectId 48fd7083-5c5c-425b-8900-24e6b2626ea5 --env dev -- npx tsx scripts/capture-demo-light.ts
+ * Usage: npx tsx scripts/capture-demo-light.ts
  */
 
 import { PrismaClient } from '@prisma/client';

@@ -870,6 +870,12 @@ Access at `/admin` (no login required on self-hosted instances):
 
 Requires Node.js >= 22.
 
+Shared scripts read configuration from the caller's environment. Supply
+`DATABASE_URL`, optional `REDIS_URL`, and any credentials needed for the command
+through your shell, container, or secret manager. No Infisical or Doppler account
+is required. If you use a secret manager, wrap the npm command externally with
+your own project configuration. Do not commit credentials.
+
 ```bash
 npm install
 docker compose up -d db redis

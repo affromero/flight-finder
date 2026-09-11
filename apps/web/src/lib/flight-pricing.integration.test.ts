@@ -6,7 +6,9 @@ import { GET as getPrices } from '../app/api/queries/[id]/prices/route';
 import { GET as getCommunityRoutes } from '../app/api/community/routes/route';
 import { GET as getCommunityPrices } from '../app/api/community/routes/[route]/route';
 import { syncToHub } from './community-sync';
-import { getQueryJson, getQueryListJson } from '../../../../packages/cli/src/lib/json-output';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 
 describe.skipIf(process.env.FLIGHT_PRICING_INTEGRATION_TESTS !== '1')('actual flight fares in PostgreSQL', () => {
   let queryId = '';
@@ -56,10 +58,16 @@ describe.skipIf(process.env.FLIGHT_PRICING_INTEGRATION_TESTS !== '1')('actual fl
     expect(await prisma.priceSnapshot.count({ where: { queryId } })).toBe(2);
   });
 
-  it('excludes estimates from CLI detail and list summaries', async () => {
-    const detail = await getQueryJson(queryId);
+  it('prints actual fares through the built CLI detail and list commands', async () => {
+    const executable = fileURLToPath(new URL('../../../../packages/cli/dist/index.js', import.meta.url));
+    const run = (args: string[]) => promisify(execFile)(process.execPath, [executable, '--json', ...args], { timeout: 15_000 });
+    const detailOutput = await run(['--view', queryId]);
+    expect(detailOutput.stderr).toBe('');
+    const detail = JSON.parse(detailOutput.stdout);
     expect(detail).toMatchObject({ bestPrice: { price: 1809, airline: 'Air Canada' }, snapshotCount: 1 });
-    const summary = (await getQueryListJson()).find((row) => row.id === queryId);
+    const listOutput = await run([]);
+    expect(listOutput.stderr).toBe('');
+    const summary = JSON.parse(listOutput.stdout).find((row: { id: string }) => row.id === queryId);
     expect(summary).toMatchObject({ minPrice: 1809, maxPrice: 1809, snapshotCount: 1 });
   });
 
