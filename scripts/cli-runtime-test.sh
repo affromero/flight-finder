@@ -928,6 +928,17 @@ test_uninstall_invokes_compose_and_removes_dir_on_y
 test_search_hits_all_three_endpoints
 test_search_aborts_when_health_fails
 test_status_only_calls_curl
+# The installer may choose a different port when 3003 is occupied.
+setup_runtime docker_v2
+printf 'HOST_PORT=3017\n' > "$SANDBOX/.flight-finder/.env"
+: > "$RECORD_FILE"
+HOME="$SANDBOX" PATH="$SANDBOX/bin:$SANDBOX/sysbin" HOST_PORT='' PORT='' \
+  bash "$CLI" status >/dev/null 2>&1
+if grep -q 'http://localhost:3017/api/health' "$RECORD_FILE"; then
+  pass "status uses the installed port instead of assuming 3003"
+else
+  fail "status ignores the installed HOST_PORT"
+fi
 test_version_only_calls_curl
 test_compose_files_includes_override_when_present
 test_vpn_compose_excluded_without_env

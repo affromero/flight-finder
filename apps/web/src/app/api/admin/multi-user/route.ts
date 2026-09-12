@@ -7,6 +7,8 @@ import { getCurrentUser } from '@/lib/user-auth';
 import { requireAdminApi, verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { disableMultiUserMode } from '@/lib/admin-recovery';
 import { isPresetSlug } from '@/lib/avatars';
+import { lockTravelAdmission } from '@/lib/travel/admission';
+import { migrateSoloOwnership } from '@/lib/account-migration';
 
 const MIN_PASSWORD_LENGTH = 8;
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{2,32}$/;
@@ -112,6 +114,8 @@ export async function POST(request: NextRequest) {
   let result;
   try {
     result = await prisma.$transaction(async (tx) => {
+      await lockTravelAdmission(tx);
+      if (isFirstBoot && await tx.user.count() > 0) throw new AlreadyEnabledError();
       // Ensure the singleton row exists, then atomically flip multiUserMode
       // only when it is currently false. If two concurrent calls reach here,
       // exactly one updateMany returns count=1; the other returns 0 and we
@@ -137,14 +141,8 @@ export async function POST(request: NextRequest) {
         },
       });
 
-      const backfill = await tx.query.updateMany({
-        where: { userId: null, isSeed: false },
-        data: { userId: user.id },
-      });
-      await tx.hotelTracker.updateMany({ where: { userId: null }, data: { userId: user.id } });
-      await tx.hotelSearchRun.updateMany({ where: { userId: null }, data: { userId: user.id } });
-
-      return { user, backfillCount: backfill.count };
+      const backfillCount = await migrateSoloOwnership(tx, user.id);
+      return { user, backfillCount };
     });
   } catch (err) {
     if (err instanceof AlreadyEnabledError) {

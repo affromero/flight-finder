@@ -5,8 +5,7 @@ import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 
 // Exercises the real Tauri desktop launcher UI (apps/desktop/src) from the web
-// test runner so it runs in `npm run ci`. The desktop package is intentionally
-// minimal (no JS test runner of its own), and main.js is plain DOM glue, so we
+// test runner so it runs in `npm run ci`. main.js is plain DOM glue, so we
 // load the actual index.html + main.js into jsdom with a mocked Tauri bridge
 // and assert the behavior that #151 added: the Restart button and the .env
 // hint show only in the right states, and Restart invokes restart_stack.
@@ -37,7 +36,8 @@ function installLocalStorage() {
 function loadLauncher(responses: Responses) {
   document.body.innerHTML = bodyInner; // <script> in innerHTML does not execute in jsdom
   installLocalStorage();
-  const invoke = vi.fn((cmd: string) => Promise.resolve(responses[cmd]));
+  const available = { connection: { port: 3017, localOnly: true }, ...responses } as Responses;
+  const invoke = vi.fn((cmd: string) => Promise.resolve(available[cmd]));
   (window as unknown as { __TAURI__: unknown }).__TAURI__ = { core: { invoke } };
   const factory = new Function(`${mainJs}\nreturn { refreshHost, setMode };`);
   const api = factory() as { refreshHost: () => Promise<void>; setMode: (m: string | null) => void };
@@ -84,6 +84,7 @@ describe('desktop launcher UI (#151)', () => {
     await api.refreshHost();
     invoke.mockClear();
     el('restart').dispatchEvent(new window.Event('click'));
+    await Promise.resolve();
     expect(invoke).toHaveBeenCalledWith('restart_stack');
   });
 });

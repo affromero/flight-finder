@@ -15,7 +15,9 @@ const { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockNa
     query: { findUnique: vi.fn() },
     fetchRun: { create: vi.fn(), update: vi.fn() },
     extractionConfig: { findFirst: vi.fn(), findUnique: vi.fn() },
-    priceSnapshot: { createMany: vi.fn(), findMany: vi.fn() },
+    priceSnapshot: { createMany: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), aggregate: vi.fn() },
+    queryEditEvent: { findFirst: vi.fn() },
+    travelAlertDelivery: { upsert: vi.fn() },
     apiUsageLog: { create: vi.fn() },
   };
   const mockNavigateGoogleFlights = vi.fn();
@@ -124,6 +126,26 @@ describe('runScrapeForQuery', () => {
       resultsFound: true,
       source: 'google_flights',
     });
+  });
+
+  it('keeps distinct flights available when their previously different fares become equal', async () => {
+    const common = { travelDate: '2026-06-15', price: 100, currency: 'USD', airline: 'Delta', bookingUrl: '', stops: 0, duration: '5h' };
+    mockExtractPrices.mockResolvedValue({ prices: [
+      { ...common, flightNumber: 'DL100', departureTime: '08:00' },
+      { ...common, flightNumber: 'DL200', departureTime: '12:00' },
+    ], usage: { inputTokens: 100, outputTokens: 20 } });
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([
+      { ...common, travelDate: new Date(common.travelDate), flightId: 'Delta-DL100-JFK-LAX-2026-06-15', flightNumber: 'DL100', departureTime: '08:00', status: 'available' },
+      { ...common, travelDate: new Date(common.travelDate), price: 110, flightId: 'Delta-DL200-JFK-LAX-2026-06-15', flightNumber: 'DL200', departureTime: '12:00', status: 'available' },
+    ]);
+    const result = await runScrapeForQuery('q1');
+    expect(result).toMatchObject({ status: 'success', snapshotsCount: 2 });
+    const saved = mockPrisma.priceSnapshot.createMany.mock.calls.flatMap(([input]) => input.data);
+    expect(saved).toEqual(expect.arrayContaining([
+      expect.objectContaining({ flightNumber: 'DL100', price: 100 }),
+      expect.objectContaining({ flightNumber: 'DL200', price: 100 }),
+    ]));
+    expect(saved.some(row => row.status === 'sold_out')).toBe(false);
   });
 
   it('stores empty-string bookingUrl when extractPrices coerced null to empty string', async () => {

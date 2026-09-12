@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { ACTUAL_FLIGHT_FARE_WHERE } from '@/lib/flight-pricing';
+import type { Prisma } from '@/generated/prisma/client';
 
 /** A confirmed new-low price worth alerting on. */
 export interface NewLowAlert {
@@ -42,7 +43,7 @@ export interface DetectNewLowParams {
  * baseline, so we stay silent and let that run establish it — this also keeps
  * the create-time preview scrape from firing a spurious alert.
  */
-export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAlert | null> {
+export async function detectNewLow(params: DetectNewLowParams, database: Pick<Prisma.TransactionClient, 'priceSnapshot'> = prisma): Promise<NewLowAlert | null> {
   const { query, cycleStartedAt, floorAbs, floorPct, baselineFrom } = params;
 
   // Only ever compare prices in the same currency. When the query has an
@@ -54,8 +55,8 @@ export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAl
 
   // Cheapest available fare found this cycle. Carry its booking details so the
   // notification can deep-link straight to the flight.
-  const cheapest = await prisma.priceSnapshot.findFirst({
-    where: { queryId: query.id, status: 'available', scrapedAt: { gte: cycleStartedAt }, ...currencyFilter, ...ACTUAL_FLIGHT_FARE_WHERE },
+  const cheapest = await database.priceSnapshot.findFirst({
+    where: { queryId: query.id, status: 'available', scrapedAt: { gte: baselineFrom && baselineFrom > cycleStartedAt ? baselineFrom : cycleStartedAt }, ...currencyFilter, ...ACTUAL_FLIGHT_FARE_WHERE },
     orderBy: { price: 'asc' },
     select: {
       price: true,
@@ -75,7 +76,7 @@ export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAl
   // the cheapest snapshot's own currency so we never cross-compare e.g. JPY
   // against USD. Scoped by scrapedAt (not fetchRunId) so legacy null-fetchRunId
   // snapshots still count.
-  const prior = await prisma.priceSnapshot.aggregate({
+  const prior = await database.priceSnapshot.aggregate({
     where: {
       queryId: query.id,
       status: 'available',
@@ -97,7 +98,7 @@ export async function detectNewLow(params: DetectNewLowParams): Promise<NewLowAl
   // (for example 100.10 - 99.90 landing at 0.2000000000000028) cannot push a
   // borderline drop just over or under the configured floor.
   const drop = Math.round((baseline - currentMin) * 100) / 100;
-  if (drop < floorAbs) return null;
+  if (drop <= 0 || drop < floorAbs) return null;
   if (floorPct > 0 && drop / baseline < floorPct) return null;
 
   return {

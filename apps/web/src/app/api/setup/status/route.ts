@@ -1,5 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { detectAvailableProviders } from '@/lib/scraper/ai-registry';
+import { setupComplete as isSetupComplete } from '@/lib/setup-state';
 
 export async function GET() {
   const config = await prisma.extractionConfig.findFirst({
@@ -7,12 +8,9 @@ export async function GET() {
   });
 
   const isSelfHosted = process.env.SELF_HOSTED === 'true';
-  // Setup is complete once the explicit setup flow has run -- it always sets
-  // adminPasswordHash ('self-hosted' sentinel on self-hosted). Do NOT key off
-  // provider: it is a NOT NULL column with a default ("anthropic"), so any
-  // config row (e.g. one created by the admin-config GET upsert before setup)
-  // would otherwise look complete and wrongly skip the wizard / hide detection.
-  const setupComplete = Boolean(config?.adminPasswordHash);
+  // Provider defaults do not establish setup completion. Account bootstrap
+  // does, including recovered instances whose legacy password was cleared.
+  const setupComplete = await isSetupComplete();
 
   // Once setup is complete the instance is configured and may be publicly
   // reachable, so expose only the two booleans the setup wizard and

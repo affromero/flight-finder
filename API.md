@@ -308,8 +308,22 @@ Public deployments require a valid, non-revoked administrator session; multi-use
 deployments require an administrator account. Solo self-hosted deployments follow
 the existing administrator access model.
 
-An expired lease or unverified cleanup keeps shared execution stopped. After
-stopping old workers and independently verifying the network, an administrator
+An expired lease stops shared execution until cleanup is verified. With VPN
+disabled, the original worker can reopen admission after its work and browser
+cleanup finish. Every affected worker must acknowledge cleanup, and interrupted
+jobs are marked failed so their searches can be retried. Expiry never authorizes
+another worker to take over an abandoned browser.
+
+A crashed worker, uncertain cleanup, VPN incident, configuration conflict, or
+incident recorded by an older runtime requires administrator recovery. Restarting
+the app preserves that incident. Open `/admin` and use the travel recovery panel.
+For Docker installations, stop all app and CLI worker instances, ensure their
+browser processes have stopped, and verify the configured VPN/network state.
+Start the app again to access the panel; queued work remains paused until recovery.
+New hotel searches and active hotel/car status requests return 503 with recovery
+guidance during a pause. Completed results and cancellation remain available.
+After recovery, retry status updates to continue the same queued search.
+After stopping old workers and independently verifying the network, an administrator
 can submit the actor scope and generation obtained from GET:
 
 ```http

@@ -2,15 +2,19 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockUpsert = vi.fn();
 const mockFindFirst = vi.fn();
+const mockUserCount = vi.fn().mockResolvedValue(0);
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const db = {
     extractionConfig: {
       upsert: (...args: unknown[]) => mockUpsert(...args),
       findFirst: (...args: unknown[]) => mockFindFirst(...args),
     },
-  },
-}));
+    user: { count: () => mockUserCount() },
+    $executeRaw: vi.fn().mockResolvedValue(0),
+  };
+  return { prisma: { ...db, $transaction: async (work: (tx: typeof db) => Promise<unknown>) => work(db) } };
+});
 
 vi.mock('@/lib/community-sync', () => ({
   registerForCommunity: vi.fn().mockResolvedValue('comm_key'),
@@ -31,10 +35,26 @@ describe('POST /api/setup — provider API key (#149)', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUserCount.mockResolvedValue(0);
     // Self-hosted so no admin password is required; isolates the key behavior.
     process.env.SELF_HOSTED = 'true';
     mockFindFirst.mockResolvedValue(null); // setup not yet completed
     mockUpsert.mockResolvedValue({ id: 'singleton' });
+  });
+
+  it('rejects setup when account recovery cleared the legacy password', async () => {
+    mockFindFirst.mockResolvedValue({ adminPasswordHash: null, multiUserMode: false });
+    mockUserCount.mockResolvedValue(1);
+    const response = await POST(setupRequest({ provider: 'openai', model: 'gpt-4.1-mini', customBaseUrl: 'https://attacker.example' }));
+    expect(response.status).toBe(403);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('does not overwrite setup completed while the request was preparing', async () => {
+    mockFindFirst.mockResolvedValueOnce(null).mockResolvedValue({ adminPasswordHash: 'configured' });
+    const response = await POST(setupRequest({ provider: 'openai', model: 'gpt-4.1-mini' }));
+    expect(response.status).toBe(403);
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
   afterEach(() => {

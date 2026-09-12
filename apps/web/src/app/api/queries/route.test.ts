@@ -25,12 +25,15 @@ vi.mock('next/headers', () => ({
   cookies: vi.fn().mockResolvedValue({ get: vi.fn(), set: vi.fn(), delete: vi.fn() }),
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const db = {
     query: { create: mockQueryCreate },
     priceSnapshot: { createMany: mockSnapshotCreateMany },
-  },
-}));
+    extractionConfig: { findUnique: async () => ({ multiUserMode: false }) },
+    $executeRaw: vi.fn().mockResolvedValue(0),
+  };
+  return { prisma: { ...db, $transaction: async (work: (tx: typeof db) => Promise<unknown>) => work(db) } };
+});
 
 const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
 const mockGetCurrentUser = vi.fn().mockResolvedValue(null);

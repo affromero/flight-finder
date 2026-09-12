@@ -1,0 +1,61 @@
+name: Desktop CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+jobs:
+  native:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, ubuntu-22.04, windows-latest]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - name: Install Linux native dependencies
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+      - uses: dtolnay/rust-toolchain@stable
+      - uses: swatinem/rust-cache@v2
+        with:
+          workspaces: ./apps/desktop/src-tauri -> target
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+      - run: npm install
+        working-directory: apps/desktop
+      - run: npm run icon
+        working-directory: apps/desktop
+      - run: npm test
+        working-directory: apps/desktop
+      - run: cargo test --locked
+        working-directory: apps/desktop/src-tauri
+
+  cli-runtime:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        node: [22, 26]
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run test --workspace=@flight-finder/cli
+      - run: npm run build --workspace=@flight-finder/cli
+      - name: Verify source CLI startup without deprecated loader hooks
+        run: |
+          node --throw-deprecation --import tsx --import ./packages/cli/register.mjs packages/cli/src/index.tsx --headless --help
+          node --throw-deprecation --import tsx --import ./packages/cli/register.mjs --input-type=module -e "await import('@/lib/flight-pricing'); await import('@/generated/prisma/client.ts')"

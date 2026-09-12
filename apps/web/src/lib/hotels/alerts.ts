@@ -1,10 +1,8 @@
-import { prisma } from '@/lib/prisma';
-import { dispatchNotifications } from '@/lib/notifications/notify';
 import type { ChannelMessage } from '@/lib/notifications/channels/types';
 import { resolveBaseUrl } from '@/lib/notifications/run';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { evaluateHotelAlerts } from './domain';
-import { json, lockHotelTracker } from './store';
+import { json } from './store';
 import type { HotelTracker, Prisma } from '@/generated/prisma/client';
 import type { HotelOffer, HotelTrackingOptions } from './types';
 
@@ -26,28 +24,5 @@ export async function recordHotelAlerts(tx: Prisma.TransactionClient, tracker: H
   if (outcome.target || outcome.low) await tx.hotelAlert.create({ data: { trackerId: tracker.id, message: json(message) } });
 }
 
-export async function deliverHotelAlerts() {
-  const alerts = await prisma.hotelAlert.findMany({ where: { pending: true, nextAttemptAt: { lte: new Date() }, tracker: { active: true } }, orderBy: { nextAttemptAt: 'asc' }, take: 50 });
-  for (const alert of alerts) {
-    try {
-      // The claim follows the same tracker lock as pause/reassignment so stale
-      // rows from the batch cannot deliver cancelled events or old ownership.
-      const claimed = await prisma.$transaction(async tx => {
-        const tracker = await lockHotelTracker(tx, alert.trackerId);
-        if (!tracker?.active) return null;
-        const claim = await tx.hotelAlert.updateMany({ where: { id: alert.id, pending: true, nextAttemptAt: { lte: new Date() } }, data: { nextAttemptAt: new Date(Date.now() + 300_000) } });
-        if (!claim.count) return null;
-        const current = await tx.hotelAlert.findUnique({ where: { id: alert.id } });
-        return current ? { ...current, userId: tracker.userId } : null;
-      });
-      if (!claimed) continue;
-      const outcomes = await dispatchNotifications(claimed.userId, claimed.message as unknown as ChannelMessage, claimed.deliveredIds);
-      const deliveredIds = [...new Set([...claimed.deliveredIds, ...outcomes.filter(o => o.ok).map(o => o.channelId)])];
-      // With no channels configured, retain the event until a channel exists.
-      const pending = outcomes.some(o => !o.ok) || (outcomes.length === 0 && deliveredIds.length === 0);
-      await prisma.hotelAlert.updateMany({ where: { id: alert.id, pending: true }, data: { deliveredIds, pending, lastError: outcomes.filter(o => !o.ok).map(o => o.error).join('; ') || null } });
-    } catch (error) {
-      await prisma.hotelAlert.updateMany({ where: { id: alert.id, pending: true }, data: { lastError: error instanceof Error ? error.message : String(error), nextAttemptAt: new Date(Date.now() + 300_000) } });
-    }
-  }
-}
+
+export { deliverHotelAlerts } from './delivery';

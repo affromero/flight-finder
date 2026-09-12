@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { TravelJob } from '@/generated/prisma/client';
-import type { TravelLeaseToken } from './admission';
+import { getTravelAdmission, type TravelLeaseToken } from './admission';
 import { TravelJobError } from './errors';
 import { currentTravelContext } from './context';
 import { executeCarJob } from '../cars/run';
@@ -34,10 +34,14 @@ export async function executeTravelJob(id: string, work = dispatch): Promise<boo
 export async function pumpTravelJobs(): Promise<void> {
   const config = await prisma.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { enabled: true } });
   if (config?.enabled === false) return;
+  if ((await getTravelAdmission()).quarantinedAt) return;
   const jobs = await prisma.travelJob.findMany({ where: { status: 'queued', kind: { in: process.env.SELF_HOSTED === 'true' ? ['flight_batch', 'flight_query', 'hotel_search', 'car_search'] : ['flight_batch', 'flight_query'] } }, orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }], take: 20 });
   for (const job of jobs) {
     try { await executeTravelJob(job.id); }
-    catch (error) { console.error('[travel] Worker failed:', error); }
+    catch (error) {
+      console.error('[travel] Worker failed:', error);
+      if ((await getTravelAdmission()).quarantinedAt) return;
+    }
   }
 }
 

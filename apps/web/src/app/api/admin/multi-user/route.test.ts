@@ -34,7 +34,8 @@ vi.mock('@/lib/prisma', () => ({
     },
     $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
       fn({
-        user: { create: (...args: unknown[]) => mockUserCreate(...args) },
+        $executeRaw: vi.fn().mockResolvedValue(0),
+        user: { count: () => mockUserCount(), create: (...args: unknown[]) => mockUserCreate(...args) },
         extractionConfig: {
           upsert: (...args: unknown[]) => mockConfigUpsert(...args),
           updateMany: (...args: unknown[]) => mockConfigUpdateMany(...args),
@@ -42,6 +43,14 @@ vi.mock('@/lib/prisma', () => ({
         query: { updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args) },
         hotelTracker: { updateMany: (...args: unknown[]) => mockHotelTrackerUpdateMany(...args) },
         hotelSearchRun: { updateMany: (...args: unknown[]) => mockHotelSearchUpdateMany(...args) },
+        carTracker: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        carSearchRun: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        carTrackerCreation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        carSearchCreation: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        carRefreshRequest: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        hotelAlert: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        travelAlertDelivery: { updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
+        travelJob: { findMany: vi.fn().mockResolvedValue([]), updateMany: vi.fn().mockResolvedValue({ count: 0 }) },
       }),
   },
 }));

@@ -59,9 +59,8 @@ export async function resetUserPassword(
  * absent. If it exists (the normal case), only these two fields change and every
  * other setting is left intact.
  *
- * Cache invalidation is correct because this runs inside the `web` container,
- * sharing REDIS_URL and the `ft:multi-user` key; the 60s TTL would self-heal a
- * missed bust anyway.
+ * Authorization reads the database directly. Cache invalidation only removes
+ * account-mode entries left by earlier application versions.
  */
 export async function disableMultiUserMode(): Promise<void> {
   await prisma.extractionConfig.upsert({
