@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { TravelJob } from '@/generated/prisma/client';
-import { acquireTravelLease, lockTravelLease, quarantineTravelLease, releaseTravelLease, renewTravelLease, type TravelLeaseToken } from './admission';
+import { acknowledgeTravelCleanup, acquireTravelLease, lockTravelLease, quarantineTravelLease, releaseTravelLease, renewTravelLease, type TravelLeaseToken } from './admission';
 import { claimTravelJob, completeTravelJob, failTravelJob, travelResource } from './jobs';
 import { TravelJobError } from './errors';
 import { TravelCleanupError, TravelExecution, withTravelExecution } from './execution';
@@ -75,9 +75,9 @@ export async function executeTravelJob(id: string, work: (job: TravelJob, lease:
   } catch (error) {
     failure = error;
     try {
-      if (unsafeCleanup(error) || authorityLost) {
+      if (unsafeCleanup(error)) {
         await quarantineTravelLease(lease, 'Travel execution or cleanup lost its safety guarantees. Stop old workers and verify the network before recovery.');
-      } else {
+      } else if (!authorityLost) {
         const current = await prisma.travelJob.findUnique({ where: { id }, select: { status: true } });
         if (current?.status === 'running') {
           const message = 'Travel check could not finish; previous observations were retained.';
@@ -92,7 +92,10 @@ export async function executeTravelJob(id: string, work: (job: TravelJob, lease:
     await heartbeat;
     try {
       await execution.dispose();
-      if (authorityLost) await quarantineTravelLease(lease, 'Travel worker authority was lost before cleanup completed. Administrator recovery is required.');
+      if (vpn?.type === 'none') {
+        await vpn.dispose();
+        if (!(await acknowledgeTravelCleanup(lease))) await quarantineTravelLease(lease, 'Travel worker cleanup requires administrator recovery. Open /admin to review the incident.');
+      } else if (authorityLost) await quarantineTravelLease(lease, 'Travel worker authority was lost before cleanup completed. Open /admin for administrator recovery.');
       else {
         await vpn?.dispose();
         await releaseTravelLease(lease);

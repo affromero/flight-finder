@@ -498,6 +498,7 @@ model TravelAdmission {
   systemWide         Boolean @default(false)
   quarantinedAt      DateTime?
   quarantineReason   String?
+  cleanupRecoveryAllowed Boolean @default(false)
   recoveryGeneration Int @default(0)
   recoveredAt        DateTime?
   recoveredBy        String?

@@ -49,7 +49,8 @@ export function CarSearchStatus({ initial, actorScope }: { initial: CarRunView; 
       if (sequence !== generation.current) return;
       const hidden = failure instanceof TravelResponseError && [401, 403, 404].includes(failure.status);
       setPrivateHidden(previous => previous || hidden); setPaused(true);
-      setError(t(hidden ? 'accessLost' : cancel ? 'cancelUncertain' : 'statusInterrupted'));
+      const pausedMessage = !cancel && failure instanceof TravelResponseError && failure.definitive && failure.status === 503;
+      setError(pausedMessage ? failure.message : t(hidden ? 'accessLost' : cancel ? 'cancelUncertain' : 'statusInterrupted'));
     } finally {
       clearTimeout(timeout);
       if (controller.current === aborter) controller.current = null;

@@ -4,6 +4,10 @@ import { createUserSessionToken } from '../user-auth';
 import { createSessionToken } from '../admin-auth';
 import { acquireTravelLease, getTravelAdmission, quarantineTravelLease } from './admission';
 import { GET, POST } from '@/app/api/admin/travel/route';
+import { GET as hotelStatus } from '@/app/api/hotels/search/[id]/route';
+import { GET as carStatus } from '@/app/api/cars/search/[id]/route';
+import { carSearchFixture } from '@/test/car-fixtures';
+import { json } from '../hotels/store';
 
 const boundary = vi.hoisted(() => ({ token: '' }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.token ? { value: boundary.token } : undefined }) }));
@@ -103,5 +107,30 @@ describe.skipIf(process.env.TRAVEL_INTEGRATION_TESTS !== '1')('administrator tra
     expect((await POST(new Request(base, { method: 'POST', body: '{}' }))).status).toBe(415);
     expect((await POST(new Request(base, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: 'x'.repeat(70_000) }))).status).toBe(413);
     expect((await getTravelAdmission()).quarantinedAt).toBeInstanceOf(Date);
+  });
+  it.each(['hotel', 'car'] as const)('keeps %s search ownership private and gives members appropriate recovery guidance', async kind => {
+    await prisma.user.update({ where: { id: memberId }, data: { sessionsValidFrom: null } });
+    const row = kind === 'hotel'
+      ? await prisma.hotelSearchRun.create({ data: { userId: adminId, request: {} } })
+      : await prisma.carSearchRun.create({ data: { userId: adminId, request: json(carSearchFixture()) } });
+    const read = kind === 'hotel' ? hotelStatus : carStatus;
+    const context = { params: Promise.resolve({ id: row.id }) };
+    try {
+      const admin = await read(new Request('http://localhost'), context);
+      expect(admin.status).toBe(503);
+      expect((await admin.json()).error).toContain('/admin');
+      boundary.token = createUserSessionToken(memberId);
+      expect((await read(new Request('http://localhost'), context)).status).toBe(404);
+      if (kind === 'hotel') await prisma.hotelSearchRun.update({ where: { id: row.id }, data: { userId: memberId } });
+      else await prisma.carSearchRun.update({ where: { id: row.id }, data: { userId: memberId } });
+      const member = await read(new Request('http://localhost'), context);
+      expect(member.status).toBe(503);
+      const body = await member.json();
+      expect(body.error).toMatch(/Ask your administrator/);
+      expect(body.error).not.toContain('/admin');
+    } finally {
+      if (kind === 'hotel') await prisma.hotelSearchRun.delete({ where: { id: row.id } });
+      else await prisma.carSearchRun.delete({ where: { id: row.id } });
+    }
   });
 });
