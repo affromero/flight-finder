@@ -65,6 +65,11 @@ export async function stageCliRuntime(rootPath, outputPath, metafilePath) {
     const optional = found.metadata.optionalDependencies ?? {};
     const peers = found.metadata.peerDependencies ?? {};
     for (const name of new Set([...Object.keys(required), ...Object.keys(optional), ...Object.keys(peers)])) {
+      // The generated client needs neither the schema CLI nor the TypeScript compiler.
+      // Exclude only these build-time peer edges; independent runtime imports still win.
+      if (found.metadata.name === '@prisma/client' && (name === 'prisma' || name === 'typescript')
+        && Object.hasOwn(peers, name) && found.metadata.peerDependenciesMeta?.[name]?.optional === true
+        && !Object.hasOwn(required, name) && !Object.hasOwn(optional, name)) continue;
       queue.push({ name, from: found.directory, optional: Object.hasOwn(optional, name) || (!Object.hasOwn(required, name) && found.metadata.peerDependenciesMeta?.[name]?.optional === true) });
     }
   }

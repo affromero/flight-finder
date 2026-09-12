@@ -37,6 +37,13 @@ RUN set -e; cd /app; mkdir -p /ext; \
       done; \
     done
 
+# Include only Prisma's generated-client runtime and PostgreSQL adapter closure.
+# Missing required packages must fail the build rather than produce a partial image.
+RUN set -e; cd /app; mkdir -p /ext/@prisma; \
+    for p in client adapter-pg driver-adapter-utils client-runtime-utils debug; do \
+      cp -R "node_modules/@prisma/$p" "/ext/@prisma/$p"; \
+    done
+
 # Prisma CLI as a self-contained toolchain for the entrypoint schema push.
 # The CLI is a devDependency, so it is absent from the lean runtime
 # node_modules, and fetching it with npx at container start round-trips the
@@ -82,7 +89,6 @@ RUN node /stage-cli-runtime.mjs /app /cli-runtime /cli-metafile.json
 # Separate COPY layers retain overwritten package files in the image archive.
 FROM scratch AS runtimeassets
 COPY --from=builder --chown=1000:1000 /app/apps/web/.next/standalone /app
-COPY --from=proddeps --chown=1000:1000 /app/node_modules/@prisma /app/node_modules/@prisma
 COPY --from=proddeps --chown=1000:1000 /ext /app/node_modules
 COPY --from=builder --chown=1000:1000 /app/packages/cli/dist /app/packages/cli/dist
 COPY --from=builder --chown=1000:1000 /app/packages/cli/package.json /app/packages/cli/package.json
@@ -121,9 +127,9 @@ COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.nex
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
 # Prisma schema (the entrypoint db push reads it). The generated client and its
-# @prisma/client runtime (WASM query compiler) come in via the Next standalone
-# trace; @prisma is copied too so the runtime adapter (@prisma/adapter-pg) and
-# client are guaranteed present. v7 has no node_modules/.prisma engine dir.
+# @prisma/client runtime (WASM query compiler) and PostgreSQL adapter are staged
+# as complete runtime packages above. The separate Prisma CLI retains its own
+# toolchain. v7 has no node_modules/.prisma engine dir.
 COPY --from=builder --chown=node:node /app/apps/web/prisma ./apps/web/prisma
 
 # Self-contained Prisma CLI for the entrypoint schema push (db push). Calling
