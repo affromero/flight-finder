@@ -18,6 +18,7 @@ import { expandQueryDates } from './scrape-dates';
 import { currentTravelContext, checkTravelAuthority, travelTransaction } from '../travel/context';
 import { flightTransaction, submitFlightJob } from '../travel/flights';
 import { currentTravelExecution, travelDelay } from '../travel/execution';
+import { recordFlightAlertInTransaction } from '../notifications/flights';
 
 const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
   'empty_extraction',
@@ -283,6 +284,7 @@ async function scrapeQueryForCountry(
   proxyUrl: string | undefined,
   fetchRunId: string,
 ): Promise<ScrapeResult> {
+  const cycleStartedAt = new Date();
   const countryProfile = vpnCountry ? getCountryProfile(vpnCountry) : undefined;
   if (searchParams.sourceUrl) assertFlightLinkSearch(searchParams.sourceUrl, { ...searchParams, dateFrom: searchParams.dateFrom.toISOString().slice(0, 10), dateTo: searchParams.dateTo.toISOString().slice(0, 10), cabinClass: searchParams.cabinClass ?? 'economy', tripType: searchParams.tripType ?? 'round_trip', flexibility: query.flexibility });
 
@@ -371,10 +373,12 @@ async function scrapeQueryForCountry(
     }
   }
 
-  // Deduplicate by airline + price + date + vpnCountry
+  // Equal fares can belong to different flights. Preserve their identity before
+  // sold-out detection compares this observation with the previous scrape.
   const seen = new Set<string>();
   allPrices = allPrices.filter((p) => {
-    const key = `${p.airline}:${p.price}:${p.travelDate}:${vpnCountry ?? ''}`;
+    const identity = (p.flightNumber ?? '').replace(/\s+/g, '').toUpperCase() || p.departureTime || '';
+    const key = JSON.stringify([p.airline, identity, p.price, p.currency, p.travelDate, vpnCountry ?? null]);
     if (seen.has(key)) return false;
     seen.add(key);
     return true;
@@ -494,6 +498,8 @@ async function scrapeQueryForCountry(
         data: soldOutSnapshots,
       });
     }
+
+    if (withFlightIds.length > 0) await recordFlightAlertInTransaction(tx, queryId, cycleStartedAt);
 
     console.log(`[scrape] query=${queryId} vpn=${vpnCountry ?? 'local'} finished — ${allPrices.length} prices, cost=$${extractionCost.toFixed(4)}`);
     const failureReason = allPrices.length === 0 ? lastFailureReason : undefined;

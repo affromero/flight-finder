@@ -76,6 +76,11 @@ jobs:
       - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/creation.integration.test.ts
         env:
           CAR_STORE_INTEGRATION_TESTS: '1'
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/list.integration.test.ts src/lib/cars/delivery.integration.test.ts src/lib/cars/parse-gate.integration.test.ts --no-file-parallelism
+        env:
+          CAR_STORE_INTEGRATION_TESTS: '1'
+          CAR_DELIVERY_INTEGRATION_TESTS: '1'
+          CAR_PARSE_INTEGRATION_TESTS: '1'
       - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/persistence.integration.test.ts
         env:
           CAR_PERSISTENCE_INTEGRATION_TESTS: '1'
@@ -86,6 +91,39 @@ jobs:
         env:
           TRAVEL_BROWSER_TESTS: '1'
           CAR_RUN_INTEGRATION_TESTS: '1'
+
+  flight-pricing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: flight_test
+          POSTGRES_PASSWORD: flight-local-test
+          POSTGRES_DB: flight_test
+        ports:
+          - 55416:5432
+        options: >-
+          --health-cmd "pg_isready -U flight_test -d flight_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://flight_test:flight-local-test@127.0.0.1:55416/flight_test
+      FLIGHT_PRICING_INTEGRATION_TESTS: '1'
+      NOTIFICATION_INTEGRATION_TESTS: '1'
+      REDIS_URL: ''
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:push
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/flight-pricing.integration.test.ts src/lib/notifications/delivery.integration.test.ts --no-file-parallelism
 
   migration-rollback:
     runs-on: ubuntu-latest

@@ -3,11 +3,12 @@ import { refreshCarTracker } from '../cars/store';
 import { cleanupHotelSearches, reconcileHotelJobs, scheduleDueHotels } from '../hotels/runner';
 import { deliverHotelAlerts } from '../hotels/alerts';
 import { deliverCarAlerts } from '../cars/delivery';
+import { deliverFlightAlerts } from '../notifications/flights';
 import { notificationTransaction } from '../notifications/database';
 import { pumpTravelJobs } from './coordinator';
 import { expireQueuedPreviews } from './preview';
 
-type AlertKind = 'car' | 'hotel';
+type AlertKind = 'car' | 'hotel' | 'flight';
 const runtime = globalThis as typeof globalThis & {
   travelTimer?: ReturnType<typeof setTimeout>; travelPump?: Promise<void>;
   travelAlertTimers?: Partial<Record<AlertKind, ReturnType<typeof setTimeout>>>;
@@ -41,15 +42,15 @@ async function runAlerts(kind: AlertKind): Promise<void> {
   const pumps = runtime.travelAlertPumps ??= {};
   if (pumps[kind]) return pumps[kind];
   pumps[kind] = (async () => {
-    if (process.env.SELF_HOSTED !== 'true') return;
+    if (kind !== 'flight' && process.env.SELF_HOSTED !== 'true') return;
     const config = await notificationTransaction(tx => tx.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { enabled: true } }));
     if (config?.enabled === false) return;
-    await (kind === 'car' ? deliverCarAlerts() : deliverHotelAlerts());
+    await (kind === 'car' ? deliverCarAlerts() : kind === 'hotel' ? deliverHotelAlerts() : deliverFlightAlerts());
   })().catch(error => { console.error(`[travel] ${kind} notification worker failed:`, error); }).finally(() => { delete pumps[kind]; });
   return pumps[kind];
 }
 export async function runTravelAlertsSafely(): Promise<void> {
-  await Promise.all([runAlerts('car'), runAlerts('hotel')]);
+  await Promise.all([runAlerts('car'), runAlerts('hotel'), runAlerts('flight')]);
 }
 export async function runTravelJobsSafely(): Promise<void> {
   if (!runtime.travelPump) runtime.travelPump = pump().catch(error => { console.error('[travel] Scheduled worker failed:', error); }).finally(() => { runtime.travelPump = undefined; });
@@ -68,7 +69,7 @@ export function startTravelScheduler(): void {
   runtime.travelTimer = setTimeout(() => { void tick(); }, 1000);
   runtime.travelTimer.unref();
   const timers = runtime.travelAlertTimers ??= {};
-  for (const kind of ['car', 'hotel'] as const) {
+  for (const kind of ['car', 'hotel', 'flight'] as const) {
     if (timers[kind]) continue;
     const alertTick = async () => {
       await runAlerts(kind);

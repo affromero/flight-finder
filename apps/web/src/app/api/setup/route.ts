@@ -4,6 +4,8 @@ import { hashPassword } from '@/lib/password';
 import { registerForCommunity } from '@/lib/community-sync';
 import { encryptSecret } from '@/lib/secret-crypto';
 import { validateInferenceSelection } from '@/lib/scraper/inference-selection';
+import { setupComplete } from '@/lib/setup-state';
+import { lockTravelAdmission } from '@/lib/travel/admission';
 
 // Env-backed provider -> the ExtractionConfig column that stores its key,
 // encrypted at rest (#149). Keep in sync with STORED_KEY_FIELD in ai-registry.
@@ -14,12 +16,7 @@ const PROVIDER_KEY_COLUMN: Record<string, 'anthropicApiKey' | 'openaiApiKey' | '
 };
 
 export async function POST(request: Request) {
-  // Only allow setup if no config exists yet
-  const existing = await prisma.extractionConfig.findFirst({
-    where: { id: 'singleton' },
-  });
-
-  if (existing?.adminPasswordHash) {
+  if (await setupComplete()) {
     return apiError('Setup already completed. Use admin panel to change settings.', 403);
   }
 
@@ -86,32 +83,25 @@ export async function POST(request: Request) {
     }
   }
 
-  await prisma.extractionConfig.upsert({
-    where: { id: 'singleton' },
-    create: {
-      id: 'singleton',
-      provider,
-      model,
-      reasoningEffort: selection.reasoningEffort,
-      adminPasswordHash: passwordHash,
-      communitySharing: communitySharing && communityApiKey !== null,
-      communityApiKey,
-      customBaseUrl: customBaseUrl || null,
-      publicBaseUrl: normalizedPublicBaseUrl,
-      ...providerKeyData,
-    },
-    update: {
-      provider,
-      model,
-      reasoningEffort: selection.reasoningEffort,
-      adminPasswordHash: passwordHash,
-      communitySharing: communitySharing && communityApiKey !== null,
-      communityApiKey,
-      customBaseUrl: customBaseUrl || null,
-      publicBaseUrl: normalizedPublicBaseUrl,
-      ...providerKeyData,
-    },
+  const data = {
+    provider,
+    model,
+    reasoningEffort: selection.reasoningEffort,
+    adminPasswordHash: passwordHash,
+    communitySharing: communitySharing && communityApiKey !== null,
+    communityApiKey,
+    customBaseUrl: customBaseUrl || null,
+    publicBaseUrl: normalizedPublicBaseUrl,
+    ...providerKeyData,
+  };
+  const saved = await prisma.$transaction(async tx => {
+    await lockTravelAdmission(tx);
+    if (await setupComplete(tx)) return false;
+    await tx.extractionConfig.upsert({ where: { id: 'singleton' }, create: { id: 'singleton', ...data }, update: data });
+    return true;
   });
+
+  if (!saved) return apiError('Setup already completed. Use admin panel to change settings.', 403);
 
   return apiSuccess({ message: 'Setup complete' });
 }

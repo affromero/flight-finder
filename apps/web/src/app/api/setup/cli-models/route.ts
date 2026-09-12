@@ -1,12 +1,11 @@
 import { apiError, apiSuccess } from '@/lib/api-response';
-import { prisma } from '@/lib/prisma';
+import { setupComplete } from '@/lib/setup-state';
 import { discoverCliModels } from '@/lib/scraper/cli-models';
 import { CliTestError, testCliSelection } from '@/lib/scraper/cli-test';
 import { InferenceSelectionError } from '@/lib/scraper/inference-selection';
 
 export async function GET(request: Request) {
-  const config = await prisma.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { adminPasswordHash: true } });
-  if (config?.adminPasswordHash) return apiError('Setup is complete; use administrator settings', 403);
+  if (await setupComplete()) return apiError('Setup is complete; use administrator settings', 403);
   const url = new URL(request.url), provider = url.searchParams.get('provider');
   if (provider !== 'codex' && provider !== 'claude-code') return apiError('Choose a supported CLI provider', 400);
   try { return apiSuccess(await discoverCliModels(provider, url.searchParams.get('refresh') === 'true')); }
@@ -14,8 +13,7 @@ export async function GET(request: Request) {
 }
 
 export async function POST(request: Request) {
-  const config = await prisma.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { adminPasswordHash: true } });
-  if (config?.adminPasswordHash) return apiError('Setup is complete; use administrator settings', 403);
+  if (await setupComplete()) return apiError('Setup is complete; use administrator settings', 403);
   try { return apiSuccess(await testCliSelection(await request.json(), request.signal)); }
   catch (error) {
     if (error instanceof SyntaxError) return apiError('Invalid JSON request', 400);

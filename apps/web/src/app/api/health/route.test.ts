@@ -37,6 +37,7 @@ describe('GET /api/health', () => {
     const res = await GET();
     expect(res.status).toBe(200);
     const body = await res.json();
+    expect(body.application).toBe('flight-finder');
     expect(body.status).toBe('ok');
     expect(body.database).toBe('connected');
     expect(body.redis).toBe('connected');

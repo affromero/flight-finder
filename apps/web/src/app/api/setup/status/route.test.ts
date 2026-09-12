@@ -1,10 +1,12 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockFindFirst = vi.fn();
+const mockUserCount = vi.fn().mockResolvedValue(0);
 const mockDetect = vi.fn(async () => ['anthropic', 'ollama']);
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    user: { count: () => mockUserCount() },
     extractionConfig: {
       findFirst: (...args: unknown[]) => mockFindFirst(...args),
     },
@@ -20,7 +22,16 @@ import { GET } from './route';
 describe('GET /api/setup/status -- information disclosure', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockUserCount.mockResolvedValue(0);
     delete process.env.SELF_HOSTED;
+  });
+
+  it('keeps provider discovery private after account recovery clears the legacy hash', async () => {
+    mockFindFirst.mockResolvedValue({ adminPasswordHash: null, multiUserMode: false });
+    mockUserCount.mockResolvedValue(1);
+    const response = await GET();
+    expect(await response.json()).toEqual({ setupComplete: true, needsSetup: false });
+    expect(mockDetect).not.toHaveBeenCalled();
   });
 
   it('does not reveal provider names to unauthenticated callers', async () => {

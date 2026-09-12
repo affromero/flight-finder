@@ -2,7 +2,7 @@ name: Docker
 
 on:
   workflow_run:
-    workflows: [CI]
+    workflows: [CI, Car and shared travel workflows, Hotel integration, Desktop CI]
     types: [completed]
     branches: [main]
   release:
@@ -23,18 +23,28 @@ env:
 
 jobs:
   resolve:
-    if: ${{ github.event_name == 'release' || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
+    if: ${{ (github.event_name == 'release' && startsWith(github.event.release.tag_name, 'v')) || github.event_name == 'workflow_dispatch' || github.event.workflow_run.conclusion == 'success' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
       contents: read
+      actions: read
     outputs:
       sha: ${{ steps.commit.outputs.sha }}
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ inputs.ref || github.event.workflow_run.head_sha || github.sha }}
+          ref: ${{ github.workflow_sha }}
       - id: commit
-        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+        uses: actions/github-script@v8
+        env:
+          BUILD_REF: ${{ inputs.ref || github.event.release.tag_name || github.event.workflow_run.head_sha || github.sha }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { data } = await github.rest.repos.getCommit({ owner, repo, ref: process.env.BUILD_REF });
+            await require('./scripts/docker-publication.cjs').requireChecks({ github, owner, repo, sha: data.sha });
+            core.setOutput('sha', data.sha);
 
   build:
     needs: resolve
@@ -90,17 +100,17 @@ jobs:
   merge:
     needs: [resolve, build]
     runs-on: ubuntu-latest
+    concurrency:
+      group: flight-finder-image-publication
+      cancel-in-progress: false
     permissions:
       contents: read
       packages: write
+      actions: read
     steps:
       - uses: actions/checkout@v7.0.1
         with:
-          ref: ${{ needs.resolve.outputs.sha }}
-
-      - name: Get version
-        id: version
-        run: echo "version=$(node -p "require('./apps/web/package.json').version")" >> "$GITHUB_OUTPUT"
+          ref: ${{ github.workflow_sha }}
 
       - uses: docker/setup-buildx-action@v4.3.0
 
@@ -117,16 +127,22 @@ jobs:
           merge-multiple: true
 
       - name: Create multi-arch manifest
-        working-directory: /tmp/digests
+        uses: actions/github-script@v8
         env:
           HEAD_SHA: ${{ needs.resolve.outputs.sha }}
-        run: |
-          docker buildx imagetools create \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ steps.version.outputs.version }} \
-            -t ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${HEAD_SHA} \
-            $(printf '${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}@sha256:%s ' *)
+          RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const sha = process.env.HEAD_SHA;
+            await require('./scripts/docker-publication.cjs').requireChecks({ github, owner, repo, sha, attempts: 1 });
+            const { data } = await github.rest.repos.getContent({ owner, repo, path: 'apps/web/package.json', ref: sha });
+            const { version } = JSON.parse(Buffer.from(data.content, 'base64').toString());
+            const digests = require('node:fs').readdirSync('/tmp/digests').map(value => `sha256:${value}`);
+            await require('./scripts/docker-publication.cjs').publish({ github, owner, repo, sha,
+              image: `${process.env.REGISTRY}/${process.env.IMAGE_NAME}`, digests,
+              releaseTag: process.env.RELEASE_TAG, version });
 
       - name: Verify manifest
         run: |
-          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+          docker buildx imagetools inspect ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:${{ needs.resolve.outputs.sha }}

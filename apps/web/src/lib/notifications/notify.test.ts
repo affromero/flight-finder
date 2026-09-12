@@ -46,10 +46,24 @@ describe('dispatchNotifications', () => {
     expect(fetchMock.mock.calls.map(call => call[0])).toEqual(['http://127.0.0.1/a']);
   });
   it('does not contact a channel when the event guard rejects its authority', async () => {
-    mockFindMany.mockResolvedValue([{ id: 'a', type: 'webhook', config: { url: 'http://127.0.0.1/a' }, userId: null }]);
+    const channel = { id: 'a', type: 'webhook', enabled: true, config: { url: 'http://127.0.0.1/a' }, userId: null };
+    mockFindMany.mockResolvedValue([channel]);
+    mockFindUnique.mockResolvedValue(channel);
     await expect(dispatchNotifications(null, MESSAGE, [], {
       signal: new AbortController().signal, beforeSend: async () => { throw new Error('Tracker owner changed'); }, onDelivered: async () => undefined,
     })).rejects.toThrow(/owner changed/);
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+  it('checks delivery authority after a delayed channel lookup returns', async () => {
+    const channel = { id: 'a', type: 'webhook', enabled: true, config: { url: 'http://127.0.0.1/a' }, userId: null };
+    mockFindMany.mockResolvedValue([channel]);
+    let authorized = true;
+    mockFindUnique.mockImplementation(async () => { authorized = false; return channel; });
+    await expect(dispatchNotifications(null, MESSAGE, [], {
+      signal: new AbortController().signal,
+      beforeSend: async () => { if (!authorized) throw new Error('Claim expired during channel lookup'); },
+      onDelivered: async () => undefined,
+    })).rejects.toThrow(/Claim expired/);
     expect(fetchMock).not.toHaveBeenCalled();
   });
   it('excludes channels already delivered when retrying a hotel alert', async () => {

@@ -3,6 +3,7 @@ import { apiSuccess } from '@/lib/api-response';
 import { hotelEndpoint } from '@/lib/hotels/http';
 import { getHotelTracker, editHotelTracker, trackerDto, lockHotelTracker } from '@/lib/hotels/store';
 import { assertHotelOwner } from '@/lib/hotels/access';
+import { assertAccountActor } from '@/lib/account-actor';
 
 type Context = { params: Promise<{ id: string }> };
 export async function GET(request: Request, context: Context) {
@@ -28,6 +29,7 @@ export async function DELETE(request: Request, context: Context) {
     const { id } = await context.params;
     await prisma.$transaction(async tx => {
       const row = await lockHotelTracker(tx, id);
+      await assertAccountActor(tx, actor);
       assertHotelOwner(actor, row);
       await tx.hotelTracker.delete({ where: { id } });
     });

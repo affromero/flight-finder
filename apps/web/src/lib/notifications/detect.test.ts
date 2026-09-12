@@ -136,6 +136,11 @@ describe('detectNewLow', () => {
     expect(await run()).toBeNull();
   });
 
+  it('does not call an unchanged fare a new low when both thresholds are zero', async () => {
+    arrange({ current: { price: 250 }, priorMin: 250 });
+    expect(await run({ floorAbs: 0, floorPct: 0 })).toBeNull();
+  });
+
   it('scopes both comparisons to the query currency when it is set', async () => {
     arrange({ current: { price: 250 }, priorMin: 300 });
     await run({ query: { id: 'q1', currency: 'EUR', lastNotifiedLowPrice: null } });

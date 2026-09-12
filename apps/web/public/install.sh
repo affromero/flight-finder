@@ -24,9 +24,14 @@ ok()    { printf "${GREEN}${BOLD}✓${RESET} %b\n" "$1"; }
 warn()  { printf "${YELLOW}${BOLD}!${RESET} %b\n" "$1"; }
 fail()  { printf "${RED}${BOLD}✗${RESET} %b\n" "$1"; exit 1; }
 
-FLIGHT_FINDER_DIR="$HOME/.flight-finder"
+FLIGHT_FINDER_DIR="${FLIGHT_FINDER_DIR:-$HOME/.flight-finder}"
 INSTALL_BIN="$HOME/.local/bin"
 HOST_PORT="${HOST_PORT:-${PORT:-3003}}"
+HOST_BIND_ADDRESS="${FLIGHT_FINDER_BIND_ADDRESS:-}"
+case "$HOST_BIND_ADDRESS" in
+  ''|127.0.0.1|0.0.0.0) ;;
+  *) fail "FLIGHT_FINDER_BIND_ADDRESS must be 127.0.0.1 or 0.0.0.0" ;;
+esac
 BASE_URL="${FLIGHT_FINDER_URL:-https://flight-finder.org}"
 # Test overrides (used by scripts/install-flow-test.sh)
 FLIGHT_FINDER_REPO="https://github.com/affromero/flight-finder.git"
@@ -85,6 +90,7 @@ fi
 OS="unknown"
 case "$(uname -s)" in
   Darwin*)  OS="macos" ;;
+  MINGW*|MSYS*|CYGWIN*) OS="windows" ;;
   Linux*)
     if grep -qi microsoft /proc/version 2>/dev/null; then
       OS="wsl"
@@ -130,6 +136,9 @@ install_docker_linux() {
 }
 
 if ! command -v git &>/dev/null; then
+  if [ "$OS" = "windows" ]; then
+    fail "Git for Windows is required. Install it with Git Bash from https://gitforwindows.org/, then reopen Flight Finder."
+  fi
   fail "git is required to install Flight Finder.\n\n  Install: ${BOLD}sudo apt install git${RESET} (Debian/Ubuntu), ${BOLD}sudo dnf install git${RESET} (Fedora), or ${BOLD}sudo pacman -S git${RESET} (Arch/Manjaro)"
 fi
 
@@ -139,6 +148,9 @@ elif command -v podman &>/dev/null; then
   CONTAINER_CMD=podman
 else
   case "$OS" in
+    windows)
+      fail "Docker Desktop or Podman with Compose is required. Install and start the container runtime, then reopen Flight Finder.\n  Docker Desktop: https://www.docker.com/products/docker-desktop/"
+      ;;
     macos)
       fail "Docker Desktop or Podman is required.\n\n  Docker: ${BOLD}https://docs.docker.com/desktop/setup/install/mac-install/${RESET}\n  Podman: ${BOLD}https://podman.io/docs/installation${RESET}\n\n  Then re-run: ${BOLD}curl -fsSL https://flight-finder.org/install.sh | bash${RESET}"
       ;;
@@ -181,8 +193,8 @@ if [ "$CONTAINER_CMD" = "docker" ]; then
         ;;
       *)
         case "$OS" in
-          macos)
-            fail "Docker Desktop is not running.\n\n  Open Docker Desktop from Applications, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://flight-finder.org/install.sh | bash${RESET}"
+          macos|windows)
+            fail "Docker Desktop is not running.\n\n  Open Docker Desktop, wait for it to start, then re-run:\n  ${BOLD}curl -fsSL https://flight-finder.org/install.sh | bash${RESET}"
             ;;
           linux|wsl)
             warn "Docker daemon is not running."
@@ -401,7 +413,7 @@ services:
       db:
         condition: service_healthy
     ports:
-      - "\${HOST_PORT:-3003}:3003"
+      - "\${HOST_BIND_ADDRESS:-0.0.0.0}:\${HOST_PORT:-3003}:3003"
     env_file: .env
     environment:
       DATABASE_URL: postgresql://postgres:\${POSTGRES_PASSWORD:-postgres}@db:5432/flight_finder
@@ -707,7 +719,22 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# 6b. Optional: ExpressVPN for price comparison across countries
+# 6b. Persist an explicitly selected desktop network binding.
+# Ordinary installs keep their existing binding or the all-interface default.
+# ---------------------------------------------------------------------------
+if [ -n "$HOST_BIND_ADDRESS" ]; then
+  BIND_CONFIG=$(mktemp "$FLIGHT_FINDER_DIR/.binding.XXXXXX")
+  awk -v binding="$HOST_BIND_ADDRESS" '
+    /^HOST_BIND_ADDRESS=/ { if (!written++) print "HOST_BIND_ADDRESS=" binding; next }
+    { print }
+    END { if (!written) print "HOST_BIND_ADDRESS=" binding }
+  ' "$FLIGHT_FINDER_DIR/.env" > "$BIND_CONFIG"
+  chmod 600 "$BIND_CONFIG"
+  mv "$BIND_CONFIG" "$FLIGHT_FINDER_DIR/.env"
+fi
+
+# ---------------------------------------------------------------------------
+# 6c. Optional: ExpressVPN for price comparison across countries
 # ---------------------------------------------------------------------------
 printf "\n"
 printf "  ${BOLD}VPN Price Comparison (optional)${RESET}\n"
@@ -941,14 +968,18 @@ if [ "$FLIGHT_FINDER_OPEN_BROWSER" = "1" ]; then
 fi
 
 # ---------------------------------------------------------------------------
-# 11. Reachability — who can reach this instance? (consent-first; default none)
+# 11. Explain the current binding and optional tunnel access.
 # ---------------------------------------------------------------------------
-# Nothing here exposes the instance unless you explicitly pick it; the default
-# and the non-interactive path keep it to this computer only. Installing the app
-# on a phone home screen needs an https URL (service workers only run in a secure
-# context); /connect shows the QR + add-to-home-screen steps.
-printf "  ${BOLD}Who should be able to reach Flight Finder?${RESET}\n"
-printf "    ${DIM}1)${RESET} This computer only            ${DIM}(default — nothing is exposed)${RESET}\n"
+# The standard installer preserves its all-interface default. Desktop installs
+# request localhost explicitly. This menu does not change Compose bindings.
+CURRENT_BIND_ADDRESS=$(sed -n 's/^HOST_BIND_ADDRESS=//p' "$FLIGHT_FINDER_DIR/.env" | tail -n 1)
+if [ "$CURRENT_BIND_ADDRESS" = "127.0.0.1" ]; then
+  printf "  ${DIM}The web port is configured for this computer only.${RESET}\n"
+else
+  printf "  ${DIM}The web port is configured for access from other devices on your network.${RESET}\n"
+fi
+printf "  ${BOLD}Connection options${RESET}\n"
+printf "    ${DIM}1)${RESET} Keep the current binding      ${DIM}(default; no tunnel)${RESET}\n"
 printf "    ${DIM}2)${RESET} Other devices on this network ${DIM}(prints the LAN URL; http only)${RESET}\n"
 printf "    ${DIM}3)${RESET} A public URL via Cloudflare   ${DIM}(temporary tunnel, no account)${RESET}\n"
 printf "    ${DIM}4)${RESET} Tailscale                     ${DIM}(private mesh; needs the Tailscale app)${RESET}\n"
@@ -973,7 +1004,9 @@ REACH_CHOICE="${REACH_CHOICE:-1}"
 case "$REACH_CHOICE" in
   2)
     LAN_IP="$(lan_ip)"
-    if [ -n "$LAN_IP" ]; then
+    if [ "$CURRENT_BIND_ADDRESS" = "127.0.0.1" ]; then
+      warn "Local network access is disabled. Use the desktop Local network option to change the binding."
+    elif [ -n "$LAN_IP" ]; then
       ok "On your network at: ${BOLD}http://${LAN_IP}:${HOST_PORT}${RESET}"
       printf "  ${DIM}Open that on a phone on the same WiFi. It is http, so the phone can view\n"
       printf "  it but cannot install it as an app — use option 3 or 4 for that.${RESET}\n"

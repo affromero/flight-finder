@@ -1,5 +1,6 @@
 import { createHash, randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
+import { assertAccountActor } from '../account-actor';
 import { Prisma, type CarTracker } from '@/generated/prisma/client';
 import { cancelTravelJob, enqueueTravelJob, lockTravelResource } from '../travel/jobs';
 import { assertCarOwner, type CarActor } from './access';
@@ -33,10 +34,18 @@ export function carTrackerDto(row: CarTracker) {
   });
 }
 
-export async function lockCarTracker(tx: Prisma.TransactionClient, id: string, actor: CarActor): Promise<CarTracker> {
+/** Internal workers apply their own persisted event or job authority after locking. */
+export async function lockCarTrackerRow(tx: Prisma.TransactionClient, id: string): Promise<CarTracker> {
   await lockTravelResource(tx, 'car_search');
   const rows = await tx.$queryRaw<CarTracker[]>`SELECT * FROM "CarTracker" WHERE id = ${id} FOR UPDATE`;
   const row = rows[0] ?? null;
+  if (!row) throw new CarError('Car tracker or search not found', 404);
+  return row;
+}
+
+export async function lockCarTracker(tx: Prisma.TransactionClient, id: string, actor: CarActor): Promise<CarTracker> {
+  const row = await lockCarTrackerRow(tx, id);
+  await assertAccountActor(tx, actor);
   assertCarOwner(actor, row);
   return row;
 }
@@ -58,6 +67,7 @@ export async function createCarSearch(raw: unknown, actor: CarActor) {
   const search = validateCarSearch(raw);
   return prisma.$transaction(async tx => {
     await lockTravelResource(tx, 'car_search');
+    await assertAccountActor(tx, actor);
     return queueSearch(tx, search, actor.userId);
   });
 }
@@ -74,6 +84,7 @@ export async function createCarCatalogSearch(raw: unknown, actor: CarActor, requ
   const search = await carSearchIntent(raw);
   return prisma.$transaction(async tx => {
     await lockTravelResource(tx, 'car_search');
+    await assertAccountActor(tx, actor);
     const existing = await tx.carSearchCreation.findUnique({ where: { id: receipt.id }, include: { run: true } });
     if (existing) {
       if (existing.requestHash !== receipt.requestHash) throw new CarError('This search key was already used for different rental criteria', 409);
@@ -94,6 +105,7 @@ export async function createCarProtectionRecheck(searchId: string, raw: unknown,
   const owner = { ...actor, isAdmin: false };
   return prisma.$transaction(async tx => {
     await lockTravelResource(tx, 'car_search');
+    await assertAccountActor(tx, actor);
     const previous = await tx.carSearchCreation.findUnique({ where: { id: receipt.id }, include: { run: true } });
     if (previous) {
       if (previous.requestHash !== receipt.requestHash) throw new CarError('This search key was already used for a different request', 409);
@@ -139,6 +151,7 @@ export async function getCarSearch(id: string, actor: CarActor) {
 export async function closeCarSearchTracking(id: string, actor: CarActor) {
   return prisma.$transaction(async tx => {
     await lockTravelResource(tx, 'car_search');
+    await assertAccountActor(tx, actor);
     await tx.$queryRaw`SELECT id FROM "CarSearchRun" WHERE id = ${id} FOR UPDATE`;
     const run = await tx.carSearchRun.findUnique({ where: { id } });
     assertCarOwner(actor, run);
@@ -155,6 +168,7 @@ export async function createCarTracker(raw: unknown, actor: CarActor, requestKey
   const { searchId, offerId } = intent;
   return prisma.$transaction(async tx => {
     await lockTravelResource(tx, 'car_search');
+    await assertAccountActor(tx, actor);
     const receipt = await tx.carTrackerCreation.findUnique({ where: { id: intent.id }, include: { tracker: true } });
     if (receipt) {
       if (receipt.requestHash !== intent.requestHash) throw new CarError('This creation key was already used for different rental settings', 409);
@@ -251,6 +265,7 @@ export async function editCarTracker(id: string, raw: unknown, actor: CarActor, 
 export async function cancelCarSearch(id: string, actor: CarActor) {
   return prisma.$transaction(async tx => {
     await lockTravelResource(tx, 'car_search');
+    await assertAccountActor(tx, actor);
     await tx.$queryRaw`SELECT id FROM "CarSearchRun" WHERE id = ${id} FOR UPDATE`;
     const run = await tx.carSearchRun.findUnique({ where: { id }, include: { travelJob: true } });
     assertCarOwner(actor, run);

@@ -31,8 +31,13 @@ YELLOW='\033[0;33m'
 RED='\033[0;31m'
 RESET='\033[0m'
 
-FLIGHT_FINDER_DIR="$HOME/.flight-finder"
-PORT="${HOST_PORT:-${PORT:-3003}}"
+FLIGHT_FINDER_DIR="${FLIGHT_FINDER_DIR:-$HOME/.flight-finder}"
+# Read the non-secret published port as data. Never source the config file.
+_SAVED_PORT=""
+if [ -f "$FLIGHT_FINDER_DIR/.env" ]; then
+  _SAVED_PORT=$(sed -n 's/^HOST_PORT=\([0-9][0-9]*\)[[:space:]]*$/\1/p' "$FLIGHT_FINDER_DIR/.env" | tail -n 1)
+fi
+PORT="${HOST_PORT:-${PORT:-${_SAVED_PORT:-3003}}}"
 BASE_URL="${FLIGHT_FINDER_URL:-https://flight-finder.org}"
 
 # A private instance sets FF_ACCESS_PASSWORD, and its middleware then refuses

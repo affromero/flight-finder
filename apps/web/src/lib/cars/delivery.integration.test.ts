@@ -57,6 +57,21 @@ describe.skipIf(process.env.CAR_DELIVERY_INTEGRATION_TESTS !== '1')('durable car
   const due = () => prisma.travelAlertDelivery.update({ where: { id: eventId }, data: { nextAttemptAt: new Date(0) } });
   const event = () => prisma.travelAlertDelivery.findUniqueOrThrow({ where: { id: eventId } });
 
+  it('delivers an owned rental event with accounts enabled while rejecting stale solo mutations', async () => {
+    const previous = await prisma.extractionConfig.findUnique({ where: { id: 'singleton' } });
+    await prisma.extractionConfig.upsert({ where: { id: 'singleton' }, create: { multiUserMode: true }, update: { multiUserMode: true } });
+    try {
+      const configured = await channel('multiuser');
+      await expect(editCarTracker(trackerId, { active: false }, { userId: null, isAdmin: true })).rejects.toMatchObject({ status: 401 });
+      await deliverCarAlerts();
+      expect(received.map(row => row.path)).toEqual(['/multiuser']);
+      expect(await event()).toMatchObject({ pending: false, deliveredIds: [configured.id], claimToken: null });
+    } finally {
+      if (previous) await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { multiUserMode: previous.multiUserMode } });
+      else await prisma.extractionConfig.delete({ where: { id: 'singleton' } });
+    }
+  });
+
   it('shows actual delivery progression without exposing channel IDs, messages or transport details', async () => {
     const actor = { userId: owner, isAdmin: false };
     expect((await getCarDetail(trackerId, actor)).deliveries).toMatchObject([{ status: 'waiting', acknowledgedChannels: 0 }]);
