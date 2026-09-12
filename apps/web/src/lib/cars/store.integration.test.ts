@@ -12,6 +12,18 @@ import { listCarSearchPage } from './search-list';
 import { closeCarSearchTracking, createCarProtectionRecheck } from './store';
 
 describe.skipIf(process.env.CAR_STORE_INTEGRATION_TESTS !== '1')('car ownership and persistence against isolated PostgreSQL', () => {
+  it('persists imported rentals as exact contracts and refreshes without their expiring link', async () => {
+    const sourceUrl = 'https://www.discovercars.com/offer/12345678-abcd-abcd-abcd-123456789abc-ab12?sq=e30%3D';
+    const search = { ...criteria(), sourceUrl, sources: ['discovercars'] }, value = offer();
+    const run = await prisma.carSearchRun.create({ data: { userId: owner.userId, request: carJson(search), result: carJson(carReportFixture([value])), status: 'success', createdAt: new Date(value.observedAt), completedAt: new Date() } });
+    await expect(createCarTracker({ searchId: run.id, offerId: value.id, mode: 'best' }, owner)).rejects.toMatchObject({ status: 400 });
+    const tracked = await createCarTracker({ searchId: run.id, offerId: value.id, mode: 'contract' }, owner);
+    expect(tracked.mode).toBe('contract');
+    expect(tracked.selection).toMatchObject({ source: 'discovercars', contractHash: carContractHash(value.contract) });
+    expect(tracked.search).not.toHaveProperty('sourceUrl');
+    const refresh = await prisma.carSearchRun.findFirstOrThrow({ where: { trackerId: tracked.id } });
+    expect(refresh.request).not.toHaveProperty('sourceUrl');
+  });
   let owner: CarActor, other: CarActor;
   const leases: TravelLeaseToken[] = [];
   beforeAll(() => {

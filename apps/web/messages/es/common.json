@@ -1,4 +1,17 @@
 {
+  "LinkImport": {
+    "confirmHotel": "Revisé las fechas, los huéspedes y la distribución de habitaciones. Estos datos pueden faltar en el enlace.",
+    "label": "¿Ya elegiste? Pega el enlace",
+    "flights": "Enlaces de reserva seleccionada de Google Flights. Un adulto, solo ida o ida y vuelta.",
+    "hotels": "Enlaces de hoteles de Google Hotels o Booking.com. Revisa las fechas, los huéspedes y las habitaciones.",
+    "cars": "Enlaces de ofertas de DiscoverCars u opciones de Auto Europe. Revisa los lugares, las fechas y los datos del conductor. Los enlaces vencidos no se pueden importar.",
+    "import": "Importar enlace",
+    "loading": "Leyendo enlace…",
+    "failed": "No se pudo importar el enlace",
+    "review": "Revisa la selección importada y completa los datos que faltan antes de buscar. El seguimiento empieza cuando eliges un resultado verificado.",
+    "selection": "Abrir selección importada",
+    "remove": "Quitar enlace"
+  },
   "common": {
     "appName": "Flight Finder",
     "tagline": "El rastro de precios que las aerolíneas no te muestran"

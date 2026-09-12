@@ -1,4 +1,17 @@
 {
+  "LinkImport": {
+    "confirmHotel": "I checked the dates, guests and room allocation. These may be missing from the link.",
+    "label": "Already picked one? Paste its link",
+    "flights": "Google Flights selected booking links. One adult, one-way or round trip.",
+    "hotels": "Google Hotels or Booking.com property links. Review the dates, guests and rooms before searching.",
+    "cars": "DiscoverCars offer or Auto Europe options links. Review the locations, dates and driver details. Expired links cannot be imported.",
+    "import": "Import link",
+    "loading": "Reading link…",
+    "failed": "Could not import this link",
+    "review": "Review the imported selection and complete any missing details before searching. Nothing is tracked until you select a verified result.",
+    "selection": "Open imported selection",
+    "remove": "Remove link"
+  },
   "common": {
     "appName": "Flight Finder",
     "tagline": "The price trail airlines don't show you"

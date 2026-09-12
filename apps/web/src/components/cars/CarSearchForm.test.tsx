@@ -10,11 +10,14 @@ import es from '../../../messages/es/cars.json';
 import pt from '../../../messages/pt/cars.json';
 import fr from '../../../messages/fr/cars.json';
 import de from '../../../messages/de/cars.json';
+import common from '../../../messages/en/common.json';
+import { CAR_IMPORT_URL } from '@/test/import-fixtures';
+import { validateCarParseDraft } from '@/lib/cars/parse-draft';
 
 vi.unmock('next-intl');
 const place: CarLocationChoice = { id: 'ourairports:2434', version: 'a'.repeat(64), name: 'London Heathrow Airport', kind: 'airport', city: 'London', country: 'GB', region: 'England', timeZone: 'Europe/London', latitude: 51.47, longitude: -.45, iata: 'LHR' };
 const response = (data: unknown) => new Response(JSON.stringify({ ok: true, data }));
-const surface = (locale = 'en', messages = en) => <NextIntlClientProvider locale={locale} messages={messages}><CarSearchForm actorScope="alice" defaultCurrency="GBP" defaultSources={['discovercars', 'autoeurope']} options={carFormOptions(locale)} /></NextIntlClientProvider>;
+const surface = (locale = 'en', messages = en) => <NextIntlClientProvider locale={locale} messages={{ ...messages, LinkImport: common.LinkImport }}><CarSearchForm actorScope="alice" defaultCurrency="GBP" defaultSources={['discovercars', 'autoeurope']} options={carFormOptions(locale)} /></NextIntlClientProvider>;
 beforeEach(() => { vi.useFakeTimers(); sessionStorage.clear(); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const settle = async () => { await act(async () => { await vi.advanceTimersByTimeAsync(0); }); };
@@ -32,6 +35,26 @@ async function completeForm(copy = en.Cars.Search) {
 }
 
 describe('independent rental search form', () => {
+  it('imports the selected quote only after review and blocks competing drafts while importing', async () => {
+    const searches: unknown[] = [];
+    let finish!: (value: Response) => void;
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {
+      if (url.startsWith('/api/cars/locations?')) return response([place]);
+      if (url === '/api/travel/import') return new Promise<Response>(resolve => { finish = resolve; });
+      searches.push(JSON.parse(String(init.body)));
+      return response({ id: 'imported-search', status: 'queued', creationKey: new Headers(init.headers).get('Idempotency-Key') });
+    }));
+    render(surface()); await completeForm();
+    fireEvent.change(screen.getByLabelText(common.LinkImport.label), { target: { value: CAR_IMPORT_URL } });
+    fireEvent.click(screen.getByRole('button', { name: common.LinkImport.import })); await settle();
+    expect(screen.getByLabelText(en.Cars.Draft.description)).toBeDisabled();
+    await act(async () => { finish(response({ kind: 'cars', url: CAR_IMPORT_URL, car: validateCarParseDraft({ sources: ['autoeurope'] }) })); });
+    expect(searches).toEqual([]);
+    expect(screen.getByRole('button', { name: en.Cars.Search.search })).toBeDisabled();
+    fireEvent.click(screen.getByLabelText(en.Cars.Draft.confirm));
+    fireEvent.click(screen.getByRole('button', { name: en.Cars.Search.search })); await settle();
+    expect(searches).toEqual([expect.objectContaining({ sourceUrl: CAR_IMPORT_URL, sources: ['autoeurope'] })]);
+  });
   it('applies suggestions only on request, preserves manual facts, and requires review before searching', async () => {
     const searches: unknown[] = [];
     vi.stubGlobal('fetch', vi.fn(async (url: string, init: RequestInit) => {

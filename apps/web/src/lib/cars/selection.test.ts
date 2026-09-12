@@ -2,6 +2,14 @@ import { describe, expect, it } from 'vitest';
 import { carContractHash, carTrackerSearch, selectCarObservation } from './selection';
 import { validateCarSearch } from './validation';
 import type { CarEvidence, CarOffer, CarSearchReport } from './types';
+import { CAR_IMPORT_URL } from '@/test/import-fixtures';
+
+it('refreshes an imported rental using its verified contract instead of an expiring offer link', () => {
+  const tracking = carTrackerSearch({ ...search, sourceUrl: CAR_IMPORT_URL });
+  expect(tracking.sourceUrl).toBeUndefined();
+  expect(tracking.pickupAt).toEqual(search.pickupAt);
+  expect(tracking.driver).toEqual(search.driver);
+});
 
 const now = new Date('2026-09-06T12:01:00Z');
 const location = { name: 'Example Airport', country: 'GB', timeZone: 'Europe/London', providerIds: { discovercars: '1712' } };
