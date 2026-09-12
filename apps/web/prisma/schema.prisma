@@ -9,6 +9,7 @@ datasource db {
 
 model Query {
   id              String   @id @default(cuid())
+  sourceUrl       String?
   rawInput        String
   origin          String
   originName      String

@@ -21,6 +21,7 @@ export interface PriceData {
 }
 
 export interface QueryFilters {
+  selectedItinerary?: import('./flight-link').FlightLinkSegment[][];
   maxPrice: number | null;
   maxStops: number | null;
   maxDurationHours: number | null;
@@ -56,6 +57,9 @@ export function sanitizeScrapedHtml(html: string): string {
 
 function buildSystemPrompt(filters: QueryFilters, maxResults: number, source: NavigationSource = 'google_flights', currency: string | null = null): string {
   const filterRules: string[] = [];
+  if (filters.selectedItinerary) {
+    filterRules.push(`- This is a selected itinerary booking page. Return only the lowest available TOTAL itinerary fare from its booking options. Exclude alternative flights, separate tickets, upgrades, per-leg prices and per-month payments. The complete selected itinerary is ${JSON.stringify(filters.selectedItinerary)}. If no total for this complete itinerary is displayed, return []. Use the outbound departure date as travelDate.`);
+  }
 
   if (filters.maxPrice) {
     filterRules.push(`- ONLY include flights priced at or below ${filters.maxPrice}`);

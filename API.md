@@ -23,6 +23,26 @@ Auth requirements depend on mode and endpoint family:
 
 ## Endpoints
 
+### Import a selected booking link
+
+`POST /api/travel/import` accepts JSON `{ "kind": "flights", "url": "https://..." }`.
+`kind` also accepts `hotels` and `cars`. It returns an editable `flight`, `hotel`,
+or `car` draft plus the normalized `url`. It does not start a search or create a
+tracker. Hotel and car imports require the same self-hosted access as their
+search endpoints.
+
+Supported links are Google Flights selected booking pages, Google Hotels
+properties, Booking.com hotel pages, DiscoverCars offers, and Auto Europe
+options pages. Short links and reservation confirmations are rejected.
+
+Submit the imported `sourceUrl` with the existing preview/search request after
+reviewing the details. Flight imports support one adult and preserve all selected
+segments, dates and cabin; pass `sourceUrl` again when creating the query. Initial
+flight snapshots come from the server scrape. Hotel imports preserve the property
+and require guest and room review. Car imports require catalog locations and
+driver details; tracking uses `mode: "contract"` and fresh contract matching on
+later checks. Expired or changed selections never become broader searches.
+
 ### Parse a flight query
 
 Converts natural language into structured flight data using your configured LLM.

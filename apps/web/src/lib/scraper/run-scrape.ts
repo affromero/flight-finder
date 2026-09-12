@@ -11,6 +11,8 @@ import {
 import { extractPrices, type ExtractionFailureReason } from './extract-prices';
 import { getModelCosts } from './ai-registry';
 import { isKnownAirline } from './airline-urls';
+import { scrapeImportedFlight } from './imported-flight';
+import { assertFlightLinkSearch } from './flight-link';
 import { getCountryProfile } from './country-profiles';
 import { expandQueryDates } from './scrape-dates';
 import { currentTravelContext, checkTravelAuthority, travelTransaction } from '../travel/context';
@@ -146,6 +148,10 @@ async function scrapeOneDatePair(
   proxyUrl: string | undefined,
   vpnCountry: string | null,
 ): Promise<PairScrapeResult> {
+  if (pairParams.sourceUrl) {
+    const result = await scrapeImportedFlight({ ...pairParams, sourceUrl: pairParams.sourceUrl }, filters, undefined, countryProfile, proxyUrl);
+    return { prices: result.prices, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens, sources: new Set(['google_flights']), lastFailureReason: result.failureReason };
+  }
   const effectiveCurrency = pairParams.currency ?? null;
   const travelDateFallback = pairParams.dateFrom.toISOString().split('T')[0]!;
 
@@ -278,6 +284,7 @@ async function scrapeQueryForCountry(
   fetchRunId: string,
 ): Promise<ScrapeResult> {
   const countryProfile = vpnCountry ? getCountryProfile(vpnCountry) : undefined;
+  if (searchParams.sourceUrl) assertFlightLinkSearch(searchParams.sourceUrl, { ...searchParams, dateFrom: searchParams.dateFrom.toISOString().slice(0, 10), dateTo: searchParams.dateTo.toISOString().slice(0, 10), cabinClass: searchParams.cabinClass ?? 'economy', tripType: searchParams.tripType ?? 'round_trip', flexibility: query.flexibility });
 
   const directAirlines = query.preferredAirlines.filter(isKnownAirline);
   const useAirlineDirect = directAirlines.length > 0;

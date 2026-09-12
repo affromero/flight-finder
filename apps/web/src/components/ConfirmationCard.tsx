@@ -15,6 +15,7 @@ import {
 import styles from './ConfirmationCard.module.css';
 
 export interface ParsedQuery {
+  sourceUrl?: string;
   origin: string;
   originName: string;
   destination: string;

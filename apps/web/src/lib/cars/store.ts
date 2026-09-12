@@ -178,6 +178,7 @@ export async function createCarTracker(raw: unknown, actor: CarActor, requestKey
     const assessment = assessCarPrice(offer, search);
     if (!assessment.eligible) throw new CarError(`This quote cannot be tracked: ${assessment.reasons.join('; ')}`, 409);
     const options = validateCarOptions(intent.options, search.currency);
+    if (search.sourceUrl && options.mode !== 'contract') throw new CarError('Track the selected contract for an imported rental', 400);
     const selection = options.mode === 'contract' ? { source: offer.contract.source, contractHash: carContractHash(offer.contract) } : null;
     const trackingSearch = carTrackerSearch(search);
     const tracker = await tx.carTracker.create({ data: {

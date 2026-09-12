@@ -26,6 +26,8 @@ import { getModelCosts, resolveApiKey } from '@/lib/scraper/ai-registry';
 import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
 import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navigate';
+import { assertFlightLinkSearch } from './scraper/flight-link';
+import { scrapeImportedFlight } from './scraper/imported-flight';
 import type { Airport } from '@/lib/scraper/parse-query';
 import {
   buildPreviewDatePairs,
@@ -189,6 +191,7 @@ export interface ExtractionContext {
 }
 
 interface ScrapeRouteParams {
+  sourceUrl?: string;
   origin: string;
   destination: string;
   dateFrom: Date;
@@ -292,6 +295,10 @@ export function validatePreviewPayload(
   // singleton RT legs (common LLM output). Unequal multi×multi still throws.
   const datePairs = buildPreviewDatePairs(outboundDates, returnDates, dateFrom, dateTo, isOneWay);
   const totalTasks = combos * datePairs.length;
+  if (payload.sourceUrl) {
+    if (totalTasks !== 1) throw new Error('An imported flight must keep one route and exact dates');
+    assertFlightLinkSearch(payload.sourceUrl, { origin: origins[0]!.code, destination: destinations[0]!.code, dateFrom: datePairs[0]!.outboundDate, dateTo: datePairs[0]!.returnDate, cabinClass: payload.cabinClass, tripType: payload.tripType });
+  }
 
   if (totalTasks > maxCombos) {
     throw new Error(`Too many date/route combinations (${totalTasks}). Cap is ${maxCombos} (combos x dates).`);
@@ -418,6 +425,16 @@ async function scrapeOneWayEstimate(params: ScrapeRouteParams): Promise<OneWayEs
 type RoutePricing = Pick<RouteResultPayload, 'flights' | 'oneWayEstimate' | 'error'>;
 
 async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
+  if (params.sourceUrl) {
+    const startedAt = Date.now();
+    const result = await scrapeImportedFlight({ ...params, sourceUrl: params.sourceUrl }, params, params.context);
+    const { provider, model, costs } = params.context;
+    await prisma.apiUsageLog.create({ data: { provider, model, inputTokens: result.usage.inputTokens, outputTokens: result.usage.outputTokens,
+      costUsd: (result.usage.inputTokens / 1000) * costs.costPer1kInput + (result.usage.outputTokens / 1000) * costs.costPer1kOutput,
+      operation: 'preview-flights', durationMs: Date.now() - startedAt, error: result.failureReason ?? null } });
+    if (result.failureReason || !result.prices.length) throw new Error('No verified price is available for the selected itinerary');
+    return result.prices;
+  }
   const { origin, destination, dateFrom, dateTo, dateFromStr, cabinClass, tripType } = params;
 
   const searchParams = { origin, destination, dateFrom, dateTo, cabinClass, tripType, currency: params.currency };
@@ -567,7 +584,7 @@ async function scrapeRouteWithEstimate(cacheKey: string, params: ScrapeRoutePara
     return { flights: await cached(cacheKey, () => scrapeRoute(params)) };
   } catch (error) {
     currentTravelExecution()?.check();
-    if (!(error instanceof GoogleFlightsLoadingShellError) || params.tripType === 'one_way') throw error;
+    if (params.sourceUrl || !(error instanceof GoogleFlightsLoadingShellError) || params.tripType === 'one_way') throw error;
   }
 
   // A temporary loading failure must not cache an estimate in place of fares.
@@ -654,7 +671,9 @@ export async function runPreview(
     );
 
     try {
-      const pricing = await scrapeRouteWithEstimate(cacheKey, {
+      const importedCacheKey = payload.sourceUrl ? `${cacheKey}:import:${createHash('sha256').update(payload.sourceUrl).digest('hex')}` : cacheKey;
+      const pricing = await scrapeRouteWithEstimate(importedCacheKey, {
+        sourceUrl: payload.sourceUrl,
         origin: combo.origin.code,
         destination: combo.destination.code,
         dateFrom: taskFrom,

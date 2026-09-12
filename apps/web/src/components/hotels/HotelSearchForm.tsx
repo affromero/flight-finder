@@ -4,13 +4,18 @@ import { useTranslations } from 'next-intl';
 import { DEFAULT_HOTEL_FILTERS, HOTEL_AMENITIES, HOTEL_SOURCES, type HotelSearch } from '@/lib/hotels/types';
 import { hotelRequest } from './client';
 import styles from './Hotels.module.css';
+import { LinkImport } from '../travel/LinkImport';
 
-export function HotelSearchForm({ busy, onSearch }: { busy: boolean; onSearch: (search: HotelSearch) => void }) {
+export function HotelSearchForm({ busy: externalBusy, onSearch }: { busy: boolean; onSearch: (search: HotelSearch) => void }) {
   const t = useTranslations('Hotels');
+  const [importBusy, setImportBusy] = useState(false);
+  const busy = externalBusy || importBusy;
   const [search, setSearch] = useState<HotelSearch>({ destination: '', dateMode: 'fixed', checkIn: '', checkOut: '', flexibility: 1, minNights: 1, maxNights: 3, rooms: [{ adults: 2, children: [] }], currency: 'USD', sources: [...HOTEL_SOURCES], filters: { ...DEFAULT_HOTEL_FILTERS } });
   const [text, setText] = useState('');
   const [parsing, setParsing] = useState(false);
   const [error, setError] = useState('');
+  const [importReviewed, setImportReviewed] = useState(false);
+  const importCopy = useTranslations('LinkImport');
   const update = <K extends keyof HotelSearch>(key: K, value: HotelSearch[K]) => setSearch((s) => ({ ...s, [key]: value }));
   const filter = <K extends keyof HotelSearch['filters']>(key: K, value: HotelSearch['filters'][K]) => setSearch((s) => ({ ...s, filters: { ...s.filters, [key]: value } }));
   async function parse() {
@@ -19,8 +24,10 @@ export function HotelSearchForm({ busy, onSearch }: { busy: boolean; onSearch: (
     catch (e) { setError(e instanceof Error ? e.message : t('failed')); }
     finally { setParsing(false); }
   }
-  return <form className={styles.form} onSubmit={(e) => { e.preventDefault(); onSearch({ ...search, filters: { ...search.filters, excludedSellers: search.filters.excludedSellers.filter(Boolean) } }); }}>
-    <fieldset disabled={busy || parsing}>
+  return <form className={styles.form} onSubmit={(e) => { e.preventDefault(); if (search.sourceUrl && !importReviewed) return; onSearch({ ...search, filters: { ...search.filters, excludedSellers: search.filters.excludedSellers.filter(Boolean) } }); }}>
+    <LinkImport onBusy={setImportBusy} kind="hotels" disabled={busy || parsing} value={search.sourceUrl} onClear={() => setSearch(previous => { const next = { ...previous }; delete next.sourceUrl; return next; })} onImport={draft => { if (draft.hotel) { setSearch(previous => ({ ...previous, ...draft.hotel })); setImportReviewed(false); } }} />
+    {search.sourceUrl && <label className={styles.field}><input type="checkbox" required disabled={busy || parsing} checked={importReviewed} onChange={event => setImportReviewed(event.target.checked)} />{importCopy('confirmHotel')}</label>}
+    <fieldset disabled={busy || parsing || Boolean(search.sourceUrl)}>
       <legend>{t('findStay')}</legend>
       <label className={styles.field}>{t('describe')}<textarea value={text} onChange={(e) => setText(e.target.value)} placeholder={t('example')} /></label>
       <div className={styles.actions}><button className={styles.secondary} type="button" disabled={!text.trim()} onClick={() => void parse()}>{parsing ? t('parsing') : t('fillDetails')}</button><span className={styles.muted}>{t('reviewDetails')}</span></div>

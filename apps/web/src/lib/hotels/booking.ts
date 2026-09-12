@@ -1,5 +1,9 @@
 import type { HotelSearch, HotelSelection, HotelStay } from './types';
 
+export function bookingPropertyId(rawUrl: string): string {
+  return `booking:${new URL(rawUrl).pathname.replace(/\.[a-z]{2}(?:-[a-z]{2})?\.html$/, '.html')}`;
+}
+
 export function bookingSearchUrl(search: HotelSearch, stay: HotelStay, selection?: HotelSelection): string {
   const url = new URL(selection?.propertyUrl ?? 'https://www.booking.com/searchresults.html');
   if (url.protocol !== 'https:' || url.username || url.password || url.port || url.hostname !== 'www.booking.com' || (selection && !/^\/hotel\/[a-z]{2}\/[\w.-]+\.html$/.test(url.pathname))) {

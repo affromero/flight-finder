@@ -44,7 +44,7 @@ function CarResultsBody({ actorScope, searchId, search, report, status, mutation
   const [reviews, setReviews] = useState<Record<string, string>>({}), reviewed = useRef(reviews);
   const reviewIdentity = (offer: CarOffer) => JSON.stringify(offer);
   const needsReview = Boolean(search.protectionRecheck);
-  const [draft, setDraft] = useState(defaultCarOptionsDraft), [localError, setLocalError] = useState('');
+  const [draft, setDraft] = useState(() => ({ ...defaultCarOptionsDraft, ...(search.sourceUrl ? { mode: 'contract' as const } : {}) })), [localError, setLocalError] = useState('');
   const complete = status === 'success' || status === 'partial', running = status === 'queued' || status === 'running';
   const closingSearch = ['closing', 'close_uncertain', 'closed'].includes(creation.phase) || ['closing', 'close_uncertain', 'closed'].includes(protection.phase);
   const locked = creation.locked || protection.locked || closed || trackingClosed;
@@ -86,7 +86,7 @@ function CarResultsBody({ actorScope, searchId, search, report, status, mutation
     {creation.phase === 'removed' && <Link className={styles.secondary} href="/cars">{t('carsTitle')}</Link>}
     {creation.phase === 'created' && creation.trackerId && <div role="status" className={styles.notice}><h3>{t('created')}</h3><Link className={styles.button} href={`/cars/${encodeURIComponent(creation.trackerId)}`}>{t('openTracker')}</Link></div>}
     {creation.pending && <dl className={styles.terms} aria-label={t('pendingSettings')}><div><dt>{t('selectedOffer')}</dt><dd>{pendingOffer && `${pendingOffer.supplier} · ${pendingOffer.contract.model} · `}{creation.pending.body.offerId}</dd></div><div><dt>{t('mode')}</dt><dd>{t(creation.pending.body.mode)}</dd></div><div><dt>{t('target', { currency: search.currency })}</dt><dd>{creation.pending.body.target ? formatCarMoney(creation.pending.body.target, locale) : t('noTarget')}</dd></div><div><dt>{t('interval')}</dt><dd>{creation.pending.body.scrapeInterval}</dd></div><div><dt>{t('notifyLows')}</dt><dd>{t(creation.pending.body.notifyLows ? 'yes' : 'no')}</dd></div></dl>}
-    {report.offers.length > 0 && <>{!creation.pending && !closingSearch && <CarTrackingOptions value={draft} currency={search.currency} disabled={locked || !complete || mutationsDisabled} invalid={options === null} onChange={setDraft} />}
+    {report.offers.length > 0 && <>{!creation.pending && !closingSearch && <CarTrackingOptions edit={Boolean(search.sourceUrl)} value={draft} currency={search.currency} disabled={locked || !complete || mutationsDisabled} invalid={options === null} onChange={setDraft} />}
       <div className={styles.offers}>{report.offers.map((offer, index) => <CarOfferRow key={offer.id} offer={offer} search={search} assessment={assessments[index]!} disabled={locked || !complete || options === null || mutationsDisabled || (needsReview && reviews[offer.id] !== reviewIdentity(offer))} onTrack={() => void track(offer)}>
         {needsReview ? <CarProtectionReview offer={offer} reviewed={reviews[offer.id] === reviewIdentity(offer)} disabled={locked || !complete || mutationsDisabled} onReview={checked => {
           const next = { ...reviewed.current, [offer.id]: checked ? reviewIdentity(offer) : '' }; reviewed.current = next; setReviews(next);

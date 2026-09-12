@@ -3,6 +3,11 @@ import { carOfferFixture, carReportFixture, carSearchFixture } from '@/test/car-
 import { validateCarReport } from './report';
 
 describe('rental report validation at persistence boundaries', () => {
+  it('preserves the one-offer scope of an imported rental', () => {
+    const report = carReportFixture();
+    report.providers[0]!.limit = 1;
+    expect(validateCarReport(report, carSearchFixture().sources)).toEqual(report);
+  });
   it('retains verified quotes and coherent progress while removing unrecognized fields', () => {
     const report = carReportFixture();
     expect(validateCarReport({ ...report, unsafePayload: 'discard' }, carSearchFixture().sources)).toEqual(report);

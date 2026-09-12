@@ -13,6 +13,7 @@ export function carContractHash(contract: unknown): string {
 export function carTrackerSearch(search: CarSearch): CarSearch {
   const tracking = { ...search, filters: { ...search.filters, maxTotal: null } };
   delete tracking.protectionRecheck;
+  delete tracking.sourceUrl;
   return tracking;
 }
 

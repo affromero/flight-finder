@@ -9,6 +9,7 @@ export interface Airport {
 }
 
 export interface ParsedFlightQuery {
+  sourceUrl?: string;
   origin: string;      // primary origin IATA code (first in origins array)
   originName: string;  // primary origin city name
   destination: string; // primary destination IATA code (first in destinations array)

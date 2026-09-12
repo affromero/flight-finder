@@ -99,6 +99,8 @@ try {
     await fill();
     for (const width of [1280, 390]) {
       await page.setViewportSize({ width, height: 1000 });
+      // Filling the date fields can scroll the longer form before this check.
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
       const brand = page.getByRole('link', { name: /Flight Finder home/i });
       const homeBox = await brand.boundingBox();
       const heading = await page.getByRole('heading', { level: 1 }).boundingBox();
@@ -106,9 +108,9 @@ try {
       const navigation = await page.getByRole('link', { name: 'Hotels', exact: true }).boundingBox();
       assert.ok(navigation && homeBox.y + homeBox.height <= navigation.y, 'Home link does not cover hotel navigation');
       const before = homeBox.y;
-      await page.evaluate(() => window.scrollTo(0, 150));
+      await page.evaluate(() => window.scrollTo({ top: 150, behavior: 'instant' }));
       assert.ok((await brand.boundingBox()).y < before - 50, 'Hotel branding scrolls with content');
-      await page.evaluate(() => window.scrollTo(0, 0));
+      await page.evaluate(() => window.scrollTo({ top: 0, behavior: 'instant' }));
     }
     await page.getByRole('button', { name: 'Add room', exact: true }).click();
     await page.getByLabel('Children', { exact: true }).nth(1).fill('1');

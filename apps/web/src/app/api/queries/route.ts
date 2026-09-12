@@ -12,6 +12,7 @@ import { isValidPriceAmount } from '@/lib/limits';
 import { CABIN_CLASSES, isCabinClass } from '@/lib/cabin-class';
 import { coerceLayovers } from '@/lib/scraper/duration';
 import { isLegacySplitFare, LEGACY_SPLIT_PREVIEW_ERROR } from '@/lib/flight-pricing';
+import { assertFlightLinkSearch, readFlightLink } from '@/lib/scraper/flight-link';
 
 const MAX_ROUTES = 20;
 const MAX_FLIGHTS_PER_ROUTE = 50;
@@ -201,6 +202,19 @@ export async function POST(request: NextRequest) {
     return apiError(`Too many routes: maximum is ${MAX_ROUTES}`, 400);
   }
 
+  let sourceUrl: string | undefined;
+  if (body.sourceUrl !== undefined && body.sourceUrl !== null) {
+    try {
+      sourceUrl = readFlightLink(body.sourceUrl).url;
+      if (routeInputs.length !== 1) throw new Error('An imported itinerary must create exactly one tracker');
+      const route = routeInputs[0]!;
+      assertFlightLinkSearch(sourceUrl, { origin: route.origin, destination: route.destination, dateFrom: route.date ?? dateFrom, dateTo: route.returnDate ?? dateTo, cabinClass: cabinClass ?? 'economy', tripType: tripType ?? 'round_trip', flexibility: Number(flexibility ?? 0) });
+      // Imported prices are recorded only by the server's immediate scrape.
+      // The browser's preview selection is not an authoritative observation.
+      routeInputs = [{ ...route, selectedFlights: [] }];
+    } catch (error) { return apiError(error instanceof Error ? error.message : 'Invalid selected flight link', 400); }
+  }
+
   // Validate all route fields: airport codes, name lengths, per-route flight counts, and flight fields
   for (const route of routeInputs) {
     if (!/^[A-Z]{3}$/.test(route.origin) || !/^[A-Z]{3}$/.test(route.destination)) {
@@ -349,6 +363,7 @@ export async function POST(request: NextRequest) {
     const query = await prisma.query.create({
       data: {
         rawInput,
+        ...(sourceUrl ? { sourceUrl } : {}),
         origin: route.origin,
         originName: route.originName,
         destination: route.destination,
