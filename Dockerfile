@@ -78,6 +78,16 @@ COPY scripts/stage-cli-runtime.mjs /stage-cli-runtime.mjs
 COPY --from=builder /app/packages/cli/dist/metafile-esm.json /cli-metafile.json
 RUN node /stage-cli-runtime.mjs /app /cli-runtime /cli-metafile.json
 
+# Merge overlapping runtime dependencies before they enter the final image.
+# Separate COPY layers retain overwritten package files in the image archive.
+FROM scratch AS runtimeassets
+COPY --from=builder --chown=1000:1000 /app/apps/web/.next/standalone /app
+COPY --from=proddeps --chown=1000:1000 /app/node_modules/@prisma /app/node_modules/@prisma
+COPY --from=proddeps --chown=1000:1000 /ext /app/node_modules
+COPY --from=builder --chown=1000:1000 /app/packages/cli/dist /app/packages/cli/dist
+COPY --from=builder --chown=1000:1000 /app/packages/cli/package.json /app/packages/cli/package.json
+COPY --from=cliruntime --chown=1000:1000 /cli-runtime /app
+
 FROM docker.io/library/node:26-alpine AS runner
 RUN apk add --no-cache libc6-compat openssl chromium curl
 ENV NODE_ENV=production
@@ -105,8 +115,8 @@ COPY --chown=node:node scripts/update-cli.mjs /app/update-cli.mjs
 COPY --chown=node:node scripts/cli-retention.mjs /app/cli-retention.mjs
 COPY --chown=node:node cli-versions.json /app/cli-versions.json
 
-# Standalone server (includes traced node_modules)
-COPY --from=builder --chown=node:node /app/apps/web/.next/standalone ./
+# Standalone server and CLI with their merged runtime dependencies.
+COPY --from=runtimeassets /app /app
 COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
@@ -115,26 +125,11 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 # trace; @prisma is copied too so the runtime adapter (@prisma/adapter-pg) and
 # client are guaranteed present. v7 has no node_modules/.prisma engine dir.
 COPY --from=builder --chown=node:node /app/apps/web/prisma ./apps/web/prisma
-COPY --from=proddeps --chown=node:node /app/node_modules/@prisma ./node_modules/@prisma
 
 # Self-contained Prisma CLI for the entrypoint schema push (db push). Calling
 # it directly avoids the unreliable runtime `npx prisma` registry fetch.
 COPY --from=prismacli --chown=node:node /pcli/node_modules /app/prisma-cli/node_modules
 
-# Overlay the externalized packages staged in /ext by the proddeps stage,
-# resolved from wherever npm hoisted them. Versions match the standalone trace
-# because both come from the same lockfile.
-COPY --from=proddeps --chown=node:node /ext ./node_modules
-
-# Preserve the locked CLI dependency closure at its original hoisted/workspace
-# locations, sharing React identity with Ink and retaining dynamic package assets.
-COPY --from=builder --chown=node:node /app/packages/cli/dist /app/packages/cli/dist
-# Ship the cli package.json next to dist so Node finds "type":"module" when it
-# resolves dist/index.js. Without it Node walks up to the Next standalone
-# /app/package.json (no type field) and reparses every run as ESM, printing the
-# MODULE_TYPELESS_PACKAGE_JSON performance warning.
-COPY --from=builder --chown=node:node /app/packages/cli/package.json /app/packages/cli/package.json
-COPY --from=cliruntime --chown=node:node /cli-runtime /app
 RUN printf '#!/bin/sh\nexec node /app/packages/cli/dist/index.js "$@"\n' > /home/node/.npm-global/bin/flight-finder-tui \
     && chmod +x /home/node/.npm-global/bin/flight-finder-tui \
     && chown node:node /home/node/.npm-global/bin/flight-finder-tui
