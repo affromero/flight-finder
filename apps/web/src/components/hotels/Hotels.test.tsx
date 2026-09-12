@@ -20,6 +20,22 @@ beforeEach(() => { push.mockReset(); });
 afterEach(() => { vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('Hotel search and tracking', () => {
+  it('reviews an imported property and carries its identity into the search', async () => {
+    const sourceUrl = 'https://www.booking.com/hotel/gb/strandpalace.html';
+    const fetcher = vi.fn().mockImplementation(async (url: string) => url === '/api/travel/import'
+      ? response({ kind: 'hotels', url: sourceUrl, hotel: { ...search, sourceUrl, sources: ['booking'] } })
+      : response({ id: 'imported-search', status: 'unavailable', result: { offers: [], errors: [], completed: 1, total: 1 } }));
+    vi.stubGlobal('fetch', fetcher); render(<HotelSearchExperience />);
+    fireEvent.change(screen.getByLabelText('Already picked one? Paste its link'), { target: { value: sourceUrl } });
+    fireEvent.click(screen.getByRole('button', { name: 'Import link' }));
+    expect(await screen.findByRole('link', { name: 'Open imported selection' })).toHaveAttribute('href', sourceUrl);
+    expect(fetcher.mock.calls.every(([url]) => url === '/api/travel/import')).toBe(true);
+    fireEvent.click(screen.getByLabelText('I checked the dates, guests and room allocation. These may be missing from the link.'));
+    fireEvent.click(screen.getByRole('button', { name: 'Search hotels' }));
+    await screen.findByText(/No offers matched/);
+    const submitted = fetcher.mock.calls.find(([url]) => url === '/api/hotels/search');
+    expect(JSON.parse(submitted![1].body as string)).toMatchObject({ sourceUrl, sources: ['booking'] });
+  });
   it('offers each travel section from an account without marking one as the current page', () => {
     render(<TravelNav />);
     expect(screen.getByRole('link', { name: 'Flights' })).toHaveAttribute('href', '/');

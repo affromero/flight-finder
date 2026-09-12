@@ -25,6 +25,13 @@ beforeEach(() => { sessionStorage.clear(); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 
 describe('rental results and honest tracking controls', () => {
+  it('keeps imported rentals on exact contract tracking', () => {
+    const search = { ...carSearchFixture(), sourceUrl: 'https://www.discovercars.com/offer/selected' };
+    render(<Results search={search} />);
+    expect(screen.getByText(en.Cars.contract)).toBeVisible();
+    expect(screen.queryByRole('combobox', { name: en.Cars.mode })).not.toBeInTheDocument();
+    expect(screen.getByText(en.Cars.contractHelp)).toBeVisible();
+  });
   it.each(Object.keys(locales) as (keyof typeof locales)[])('shows estimated selected seats without permitting tracking in %s', async locale => {
     const search = carSearchFixture(), offer = carOfferFixture(), copy = locales[locale].Cars;
     search.extras.childSeats = [{ category: 'child', quantity: 2 }];

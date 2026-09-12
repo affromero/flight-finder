@@ -1,4 +1,19 @@
 {
+  "LinkImport": {
+    "examples": "Exemplos de formatos de links",
+    "examplesHelp": "Estes exemplos estão abreviados. Copie o endereço completo depois de selecionar seu voo, hotel ou carro de aluguel.",
+    "confirmHotel": "Conferi as datas, os hóspedes e a distribuição dos quartos. Esses dados podem faltar no link.",
+    "label": "Já escolheu? Cole o link",
+    "flights": "Links de reserva selecionada do Google Flights. Um adulto, só ida ou ida e volta.",
+    "hotels": "Links de hotéis do Google Hotels ou Booking.com. Confira as datas, os hóspedes e os quartos.",
+    "cars": "Links de ofertas da DiscoverCars ou de opções da Auto Europe. Confira os locais, as datas e os dados do motorista. Links expirados não podem ser importados.",
+    "import": "Importar link",
+    "loading": "Lendo link…",
+    "failed": "Não foi possível importar este link",
+    "review": "Confira a seleção importada e complete os dados que faltam antes de buscar. O acompanhamento começa quando você escolhe um resultado verificado.",
+    "selection": "Abrir seleção importada",
+    "remove": "Remover link"
+  },
   "common": {
     "appName": "Flight Finder",
     "tagline": "O rastro de preços que as companhias aéreas não mostram"

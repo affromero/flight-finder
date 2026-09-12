@@ -1,6 +1,6 @@
 import { launchBrowser, createStealthContext } from '../scraper/browser';
 import { COUNTRY_PROFILES } from '../scraper/country-profiles';
-import { bookingSearchUrl } from './booking';
+import { bookingSearchUrl, bookingPropertyId } from './booking';
 import { googleSearchUrl, selectGoogleTotal } from './google';
 import type { HotelPageCapture } from './extraction';
 import { extractBookingOffers } from './booking-extraction';
@@ -11,6 +11,7 @@ import { captureHotelLinks } from './link-capture';
 import { captureHotelLocation } from './location-capture';
 import type { HotelOffer, HotelSearch, HotelSelection, HotelSource, HotelStay } from './types';
 import { closeTravelBrowser, currentTravelExecution, TravelCleanupError } from '../travel/execution';
+import { travelImportUrl } from '../travel/import-url';
 
 export const HOTEL_DISCOVERY_LIMIT = 8;
 
@@ -62,6 +63,15 @@ export async function captureHotelSource(search: HotelSearch, stay: HotelStay, s
 }
 
 export async function searchHotelSource(search: HotelSearch, stay: HotelStay, source: HotelSource, selection?: HotelSelection): Promise<HotelOffer[]> {
+  if (!selection && search.sourceUrl) {
+    const imported = travelImportUrl(search.sourceUrl, 'hotels');
+    if (imported.source !== source) throw new Error('The hotel link belongs to another provider');
+    const property: HotelSelection = { source, propertyId: '', hotelName: search.destination, propertyUrl: imported.url, roomName: null, rateName: null, seller: '', refundable: null, breakfast: null };
+    const capture = await captureHotelSource(search, stay, source, property);
+    const identity = (url: string) => source === 'booking' ? bookingPropertyId(url) : new URL(url).pathname.replace(/\/$/, '');
+    if (identity(capture.url) !== identity(imported.url)) throw new Error('The provider changed the imported property; no substitute hotel was used');
+    return source === 'booking' ? extractBookingOffers(capture, search, stay) : extractGoogleOffers(capture, search, stay);
+  }
   const capture = await captureHotelSource(search, stay, source, selection);
   if (selection) return source === 'booking' ? extractBookingOffers(capture, search, stay, selection) : extractGoogleOffers(capture, search, stay);
   if (source === 'booking' && capture.rates?.length) return extractBookingOffers(capture, search, stay);

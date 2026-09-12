@@ -1,6 +1,7 @@
 import type { PriceData } from '@/lib/scraper/extract-prices';
 
 export interface PreviewRequestPayload {
+  sourceUrl?: string;
   dateFrom: string;
   dateTo: string;
   maxPrice: number | null;

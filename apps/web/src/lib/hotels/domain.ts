@@ -1,4 +1,5 @@
 import { DEFAULT_HOTEL_FILTERS, HOTEL_AMENITIES, HOTEL_SOURCES, type HotelSearch, type HotelStay, type HotelOffer, type HotelSelection, type HotelTrackingOptions } from './types';
+import { optionalImportUrl } from '../travel/import-url';
 
 export class HotelError extends Error {
   constructor(message: string, public readonly status = 400) { super(message); this.name = 'HotelError'; }
@@ -64,6 +65,10 @@ export function validateHotelSearch(raw: unknown, now = new Date()): HotelSearch
     maxNights: integer(r.maxNights ?? 7, 1, 30, 'Maximum nights'),
     filters: { ...DEFAULT_HOTEL_FILTERS, maxTotal: hotelPrice(f.maxTotal), refundable: boolean(f.refundable), breakfast: boolean(f.breakfast), minStars: integer(f.minStars ?? 0, 0, 5, 'Hotel class'), minRating: rating, excludedSellers: excluded.map(s => text(s, 100, 'seller')), amenities: [...new Set(amenities)] },
   };
+  try {
+    const sourceUrl = optionalImportUrl(r.sourceUrl, 'hotels', search.sources);
+    if (sourceUrl) search.sourceUrl = sourceUrl;
+  } catch (error) { throw new HotelError(error instanceof Error ? error.message : 'Invalid hotel link'); }
   if (search.maxNights < search.minNights) throw new HotelError('Maximum nights must be at least minimum nights');
   expandHotelStays(search, now);
   return search;

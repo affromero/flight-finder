@@ -21,6 +21,10 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npx playwright install chromium --with-deps
+      - name: Verify selected flight and hotel imports
+        run: npm run test --workspace=@flight-finder/web -- src/lib/scraper/imported-flight.browser.test.ts src/lib/hotels/imported-hotel.browser.test.ts
+        env:
+          TRAVEL_BROWSER_TESTS: '1'
       - run: npm run test --workspace=@flight-finder/web -- src/lib/travel/execution.test.ts src/lib/travel/execution.browser.test.ts src/lib/travel/navigation.browser.test.ts src/lib/scraper/browser.test.ts src/lib/cars/browser-context.browser.test.ts src/lib/cars/autoeurope-navigation.browser.test.ts src/lib/cars/discovercars-frame.browser.test.ts src/lib/cars/discovercars-price-lines.browser.test.ts src/lib/cars/discovercars-navigation.browser.test.ts src/lib/cars/discovercars-extras.browser.test.ts src/lib/cars/protection-discovery.browser.test.ts src/lib/cars/controls.browser.test.ts src/lib/cars/search.browser.test.ts
         env:
           TRAVEL_BROWSER_TESTS: '1'

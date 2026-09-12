@@ -34,10 +34,11 @@ export function validateCarReport(raw: unknown, sources: CarSource[], now = new 
     const p = carRecord(value), source = provider(p.source, sources);
     if (source !== sources[index]) throw new CarError('Rental report changed provider preference order');
     const status = (['running', 'complete', 'partial', 'failed', 'timed_out', 'blocked', 'cancelled'] as const).find(status => status === p.status);
-    if (!status || p.limit !== 8 || typeof p.truncated !== 'boolean') throw new CarError('Invalid rental provider progress');
-    const checked = carInteger(p.checked, 0, 8, 'Checked offers'), discoveredVisible = carInteger(p.discoveredVisible, checked, 10000, 'Visible offers');
-    if (p.truncated !== (discoveredVisible > 8)) throw new CarError('Rental report has inconsistent scan limits');
-    return { source, status, checked, discoveredVisible, limit: 8, truncated: p.truncated };
+    if (!status || (p.limit !== 8 && p.limit !== 1) || typeof p.truncated !== 'boolean') throw new CarError('Invalid rental provider progress');
+    const limit = p.limit;
+    const checked = carInteger(p.checked, 0, limit, 'Checked offers'), discoveredVisible = carInteger(p.discoveredVisible, checked, 10000, 'Visible offers');
+    if (p.truncated !== (discoveredVisible > limit)) throw new CarError('Rental report has inconsistent scan limits');
+    return { source, status, checked, discoveredVisible, limit, truncated: p.truncated };
   });
   const offers = list(r.offers, 16).map(value => validateCarOffer(value, now));
   if (new Set(offers.map(offer => offer.id)).size !== offers.length) throw new CarError('Rental report contains duplicate quotes');

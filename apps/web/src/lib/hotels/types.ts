@@ -13,6 +13,7 @@ export interface HotelFilters {
   amenities: HotelAmenity[];
 }
 export interface HotelSearch {
+  sourceUrl?: string;
   destination: string;
   dateMode: 'fixed' | 'nearby' | 'window';
   checkIn: string;

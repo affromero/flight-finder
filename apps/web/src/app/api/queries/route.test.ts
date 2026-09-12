@@ -44,6 +44,8 @@ vi.mock('@/lib/user-auth', () => ({
 }));
 
 import { POST } from './route';
+import { FLIGHT_IMPORT_URL } from '@/test/import-fixtures';
+import { flightLinkQuery } from '@/lib/scraper/flight-link';
 
 function makeRequest(body: unknown, ip = '1.2.3.4'): NextRequest {
   return new NextRequest('http://localhost/api/queries', {
@@ -72,6 +74,19 @@ const validBody = {
 };
 
 describe('POST /api/queries', () => {
+  it('stores an imported itinerary without trusting client-supplied seed prices', async () => {
+    const parsed = flightLinkQuery(FLIGHT_IMPORT_URL);
+    const res = await POST(makeRequest({ ...parsed, rawInput: 'Selected ORD to DUS round trip', routes: [{ origin: 'ORD', destination: 'DUS', originName: 'Chicago', destinationName: 'Dusseldorf', selectedFlights: [{ price: 1, airline: 'Invented', travelDate: parsed.dateFrom, bookingUrl: FLIGHT_IMPORT_URL }] }] }));
+    expect(res.status).toBe(201);
+    expect(mockQueryCreate.mock.calls.at(-1)?.[0].data).toMatchObject({ sourceUrl: FLIGHT_IMPORT_URL, origin: 'ORD', destination: 'DUS', flexibility: 0 });
+    expect(mockSnapshotCreateMany).not.toHaveBeenCalled();
+  });
+  it('rejects changing the return date of an imported itinerary before creating a tracker', async () => {
+    const parsed = flightLinkQuery(FLIGHT_IMPORT_URL);
+    const res = await POST(makeRequest({ ...parsed, dateTo: '2026-10-20', rawInput: 'Selected flight', origin: 'ORD', destination: 'DUS' }));
+    expect(res.status).toBe(400);
+    expect(mockQueryCreate).not.toHaveBeenCalled();
+  });
   it('rejects old split estimates before writing trackers or snapshots', async () => {
     const res = await POST(makeRequest({ ...validBody, routes: [{ ...validBody.routes[0], selectedFlights: [{
       travelDate: '2026-06-15', price: 2991, currency: 'CAD',

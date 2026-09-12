@@ -14,6 +14,7 @@ import styles from './CarSearchForm.module.css';
 import { CarNaturalLanguage } from './CarNaturalLanguage';
 import type { CarParseDraft, CarDriverDraft } from '@/lib/cars/parse-draft';
 import { formatCarDecimal } from '@/lib/cars/money';
+import { LinkImport } from '../travel/LinkImport';
 
 interface DriverDraft { age: string; licenceYears: string; residenceCountry: string }
 const blankDriver = (): DriverDraft => ({ age: '', licenceYears: '', residenceCountry: '' });
@@ -31,11 +32,13 @@ function CarSearchFormFields({ actorScope, defaultCurrency, defaultSources, opti
   const [transmission, setTransmission] = useState('any'), [minSeats, setMinSeats] = useState('4'), [maxTotal, setMaxTotal] = useState('');
   const [unlimited, setUnlimited] = useState(false), [cancellation, setCancellation] = useState(false), [error, setError] = useState('');
   const [discardConfirmed, setDiscardConfirmed] = useState(false);
+  const [sourceUrl, setSourceUrl] = useState<string>();
+  const [importBusy, setImportBusy] = useState(false);
   const [draftBusy, setDraftBusy] = useState(false), [reviewRequired, setReviewRequired] = useState(false), [reviewed, setReviewed] = useState(false);
   const [draftWarnings, setDraftWarnings] = useState<string[]>([]);
   const [locationDraft, setLocationDraft] = useState({ pickup: '', dropoff: '', pickupRevision: 0, dropoffRevision: 0 });
   const draftCopy = useTranslations('Cars.Draft');
-  const locked = creation.locked || draftBusy;
+  const locked = creation.locked || draftBusy || importBusy;
   function applyDraft(draft: CarParseDraft) {
     if (creation.locked) return;
     const mergeDriver = (previous: DriverDraft, next: CarDriverDraft): DriverDraft => ({ age: next.age === null ? previous.age : String(next.age), licenceYears: next.licenceYears === null ? previous.licenceYears : String(next.licenceYears), residenceCountry: next.residenceCountry ?? previous.residenceCountry });
@@ -75,7 +78,7 @@ function CarSearchFormFields({ actorScope, defaultCurrency, defaultSources, opti
         if (!value.age || !value.licenceYears || !value.residenceCountry) throw new Error(t('driverRequired'));
         return { ...value, age: Number(value.age), licenceYears: Number(value.licenceYears) };
       };
-      const body = { pickup: { id: pickup.id, version: pickup.version }, dropoff: { id: destination.id, version: destination.version }, pickupAt, dropoffAt, driver: confirmedDriver(driver), currency, sources,
+      const body = { ...(sourceUrl ? { sourceUrl } : {}), pickup: { id: pickup.id, version: pickup.version }, dropoff: { id: destination.id, version: destination.version }, pickupAt, dropoffAt, driver: confirmedDriver(driver), currency, sources,
         extras: { childSeats: CHILD_SEAT_CATEGORIES.filter(category => seats[category] > 0).map(category => ({ category, quantity: seats[category] })), additionalDrivers: drivers.map(confirmedDriver), protection: [] },
         filters: { transmission, minSeats: Number(minSeats), unlimitedMileage: unlimited, freeCancellation: cancellation, maxTotal: carMoneyFromDraft(maxTotal, currency, locale) } };
       validateCarSearch({ ...body, pickup: location(pickup), dropoff: location(destination) }, new Date(), { allowUnresolvedProviders: true });
@@ -83,7 +86,8 @@ function CarSearchFormFields({ actorScope, defaultCurrency, defaultSources, opti
     } catch (error) { setError(error instanceof Error ? error.message : t('invalidSearch')); }
   }
   return <section className={styles.root} aria-labelledby="car-search-heading"><div className={styles.heading}><p>{t('independent')}</p><h2 id="car-search-heading">{t('findCar')}</h2><p>{t('intro')}</p></div>
-    <CarNaturalLanguage disabled={creation.locked} onBusy={setDraftBusy} onApply={applyDraft} />
+    <LinkImport onBusy={setImportBusy} kind="cars" disabled={locked} value={sourceUrl} onClear={() => setSourceUrl(undefined)} onImport={draft => { if (draft.car) { applyDraft(draft.car); setSourceUrl(draft.url); } }} />
+    <CarNaturalLanguage disabled={creation.locked || importBusy || Boolean(sourceUrl)} onBusy={setDraftBusy} onApply={applyDraft} />
     <form onInvalidCapture={event => { const details = (event.target as HTMLElement).closest('details'); if (details) details.open = true; }} onSubmit={event => { event.preventDefault(); void submit(); }}>
       {reviewRequired && <div className={styles.notice} role="status"><p>{draftCopy('reviewHelp')}</p>{draftWarnings.length > 0 && <ul>{draftWarnings.map((warning, index) => <li key={index}>{warning}</li>)}</ul>}</div>}
       <fieldset disabled={locked}><legend>{t('journey')}</legend>

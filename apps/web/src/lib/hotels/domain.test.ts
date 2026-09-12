@@ -43,6 +43,15 @@ describe('hotel search criteria', () => {
     expect(() => validateHotelSearch({ ...input, dateMode: 'window', minNights: 5, maxNights: 7 }, NOW)).toThrow(/No valid/);
   });
 });
+describe('imported hotel selection', () => {
+  it('keeps a selected property in the validated search', () => {
+    const sourceUrl = 'https://www.booking.com/hotel/gb/strandpalace.html';
+    expect(validateHotelSearch({ ...input, sources: ['booking'], sourceUrl }, NOW).sourceUrl).toBe(sourceUrl);
+  });
+  it('rejects an imported property being searched through other providers', () => {
+    expect(() => validateHotelSearch({ ...input, sources: ['booking', 'google_hotels'], sourceUrl: 'https://www.booking.com/hotel/gb/strandpalace.html' }, NOW)).toThrow(/original provider/);
+  });
+});
 describe('qualifying hotel prices', () => {
   it.each([{ taxesIncluded: false }, { occupancyVerified: false }, { currency: 'GBP' }, { totalPrice: NaN }, { totalPrice: 0 }, { rooms: [{ adults: 1, children: [] }] }])('rejects incomparable offer %j', changes => {
     expect(matchesHotelFilters(offer(changes), search())).toBe(false);

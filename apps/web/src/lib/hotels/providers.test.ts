@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { bookingSearchUrl } from './booking';
+import { bookingSearchUrl, bookingPropertyId } from './booking';
 import { googleSearchUrl } from './google';
 import { extractBookingOffers } from './booking-extraction';
 import { extractGoogleOffers } from './google-extraction';
@@ -13,6 +13,10 @@ const stay = { checkIn: search.checkIn, checkOut: search.checkOut };
 const propertyUrl = 'https://www.booking.com/hotel/gb/strandpalace.html';
 const selection: HotelSelection = { propertyId: 'booking:/hotel/gb/strandpalace.html', source: 'booking', hotelName: 'Strand Palace', propertyUrl, roomName: null, rateName: null, seller: 'Booking.com', refundable: null, breakfast: null };
 describe('hotel provider requests', () => {
+  it('recognizes a property after its provider redirects to a localized URL', () => {
+    expect(bookingPropertyId('https://www.booking.com/hotel/gb/strandpalace.en-gb.html')).toBe(bookingPropertyId('https://www.booking.com/hotel/gb/strandpalace.html'));
+    expect(bookingPropertyId('https://www.booking.com/hotel/gb/another.en-gb.html')).not.toBe(bookingPropertyId('https://www.booking.com/hotel/gb/strandpalace.html'));
+  });
   it('preserves stay dates, each child age, room count and total adults', () => {
     const url = new URL(bookingSearchUrl({ ...search, rooms: [{ adults: 2, children: [4] }, { adults: 1, children: [12] }] }, stay));
     expect(url.searchParams.get('checkin')).toBe(stay.checkIn);

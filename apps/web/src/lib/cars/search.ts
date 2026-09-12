@@ -17,6 +17,7 @@ import { discoverDiscoverCarsProtection } from './discovercars-protection';
 import { carProtectionQuoteIdentity, validateCarProtectionDiscovery } from './protection-discovery';
 import { CarError, type CarContractSelection, type CarOffer, type CarProviderProgress, type CarSearch, type CarSearchReport, type CarSource } from './types';
 import { createCarBrowserContext, withCarQuoteContext } from './browser-context';
+import { verifyCarProviderContext } from './provider-context';
 
 export class CarSearchCleanupError extends Error {
   constructor(readonly report: CarSearchReport, cause: unknown) {
@@ -117,7 +118,11 @@ async function inspectProvider(source: CarSource, search: CarSearch, report: Car
     }
     Object.assign(search, { pickup: resolved.pickup, dropoff: resolved.dropoff });
     search = singleSource;
-    const discovery = source === 'discovercars' ? await navigateDiscoverCarsSearch(searchPage, search) : await navigateAutoEuropeSearch(searchPage, search);
+    let discovery = source === 'discovercars' ? await navigateDiscoverCarsSearch(searchPage, search) : await navigateAutoEuropeSearch(searchPage, search);
+    if (search.sourceUrl) {
+      verifyCarProviderContext(search.sourceUrl, source, search);
+      discovery = { links: [search.sourceUrl], discoveredVisible: 1, limit: 1, truncated: false };
+    }
     Object.assign(progress, { discoveredVisible: discovery.discoveredVisible, limit: discovery.limit, truncated: discovery.truncated });
     await publishProgress(report, options.onProgress, [execution.signal]);
     const detail = await context.newPage();
@@ -129,6 +134,7 @@ async function inspectProvider(source: CarSource, search: CarSearch, report: Car
       let protectionOffer: CarOffer | undefined;
       try {
         const observation = await captureRequestedOffer(source, detail, url, search, searchPage);
+        if (search.sourceUrl && carProtectionQuoteIdentity(search.sourceUrl, source) !== carProtectionQuoteIdentity(observation.bookingUrl, source)) throw new CarError('The provider changed the imported rental; no substitute offer was used');
         if ('contract' in observation) report.offers.push(observation);
         else report.candidates.push(observation);
         if ('contract' in observation && options.discoverProtection && search.extras.protection.length === 0 && !options.selection) {

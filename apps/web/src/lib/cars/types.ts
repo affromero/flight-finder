@@ -29,6 +29,7 @@ export interface CarExtras {
   protection: { source: CarSource; productId: string }[];
 }
 export interface CarSearch {
+  sourceUrl?: string;
   /** Server-authored binding for a fresh quote, never ordinary search input. */
   protectionRecheck?: { searchId: string; offerId: string; choiceId: string; baseContractHash: string; baseCoverageTerms: string };
   pickup: CarLocation;
