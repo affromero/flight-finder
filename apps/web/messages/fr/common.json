@@ -1,5 +1,7 @@
 {
   "LinkImport": {
+    "examples": "Exemples de formats de liens",
+    "examplesHelp": "Ces exemples sont abrégés. Copiez l’adresse complète après avoir sélectionné votre vol, hôtel ou voiture de location.",
     "confirmHotel": "J’ai vérifié les dates, les voyageurs et la répartition des chambres. Ces informations peuvent manquer dans le lien.",
     "label": "Vous avez déjà choisi ? Collez le lien",
     "flights": "Liens de réservation sélectionnée Google Flights. Un adulte, aller simple ou aller-retour.",

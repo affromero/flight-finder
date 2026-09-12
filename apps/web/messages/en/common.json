@@ -1,5 +1,7 @@
 {
   "LinkImport": {
+    "examples": "Example link formats",
+    "examplesHelp": "These examples are shortened. Copy the full address after selecting your flight, hotel or rental.",
     "confirmHotel": "I checked the dates, guests and room allocation. These may be missing from the link.",
     "label": "Already picked one? Paste its link",
     "flights": "Google Flights selected booking links. One adult, one-way or round trip.",
