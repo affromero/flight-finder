@@ -80,6 +80,8 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
+          cache-from: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.runner }}
+          cache-to: type=registry,ref=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:buildcache-${{ matrix.runner }},mode=max
           build-args: |
             COMMIT_SHA=${{ needs.resolve.outputs.sha }}
           outputs: type=image,name=${{ env.REGISTRY }}/${{ env.IMAGE_NAME }},push-by-digest=true,name-canonical=true,push=true

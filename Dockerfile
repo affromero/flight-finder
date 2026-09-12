@@ -94,12 +94,17 @@ COPY --from=builder --chown=1000:1000 /app/packages/cli/dist /app/packages/cli/d
 COPY --from=builder --chown=1000:1000 /app/packages/cli/package.json /app/packages/cli/package.json
 COPY --from=cliruntime --chown=1000:1000 /cli-runtime /app
 
-FROM docker.io/library/node:26-alpine AS runner
+FROM docker.io/library/node:26-alpine AS partitioned
+COPY --from=runtimeassets /app /runtime
+COPY scripts/partition-runtime.mjs /partition-runtime.mjs
+RUN node /partition-runtime.mjs /runtime /dependencies
+
+FROM docker.io/library/node:26-alpine AS browser-runtime
 RUN apk add --no-cache libc6-compat openssl chromium curl
+
+FROM browser-runtime AS runner
 ENV NODE_ENV=production
 ENV NEXT_TELEMETRY_DISABLED=1
-ARG COMMIT_SHA=unknown
-LABEL org.opencontainers.image.revision=${COMMIT_SHA}
 ENV PORT=3003
 ENV HOSTNAME="0.0.0.0"
 ENV CHROME_PATH=/usr/bin/chromium-browser
@@ -117,12 +122,16 @@ ENV NPM_CONFIG_PREFIX=/home/node/.npm-global
 ENV PATH="/home/node/.npm-global/bin:$PATH"
 
 WORKDIR /app
+# Keep the locked migration toolchain ahead of application updates so its layer
+# remains reusable. Startup still applies the schema and relational constraints.
+COPY --from=prismacli --chown=node:node /pcli/node_modules /app/prisma-cli/node_modules
 COPY --chown=node:node scripts/update-cli.mjs /app/update-cli.mjs
 COPY --chown=node:node scripts/cli-retention.mjs /app/cli-retention.mjs
 COPY --chown=node:node cli-versions.json /app/cli-versions.json
 
 # Standalone server and CLI with their merged runtime dependencies.
-COPY --from=runtimeassets /app /app
+COPY --from=partitioned /dependencies /app
+COPY --from=partitioned /runtime /app
 COPY --from=builder --chown=node:node /app/apps/web/.next/static ./apps/web/.next/static
 COPY --from=builder /app/apps/web/public ./apps/web/public
 
@@ -131,10 +140,6 @@ COPY --from=builder /app/apps/web/public ./apps/web/public
 # as complete runtime packages above. The separate Prisma CLI retains its own
 # toolchain. v7 has no node_modules/.prisma engine dir.
 COPY --from=builder --chown=node:node /app/apps/web/prisma ./apps/web/prisma
-
-# Self-contained Prisma CLI for the entrypoint schema push (db push). Calling
-# it directly avoids the unreliable runtime `npx prisma` registry fetch.
-COPY --from=prismacli --chown=node:node /pcli/node_modules /app/prisma-cli/node_modules
 
 RUN printf '#!/bin/sh\nexec node /app/packages/cli/dist/index.js "$@"\n' > /home/node/.npm-global/bin/flight-finder-tui \
     && chmod +x /home/node/.npm-global/bin/flight-finder-tui \
@@ -162,3 +167,5 @@ EXPOSE 3003
 HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=3 \
   CMD curl -sf http://localhost:3003/api/health || exit 1
 ENTRYPOINT ["./docker-entrypoint.sh"]
+ARG COMMIT_SHA=unknown
+LABEL org.opencontainers.image.revision=${COMMIT_SHA}
