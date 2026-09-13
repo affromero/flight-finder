@@ -97,10 +97,13 @@ COPY --from=cliruntime --chown=1000:1000 /cli-runtime /app
 FROM docker.io/library/node:26-alpine AS partitioned
 COPY --from=runtimeassets /app /runtime
 COPY scripts/partition-runtime.mjs /partition-runtime.mjs
-RUN node /partition-runtime.mjs /runtime /dependencies
+COPY scripts/prune-runtime-dependencies.mjs /prune-runtime-dependencies.mjs
+RUN node /partition-runtime.mjs /runtime /dependencies \
+    && node /prune-runtime-dependencies.mjs /dependencies
 
 FROM docker.io/library/node:26-alpine AS browser-runtime
-RUN apk add --no-cache libc6-compat openssl chromium curl
+RUN apk add --no-cache libc6-compat openssl chromium-headless-shell curl \
+    && ln -s /usr/bin/chromium-headless-shell /usr/bin/chromium-browser
 
 FROM browser-runtime AS runner
 ENV NODE_ENV=production
@@ -108,7 +111,7 @@ ENV NEXT_TELEMETRY_DISABLED=1
 ENV PORT=3003
 ENV HOSTNAME="0.0.0.0"
 ENV CHROME_PATH=/usr/bin/chromium-browser
-ENV BROWSER_SINGLE_PROCESS=true
+ENV BROWSER_SINGLE_PROCESS=false
 
 # CLI provider support: writable npm global prefix for node user
 # *-host dirs are read-only mount points; entrypoint copies into writable dirs
