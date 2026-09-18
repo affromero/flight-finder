@@ -36,7 +36,7 @@ jobs:
         with:
           ref: ${{ github.workflow_sha }}
       - id: commit
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           BUILD_REF: ${{ inputs.ref || github.event.release.tag_name || github.event.workflow_run.head_sha || github.sha }}
         with:
@@ -127,7 +127,7 @@ jobs:
           merge-multiple: true
 
       - name: Create multi-arch manifest
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           HEAD_SHA: ${{ needs.resolve.outputs.sha }}
           RELEASE_TAG: ${{ github.event_name == 'release' && github.event.release.tag_name || '' }}

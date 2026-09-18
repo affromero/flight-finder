@@ -30,7 +30,7 @@ jobs:
       - uses: actions/checkout@v7.0.1
         with:
           ref: ${{ github.workflow_sha }}
-      - uses: actions/github-script@v8
+      - uses: actions/github-script@v9
         id: release
         env:
           RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
@@ -138,7 +138,7 @@ jobs:
           pattern: desktop-*
           path: /tmp/desktop-installers
       - name: Verify commit and publish installers
-        uses: actions/github-script@v8
+        uses: actions/github-script@v9
         env:
           HEAD_SHA: ${{ needs.verify.outputs.sha }}
           RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
