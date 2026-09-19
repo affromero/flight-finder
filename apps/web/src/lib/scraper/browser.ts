@@ -49,10 +49,9 @@ export function buildBrowserArgs(options: LaunchBrowserOptions = {}): string[] {
     '--enforce-webrtc-ip-permission-check',
   ];
 
-  // --single-process (and its --in-process-gpu companion) work around Docker
-  // Desktop GPU crashes, but can crash native Chromium on heavy SPAs such as
-  // Google Flights. Native and desktop runs use multi-process Chromium by
-  // default; the Docker image explicitly opts into the workaround.
+  // --single-process (and its --in-process-gpu companion) can work around
+  // Docker Desktop GPU crashes, but it can crash headless-shell when contexts
+  // close. Keep multi-process mode as the default on every platform.
   if (process.env.BROWSER_SINGLE_PROCESS === 'true') {
     args.push('--single-process', '--in-process-gpu');
   }

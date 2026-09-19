@@ -3,8 +3,6 @@ import { timingSafeEqual } from 'crypto';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { extractPrices } from '@/lib/scraper/extract-prices';
-import { readFileSync } from 'fs';
-import { join } from 'path';
 
 interface CheckResult {
   name: string;
@@ -99,22 +97,6 @@ export async function GET(request: NextRequest) {
 
   checks.push(
     await runCheck('extraction', async () => {
-      // Load fixture HTML - try filesystem paths first, fall back to inline
-      let fixtureHtml = INLINE_FIXTURE;
-      const paths = [
-        join(process.cwd(), 'apps/web/src/test/fixtures/google-flights-sample.txt'),
-        join(process.cwd(), 'src/test/fixtures/google-flights-sample.txt'),
-        join(process.cwd(), 'test/fixtures/google-flights-sample.txt'),
-      ];
-      for (const p of paths) {
-        try {
-          fixtureHtml = readFileSync(p, 'utf-8');
-          break;
-        } catch {
-          // Try next path
-        }
-      }
-
       // Ensure ExtractionConfig exists (LLMock uses anthropic provider)
       await prisma.extractionConfig.upsert({
         where: { id: 'singleton' },
@@ -123,7 +105,7 @@ export async function GET(request: NextRequest) {
       });
 
       const result = await extractPrices(
-        fixtureHtml,
+        INLINE_FIXTURE,
         'https://www.google.com/travel/flights?q=flights+from+JFK+to+LAX',
         '2026-06-15',
         { maxPrice: null, maxStops: null, maxDurationHours: null, preferredAirlines: [], timePreference: 'any', cabinClass: 'economy' },

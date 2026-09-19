@@ -52,3 +52,48 @@ it('rejects a missing required dependency while permitting absent optional platf
   await stage(['tool']);
   expect(await readFile(join(output, 'node_modules/required/package.json'), 'utf8')).toContain('required');
 });
+
+async function prismaFixture(fields: object = {}) {
+  await packageFixture('node_modules/@prisma/client', '@prisma/client', '7.10.0', {
+    peerDependencies: { prisma: '*', typescript: '>=5.4', 'runtime-peer': '*' },
+    peerDependenciesMeta: { prisma: { optional: true }, typescript: { optional: true }, 'runtime-peer': { optional: true } },
+    ...fields,
+  });
+  await packageFixture('node_modules/prisma', 'prisma', '7.10.0', { dependencies: { 'schema-tooling': '*' } });
+  await packageFixture('node_modules/schema-tooling', 'schema-tooling', '1.0.0');
+  await packageFixture('node_modules/typescript', 'typescript', '5.9.0');
+  await packageFixture('node_modules/runtime-peer', 'runtime-peer', '1.0.0');
+}
+
+it('omits Prisma build-only peers and their tooling while retaining installed optional runtime peers', async () => {
+  await prismaFixture();
+  await writeFile(join(root, 'node_modules/@prisma/client/index.js'), "import runtime from 'runtime-peer'; export default runtime;");
+  await stage(['@prisma/client']);
+  await writeFile(join(output, 'check.mjs'), "import client from '@prisma/client'; import runtime from 'runtime-peer'; if (client !== runtime) throw new Error('Missing runtime peer');");
+  await exec(process.execPath, [join(output, 'check.mjs')]);
+  for (const name of ['prisma', 'typescript', 'schema-tooling']) {
+    await expect(access(join(output, 'node_modules', name))).rejects.toThrow();
+  }
+});
+
+it('retains Prisma tooling when independently imported or required by another runtime package', async () => {
+  await prismaFixture();
+  await packageFixture('node_modules/tool', 'tool', '1.0.0', { dependencies: { prisma: '*' } });
+  await stage(['@prisma/client', 'tool', 'typescript']);
+  await writeFile(join(output, 'check.mjs'), "import 'prisma'; import 'typescript'; import 'schema-tooling';");
+  await exec(process.execPath, [join(output, 'check.mjs')]);
+});
+
+it.each(['dependencies', 'optionalDependencies'])('retains Prisma peers also declared as %s', async field => {
+  await prismaFixture({ [field]: { prisma: '*', typescript: '*' } });
+  await stage(['@prisma/client']);
+  await writeFile(join(output, 'check.mjs'), "import 'prisma'; import 'typescript'; import 'schema-tooling';");
+  await exec(process.execPath, [join(output, 'check.mjs')]);
+});
+
+it('retains Prisma tooling peers when the client declares them required', async () => {
+  await prismaFixture({ peerDependenciesMeta: {} });
+  await stage(['@prisma/client']);
+  await writeFile(join(output, 'check.mjs'), "import 'prisma'; import 'typescript'; import 'schema-tooling';");
+  await exec(process.execPath, [join(output, 'check.mjs')]);
+});
