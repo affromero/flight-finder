@@ -35,7 +35,7 @@
     "react-plotly.js": "^4.1.0",
     "recharts": "^3.10.1",
     "thesidedoor": "0.2.0",
-    "thesidedoor-core": "0.1.0",
+    "thesidedoor-core": "0.2.0",
     "ua-parser-js": "^2.0.10",
     "undici": "^8.10.1"
   },
