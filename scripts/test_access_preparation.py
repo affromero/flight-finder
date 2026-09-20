@@ -11,6 +11,21 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class AccessPreparationTests(unittest.TestCase):
+    def test_container_prepares_before_schema_change_and_finalizes_before_serving(self):
+        entrypoint = (ROOT / "docker-entrypoint.sh").read_text()
+        prepare = entrypoint.index("access prepare")
+        schema = entrypoint.index("db push")
+        finalize = entrypoint.index("access finalize")
+        serve = entrypoint.index("exec node apps/web/server.js")
+        self.assertLess(prepare, schema)
+        self.assertLess(schema, finalize)
+        self.assertLess(finalize, serve)
+
+        compose = (ROOT / "docker-compose.prod.yml").read_text()
+        self.assertIn("SIDEDOOR_IMPORT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}", compose)
+        self.assertIn("SIDEDOOR_IMPORT_PASSWORD: ${FF_ACCESS_PASSWORD:-}", compose)
+        self.assertIn("SIDEDOOR_IMPORT_MACHINE_TOKEN: ${FF_MACHINE_TOKEN:-}", compose)
+
     def run_launcher(self, arguments: list[str], fails: bool):
         with tempfile.TemporaryDirectory(prefix="flight-finder-prepare-") as temporary:
             directory = Path(temporary)

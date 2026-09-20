@@ -75,7 +75,7 @@ process.stdin.on('end', () => {
   const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
   const { prisma } = await import('@/lib/prisma');
   await providerVault(prisma).vault.configure('openai', { apiKey: 'saved-openai-key' });
-  await boundary.fixture!.access.store.transact(state => { state.initializations.push('flight-finder-access-v2'); state.principals[0]!.sourceVersion = ''; });
+  await boundary.fixture!.access.store.transact(state => { state.initializations.push('flight-finder-platform-v1'); state.principals[0]!.sourceVersion = ''; });
   boundary.upsert.mockImplementation(async ({ update }) => { boundary.config = { ...boundary.config, ...update, updatedAt: new Date(), providerRevision: Number(boundary.config.providerRevision) + 1 }; return boundary.config; });
   boundary.spawn.mockImplementation((_binary: string, args: string[]) => {
     const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn() });

@@ -52,7 +52,7 @@ describe('POST /api/setup — provider API key (#149)', () => {
     persistence.state!.reset();
     persistence.config = null;
     await (await import('@/lib/sidedoor/provider-credentials')).initializeProviderCredentials();
-    await sessionBoundary.fixture!.access.store.transact(state => { state.initializations.push('flight-finder-access-v2'); state.principals[0]!.sourceVersion = ''; });
+    await sessionBoundary.fixture!.access.store.transact(state => { state.initializations.push('flight-finder-platform-v1'); state.principals[0]!.sourceVersion = ''; });
     vi.clearAllMocks();
     // Self-hosted so no admin password is required; isolates the key behavior.
     process.env.SELF_HOSTED = 'true';

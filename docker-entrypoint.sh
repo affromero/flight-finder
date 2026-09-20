@@ -59,6 +59,9 @@ until node -e "
 done
 echo "[setup] Database is ready"
 
+echo "[setup] Preparing shared platform state..."
+node /app/packages/cli/dist/index.js access prepare
+
 # --- Run migrations ---
 # Use the Prisma CLI bundled into the image (see the prismacli stage in the
 # Dockerfile) instead of fetching it with npx at runtime, which round-trips the
@@ -83,8 +86,10 @@ fi
 # Relational job invariants and partial indexes are not represented by Prisma.
 node /app/scripts/apply-travel-constraints.mjs
 
+echo "[setup] Verifying shared platform state..."
+node /app/packages/cli/dist/index.js access finalize
+
 if [ "${SIDEDOOR_PREPARE_ONLY:-false}" = "true" ]; then
-  node /app/packages/cli/dist/index.js access initialize
   access_listing="$(node /app/packages/cli/dist/index.js access list)"
   printf '%s\n' "$access_listing"
   if ! printf '%s\n' "$access_listing" | grep -q '"role": "owner"'; then

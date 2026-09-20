@@ -65,6 +65,7 @@ jobs:
       - run: npm run db:generate
       - run: npx prisma db push --schema=apps/web/prisma/schema.prisma
       - run: npm run test --workspace=@flight-finder/web -- src/lib/sidedoor/access-store.test.ts
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/sidedoor/platform-cutover.test.ts
       - run: node scripts/usage-migration-test.mjs
 
   integration:

@@ -76,7 +76,7 @@ beforeEach(async () => {
   boundary.unavailable = false;
   boundary.owner = await boundary.fixture!.issue("owner", true);
   await boundary.fixture!.access.store.transact((state) => {
-    state.initializations.push("flight-finder-access-v2");
+    state.initializations.push("flight-finder-platform-v1");
   });
   await boundary.fixture!.access.configureHousehold(
     boundary.owner,

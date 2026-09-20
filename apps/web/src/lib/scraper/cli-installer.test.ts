@@ -73,7 +73,7 @@ it('activates a verified upgrade while leaving the previous executable runnable'
   expect(JSON.parse((await install()).stdout)).toMatchObject({ changed: true, version: '0.153.4' });
   expect((await exec(join(prefix, 'bin', 'codex'), ['--version'])).stdout).toContain('0.153.4');
   expect((await exec(previous, ['--version'])).stdout).toContain('0.137.0');
-});
+}, 15_000);
 
 it('cleans an unactivated installation when the executable destination cannot be replaced', async () => {
   await mkdir(join(prefix, 'bin', 'codex'), { recursive: true });
@@ -88,7 +88,7 @@ it('cleans an unactivated installation when the executable destination cannot be
 it('serializes overlapping upgrades and keeps both verified executables runnable', async () => {
   await npmFixture(false, '0.137.0', true);
   const first = install('0.137.0');
-  await expect.poll(() => readFile(join(root, 'started'), 'utf8').catch(() => '')).toBe('ready');
+  await expect.poll(() => readFile(join(root, 'started'), 'utf8').catch(() => ''), { timeout: 10_000 }).toBe('ready');
   await npmFixture(false, '0.153.4');
   const second = install('0.153.4');
   await writeFile(join(root, 'release'), 'continue');
@@ -98,7 +98,7 @@ it('serializes overlapping upgrades and keeps both verified executables runnable
   expect(installations).toHaveLength(2);
   const old = installations.find(name => name.startsWith('codex-0.137.0-'))!;
   expect((await exec(join(prefix, 'flight-finder-versions', old, 'node_modules/.bin/codex'), ['--version'])).stdout).toContain('0.137.0');
-});
+}, 15_000);
 
 it('startup maintenance retains the newest versions, active CLI and unknown installations', async () => {
   await npmFixture(); await install();

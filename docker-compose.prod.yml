@@ -72,6 +72,9 @@ services:
       REDIS_URL: redis://redis:6379
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
       CRON_SECRET: ${CRON_SECRET}
+      SIDEDOOR_IMPORT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SIDEDOOR_IMPORT_PASSWORD: ${FF_ACCESS_PASSWORD:-}
+      SIDEDOOR_IMPORT_MACHINE_TOKEN: ${FF_MACHINE_TOKEN:-}
       # Private instances only. Empty on the public stack, where the gate is
       # inert and the site stays open to everyone.
       CHROME_PATH: /usr/bin/chromium-browser

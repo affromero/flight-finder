@@ -22,7 +22,7 @@ beforeEach(async () => {
   persistence.config = null;
   await initializeProviderCredentials();
   await sessionBoundary.fixture!.access.store.transact(state => {
-    state.initializations.push('flight-finder-access-v2');
+    state.initializations.push('flight-finder-platform-v1');
     state.principals[0]!.sourceVersion = '';
   });
 });

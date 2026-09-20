@@ -21,6 +21,23 @@ export function registerAccessCommands(program: Command): void {
         );
         let database: { $disconnect(): Promise<void> } | undefined;
         try {
+          if (operation === "prepare" || operation === "finalize") {
+            if (args.length !== 1)
+              throw new Error(`Use access ${operation}.`);
+            const { prisma } = await import("@/lib/prisma");
+            database = prisma;
+            const cutover = await import(
+              "../../../../apps/web/src/lib/sidedoor/platform-cutover"
+            );
+            console.log(
+              JSON.stringify(
+                operation === "prepare"
+                  ? await cutover.preparePlatformCutover()
+                  : await cutover.finalizePlatformCutover(),
+              ),
+            );
+            return;
+          }
           parseAccessCommand(args);
           const { prisma } = await import("@/lib/prisma");
           database = prisma;

@@ -13,7 +13,7 @@ import { prisma } from "@/lib/prisma";
 import { sharedStateStore } from "./store";
 import { serializable } from "./transaction";
 
-const INITIALIZATION = "flight-finder-access-v2";
+const INITIALIZATION = "flight-finder-platform-v1";
 export class AccountNotFoundError extends Error {}
 const storeFor = (database: Prisma.TransactionClient) =>
   sharedStateStore(

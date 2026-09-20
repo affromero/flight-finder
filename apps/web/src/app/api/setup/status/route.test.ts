@@ -23,7 +23,7 @@ vi.mock('@/lib/prisma', () => {
   const database = {
     sidedoorState: { findUnique: async () => {
       await sessionBoundary.fixture!.access.store.transact(state => {
-        state.initializations = ['flight-finder-access-v2'];
+        state.initializations = ['flight-finder-platform-v1'];
         for (const principal of state.principals) principal.sourceVersion = '';
       });
       return { state: await sessionBoundary.fixture!.access.store.read() };
