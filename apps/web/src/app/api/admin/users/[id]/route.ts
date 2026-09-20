@@ -1,6 +1,6 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
-import { accountMutationContext, accountMutationBody, manageAccount, accountMutationError } from '@/lib/sidedoor/account-management';
+import { accountMutationContext, accountMutationBody, manageAccount, accountMutationError } from '@/lib/sidedoor/access/account-management';
 
 export async function PATCH(request: NextRequest, { params }: { params: Promise<{ id: string }> }) {
   try {

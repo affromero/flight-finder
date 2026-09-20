@@ -27,11 +27,11 @@ vi.mock("@/lib/prisma", () => ({
     },
   },
 }));
-vi.mock("@/lib/sidedoor/service", async () => {
+vi.mock("@/lib/sidedoor/access/service", async () => {
   const { createAccessFixture } = await import("@/test/access-fixture");
   const { DeviceService } = await import("thesidedoor-core/access");
   const { FlightFinderAccessStore } =
-    await import("@/lib/sidedoor/access-store");
+    await import("@/lib/sidedoor/access/access-store");
   const fixture = createAccessFixture();
   boundary.fixture = fixture;
   return {

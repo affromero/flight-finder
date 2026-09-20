@@ -9,7 +9,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
     return state.principals.filter(principal => where.id.in.includes(principal.id)).map(principal => ({ id: principal.id, username: principal.name, displayName: null, avatar: 'globe' }));
   } },
 } }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture(); boundary.fixture = fixture;
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };

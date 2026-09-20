@@ -2,8 +2,8 @@ import { cookies } from 'next/headers';
 import { readAccessJson } from 'thesidedoor-core/access/http';
 import { providerDescriptors } from 'thesidedoor-core/ai/catalog';
 import type { Prisma } from '@/generated/prisma/client';
-import { SHARED_SESSION_COOKIE } from '@/lib/sidedoor/service';
-import { readProviderConfiguration, saveProviderConfiguration, configurationRequestOwner, providerConfigurationError, parseCredentialPatch, type ProviderCredentialDescription } from '@/lib/sidedoor/provider-config';
+import { SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
+import { readProviderConfiguration, saveProviderConfiguration, configurationRequestOwner, providerConfigurationError, parseCredentialPatch, type ProviderCredentialDescription } from '@/lib/sidedoor/providers/provider-config';
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
@@ -15,7 +15,7 @@ import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { validateInferenceSelection } from '@/lib/scraper/inference-selection';
-import { accessRouteResponse } from '@/lib/sidedoor/access-http';
+import { accessRouteResponse } from '@/lib/sidedoor/access/access-http';
 
 /**
  * Masks the middle of a secret so the full value never crosses the wire.

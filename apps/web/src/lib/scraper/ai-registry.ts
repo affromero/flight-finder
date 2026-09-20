@@ -11,7 +11,7 @@ import {
   type ProviderMeta,
 } from './provider-metadata';
 import { prisma } from '@/lib/prisma';
-import { resolveProviderCredentials } from '@/lib/sidedoor/provider-credentials';
+import { resolveProviderCredentials } from '@/lib/sidedoor/providers/provider-credentials';
 import { apiProviders, providerConnection } from 'thesidedoor-core/ai/providers';
 import { CredentialDecryptionError } from 'thesidedoor-core/configuration';
 import type { CredentialValues, TokenUsage } from 'thesidedoor-core/ai';

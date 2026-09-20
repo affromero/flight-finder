@@ -1,9 +1,9 @@
 import { prisma } from '@/lib/prisma';
 import { detectAvailableProviders } from '@/lib/scraper/ai-registry';
-import { currentAccessSession } from '@/lib/sidedoor/session';
+import { currentAccessSession } from '@/lib/sidedoor/access/session';
 import { cookies } from 'next/headers';
-import { sharedAccessStore, SHARED_SESSION_COOKIE } from '@/lib/sidedoor/service';
-import { describeProviderCredentials } from '@/lib/sidedoor/provider-config';
+import { sharedAccessStore, SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
+import { describeProviderCredentials } from '@/lib/sidedoor/providers/provider-config';
 
 export async function GET(request?: Request) {
   const config = await prisma.extractionConfig.findFirst({

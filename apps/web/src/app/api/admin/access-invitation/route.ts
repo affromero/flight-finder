@@ -1,5 +1,5 @@
-import { accessRouteResponse, withAccessBody } from '@/lib/sidedoor/access-http';
-import { accessHandler } from '@/lib/sidedoor/access';
+import { accessRouteResponse, withAccessBody } from '@/lib/sidedoor/access/access-http';
+import { accessHandler } from '@/lib/sidedoor/access/access';
 
 export const dynamic = 'force-dynamic';
 

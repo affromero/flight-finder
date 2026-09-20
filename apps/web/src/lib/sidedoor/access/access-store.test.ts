@@ -4,7 +4,7 @@ import { NextRequest } from 'next/server';
 import type { PrismaClient } from '@/generated/prisma/client';
 import type { FlightFinderAccessStore } from './access-store';
 async function initializeProviderCredentials() {
-  return (await import('./provider-credentials')).initializeProviderCredentials();
+  return (await import('../providers/provider-credentials')).initializeProviderCredentials();
 }
 
 const databaseUrl = process.env.SIDEDOOR_TEST_DATABASE_URL;
@@ -84,8 +84,8 @@ describe.skipIf(!databaseUrl)('shared access with PostgreSQL', () => {
     await initializeProviderCredentials();
     vi.stubEnv('OPENAI_BASE_URL', undefined);
     const owner = await service.claimOwner(await service.issueOperatorToken(), 'owner', 'owner account password', 'household');
-    const { saveProviderConfiguration } = await import('./provider-config');
-    const { resolveProviderCredentials } = await import('./provider-credentials');
+    const { saveProviderConfiguration } = await import('../providers/provider-config');
+    const { resolveProviderCredentials } = await import('../providers/provider-credentials');
     const before = await prisma.extractionConfig.findUniqueOrThrow({ where: { id: 'singleton' } });
     const saved = await saveProviderConfiguration(owner, { data: { provider: 'openai', model: 'gpt-4.1-mini' }, fields: { apiKey: 'original-provider-key' }, expectedUpdatedAt: before.updatedAt });
     await expect(saveProviderConfiguration(owner, { data: { provider: 'openai', model: 'different-model' }, fields: { apiKey: 'must-not-persist', baseUrl: 'https://unconfigured.example/v1' }, expectedUpdatedAt: saved.config.updatedAt })).rejects.toThrow('credentials');
@@ -99,7 +99,7 @@ describe.skipIf(!databaseUrl)('shared access with PostgreSQL', () => {
     await initializeProviderCredentials();
     vi.stubEnv('OPENAI_BASE_URL', undefined);
     const owner = await service.claimOwner(await service.issueOperatorToken(), 'owner', 'owner account password', 'household');
-    const { saveProviderConfiguration } = await import('./provider-config');
+    const { saveProviderConfiguration } = await import('../providers/provider-config');
     const expectedUpdatedAt = (await prisma.extractionConfig.findUniqueOrThrow({ where: { id: 'singleton' } })).updatedAt;
     const outcomes = await Promise.allSettled(['first-provider-key', 'second-provider-key'].map(apiKey => saveProviderConfiguration(owner, { data: { provider: 'openai', model: 'gpt-4.1-mini' }, fields: { apiKey }, expectedUpdatedAt })));
     expect(outcomes.filter(outcome => outcome.status === 'fulfilled')).toHaveLength(1);

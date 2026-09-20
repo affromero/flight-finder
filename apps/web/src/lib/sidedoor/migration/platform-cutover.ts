@@ -14,8 +14,8 @@ import { providerDescriptors } from 'thesidedoor-core/ai/catalog';
 import type { Prisma } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import { decryptSecret } from '@/lib/secret-crypto';
-import { providerVault } from './provider-credentials';
-import { sharedStateStore } from './store';
+import { providerVault } from '../providers/provider-credentials';
+import { sharedStateStore } from '../access/store';
 
 const ACCESS_IMPORT = 'flight-finder-platform-v1';
 const PROVIDER_IMPORT = 'flight-finder-platform-v1';

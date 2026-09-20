@@ -1,7 +1,7 @@
 import { prisma } from '@/lib/prisma';
 import { PrincipalManagement } from 'thesidedoor-core/access';
 import { invalidateMultiUserCache } from '@/lib/multi-user';
-import { sharedAccess, sharedAccessStore } from '@/lib/sidedoor/service';
+import { sharedAccess, sharedAccessStore } from '@/lib/sidedoor/access/service';
 
 export type ResetPasswordResult =
   | { ok: true; isAdmin: boolean }

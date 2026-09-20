@@ -15,7 +15,7 @@ vi.mock('@/lib/redis', () => ({
   cached: (...args: unknown[]) => mockCached(...args),
 }));
 
-vi.mock('@/lib/sidedoor/provider-credentials', () => ({
+vi.mock('@/lib/sidedoor/providers/provider-credentials', () => ({
   resolveProviderCredentials: async () => ({}),
 }));
 
@@ -164,7 +164,7 @@ describe('GET /api/admin/local-models', () => {
 import type { createAccessFixture } from '@/test/access-fixture';
 const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, token: '' }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.token ? { value: sessionBoundary.token } : undefined }) }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture(); sessionBoundary.fixture = fixture;
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };

@@ -8,7 +8,7 @@ const boundary = vi.hoisted(() => ({
 }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: (name: string) => name === 'ft-session' && boundary.token ? { value: boundary.token } : undefined }) }));
 vi.mock('@/lib/prisma', () => ({ prisma: { user: { findUnique: async ({ where }: { where: { id: string } }) => boundary.user?.id === where.id ? boundary.user : null } } }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture();
   boundary.fixture = fixture;

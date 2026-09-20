@@ -1,6 +1,6 @@
 import { apiError } from '@/lib/api-response';
 import { readAccessJson } from 'thesidedoor-core/access/http';
-import { accessRouteResponse } from '@/lib/sidedoor/access-http';
+import { accessRouteResponse } from '@/lib/sidedoor/access/access-http';
 
 /** Keep the existing password-change payload while shared access owns verification and revocation. */
 export async function POST(request: Request) {

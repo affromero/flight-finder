@@ -130,7 +130,7 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     const prepared = await preparePlatformCutover();
     expect(prepared).toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic'] });
 
-    const { sharedAccess, sharedAccessStore } = await import('./service');
+    const { sharedAccess, sharedAccessStore } = await import('../access/service');
     expect((await sharedAccess.authenticate(await sharedAccess.login('Owner', 'owner imported password'))).principal?.id).toBe('owner-id');
     const state = await sharedAccessStore.read();
     const configuredAdmin = state.principals.find(principal => principal.name === 'admin');
@@ -141,7 +141,7 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     const { DeviceService } = await import('thesidedoor-core/access');
     const devices = new DeviceService({ access: sharedAccess, scopesFor: () => ['api'] });
     expect((await devices.authenticate('machine-token-that-stays-valid', ['api'])).scopes).toEqual(['api']);
-    const { resolveProviderCredentials } = await import('./provider-credentials');
+    const { resolveProviderCredentials } = await import('../providers/provider-credentials');
     expect(await resolveProviderCredentials('anthropic')).toEqual({
       apiKey: 'stored-provider-key',
       baseUrl: 'https://models.example.test/v1',

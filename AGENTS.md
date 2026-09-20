@@ -54,7 +54,9 @@ in lockstep; the `/create-release` flow bumps them together.
 ## Conventions
 
 - **TypeScript strict, no `any`.** Use early returns, at most 3 nesting levels, and
-  keep files under 1000 lines.
+  keep source files at or below 1000 lines. New source files must use a focused
+  subdirectory when the current directory already contains 10 source files; the
+  pre-commit hooks enforce both limits.
 - **Styling is CSS Modules only** (`Component.tsx` + `Component.module.css`). No
   Tailwind, no inline styles. Server Components by default; add `'use client'` only
   when needed.

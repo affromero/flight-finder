@@ -2,16 +2,16 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { createRequestAccessFixture } from '@/test/access-fixture';
 import type { createStateBoundary } from '@/test/state-fixture';
 const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null }));
-vi.mock('@/lib/sidedoor/store', async () => {
+vi.mock('@/lib/sidedoor/access/store', async () => {
   const { createStateBoundary } = await import('@/test/state-fixture');
   persistence.state = createStateBoundary();
   return { sharedStateStore: <State>(id: string, parse: (value: unknown) => State, initial: () => State) => id === 'access' ? sessionBoundary.fixture!.access.store : persistence.state!.store(id, parse, initial) };
 });
 const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createRequestAccessFixture } = await import('@/test/access-fixture');
   const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
-  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access-store');
+  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access/access-store');
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, sharedAccessStore: new FlightFinderAccessStore(), SHARED_SESSION_COOKIE: 'ft-session' };
 });
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
@@ -48,7 +48,7 @@ describe('GET /api/setup/status -- information disclosure', () => {
     sessionBoundary.fixture!.resetRequest();
     persistence.state!.reset();
     mockFindFirst.mockResolvedValue(null);
-    await (await import('@/lib/sidedoor/provider-credentials')).initializeProviderCredentials();
+    await (await import('@/lib/sidedoor/providers/provider-credentials')).initializeProviderCredentials();
     vi.clearAllMocks();
     delete process.env.SELF_HOSTED;
   });

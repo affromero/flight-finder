@@ -8,9 +8,9 @@ import {
   sharedAccess,
   sharedAccessStore,
   SHARED_SESSION_COOKIE,
-} from "@/lib/sidedoor/service";
+} from "@/lib/sidedoor/access/service";
 import { DeviceService, isAccessError } from "thesidedoor-core/access";
-import { accessHandler } from "@/lib/sidedoor/access";
+import { accessHandler } from "@/lib/sidedoor/access/access";
 
 const isSelfHosted = process.env.SELF_HOSTED === "true";
 const sharedDevices = new DeviceService({

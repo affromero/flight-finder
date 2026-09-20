@@ -1,8 +1,8 @@
 import { cookies } from 'next/headers';
 import type { User } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
-import { currentAccessSession } from '@/lib/sidedoor/session';
-import { sharedProfiles, SHARED_SESSION_COOKIE } from '@/lib/sidedoor/service';
+import { currentAccessSession } from '@/lib/sidedoor/access/session';
+import { sharedProfiles, SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
 import { isAccessError } from 'thesidedoor-core/access';
 
 /** Authenticated identity only. Selecting a household profile never satisfies this check. */

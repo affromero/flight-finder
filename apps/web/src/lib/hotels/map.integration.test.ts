@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { prisma } from '../prisma';
 import { invalidateMultiUserCache } from '../multi-user';
 import { createDatabaseSession } from '@/test/database-session';
-import { sharedAccess } from '@/lib/sidedoor/service';
+import { sharedAccess } from '@/lib/sidedoor/access/service';
 import { GET as adminGet, PATCH as adminPatch } from '@/app/api/admin/hotel-map/route';
 import { PATCH as accountPatch } from '@/app/api/account/settings/route';
 import { DEFAULT_HOTEL_MAP_CONFIG } from './map-config';

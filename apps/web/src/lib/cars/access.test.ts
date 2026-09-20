@@ -2,7 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { createAccessFixture } from '@/test/access-fixture';
 
 const boundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, multiUser: true, token: '', user: null as { id: string; isAdmin: boolean } | null }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture();
   boundary.fixture = fixture;

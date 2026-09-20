@@ -2,7 +2,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { createAccessFixture } from '@/test/access-fixture';
 const boundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, owner: '' }));
 vi.mock('@/lib/prisma', () => ({ prisma: { extractionConfig: { findUnique: async () => ({ publicBaseUrl: 'http://localhost:3003' }) } } }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture(); boundary.fixture = fixture;
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };

@@ -1,9 +1,9 @@
 import { apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { accessRouteResponse } from '@/lib/sidedoor/access-http';
-import { currentAccessSession } from '@/lib/sidedoor/session';
-import { sharedAccess } from '@/lib/sidedoor/service';
+import { accessRouteResponse } from '@/lib/sidedoor/access/access-http';
+import { currentAccessSession } from '@/lib/sidedoor/access/session';
+import { sharedAccess } from '@/lib/sidedoor/access/service';
 import { readAccessJson } from 'thesidedoor-core/access/http';
 
 export async function POST(request: Request) {

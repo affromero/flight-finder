@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { createRequestAccessFixture } from '@/test/access-fixture';
 const boundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null, enabled: true }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createRequestAccessFixture } = await import('@/test/access-fixture');
   const fixture = createRequestAccessFixture(); boundary.fixture = fixture;
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };

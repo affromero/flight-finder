@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { sharedAccessStore } from "@/lib/sidedoor/service";
+import { sharedAccessStore } from "@/lib/sidedoor/access/service";
 
 export default async function robots(): Promise<MetadataRoute.Robots> {
   // A gated instance is private: say so plainly rather than advertising routes

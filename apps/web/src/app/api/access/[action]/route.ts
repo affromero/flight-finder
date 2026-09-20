@@ -1,4 +1,4 @@
-import { accessHandler } from '@/lib/sidedoor/access';
+import { accessHandler } from '@/lib/sidedoor/access/access';
 import { apiError } from '@/lib/api-response';
 
 export const runtime = 'nodejs';

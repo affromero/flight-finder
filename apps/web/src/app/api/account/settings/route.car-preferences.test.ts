@@ -8,7 +8,7 @@ const boundary = vi.hoisted(() => {
   vi.stubEnv('REDIS_URL', '');
   return { fixture: null as ReturnType<typeof createAccessFixture> | null, multiUser: true, token: '', row: {} as Record<string, unknown> };
 });
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture();
   boundary.fixture = fixture;

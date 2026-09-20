@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '@/lib/prisma';
 import { createDatabaseSession } from '@/test/database-session';
-import { sharedAccess } from '@/lib/sidedoor/service';
+import { sharedAccess } from '@/lib/sidedoor/access/service';
 import { carOfferFixture, carReportFixture, carSearchFixture } from '@/test/car-fixtures';
 import { carJson, createCarSearch, createCarTracker } from './store';
 import { carContractHash } from './selection';

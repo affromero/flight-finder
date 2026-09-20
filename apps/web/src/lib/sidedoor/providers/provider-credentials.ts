@@ -3,8 +3,8 @@ import { providerDescriptors } from 'thesidedoor-core/ai/catalog';
 import type { CredentialValues } from 'thesidedoor-core/ai';
 import type { Prisma } from '@/generated/prisma/client';
 import { deriveSecretEncryptionKey } from '@/lib/secret-crypto';
-import { sharedStateStore } from './store';
-import { serializable } from './transaction';
+import { sharedStateStore } from '../access/store';
+import { serializable } from '../access/transaction';
 
 export function providerVault(database: Prisma.TransactionClient) {
   const store = sharedStateStore('provider-credentials', credentialStateSchema.parse, initialCredentialState, database);

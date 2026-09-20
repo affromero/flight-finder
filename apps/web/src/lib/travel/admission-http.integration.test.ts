@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '@/lib/prisma';
 import { createDatabaseSession } from '@/test/database-session';
-import { sharedAccess } from '@/lib/sidedoor/service';
+import { sharedAccess } from '@/lib/sidedoor/access/service';
 import { acquireTravelLease, getTravelAdmission, quarantineTravelLease } from './admission';
 import { GET, POST } from '@/app/api/admin/travel/route';
 

@@ -4,7 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
 import { LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
 import { requireAdminApi } from '@/lib/admin-guard';
-import { resolveProviderCredentials } from '@/lib/sidedoor/provider-credentials';
+import { resolveProviderCredentials } from '@/lib/sidedoor/providers/provider-credentials';
 
 interface OllamaModel {
   name: string;

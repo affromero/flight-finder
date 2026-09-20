@@ -4,7 +4,7 @@ import { parseFlightQuery } from '../scraper/parse-query';
 import type { createStateBoundary } from '@/test/state-fixture';
 
 const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null }));
-vi.mock('@/lib/sidedoor/store', async () => {
+vi.mock('@/lib/sidedoor/access/store', async () => {
   const { createStateBoundary } = await import('@/test/state-fixture');
   persistence.state = createStateBoundary();
   return { sharedStateStore: persistence.state.store };
@@ -42,7 +42,7 @@ beforeEach(async () => {
   database.usage.mockReset().mockImplementation(async ({ data }: { data: Record<string, unknown> }) => { usage.push(data); return { id: 'usage' }; });
   database.update.mockReset().mockImplementation(async (value: unknown) => { writes.push(value); throw new Error('Unexpected config mutation'); });
   database.upsert.mockReset().mockImplementation(async (value: unknown) => { writes.push(value); throw new Error('Unexpected config mutation'); });
-  const { initializeProviderCredentials, providerVault } = await import('@/lib/sidedoor/provider-credentials');
+  const { initializeProviderCredentials, providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
   await initializeProviderCredentials();
   const { prisma } = await import('@/lib/prisma');
   await providerVault(prisma).vault.configure('openai', {

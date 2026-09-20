@@ -4,7 +4,7 @@ const mockUpsert = vi.fn();
 const mockFindFirst = vi.fn();
 import type { createStateBoundary } from '@/test/state-fixture';
 const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
-vi.mock('@/lib/sidedoor/store', async () => {
+vi.mock('@/lib/sidedoor/access/store', async () => {
   const { createStateBoundary } = await import('@/test/state-fixture');
   persistence.state = createStateBoundary();
   return { sharedStateStore: <State>(id: string, parse: (value: unknown) => State, initial: () => State) => id === 'access' ? sessionBoundary.fixture!.access.store : persistence.state!.store(id, parse, initial) };
@@ -33,7 +33,7 @@ vi.mock('@/lib/community-sync', () => ({
 
 import { POST } from './route';
 import { prisma } from '@/lib/prisma';
-import { providerVault } from '@/lib/sidedoor/provider-credentials';
+import { providerVault } from '@/lib/sidedoor/providers/provider-credentials';
 
 function setupRequest(body: Record<string, unknown>): Request {
   return new Request('http://localhost:3003/api/setup', {
@@ -51,7 +51,7 @@ describe('POST /api/setup — provider API key (#149)', () => {
     sessionBoundary.token = await sessionBoundary.fixture!.issue('owner', true);
     persistence.state!.reset();
     persistence.config = null;
-    await (await import('@/lib/sidedoor/provider-credentials')).initializeProviderCredentials();
+    await (await import('@/lib/sidedoor/providers/provider-credentials')).initializeProviderCredentials();
     await sessionBoundary.fixture!.access.store.transact(state => { state.initializations.push('flight-finder-platform-v1'); state.principals[0]!.sourceVersion = ''; });
     vi.clearAllMocks();
     // Self-hosted so no admin password is required; isolates the key behavior.
@@ -89,9 +89,9 @@ describe('POST /api/setup — provider API key (#149)', () => {
 import type { createAccessFixture } from '@/test/access-fixture';
 const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, token: '' }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.token ? { value: sessionBoundary.token } : undefined }) }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture(); sessionBoundary.fixture = fixture;
-  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access-store');
+  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access/access-store');
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, sharedAccessStore: new FlightFinderAccessStore(), SHARED_SESSION_COOKIE: 'ft-session' };
 });

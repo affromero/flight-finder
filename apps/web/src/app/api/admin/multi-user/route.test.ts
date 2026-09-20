@@ -6,7 +6,7 @@ const boundary = vi.hoisted(() => ({
   rows: {} as Record<string, { userId: string | null; isSeed?: boolean }[]>,
 }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.fixture?.token ? { value: boundary.fixture.token } : undefined }) }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createRequestAccessFixture } = await import('@/test/access-fixture');
   const fixture = createRequestAccessFixture(); boundary.fixture = fixture;
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };

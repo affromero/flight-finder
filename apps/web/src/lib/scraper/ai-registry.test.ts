@@ -3,7 +3,7 @@ import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
 import type { createStateBoundary } from '@/test/state-fixture';
 const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
-vi.mock('@/lib/sidedoor/store', async () => {
+vi.mock('@/lib/sidedoor/access/store', async () => {
   const { createStateBoundary } = await import('@/test/state-fixture');
   persistence.state = createStateBoundary();
   return { sharedStateStore: persistence.state.store };
@@ -40,12 +40,12 @@ vi.mock('@/lib/prisma', () => {
 const { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders, detectProviderReadiness, resolveApiKey, ensureV1Suffix, filterCliStderr, isLocalProviderReachable, getModelCosts, estimateModelCost } = await import(
   './ai-registry'
 );
-const { initializeProviderCredentials } = await import('@/lib/sidedoor/provider-credentials');
+const { initializeProviderCredentials } = await import('@/lib/sidedoor/providers/provider-credentials');
 async function configureProvider(
   provider: string,
   values: Record<string, string | number | boolean | null>,
 ) {
-  const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+  const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
   const { prisma } = await import('@/lib/prisma');
   await providerVault(prisma).vault.configure(provider, values);
 }
@@ -180,7 +180,7 @@ describe('ai-registry', () => {
     });
 
     it('does not report an uncredentialed custom endpoint as configured', async () => {
-      const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+      const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
       const { prisma } = await import('@/lib/prisma');
       await providerVault(prisma).vault.configure('openai', { baseUrl: 'https://unconfigured.example/v1' });
       expect((await detectProviderReadiness()).openai).toBe('no_key');
@@ -188,7 +188,7 @@ describe('ai-registry', () => {
 
     it('probes the saved local endpoint used by inference', async () => {
       process.env.SELF_HOSTED = 'true';
-      const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+      const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
       const { prisma } = await import('@/lib/prisma');
       await providerVault(prisma).vault.configure('ollama', { baseUrl: 'http://saved-ollama.example:11434/v1' });
       const requests: string[] = [];

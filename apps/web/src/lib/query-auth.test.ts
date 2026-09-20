@@ -6,7 +6,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   user: { findUnique: async () => boundary.user },
   extractionConfig: { findUnique: async () => ({ multiUserMode: boundary.multiUser }) },
 } }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture(); boundary.fixture = fixture;
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };

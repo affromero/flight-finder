@@ -1,8 +1,8 @@
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { sharedAccess } from '@/lib/sidedoor/service';
-import { currentAccessSession } from '@/lib/sidedoor/session';
+import { sharedAccess } from '@/lib/sidedoor/access/service';
+import { currentAccessSession } from '@/lib/sidedoor/access/session';
 
 export const dynamic = 'force-dynamic';
 

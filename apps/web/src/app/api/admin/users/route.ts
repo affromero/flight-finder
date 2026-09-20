@@ -1,7 +1,7 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
-import { accountMutationContext, accountMutationBody, manageAccount, accountMutationError } from '@/lib/sidedoor/account-management';
+import { accountMutationContext, accountMutationBody, manageAccount, accountMutationError } from '@/lib/sidedoor/access/account-management';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { isPresetSlug } from '@/lib/avatars';

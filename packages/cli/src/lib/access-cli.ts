@@ -27,7 +27,7 @@ export function registerAccessCommands(program: Command): void {
             const { prisma } = await import("@/lib/prisma");
             database = prisma;
             const cutover = await import(
-              "../../../../apps/web/src/lib/sidedoor/platform-cutover"
+              "../../../../apps/web/src/lib/sidedoor/migration/platform-cutover"
             );
             console.log(
               JSON.stringify(
@@ -44,7 +44,7 @@ export function registerAccessCommands(program: Command): void {
           const { AccessService, DeviceService } =
             await import("thesidedoor-core/access");
           const { FlightFinderAccessStore } =
-            await import("../../../../apps/web/src/lib/sidedoor/access-store");
+            await import("../../../../apps/web/src/lib/sidedoor/access/access-store");
           const store = new FlightFinderAccessStore();
           const access = new AccessService({ store });
           console.log(

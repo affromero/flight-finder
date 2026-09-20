@@ -3,7 +3,7 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { registerForCommunity } from '@/lib/community-sync';
 import { readAccessJson } from 'thesidedoor-core/access/http';
 import { providerDescriptors } from 'thesidedoor-core/ai/catalog';
-import { configurationRequestOwner, saveProviderConfiguration, parseCredentialPatch, providerConfigurationError } from '@/lib/sidedoor/provider-config';
+import { configurationRequestOwner, saveProviderConfiguration, parseCredentialPatch, providerConfigurationError } from '@/lib/sidedoor/providers/provider-config';
 import { validateInferenceSelection } from '@/lib/scraper/inference-selection';
 import { requireAdminApi } from '@/lib/admin-guard';
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { createStateBoundary } from '@/test/state-fixture';
 
 const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
-vi.mock('@/lib/sidedoor/store', async () => {
+vi.mock('@/lib/sidedoor/access/store', async () => {
   const { createStateBoundary } = await import('@/test/state-fixture');
   persistence.state = createStateBoundary();
   return { sharedStateStore: persistence.state.store };
@@ -10,7 +10,7 @@ vi.mock('@/lib/sidedoor/store', async () => {
 beforeEach(async () => {
   persistence.state!.reset();
   persistence.config = null;
-  const { initializeProviderCredentials, providerVault } = await import('@/lib/sidedoor/provider-credentials');
+  const { initializeProviderCredentials, providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
   await initializeProviderCredentials();
   const { prisma } = await import('@/lib/prisma');
   await providerVault(prisma).vault.configure('anthropic', { apiKey: 'test-key' });
@@ -395,7 +395,7 @@ describe('extractPrices', () => {
 
   it('throws when the saved credential is missing', async () => {
     const { prisma } = await import('@/lib/prisma');
-    const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+    const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
     await providerVault(prisma).vault.remove('anthropic');
     await expect(
       extractPrices('content', 'https://example.com', '2026-06-15')
@@ -404,7 +404,7 @@ describe('extractPrices', () => {
 
   it('passes the saved key to the provider', async () => {
     const { prisma } = await import('@/lib/prisma');
-    const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+    const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
     await providerVault(prisma).vault.configure('anthropic', { apiKey: 'stored-anthropic-key', compatibleApiKey: 'stored-anthropic-key', baseUrl: 'https://api.anthropic.com' });
     vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
       provider: 'anthropic',
@@ -419,7 +419,7 @@ describe('extractPrices', () => {
 
   it('uses a saved key without deployment credential configuration', async () => {
     const { prisma } = await import('@/lib/prisma');
-    const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+    const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
     await providerVault(prisma).vault.configure('anthropic', { apiKey: 'stored-only-key', compatibleApiKey: 'stored-only-key', baseUrl: 'https://api.anthropic.com' });
     vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
       provider: 'anthropic',

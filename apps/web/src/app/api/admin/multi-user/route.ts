@@ -6,7 +6,7 @@ import { requireAdminApi } from '@/lib/admin-guard';
 import { disableMultiUserMode } from '@/lib/admin-recovery';
 import { readAccessJson } from 'thesidedoor-core/access/http';
 import { cookies } from 'next/headers';
-import { SHARED_SESSION_COOKIE } from '@/lib/sidedoor/service';
+import { SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
 import { isAccessError } from 'thesidedoor-core/access';
 
 class AlreadyEnabledError extends Error {}

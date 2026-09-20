@@ -2,7 +2,7 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { sharedAccessStore } from '@/lib/sidedoor/service';
+import { sharedAccessStore } from '@/lib/sidedoor/access/service';
 import { AccessInvitation } from './AccessInvitation';
 import { UsersClient } from './UsersClient';
 import styles from './page.module.css';

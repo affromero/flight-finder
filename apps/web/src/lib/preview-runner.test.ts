@@ -13,7 +13,7 @@ import { TravelVpnSession } from './travel/vpn';
 import type { createStateBoundary } from '@/test/state-fixture';
 
 const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
-vi.mock('@/lib/sidedoor/store', async () => {
+vi.mock('@/lib/sidedoor/access/store', async () => {
   const { createStateBoundary } = await import('@/test/state-fixture');
   persistence.state = createStateBoundary();
   return { sharedStateStore: persistence.state.store };
@@ -157,7 +157,7 @@ function priceData(airline: string, price: number) {
 beforeEach(async () => {
   persistence.state!.reset();
   persistence.config = null;
-  await (await import('@/lib/sidedoor/provider-credentials')).initializeProviderCredentials();
+  await (await import('@/lib/sidedoor/providers/provider-credentials')).initializeProviderCredentials();
   cachedPrices.clear();
   mockExtractionConfigFindFirst.mockReset();
   mockApiUsageLogCreate.mockClear();
@@ -196,7 +196,7 @@ beforeEach(async () => {
 describe('runPreview API key resolution (#149)', () => {
   it('threads the DB-stored key (decrypted) into the extractPrices override', async () => {
     const { prisma } = await import('@/lib/prisma');
-    const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+    const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
     await providerVault(prisma).vault.configure('anthropic', { apiKey: 'stored-preview-key', compatibleApiKey: 'stored-preview-key', baseUrl: process.env.ANTHROPIC_BASE_URL! });
     mockExtractionConfigFindFirst.mockResolvedValue({
       id: 'singleton',

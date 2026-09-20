@@ -1,4 +1,4 @@
-import { redactChannelConfig, assertPublicUrl, type ChannelType } from './channels';
+import { redactChannelConfig, assertPublicUrl, type ChannelType } from './channels/index';
 
 export interface ChannelRow {
   id: string;

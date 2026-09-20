@@ -5,10 +5,10 @@ import type { CredentialValues } from 'thesidedoor-core/ai';
 import { apiProviders } from 'thesidedoor-core/ai/providers';
 import { CredentialDecryptionError, type CredentialVault } from 'thesidedoor-core/configuration';
 import type { Prisma } from '@/generated/prisma/client';
-import { sharedAccess, sharedAccessStore, SHARED_SESSION_COOKIE } from './service';
+import { sharedAccess, sharedAccessStore, SHARED_SESSION_COOKIE } from '../access/service';
 import { providerVault, resetProviderCredentials } from './provider-credentials';
-import { accessHandler } from './access';
-import { withAccessBody } from './access-http';
+import { accessHandler } from '../access/access';
+import { withAccessBody } from '../access/access-http';
 import { apiError } from '@/lib/api-response';
 
 export function providerConfigurationError(error: unknown): Response {

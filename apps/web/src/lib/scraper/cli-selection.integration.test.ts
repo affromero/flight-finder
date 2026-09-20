@@ -9,18 +9,18 @@ import type { ExtractionConfig, TravelJob } from '@/generated/prisma/client';
 import type { createAccessFixture } from '@/test/access-fixture';
 import type { createStateBoundary } from '@/test/state-fixture';
 const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null }));
-vi.mock('@/lib/sidedoor/store', async () => {
+vi.mock('@/lib/sidedoor/access/store', async () => {
   const { createStateBoundary } = await import('@/test/state-fixture');
   persistence.state = createStateBoundary();
   return { sharedStateStore: <State>(id: string, parse: (value: unknown) => State, initial: () => State) => id === 'access' ? boundary.fixture!.access.store : persistence.state!.store(id, parse, initial) };
 });
 
 const boundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, config: {} as Record<string, unknown>, user: null as Record<string, unknown> | null, token: '', spawn: vi.fn(), upsert: vi.fn(), output: '{}' }));
-vi.mock('@/lib/sidedoor/service', async () => {
+vi.mock('@/lib/sidedoor/access/service', async () => {
   const { createAccessFixture } = await import('@/test/access-fixture');
   const fixture = createAccessFixture();
   boundary.fixture = fixture;
-  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access-store');
+  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access/access-store');
   return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, sharedAccessStore: new FlightFinderAccessStore(), SHARED_SESSION_COOKIE: 'ft-session' };
 });
 vi.mock('@/lib/prisma', () => {
@@ -67,12 +67,12 @@ process.stdin.on('end', () => {
   boundary.config = { id: 'singleton', provider: 'codex', model: 'gpt-5.6-luna', reasoningEffort: 'default', multiUserMode: false, setupComplete: true };
   boundary.config.updatedAt = new Date(0);
   boundary.config.providerRevision = 0;
-  await import('@/lib/sidedoor/service');
+  await import('@/lib/sidedoor/access/service');
   boundary.fixture!.reset();
   boundary.token = await boundary.fixture!.issue('owner', true); boundary.user = { id: 'owner', isAdmin: true };
   persistence.state!.reset();
-  await (await import('@/lib/sidedoor/provider-credentials')).initializeProviderCredentials();
-  const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+  await (await import('@/lib/sidedoor/providers/provider-credentials')).initializeProviderCredentials();
+  const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
   const { prisma } = await import('@/lib/prisma');
   await providerVault(prisma).vault.configure('openai', { apiKey: 'saved-openai-key' });
   await boundary.fixture!.access.store.transact(state => { state.initializations.push('flight-finder-platform-v1'); state.principals[0]!.sourceVersion = ''; });
