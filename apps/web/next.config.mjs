@@ -35,6 +35,7 @@ const nextConfig = {
     '@anthropic-ai/sdk',
     'openai',
     '@google/generative-ai',
+    'thesidedoor-flock',
   ],
 };
 
