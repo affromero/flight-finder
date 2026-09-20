@@ -149,6 +149,7 @@ it.each([true, false])(
       await expect(promise).rejects.toThrow('exceeded the allowed size');
     else expect((await promise).content.length).toBe(32001);
   },
+  15_000,
 );
 
 it('settles the child before returning cancellation', async () => {

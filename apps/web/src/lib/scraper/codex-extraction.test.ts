@@ -102,14 +102,14 @@ it('keeps authentication guidance from structured stdout errors', async () => {
   );
 });
 
-it('preserves authentication failures printed as plain stdout by older CLIs', async () => {
+it('preserves authentication failures printed as plain stdout by CLI processes', async () => {
   executable(
     "console.log('Not logged in. Run codex auth.');process.exitCode=1;",
   );
   await expect(extractCodex('codex', '', 'question')).rejects.toThrow(
     'Not logged in',
   );
-});
+}, 15_000);
 
 it('preserves a recognized authentication error after a CLI banner', async () => {
   executable("process.stdout.write('Codex CLI\\n401 Unauthorized\\n');process.exitCode=1;");

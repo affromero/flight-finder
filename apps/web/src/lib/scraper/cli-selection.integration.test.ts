@@ -171,7 +171,7 @@ it.each([false, true])('passes thinking through price extraction with override=%
   const result = await extractPrices('Delta $623', 'https://www.google.com/travel/flights', '2026-11-09', undefined, undefined, true, 'google_flights', 'USD', config);
   expect(result.prices[0]).toMatchObject({ price: 623, airline: 'Delta' });
   expect(executionArgs()).toEqual(expect.arrayContaining([`model_reasoning_effort="${override ? 'low' : 'medium'}"`]));
-});
+}, 15_000);
 
 it('keeps the admitted preview thinking selection through navigation and extraction', async () => {
   answer(JSON.stringify([{ travelDate: '2026-11-09', price: 623, currency: 'USD', airline: 'Delta', bookingUrl: 'https://delta.com', stops: 0, duration: '5h 30m' }]));

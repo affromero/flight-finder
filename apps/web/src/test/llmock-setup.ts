@@ -4,7 +4,7 @@
  * requests during tests.
  */
 import net from 'node:net';
-import { LLMock } from '@copilotkit/llmock';
+import { LLMock } from '@copilotkit/aimock';
 
 const LLMOCK_PORT = 19876;
 

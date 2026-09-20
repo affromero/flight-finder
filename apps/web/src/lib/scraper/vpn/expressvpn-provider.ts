@@ -1,4 +1,5 @@
 import { isIP } from 'node:net';
+import { lookupCountry } from '../../country-lookup';
 import type { VpnProvider, VpnStatus } from './types';
 
 const POLL_INTERVAL_MS = 3000;
@@ -132,8 +133,7 @@ export class ExpressVpnProvider implements VpnProvider {
           const ipText = await sidecarApi(this.apiUrl, '/v1/publicip/ip', signal);
           const exitIp = modern ? objectFrom(ipText).public_ip : ipText;
           if (typeof exitIp !== 'string' || !isIP(exitIp)) throw new Error('VPN exit IP is not verified');
-          const { default: geoip } = await import(/* webpackIgnore: true */ 'geoip-lite');
-          const exitCountry = geoip.lookup(exitIp)?.country;
+          const exitCountry = lookupCountry(exitIp);
           signal.throwIfAborted();
           const requestedCountry = countryCode.toUpperCase();
           if (exitCountry !== requestedCountry) throw new Error('VPN exit country is ' + (exitCountry ?? 'unknown') + '; expected ' + requestedCountry);

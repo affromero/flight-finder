@@ -1,6 +1,7 @@
 import { UAParser } from 'ua-parser-js';
 import { getRawDb } from './db';
 import { generateVisitorId, generateSessionId } from './visitor-id';
+import { lookupCountry } from '../country-lookup';
 
 interface TrackParams {
   path: string;
@@ -26,14 +27,11 @@ export function trackPageView({ path, ip, userAgent, referrer, botScore = 1 }: T
   const visitorId = generateVisitorId(ip, userAgent);
   const sessionId = generateSessionId(ip, userAgent);
 
-  // Lazy-load geoip-lite to keep it out of the middleware webpack bundle.
   let country: string | null = null;
   try {
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
-    const geoip = require(/* webpackIgnore: true */ 'geoip-lite');
-    country = geoip.lookup(ip)?.country ?? null;
+    country = lookupCountry(ip);
   } catch {
-    // geoip-lite not available — skip country lookup
+    // Country lookup is optional for analytics.
   }
 
   const db = getRawDb();
