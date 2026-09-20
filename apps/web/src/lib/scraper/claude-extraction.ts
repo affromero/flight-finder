@@ -54,7 +54,7 @@ export async function extractClaude(
     }
   };
   const diagnostic = () => {
-    const legacy = stdout
+    const plainTextFailure = stdout
       .split('\n')
       .map((line) => line.trim())
       .filter((line) =>
@@ -70,7 +70,7 @@ export async function extractClaude(
         .filter((line) => !line.includes('could not update PATH'))
         .join('\n')
         .trim() ||
-      legacy ||
+      plainTextFailure ||
       '(no output)'
     ).slice(-4096);
   };

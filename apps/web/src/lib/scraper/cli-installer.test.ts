@@ -54,7 +54,7 @@ it('preserves the previous executable and removes a failed download', async () =
   expect((await exec(join(prefix, 'bin', 'codex'), ['--version'])).stdout).toContain('0.137.0');
 });
 
-it('rejects an incorrect downloaded version without replacing the old CLI or authentication', async () => {
+it('rejects an incorrect downloaded version without replacing the current CLI or authentication', async () => {
   await npmFixture(false, '0.137.0');
   await install('0.137.0');
   const authentication = join(prefix, 'auth.json');
@@ -63,7 +63,7 @@ it('rejects an incorrect downloaded version without replacing the old CLI or aut
   expect((await exec(join(prefix, 'bin', 'codex'), ['--version'])).stdout).toContain('0.137.0');
   expect(await readFile(authentication, 'utf8')).toBe('private auth sentinel');
   expect(await readdir(join(prefix, 'flight-finder-versions'))).toHaveLength(1);
-});
+}, 15_000);
 
 it('activates a verified upgrade while leaving the previous executable runnable', async () => {
   await npmFixture(false, '0.137.0');

@@ -26,7 +26,7 @@ describe('shared owner guards', () => {
     await boundary.fixture!.access.logout(boundary.token);
     expect((await requireAdminApi())?.status).toBe(401);
   });
-  it('rejects legacy signatures and deleted owners', async () => {
+  it('rejects non-Sidedoor signatures and deleted owners', async () => {
     boundary.token = 'admin:1700000000000.signature';
     expect(await verifyAdminSessionRevocable()).toBe(false);
     boundary.token = await boundary.fixture!.issue('owner', true);

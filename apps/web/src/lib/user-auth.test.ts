@@ -23,7 +23,7 @@ beforeEach(() => {
 afterEach(() => vi.unstubAllEnvs());
 
 describe('shared account identity', () => {
-  it('requires a persisted session and rejects legacy or tampered cookie values', async () => {
+  it('requires a persisted session and rejects non-Sidedoor or tampered cookie values', async () => {
     expect(await getCurrentUser()).toBeNull();
     boundary.token = 'user:member:1700000000000.invalid-signature';
     expect(await getCurrentUser()).toBeNull();
