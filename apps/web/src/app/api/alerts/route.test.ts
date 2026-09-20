@@ -1,3 +1,12 @@
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+beforeEach(() => sessionBoundary.fixture!.resetRequest());
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 const mockFindMany = vi.fn();
@@ -5,16 +14,15 @@ const mockSnapshotFindMany = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    user: { findUnique: async () => sessionBoundary.fixture!.user },
     query: { findMany: (...args: unknown[]) => mockFindMany(...args) },
     priceSnapshot: { findMany: (...args: unknown[]) => mockSnapshotFindMany(...args) },
   },
 }));
 
 const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
-const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
 
 vi.mock('@/lib/multi-user', () => ({ isMultiUserEnabled: () => mockIsMultiUserEnabled() }));
-vi.mock('@/lib/user-auth', () => ({ getCurrentUser: () => mockGetCurrentUser() }));
 
 import { GET } from './route';
 
@@ -33,10 +41,10 @@ function makeQuery(overrides: Record<string, unknown> = {}) {
 }
 
 describe('GET /api/alerts', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockIsMultiUserEnabled.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
+    await sessionBoundary.fixture!.signIn(null);
     mockFindMany.mockResolvedValue([]);
     mockSnapshotFindMany.mockResolvedValue([]);
   });
@@ -44,7 +52,7 @@ describe('GET /api/alerts', () => {
   describe('multi-user mode auth enforcement', () => {
     it('returns 401 for an unauthenticated request when multi-user mode is enabled', async () => {
       mockIsMultiUserEnabled.mockResolvedValue(true);
-      mockGetCurrentUser.mockResolvedValue(null);
+      await sessionBoundary.fixture!.signIn(null);
 
       const res = await GET();
       const body = await res.json();
@@ -56,7 +64,7 @@ describe('GET /api/alerts', () => {
 
     it('scopes the query to the authenticated user in multi-user mode', async () => {
       mockIsMultiUserEnabled.mockResolvedValue(true);
-      mockGetCurrentUser.mockResolvedValue({ id: 'user-42' });
+      await sessionBoundary.fixture!.signIn({ id: 'user-42' });
       mockFindMany.mockResolvedValue([]);
 
       await GET();
@@ -68,7 +76,7 @@ describe('GET /api/alerts', () => {
 
     it('does not include queries from other users in multi-user mode', async () => {
       mockIsMultiUserEnabled.mockResolvedValue(true);
-      mockGetCurrentUser.mockResolvedValue({ id: 'user-42' });
+      await sessionBoundary.fixture!.signIn({ id: 'user-42' });
 
       // Return a query that belongs to a different user (the DB would never
       // return it given the userId filter, but we verify the filter is passed).
@@ -88,7 +96,7 @@ describe('GET /api/alerts', () => {
   describe('single-user / public mode', () => {
     it('allows unauthenticated requests when multi-user mode is disabled', async () => {
       mockIsMultiUserEnabled.mockResolvedValue(false);
-      mockGetCurrentUser.mockResolvedValue(null);
+      await sessionBoundary.fixture!.signIn(null);
       mockFindMany.mockResolvedValue([]);
 
       const res = await GET();

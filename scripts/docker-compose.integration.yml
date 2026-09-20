@@ -33,7 +33,6 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:postgres@db:5432/flight_finder
       REDIS_URL: redis://redis:6379
-      ADMIN_PASSWORD: test-admin
       ADMIN_SESSION_SECRET: test-session-secret-at-least-32-chars
       CRON_SECRET: test-cron-secret
       CHROME_PATH: /usr/bin/chromium-browser

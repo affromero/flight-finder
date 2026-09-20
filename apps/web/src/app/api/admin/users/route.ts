@@ -1,13 +1,12 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
-import { hashPassword } from '@/lib/password';
+import { accountMutationContext, accountMutationBody, manageAccount, accountMutationError } from '@/lib/sidedoor/account-management';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentUser } from '@/lib/user-auth';
 import { isPresetSlug } from '@/lib/avatars';
 
 const USERNAME_PATTERN = /^[a-zA-Z0-9_.-]{2,32}$/;
-const MIN_PASSWORD_LENGTH = 8;
 
 async function requireAdmin() {
   if (!(await isMultiUserEnabled())) return { ok: false as const, status: 404 };
@@ -38,37 +37,24 @@ export async function GET() {
 }
 
 export async function POST(request: NextRequest) {
-  const auth = await requireAdmin();
-  if (!auth.ok) return apiError('Unauthorized', auth.status);
-
-  const body = await request.json().catch(() => null);
-  if (!body) return apiError('Invalid JSON body', 400);
-
-  const username = typeof body.username === 'string' ? body.username.trim() : '';
-  const password = typeof body.password === 'string' ? body.password : '';
-  const displayName =
-    typeof body.displayName === 'string' && body.displayName.trim()
-      ? body.displayName.trim()
-      : null;
-  const isAdmin = typeof body.isAdmin === 'boolean' ? body.isAdmin : false;
-  const avatar = isPresetSlug(body.avatar) ? body.avatar : null;
-
-  if (!USERNAME_PATTERN.test(username)) {
-    return apiError('Username must be 2 to 32 characters of letters, numbers, underscores, dots, or dashes', 400);
-  }
-  // Anyone can be passwordless (tap-to-sign-in); a given password must be strong.
-  if (password && password.length < MIN_PASSWORD_LENGTH) {
-    return apiError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`, 400);
-  }
-
-  const existing = await prisma.user.findUnique({ where: { username }, select: { id: true } });
-  if (existing) return apiError('Username already taken', 409);
-
-  const passwordHash = password ? await hashPassword(password) : null;
-  const user = await prisma.user.create({
-    data: { username, displayName, passwordHash, isAdmin, avatar },
-    select: { id: true, username: true, displayName: true, avatar: true, isAdmin: true, createdAt: true },
-  });
-
-  return apiSuccess({ user }, 201);
+  try {
+    const context = await accountMutationContext(request);
+    if (context.response) return context.response;
+    const body = await accountMutationBody(request);
+    if (!body) return apiError('Invalid JSON body', 400);
+    if (Object.keys(body).some(key => !['username', 'password', 'displayName', 'isAdmin', 'avatar'].includes(key))) return apiError('Unsupported account field', 400);
+    const username = typeof body.username === 'string' ? body.username.trim() : '';
+    if (!USERNAME_PATTERN.test(username)) return apiError('Username must be 2 to 32 characters of letters, numbers, underscores, dots, or dashes', 400);
+    if (body.password !== undefined && typeof body.password !== 'string') return apiError('Invalid password', 400);
+    if (body.isAdmin !== undefined && typeof body.isAdmin !== 'boolean') return apiError('Invalid role', 400);
+    const user = await manageAccount(context.token!, {
+      kind: 'create', name: username,
+      password: typeof body.password === 'string' ? body.password : undefined,
+      role: body.isAdmin === true ? 'owner' : 'member',
+    }, {
+      displayName: typeof body.displayName === 'string' ? body.displayName.trim() || null : null,
+      avatar: isPresetSlug(body.avatar) ? body.avatar : null,
+    });
+    return apiSuccess({ user }, 201);
+  } catch (error) { return accountMutationError(error); }
 }

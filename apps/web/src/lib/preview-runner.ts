@@ -22,7 +22,9 @@ import {
   type OneWayEstimate,
 } from '@/lib/preview-run';
 import { isValidPriceAmount } from '@/lib/limits';
-import { getModelCosts, resolveApiKey } from '@/lib/scraper/ai-registry';
+import { getModelCosts, estimateModelCost, resolveApiKey, resolveProviderCredentials, CLI_PROVIDERS } from '@/lib/scraper/ai-registry';
+import { sumTokenUsage } from 'thesidedoor-core/ai/usage';
+import type { CredentialValues } from 'thesidedoor-core/ai';
 import { isKnownAirline } from '@/lib/scraper/airline-urls';
 import { extractPrices, type ExtractionFailureReason, type PriceData } from '@/lib/scraper/extract-prices';
 import { navigateAirlineDirect, navigateGoogleFlights } from '@/lib/scraper/navigate';
@@ -177,6 +179,7 @@ export type RouteResult = RouteResultPayload;
  * added so extractPrices can avoid its own DB read.
  */
 export interface ExtractionContext {
+  credentials?: CredentialValues;
   reasoningEffort?: import('./scraper/cli-model-types').ReasoningSelection;
   provider: string;
   model: string;
@@ -185,7 +188,7 @@ export interface ExtractionContext {
   /** Pre-resolved API key (DB-stored key decrypted, else env), resolved once
    *  per preview so workers don't decrypt on every attempt (#149). */
   apiKey: string;
-  costs: { costPer1kInput: number; costPer1kOutput: number };
+  costs: ReturnType<typeof getModelCosts>;
 }
 
 interface ScrapeRouteParams {
@@ -313,8 +316,8 @@ async function scrapeGoogleOneWayLeg(
 ): Promise<{
   prices: PriceData[];
   failureReason?: ExtractionFailureReason;
-  inputTokens: number;
-  outputTokens: number;
+  inputTokens: number | null;
+  outputTokens: number | null;
 }> {
   const startedAt = Date.now();
   const searchParams = {
@@ -352,19 +355,19 @@ async function scrapeGoogleOneWayLeg(
       reasoningEffort: params.context.reasoningEffort,
       extractTimeoutSeconds: params.context.extractTimeoutSeconds,
       apiKey: params.context.apiKey,
+      credentials: params.context.credentials,
     },
   );
 
   const { provider, model, costs } = params.context;
   const inputTokens = usage.inputTokens;
   const outputTokens = usage.outputTokens;
-  const cost = (inputTokens / 1000) * costs.costPer1kInput + (outputTokens / 1000) * costs.costPer1kOutput;
+  const cost = estimateModelCost(usage, costs);
   await prisma.apiUsageLog.create({
     data: {
       provider,
       model,
-      inputTokens,
-      outputTokens,
+      ...usage,
       costUsd: cost,
       operation: 'preview-flights',
       durationMs: Date.now() - startedAt,
@@ -434,8 +437,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
 
   const { provider, model, costs } = params.context;
 
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
+  let totalUsage = sumTokenUsage();
   let lastFailureReason: ExtractionFailureReason | undefined;
   let lastSource = 'google_flights';
   let hitLoadingShell = false;
@@ -471,23 +473,20 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
         reasoningEffort: params.context.reasoningEffort,
         extractTimeoutSeconds: params.context.extractTimeoutSeconds,
         apiKey: params.context.apiKey,
+        credentials: params.context.credentials,
       }
     );
 
-    totalInputTokens += usage.inputTokens;
-    totalOutputTokens += usage.outputTokens;
+    totalUsage = sumTokenUsage(totalUsage, usage);
 
     if (!failureReason) {
-      const cost =
-        (totalInputTokens / 1000) * costs.costPer1kInput +
-        (totalOutputTokens / 1000) * costs.costPer1kOutput;
+      const cost = estimateModelCost(totalUsage, costs);
 
       await prisma.apiUsageLog.create({
         data: {
           provider,
           model,
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
+          ...totalUsage,
           costUsd: cost,
           operation: 'preview-flights',
           durationMs: 0,
@@ -528,16 +527,13 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     }
   }
 
-  const totalCost =
-    (totalInputTokens / 1000) * costs.costPer1kInput +
-    (totalOutputTokens / 1000) * costs.costPer1kOutput;
+  const totalCost = estimateModelCost(totalUsage, costs);
 
   await prisma.apiUsageLog.create({
     data: {
       provider,
       model,
-      inputTokens: totalInputTokens,
-      outputTokens: totalOutputTokens,
+      ...totalUsage,
       costUsd: totalCost,
       operation: 'preview-flights',
       durationMs: 0,
@@ -597,13 +593,15 @@ export async function runPreview(
   const currency: string | null = config?.defaultCurrency ?? bodyCurrency;
   const provider = config?.provider ?? 'anthropic';
   const model = config?.model ?? 'claude-haiku-4-5-20251001';
+  const credentials = CLI_PROVIDERS[provider] ? undefined : await resolveProviderCredentials(provider);
   const context: ExtractionContext = {
     provider,
     model,
     customBaseUrl: config?.customBaseUrl ?? null,
     reasoningEffort: config?.reasoningEffort as import('./scraper/cli-model-types').ReasoningSelection | undefined,
     extractTimeoutSeconds: config?.extractTimeoutSeconds ?? null,
-    apiKey: resolveApiKey(provider, config),
+    apiKey: await resolveApiKey(provider, credentials),
+    credentials,
     costs: getModelCosts(provider, model),
   };
   const datePairs = buildPreviewDatePairs(

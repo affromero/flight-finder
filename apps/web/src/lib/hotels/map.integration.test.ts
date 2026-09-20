@@ -2,7 +2,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vites
 import { NextRequest } from 'next/server';
 import { prisma } from '../prisma';
 import { invalidateMultiUserCache } from '../multi-user';
-import { createUserSessionToken } from '../user-auth';
+import { createDatabaseSession } from '@/test/database-session';
+import { sharedAccess } from '@/lib/sidedoor/service';
 import { GET as adminGet, PATCH as adminPatch } from '@/app/api/admin/hotel-map/route';
 import { PATCH as accountPatch } from '@/app/api/account/settings/route';
 import { DEFAULT_HOTEL_MAP_CONFIG } from './map-config';
@@ -37,7 +38,7 @@ describe.skipIf(process.env.HOTEL_MAP_INTEGRATION_TESTS !== '1')('map settings a
     vi.unstubAllEnvs();
     await prisma.$disconnect();
   });
-  function signIn(id: string) { boundary.cookie.mockReturnValue({ value: createUserSessionToken(id) }); }
+  async function signIn(id: string) { boundary.cookie.mockReturnValue({ value: await createDatabaseSession(id) }); }
   function submission(path: string, actor: string, body: unknown) {
     return new NextRequest(`http://localhost${path}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Hotel-Map-Actor': `user:${actor}` }, body: JSON.stringify(body) });
   }
@@ -55,17 +56,16 @@ describe.skipIf(process.env.HOTEL_MAP_INTEGRATION_TESTS !== '1')('map settings a
   });
   it('rejects non-admin and revoked administrator sessions before changing provider settings', async () => {
     const initial = await getHotelMapConfig();
-    signIn(bob);
+    await signIn(bob);
     expect((await adminGet()).status).toBe(403);
     expect((await adminPatch(submission('/api/admin/hotel-map', bob, { config: DEFAULT_HOTEL_MAP_CONFIG, revision: initial.revision }))).status).toBe(403);
-    signIn(alice);
-    await prisma.user.update({ where: { id: alice }, data: { sessionsValidFrom: new Date(Date.now() + 1000) } });
+    await signIn(alice);
+    await sharedAccess.store.transact(state => { state.principals.find(principal => principal.id === alice)!.epoch++; });
     expect((await adminGet()).status).toBe(401);
     expect(await getHotelMapConfig()).toEqual(initial);
-    await prisma.user.update({ where: { id: alice }, data: { sessionsValidFrom: null } });
   });
   it('rejects another account’s stale form and stores preferences only on the authenticated account', async () => {
-    signIn(bob);
+    await signIn(bob);
     const preferences = { version: 1, style: 'bright', enabled: false };
     expect((await accountPatch(submission('/api/account/settings', alice, { hotelMapPreferences: preferences }))).status).toBe(409);
     expect((await prisma.user.findUniqueOrThrow({ where: { id: bob } })).hotelMapPreferences).toBeNull();

@@ -40,9 +40,8 @@ export function DashboardNav({
   const navItems = multiUserEnabled ? [...baseItems, USERS_NAV_ITEM] : baseItems;
 
   const handleLogout = async () => {
-    const url = multiUserEnabled ? '/api/auth/logout' : '/api/admin/auth/logout';
-    await fetch(url, { method: 'POST' });
-    window.location.href = multiUserEnabled ? '/login' : '/admin/login';
+    await fetch('/api/access/logout', { method: 'POST' });
+    window.location.href = '/access';
   };
 
   const showLogout = !isSelfHosted || multiUserEnabled;

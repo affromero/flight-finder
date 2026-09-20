@@ -29,7 +29,7 @@ The CLI bundles the shared scraper (`apps/web/src/lib/scraper/*`) via relative i
 Supply secrets through the caller's environment. Never use `.env` files or commit credentials.
 Keep shared scripts independent of secret-manager accounts. Operators can wrap commands externally with their preferred secret manager.
 
-Critical: `DATABASE_URL`, `REDIS_URL`, `ANTHROPIC_API_KEY`, `ADMIN_PASSWORD`, `ADMIN_SESSION_SECRET`, `CRON_SECRET`.
+Critical: `DATABASE_URL`, `REDIS_URL`, `ADMIN_SESSION_SECRET`, and `CRON_SECRET`.
 
 ## Build Commands
 
@@ -51,7 +51,6 @@ npm run ci                     # lint + typecheck + test + build (both web and c
 | `page.tsx` | Landing page — natural language search bar |
 | `layout.tsx` | Root layout — fonts, metadata |
 | `q/[id]/page.tsx` | Public shareable chart page (no auth) |
-| `admin/(auth)/login/page.tsx` | Admin login (legacy, redirects to /login in multi user mode) |
 | `admin/(dashboard)/page.tsx` | Admin dashboard — active queries, costs |
 | `admin/(dashboard)/queries/page.tsx` | Query management — pause/resume/delete/reassign |
 | `admin/(dashboard)/config/page.tsx` | LLM agent config — provider/model selection |
@@ -71,7 +70,6 @@ npm run ci                     # lint + typecheck + test + build (both web and c
 | `api/auth/login/route.ts` | POST — user login (multi user mode only); rate limited |
 | `api/auth/logout/route.ts` | POST — clears the shared ft-session cookie |
 | `api/auth/me/route.ts` | GET — current user; 401/404 outside multi user mode |
-| `api/admin/auth/route.ts` | POST — legacy admin login; 410 in multi user mode |
 | `api/admin/auth/logout/route.ts` | POST — admin logout |
 | `api/admin/queries/route.ts` | GET — list all queries |
 | `api/admin/queries/[id]/route.ts` | PATCH/DELETE — manage query; PATCH accepts userId reassignment |
@@ -126,7 +124,7 @@ npm run ci                     # lint + typecheck + test + build (both web and c
 | `prisma.ts` | Prisma client singleton |
 | `redis.ts` | Redis client + cache helpers |
 | `api-response.ts` | `apiSuccess()`/`apiError()` response helpers |
-| `admin-auth.ts` | HMAC session tokens (admin), password verification, shared signPayload/verifyPayload |
+| `sidedoor/` | Shared password, passkey, invitation, session, provider, job, and telemetry integration |
 | `user-auth.ts` | User session tokens, parseSession discriminated union, getCurrentUser (DB-backed) |
 | `multi-user.ts` | `isMultiUserEnabled()` (hard gated on SELF_HOSTED, cached 60s) |
 | `rate-limit.ts` | Redis backed login throttling (5 per 15 min per IP+username) |
@@ -150,9 +148,9 @@ Models:
 - `Query` (tracked flights, optional `userId` owner)
 - `PriceSnapshot` (price data points; optional `vpnCountry` for VPN comparison runs)
 - `FetchRun` (scrape run logs; optional `vpnCountry`)
-- `ExtractionConfig` (LLM settings singleton; `multiUserMode` flag; `adminSessionsValidFrom` for session revocation on password change; RPM caps and preview concurrency fields; encrypted per-provider API keys `anthropicApiKey`/`openaiApiKey`/`googleApiKey`, set from the admin config or setup wizard)
+- `ExtractionConfig` (application settings singleton; setup state, provider selection, `multiUserMode`, RPM caps, and preview concurrency fields. Sidedoor owns access and encrypted provider credentials.)
 - `ApiUsageLog` (cost tracking per provider/model)
-- `User` (multi user accounts, self hosted only; `sessionsValidFrom` for per-user session revocation)
+- `User` (product profile data for self-hosted accounts; Sidedoor owns credentials and session revocation)
 - `NotificationChannel` (per-channel notification config; nullable `userId` for admin-owned global channels)
 - `PreviewRun` (create-time preview scrape job; `clientIp` for per-IP concurrency cap)
 - `CommunityApiKey` (registered community node keys; tracks snapshot count and last-seen time)
@@ -183,9 +181,8 @@ Other themes (cyberpunk, tron, autumn, solar-red) remain as user-selectable alte
 - **Component**: `Name.tsx` + `Name.module.css`. Named export, `styles.root`.
 - **API Route**: Validate → query → `NextResponse.json()` with `apiSuccess()`/`apiError()`.
 - **Scraper**: Playwright navigate → capture HTML → LLM extract → store snapshots.
-- **Provider keys**: resolve via `resolveApiKey(provider, config)` in `lib/scraper/ai-registry.ts`. A DB-stored key (encrypted, set in admin config or the setup wizard) beats `process.env[envKey]`; an undecryptable value falls through to env. Never read `process.env.OPENAI_API_KEY` (or the other provider envs) directly in scraper paths. Selecting an env-backed provider with no usable key is rejected with 400 in `api/admin/config`.
-- **Admin auth**: HMAC session cookie, verified in `middleware.ts` for pages, in handler for cron.
-- **Accounts (self hosted multi user mode)**: opt-in DB flag (`ExtractionConfig.multiUserMode`) gated by `SELF_HOSTED=true`. Admin enables via Settings or setup wizard; the toggle handler atomically creates the first admin User, flips the flag, and backfills existing unowned non-seed queries. User auth is per-route via `getCurrentUser()` (DB lookup so deleted users lose access immediately). Token shape: `admin:<ts>.<sig>` for legacy admin, `user:<userId>:<ts>.<sig>` for users; both share the `ft-session` cookie. Login rate limited via `lib/rate-limit.ts`.
+- **Provider credentials**: configure them through setup or Settings. `resolveProviderCredentials()` reads the encrypted Sidedoor vault. Provider execution never reads API provider credentials from deployment environment variables.
+- **Access**: Sidedoor owns password, passkey, session, device, invitation, recovery, and household profile authority. Flight Finder stores product profile fields in the same database transaction.
 
 ## DO
 

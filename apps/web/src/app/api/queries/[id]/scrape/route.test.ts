@@ -1,3 +1,12 @@
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+beforeEach(() => sessionBoundary.fixture!.resetRequest());
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
@@ -35,6 +44,7 @@ vi.mock('@/lib/prisma', () => {
   };
   return {
     prisma: {
+    user: { findUnique: async () => sessionBoundary.fixture!.user },
       ...txClient,
       $transaction: async (
         cb: (tx: typeof txClient) => Promise<unknown>,
@@ -45,17 +55,8 @@ vi.mock('@/lib/prisma', () => {
 });
 
 const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
-const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
 vi.mock('@/lib/multi-user', () => ({ isMultiUserEnabled: () => mockIsMultiUserEnabled() }));
-vi.mock('@/lib/user-auth', () => ({ getCurrentUser: () => mockGetCurrentUser() }));
 
-const mockGetSessionToken = vi.fn().mockResolvedValue(undefined);
-const mockVerifySessionToken = vi.fn().mockReturnValue(false);
-vi.mock('@/lib/admin-auth', () => ({
-  getSessionToken: () => mockGetSessionToken(),
-  verifySessionToken: (token: string) => mockVerifySessionToken(token),
-  parseAdminTokenTimestamp: () => 1000,
-}));
 
 const mockRedisSet = vi.fn();
 const mockRedisRef = { current: { set: mockRedisSet } as { set: typeof mockRedisSet } | null };
@@ -107,7 +108,7 @@ function rowDefaults(overrides: Record<string, unknown> = {}) {
 }
 
 describe('POST /api/queries/[id]/scrape', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockRunFullScrapeForQuery.mockResolvedValue([]);
     mockRedisRef.current = { set: mockRedisSet };
@@ -119,9 +120,9 @@ describe('POST /api/queries/[id]/scrape', () => {
     mockFetchRunUpdate.mockResolvedValue({});
     mockExtractionFindFirst.mockResolvedValue({ enabled: true });
     mockIsMultiUserEnabled.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
-    mockGetSessionToken.mockResolvedValue(undefined);
-    mockVerifySessionToken.mockReturnValue(false);
+    await sessionBoundary.fixture!.signIn(null);
+
+
     delete process.env.SELF_HOSTED;
   });
 
@@ -310,10 +311,9 @@ describe('POST /api/queries/[id]/scrape', () => {
     }));
   });
 
-  it('hosted mode legacy admin session authorises without a token', async () => {
+  it('hosted mode persisted owner session authorises without a token', async () => {
     mockQueryFindUnique.mockResolvedValue(rowDefaults());
-    mockGetSessionToken.mockResolvedValueOnce('admin:1234.abc');
-    mockVerifySessionToken.mockReturnValueOnce(true);
+    await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     const res = await POST(...makeRequest('q1', {}));
     expect(res.status).toBe(200);
     await flushIifeMicrotasks();
@@ -321,13 +321,14 @@ describe('POST /api/queries/[id]/scrape', () => {
   });
 
   describe('self hosted multi user mode', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockIsMultiUserEnabled.mockResolvedValue(true);
     });
 
     it('admin session passes without token', async () => {
-      mockGetCurrentUser.mockResolvedValue({ id: 'admin_1', isAdmin: true });
+      await sessionBoundary.fixture!.signIn({ id: 'admin_1', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue(rowDefaults({ userId: 'someone_else' }));
       const res = await POST(...makeRequest('q1', {}));
       expect(res.status).toBe(200);
@@ -336,14 +337,14 @@ describe('POST /api/queries/[id]/scrape', () => {
     });
 
     it('owner user passes', async () => {
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'user_1', isAdmin: false });
       mockQueryFindUnique.mockResolvedValue(rowDefaults({ userId: 'user_1' }));
       const res = await POST(...makeRequest('q1', {}));
       expect(res.status).toBe(200);
     });
 
     it('non owner non admin gets 403', async () => {
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_2', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'user_2', isAdmin: false });
       mockQueryFindUnique.mockResolvedValue(rowDefaults({ userId: 'user_1' }));
       const res = await POST(...makeRequest('q1', {}));
       expect(res.status).toBe(403);

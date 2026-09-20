@@ -1,6 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '@/lib/prisma';
-import { createUserSessionToken } from '../user-auth';
+import { createDatabaseSession } from '@/test/database-session';
+import { sharedAccess } from '@/lib/sidedoor/service';
 import { carOfferFixture, carReportFixture, carSearchFixture } from '@/test/car-fixtures';
 import { carJson, createCarSearch, createCarTracker } from './store';
 import { carContractHash } from './selection';
@@ -40,7 +41,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     vi.spyOn(console, 'error').mockImplementation(() => undefined);
     owner = (await prisma.user.create({ data: { username: `car-http-owner-${crypto.randomUUID()}` } })).id;
     other = (await prisma.user.create({ data: { username: `car-http-other-${crypto.randomUUID()}` } })).id;
-    boundary.token = createUserSessionToken(owner);
+    boundary.token = await createDatabaseSession(owner);
   });
   afterEach(async () => {
     await prisma.travelJob.deleteMany({ where: { userId: { in: [owner, other] } } });
@@ -117,7 +118,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     const first = await session();
     expect(first.headers.get('cache-control')).toBe('private, no-store');
     expect(await first.json()).toEqual({ ok: true, data: { scope: `user:${owner}`, isAdmin: false } });
-    boundary.token = createUserSessionToken(other);
+    boundary.token = await createDatabaseSession(other);
     await prisma.user.update({ where: { id: other }, data: { isAdmin: true } });
     expect(await (await session()).json()).toEqual({ ok: true, data: { scope: `user:${other}`, isAdmin: true } });
   });
@@ -162,7 +163,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     expect((await (await protect(request(body, 'POST', key), context(run.id))).json()).data).toEqual(accepted);
     expect((await status(request(), context(accepted.id))).status).toBe(200);
     expect(await prisma.travelJob.count({ where: { userId: owner } })).toBe(1);
-    boundary.token = createUserSessionToken(other);
+    boundary.token = await createDatabaseSession(other);
     await prisma.user.update({ where: { id: other }, data: { isAdmin: true } });
     expect((await protect(request(body, 'POST'), context(run.id))).status).toBe(404);
   });
@@ -183,7 +184,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
   });
   it('hides every foreign tracker and search operation without changing its state', async () => {
     const row = await tracker(), run = await prisma.carSearchRun.findFirstOrThrow({ where: { trackerId: row.id } });
-    boundary.token = createUserSessionToken(other);
+    boundary.token = await createDatabaseSession(other);
     for (const response of [await detail(request(), context(row.id)), await edit(request({ active: false }, 'PATCH'), context(row.id)), await remove(request(), context(row.id)), await refresh(refreshRequest(), context(row.id)), await status(request(), context(run.id)), await cancel(request(), context(run.id))]) expect(response.status).toBe(404);
     expect((await (await list(request())).json()).data.trackers).toEqual([]);
     expect((await prisma.carTracker.findUniqueOrThrow({ where: { id: row.id } })).active).toBe(true);
@@ -209,7 +210,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
   it.each(['public', 'missing', 'revoked'])('rejects %s access before reading data', async mode => {
     if (mode === 'public') vi.stubEnv('SELF_HOSTED', 'false');
     if (mode === 'missing') boundary.token = '';
-    if (mode === 'revoked') await prisma.user.update({ where: { id: owner }, data: { sessionsValidFrom: new Date(Date.now() + 1000) } });
+    if (mode === 'revoked') await sharedAccess.store.transact(state => { state.principals.find(principal => principal.id === owner)!.epoch++; });
     const identity = await session();
     expect(identity.status).toBe(mode === 'public' ? 404 : 401);
     expect(identity.headers.get('cache-control')).toBe('private, no-store');
@@ -231,13 +232,13 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     expect(first).toMatchObject({ status: 'queued', creationKey: key });
     expect((await (await startSearch(request(body, 'POST', key))).json()).data).toEqual(first);
     expect((await (await searches(request())).json()).data.searches).toMatchObject([{ id: first.id, status: 'queued' }]);
-    boundary.token = createUserSessionToken(other);
+    boundary.token = await createDatabaseSession(other);
     expect((await (await searches(request())).json()).data.searches).toEqual([]);
     expect((await status(request(), context(first.id))).status).toBe(404);
   }, 20_000);
   it('requires explicit authorized administration and keeps an administrator’s normal list personal', async () => {
     const row = await tracker();
-    boundary.token = createUserSessionToken(other);
+    boundary.token = await createDatabaseSession(other);
     const adminRequest = new Request('http://localhost/api/cars?admin=true');
     expect((await list(adminRequest)).status).toBe(403);
     await prisma.user.update({ where: { id: other }, data: { isAdmin: true } });
@@ -254,7 +255,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     const next = new Request(`http://localhost/api/cars?limit=2&cursor=${encodeURIComponent(page.nextCursor)}`);
     expect((await (await list(next)).json()).data).toMatchObject({ trackers: [{ id: `${owner}-0` }], nextCursor: null });
     for (const query of ['limit=0', 'limit=101', 'limit=1.5', 'limit=01', 'limit=', 'cursor=bad!']) expect((await list(new Request(`http://localhost/api/cars?${query}`))).status).toBe(400);
-    boundary.token = createUserSessionToken(other);
+    boundary.token = await createDatabaseSession(other);
     expect((await list(next)).status).toBe(400);
     boundary.token = '';
     expect((await list(next)).status).toBe(401);
@@ -359,7 +360,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     expect((await status(request(), context(run.id))).status).toBe(200);
     const retry = request({ label: 'Late owner request' }, 'PATCH'); retry.headers.set('X-Car-Revision', '0');
     expect((await edit(retry, context(row.id))).status).toBe(404);
-    boundary.token = createUserSessionToken(other);
+    boundary.token = await createDatabaseSession(other);
     expect((await detail(request(), context(row.id))).status).toBe(200);
     expect((await status(request(), context(run.id))).status).toBe(404);
   });

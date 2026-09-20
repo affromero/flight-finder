@@ -1,19 +1,40 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { createStateBoundary } from '@/test/state-fixture';
+
+const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
+vi.mock('@/lib/sidedoor/store', async () => {
+  const { createStateBoundary } = await import('@/test/state-fixture');
+  persistence.state = createStateBoundary();
+  return { sharedStateStore: persistence.state.store };
+});
+beforeEach(async () => {
+  persistence.state!.reset();
+  persistence.config = null;
+  const { initializeProviderCredentials, providerVault } = await import('@/lib/sidedoor/provider-credentials');
+  await initializeProviderCredentials();
+  const { prisma } = await import('@/lib/prisma');
+  await providerVault(prisma).vault.configure('anthropic', { apiKey: 'test-key' });
+});
 
 const { mockExtract } = vi.hoisted(() => ({
   mockExtract: vi.fn(),
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
+vi.mock('@/lib/prisma', () => {
+  const database = {
     extractionConfig: {
       findFirst: vi.fn().mockResolvedValue({
         provider: 'anthropic',
         model: 'claude-haiku-4-5-20251001',
       }),
+      async findUnique() {
+        return persistence.config;
+      },
+      async update({ data }: { data: Record<string, unknown> }) { persistence.config = { ...persistence.config, ...data }; return persistence.config; },
     },
-  },
-}));
+  };
+  return { prisma: { ...database, $transaction: async (operation: (value: typeof database) => Promise<unknown>) => operation(database) } };
+});
 
 // Keep the real ai-registry (so resolveApiKey is exercised end to end), but
 // swap the anthropic provider's extract fn for a spy.
@@ -24,7 +45,6 @@ vi.mock('./ai-registry', async (importOriginal) => {
     EXTRACTION_PROVIDERS: {
       anthropic: {
         displayName: 'Anthropic',
-        envKey: 'ANTHROPIC_API_KEY',
         models: [],
         extract: mockExtract,
       },
@@ -33,8 +53,6 @@ vi.mock('./ai-registry', async (importOriginal) => {
     LOCAL_PROVIDERS: new Set(),
   };
 });
-
-process.env.ANTHROPIC_API_KEY = 'test-key';
 
 import { extractPrices, sanitizeScrapedHtml, coercePrice, coerceStops, extractJsonArray, readField, type QueryFilters } from './extract-prices';
 
@@ -375,55 +393,44 @@ describe('extractPrices', () => {
     expect(result.prices[1]!.flightNumber).toBe('DL 901');
   });
 
-  it('throws when api key is missing', async () => {
-    const origKey = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
-
-    try {
-      await expect(
-        extractPrices('content', 'https://example.com', '2026-06-15')
-      ).rejects.toThrow('Missing API key');
-    } finally {
-      process.env.ANTHROPIC_API_KEY = origKey;
-    }
+  it('throws when the saved credential is missing', async () => {
+    const { prisma } = await import('@/lib/prisma');
+    const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+    await providerVault(prisma).vault.remove('anthropic');
+    await expect(
+      extractPrices('content', 'https://example.com', '2026-06-15')
+    ).rejects.toThrow('Missing saved credential for Anthropic');
   });
 
-  it('passes the DB-stored key to the provider, preferring it over the env var (#149)', async () => {
+  it('passes the saved key to the provider', async () => {
     const { prisma } = await import('@/lib/prisma');
-    const { encryptSecret } = await import('@/lib/secret-crypto');
+    const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+    await providerVault(prisma).vault.configure('anthropic', { apiKey: 'stored-anthropic-key', compatibleApiKey: 'stored-anthropic-key', baseUrl: 'https://api.anthropic.com' });
     vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
       provider: 'anthropic',
       model: 'claude-haiku-4-5-20251001',
-      anthropicApiKey: encryptSecret('stored-anthropic-key'),
     } as never);
     mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 1, outputTokens: 1 } });
 
     await extractPrices('page', 'https://flights.google.com', '2026-06-15');
 
-    // process.env.ANTHROPIC_API_KEY is 'test-key'; the stored key must win.
     expect(mockExtract.mock.calls[0]![0]).toBe('stored-anthropic-key');
   });
 
-  it('does not throw "Missing API key" when only a DB-stored key is present (#149)', async () => {
+  it('uses a saved key without deployment credential configuration', async () => {
     const { prisma } = await import('@/lib/prisma');
-    const { encryptSecret } = await import('@/lib/secret-crypto');
-    const origKey = process.env.ANTHROPIC_API_KEY;
-    delete process.env.ANTHROPIC_API_KEY;
+    const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+    await providerVault(prisma).vault.configure('anthropic', { apiKey: 'stored-only-key', compatibleApiKey: 'stored-only-key', baseUrl: 'https://api.anthropic.com' });
     vi.mocked(prisma.extractionConfig.findFirst).mockResolvedValueOnce({
       provider: 'anthropic',
       model: 'claude-haiku-4-5-20251001',
-      anthropicApiKey: encryptSecret('stored-only-key'),
     } as never);
     mockExtract.mockResolvedValue({ content: '[]', usage: { inputTokens: 0, outputTokens: 0 } });
 
-    try {
-      await expect(
-        extractPrices('content', 'https://example.com', '2026-06-15')
-      ).resolves.toBeDefined();
-      expect(mockExtract.mock.calls[0]![0]).toBe('stored-only-key');
-    } finally {
-      process.env.ANTHROPIC_API_KEY = origKey;
-    }
+    await expect(
+      extractPrices('content', 'https://example.com', '2026-06-15')
+    ).resolves.toBeDefined();
+    expect(mockExtract.mock.calls[0]![0]).toBe('stored-only-key');
   });
 
   it('uses the pre-resolved override apiKey on the preview path (#149)', async () => {

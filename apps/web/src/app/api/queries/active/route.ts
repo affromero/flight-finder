@@ -1,7 +1,8 @@
 import { apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
+import type { Prisma } from '@/generated/prisma/client';
 
 export const dynamic = 'force-dynamic';
 
@@ -13,11 +14,11 @@ export async function GET() {
   // In multi user mode, only return the current user's queries. Admins still
   // get every tracker via /api/admin/queries; this endpoint powers the per
   // user landing page list.
-  let userFilter: { userId: string } | null = null;
+  let userFilter: Prisma.QueryWhereInput = {};
   if (multiUser) {
-    const user = await getCurrentUser();
+    const user = await getCurrentProfile();
     if (!user) return apiSuccess({ queries: [] });
-    userFilter = { userId: user.id };
+    userFilter = user.isAdmin ? { OR: [{ userId: user.id }, { userId: null }] } : { userId: user.id };
   }
 
   // Self-hosted: include paused queries too so users can resume them
@@ -25,8 +26,8 @@ export async function GET() {
     where: {
       isSeed: false,
       ...(isSelfHosted ? {} : { active: true }),
-      ...(userFilter ?? {}),
-      OR: [{ expiresAt: { gt: new Date() } }],
+      ...userFilter,
+      expiresAt: { gt: new Date() },
     },
     orderBy: { createdAt: 'desc' },
     select: {

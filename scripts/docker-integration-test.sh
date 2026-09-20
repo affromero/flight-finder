@@ -54,6 +54,8 @@ fi
 
 # ── Start services ───────────────────────────────────────────────
 printf "${DIM}Starting app + DB + Redis...${RESET}\n"
+HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d --no-recreate db redis
+HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
 HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d 2>&1 | while IFS= read -r line; do
   printf "  ${DIM}%s${RESET}\n" "$line"
 done

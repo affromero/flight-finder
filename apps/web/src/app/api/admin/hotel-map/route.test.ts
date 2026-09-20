@@ -1,12 +1,19 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { DEFAULT_HOTEL_MAP_CONFIG } from '@/lib/hotels/map-config';
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
 
 const db = vi.hoisted(() => ({ findUnique: vi.fn(), create: vi.fn(), updateMany: vi.fn(), config: vi.fn() }));
-vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
-vi.mock('@/lib/prisma', () => ({ prisma: { extractionConfig: { findUnique: db.config }, hotelMapConfig: db, $transaction: async (action: (tx: { hotelMapConfig: typeof db }) => unknown) => action({ hotelMapConfig: db }) } }));
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+vi.mock('@/lib/prisma', () => ({ prisma: { user: { findUnique: async () => sessionBoundary.fixture!.user }, extractionConfig: { findUnique: db.config }, hotelMapConfig: db, $transaction: async (action: (tx: { hotelMapConfig: typeof db }) => unknown) => action({ hotelMapConfig: db }) } }));
 import { GET, PATCH } from './route';
 
-beforeEach(() => { vi.resetAllMocks(); vi.stubEnv('SELF_HOSTED', 'true'); db.config.mockResolvedValue({ multiUserMode: false }); db.findUnique.mockResolvedValue(null); });
+beforeEach(async () => { vi.resetAllMocks(); sessionBoundary.fixture!.resetRequest(); await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true }); vi.stubEnv('SELF_HOSTED', 'true'); db.config.mockResolvedValue({ multiUserMode: false }); db.findUnique.mockResolvedValue(null); });
 afterEach(() => vi.unstubAllEnvs());
 const request = (body: unknown) => new Request('http://localhost/api/admin/hotel-map', { method: 'PATCH', headers: { 'Content-Type': 'application/json', 'X-Hotel-Map-Actor': 'solo' }, body: JSON.stringify(body) });
 
@@ -19,6 +26,7 @@ it('returns isolated defaults with no-store caching and no configuration writes'
 });
 
 it('requires a signed-in account in multi-user mode before reading map settings', async () => {
+  await sessionBoundary.fixture!.signIn(null);
   db.config.mockResolvedValue({ multiUserMode: true });
   const result = await GET();
   expect(result.status).toBe(401);

@@ -2,8 +2,8 @@ import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { gateEnabled } from '@/lib/access/gate';
-import { GateInvite } from './GateInvite';
+import { sharedAccessStore } from '@/lib/sidedoor/service';
+import { AccessInvitation } from './AccessInvitation';
 import { UsersClient } from './UsersClient';
 import styles from './page.module.css';
 
@@ -15,6 +15,7 @@ export default async function UsersPage() {
   if (!(await isMultiUserEnabled())) notFound();
 
   const t = await getTranslations('AdminUsers');
+  const { mode } = await sharedAccessStore.admissionPolicy();
   const users = await prisma.user.findMany({
     orderBy: [{ isAdmin: 'desc' }, { username: 'asc' }],
     select: {
@@ -31,8 +32,9 @@ export default async function UsersPage() {
   return (
     <div className={styles.root}>
       <h1 className={styles.title}>{t('title')}</h1>
-      {gateEnabled() && <GateInvite />}
+      <AccessInvitation />
       <UsersClient
+        individual={mode === 'individual'}
         initialUsers={users.map((u) => ({
           id: u.id,
           username: u.username,

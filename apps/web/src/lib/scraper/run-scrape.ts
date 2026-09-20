@@ -9,7 +9,8 @@ import {
   type NavigationSource,
 } from './navigate';
 import { extractPrices, type ExtractionFailureReason } from './extract-prices';
-import { getModelCosts } from './ai-registry';
+import { getModelCosts, estimateModelCost, type ExtractionUsage } from './ai-registry';
+import { sumTokenUsage } from 'thesidedoor-core/ai/usage';
 import { isKnownAirline } from './airline-urls';
 import { getCountryProfile } from './country-profiles';
 import { expandQueryDates } from './scrape-dates';
@@ -103,14 +104,13 @@ interface ScrapeResult {
   queryId: string;
   status: 'success' | 'partial' | 'failed';
   snapshotsCount: number;
-  extractionCost: number;
+  extractionCost: number | null;
   error?: string;
 }
 
 interface PairScrapeResult {
   prices: import('./extract-prices').PriceData[];
-  inputTokens: number;
-  outputTokens: number;
+  usage: ExtractionUsage;
   sources: Set<string>;
   lastFailureReason: string | undefined;
 }
@@ -151,8 +151,7 @@ async function scrapeOneDatePair(
 
   const sources = new Set<string>();
   let prices: import('./extract-prices').PriceData[] = [];
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let usage = sumTokenUsage();
   let lastFailureReason: string | undefined;
 
   async function extractFromNav(nav: NavigationResult, attempt: number): Promise<void> {
@@ -161,8 +160,7 @@ async function scrapeOneDatePair(
       nav.html, nav.url, travelDateFallback, filters, undefined, nav.resultsFound, nav.source, effectiveCurrency,
     );
     prices = prices.concat(result.prices);
-    inputTokens += result.usage.inputTokens;
-    outputTokens += result.usage.outputTokens;
+    usage = sumTokenUsage(usage, result.usage);
     if (result.failureReason) {
       lastFailureReason = result.failureReason;
       await saveDebugHtml(queryId, nav.html, attempt);
@@ -249,7 +247,7 @@ async function scrapeOneDatePair(
     }
   }
 
-  return { prices, inputTokens, outputTokens, sources, lastFailureReason };
+  return { prices, usage, sources, lastFailureReason };
 }
 
 /** Scrape a single query for a single country pass (local or VPN). */
@@ -319,8 +317,7 @@ async function scrapeQueryForCountry(
   console.log(`[scrape] query=${queryId} expanded into ${pairs.length} date pair(s)`);
 
   let allPrices: import('./extract-prices').PriceData[] = [];
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
+  let totalUsage = sumTokenUsage();
   let lastFailureReason: string | undefined;
   const sources = new Set<string>();
   const scrapedTravelDates = new Set<string>();
@@ -344,13 +341,13 @@ async function scrapeQueryForCountry(
       currentTravelExecution()?.check();
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[scrape] query=${queryId} pair=${pairTravelDate} threw err=${msg}`);
+      totalUsage = sumTokenUsage(totalUsage, { inputTokens: null, outputTokens: null });
       lastFailureReason = lastFailureReason ?? 'page_not_loaded';
       continue;
     }
 
     allPrices = allPrices.concat(pairResult.prices);
-    totalInputTokens += pairResult.inputTokens;
-    totalOutputTokens += pairResult.outputTokens;
+    totalUsage = sumTokenUsage(totalUsage, pairResult.usage);
     for (const s of pairResult.sources) sources.add(s);
     if (pairResult.lastFailureReason) {
       lastFailureReason = pairResult.lastFailureReason;
@@ -375,16 +372,13 @@ async function scrapeQueryForCountry(
 
   allPrices.sort((a, b) => a.price - b.price);
 
-  const extractionCost =
-    (totalInputTokens / 1000) * costs.costPer1kInput +
-    (totalOutputTokens / 1000) * costs.costPer1kOutput;
+  const extractionCost = estimateModelCost(totalUsage, costs);
 
   await prisma.apiUsageLog.create({
     data: {
       provider,
       model,
-      inputTokens: totalInputTokens,
-      outputTokens: totalOutputTokens,
+      ...totalUsage,
       costUsd: extractionCost,
       operation: 'extract-prices',
       durationMs: 0,
@@ -488,7 +482,7 @@ async function scrapeQueryForCountry(
       });
     }
 
-    console.log(`[scrape] query=${queryId} vpn=${vpnCountry ?? 'local'} finished — ${allPrices.length} prices, cost=$${extractionCost.toFixed(4)}`);
+    console.log(`[scrape] query=${queryId} vpn=${vpnCountry ?? 'local'} finished, ${allPrices.length} prices, cost=${extractionCost === null ? 'unknown' : `$${extractionCost.toFixed(4)}`}`);
     const failureReason = allPrices.length === 0 ? lastFailureReason : undefined;
     const failureMessages: Record<string, string> = {
       page_not_loaded: 'Page did not load results — blocked, CAPTCHA, or timeout.',
@@ -551,7 +545,7 @@ export async function runScrapeForQuery(
         data: { status: 'failed', error: errorMsg, completedAt: new Date() },
       }));
     }
-    return { queryId, status: 'failed', snapshotsCount: 0, extractionCost: 0, error: errorMsg };
+    return { queryId, status: 'failed', snapshotsCount: 0, extractionCost: null, error: errorMsg };
   }
 
   const config = currentTravelContext()!.config;
@@ -595,7 +589,7 @@ export async function runScrapeForQuery(
       where: { id: fetchRun.id },
       data: { status: 'failed', error: errorMsg, completedAt: new Date() },
     }));
-    return { queryId, status: 'failed', snapshotsCount: 0, extractionCost: 0, error: errorMsg };
+    return { queryId, status: 'failed', snapshotsCount: 0, extractionCost: null, error: errorMsg };
   }
 }
 

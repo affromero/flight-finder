@@ -1,7 +1,8 @@
-import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionResult } from './ai-registry';
+import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, resolveProviderCredentials, type ExtractionResult } from './ai-registry';
 import { prisma } from '@/lib/prisma';
 import { normalizeCabinClass } from '@/lib/cabin-class';
 import { matchingJsonEnd } from './extract-prices';
+import { recordExtraction } from './usage-log';
 
 export interface Airport {
   code: string; // IATA 3-letter code
@@ -273,14 +274,13 @@ export async function parseFlightQuery(
 
   const isCliProvider = provider in CLI_PROVIDERS;
   const isLocalProvider = LOCAL_PROVIDERS.has(provider);
+  const credentials = isCliProvider ? undefined : await resolveProviderCredentials(provider);
   const hasLocalEndpoint =
-    (provider === 'openai' && (config?.customBaseUrl || process.env.OPENAI_BASE_URL)) ||
+    (provider === 'openai' && (config?.customBaseUrl || typeof credentials?.baseUrl === 'string')) ||
     isLocalProvider;
-  // DB-stored key takes precedence over the env var so a GUI-entered key works
-  // without editing .env or restarting the stack (#149).
-  const apiKey = isCliProvider ? '' : resolveApiKey(provider, config);
+  const apiKey = isCliProvider ? '' : await resolveApiKey(provider, credentials);
   if (!apiKey && !isCliProvider && !hasLocalEndpoint) {
-    throw new Error(`Missing API key: ${providerConfig.envKey}`);
+    throw new Error(`Missing saved credential for ${providerConfig.displayName}`);
   }
 
   // Build prompt with conversation history. Cap to the most recent turns to
@@ -299,13 +299,14 @@ export async function parseFlightQuery(
       .join('\n') + '\nUser: ' + rawInput;
   }
 
-  const result = await providerConfig.extract(
+  const result = await recordExtraction('parse-query', provider, model, () => providerConfig.extract(
     apiKey,
     model,
     buildSystemPrompt(),
     fullPrompt,
     {
       baseUrl: config?.customBaseUrl ?? undefined,
+      credentials,
       reasoningEffort: config?.reasoningEffort as import('./cli-model-types').ReasoningSelection | undefined,
       // Read the admin configured timeout from the DB so slow CPU bound local
       // models can be granted more than the 90s default (issue #86). Falls
@@ -322,7 +323,7 @@ export async function parseFlightQuery(
       // default OpenAI model follows the JSON instruction reliably anyway.
       ...(isLocalProvider ? { responseFormat: 'json_object' as const } : {}),
     }
-  );
+  ));
 
   const extracted = extractJsonObject(result.content);
   if (!extracted.ok) {

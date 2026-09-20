@@ -117,7 +117,7 @@ try {
     '--mount', `type=bind,src=${expandedSchema},dst=/app/apps/web/prisma/schema.prisma,readonly`,
     '-e', `DATABASE_URL=${dockerConnection.href}`, '-e', 'REDIS_URL=redis://host.docker.internal:56389',
     '-e', 'SELF_HOSTED=true', '-e', 'CRON_ENABLED=false', '-e', 'INSTALL_CLI_PROVIDERS=false',
-    '-e', 'ADMIN_PASSWORD=local-migration-test', '-e', 'ADMIN_SESSION_SECRET=local-migration-test-session-secret',
+    '-e', 'ADMIN_SESSION_SECRET=local-migration-test-session-secret',
     '-e', 'CRON_SECRET=local-migration-test-cron-secret', imageId]);
   appStarted = true;
   const portMapping = (await command('docker', ['port', container, '3003/tcp'])).trim();

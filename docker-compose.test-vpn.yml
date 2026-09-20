@@ -4,7 +4,8 @@
 #    node scripts/vpn-bridge.mjs
 #
 # 2. Start the containers:
-#    ANTHROPIC_API_KEY=... docker compose -f docker-compose.test-vpn.yml up -d
+#    docker compose -f docker-compose.test-vpn.yml up -d
+# Configure the test provider and credential in browser setup before running a search.
 #
 # 3. Access: http://localhost:3005
 #
@@ -49,7 +50,6 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:testpass@db:5432/flight_finder
       REDIS_URL: redis://redis:6379
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
       EXPRESSVPN_API_URL: http://host.docker.internal:8000
       CRON_SECRET: test-cron-secret
       CHROME_PATH: /usr/bin/chromium-browser

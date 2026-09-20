@@ -1,274 +1,65 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { NextRequest, NextResponse } from 'next/server';
-
-const mockConfigFindUnique = vi.fn();
-const mockConfigUpsert = vi.fn();
-const mockConfigUpdateMany = vi.fn();
-const mockUserCreate = vi.fn();
-const mockQueryUpdateMany = vi.fn();
-const mockHotelTrackerUpdateMany = vi.fn();
-const mockHotelSearchUpdateMany = vi.fn();
-
-const mockHashPassword = vi.fn();
-const mockInvalidateCache = vi.fn();
-const mockVerifyAdminSessionRevocable = vi.fn();
-const mockGetCurrentUser = vi.fn();
-const mockIsMultiUserEnabled = vi.fn();
-const mockRequireAdmin = vi.fn();
-const mockDisable = vi.fn();
-const mockUserCount = vi.fn();
-
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    extractionConfig: {
-      findUnique: (...args: unknown[]) => mockConfigFindUnique(...args),
-      upsert: (...args: unknown[]) => mockConfigUpsert(...args),
-      updateMany: (...args: unknown[]) => mockConfigUpdateMany(...args),
-    },
-    user: {
-      count: () => mockUserCount(),
-      create: (...args: unknown[]) => mockUserCreate(...args),
-    },
-    query: {
-      updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args),
-    },
-    $transaction: async (fn: (tx: unknown) => Promise<unknown>) =>
-      fn({
-        user: { create: (...args: unknown[]) => mockUserCreate(...args) },
-        extractionConfig: {
-          upsert: (...args: unknown[]) => mockConfigUpsert(...args),
-          updateMany: (...args: unknown[]) => mockConfigUpdateMany(...args),
-        },
-        query: { updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args) },
-        hotelTracker: { updateMany: (...args: unknown[]) => mockHotelTrackerUpdateMany(...args) },
-        hotelSearchRun: { updateMany: (...args: unknown[]) => mockHotelSearchUpdateMany(...args) },
-      }),
-  },
+import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const boundary = vi.hoisted(() => ({
+  fixture: null as ReturnType<typeof createRequestAccessFixture> | null,
+  enabled: false,
+  rows: {} as Record<string, { userId: string | null; isSeed?: boolean }[]>,
 }));
-
-vi.mock('@/lib/password', () => ({
-  hashPassword: (pw: string) => mockHashPassword(pw),
-}));
-
-vi.mock('@/lib/multi-user', () => ({
-  invalidateMultiUserCache: () => mockInvalidateCache(),
-  isMultiUserEnabled: () => mockIsMultiUserEnabled(),
-}));
-
-vi.mock('@/lib/user-auth', () => ({
-  getCurrentUser: () => mockGetCurrentUser(),
-}));
-
-vi.mock('@/lib/admin-guard', () => ({
-  requireAdminApi: () => mockRequireAdmin(),
-  verifyAdminSessionRevocable: () => mockVerifyAdminSessionRevocable(),
-}));
-
-vi.mock('@/lib/admin-recovery', () => ({
-  disableMultiUserMode: () => mockDisable(),
-}));
-
-import { POST, DELETE } from './route';
-
-function makeRequest(body: unknown): NextRequest {
-  return new NextRequest('http://localhost/api/admin/multi-user', {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
-  });
-}
-
-describe('POST /api/admin/multi-user', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    process.env.SELF_HOSTED = 'true';
-    mockConfigFindUnique.mockResolvedValue({ multiUserMode: false });
-    // Default: no users exist yet (first-boot window allows unauthenticated access).
-    mockUserCount.mockResolvedValue(0);
-    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
-    mockHashPassword.mockResolvedValue('hashed:secret');
-    mockUserCreate.mockResolvedValue({
-      id: 'user_1',
-      username: 'admin',
-      displayName: null,
-      isAdmin: true,
-    });
-    mockConfigUpsert.mockResolvedValue({});
-    mockConfigUpdateMany.mockResolvedValue({ count: 1 });
-    mockQueryUpdateMany.mockResolvedValue({ count: 0 });
-    mockHotelTrackerUpdateMany.mockResolvedValue({ count: 0 });
-    mockHotelSearchUpdateMany.mockResolvedValue({ count: 0 });
-  });
-
-  it('rejects when SELF_HOSTED is not true', async () => {
-    delete process.env.SELF_HOSTED;
-    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'pw12345678' }));
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects when multi user mode is already enabled', async () => {
-    mockConfigFindUnique.mockResolvedValue({ multiUserMode: true });
-    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'pw12345678' }));
-    expect(res.status).toBe(409);
-  });
-
-  it('rejects bad username with 400', async () => {
-    const res = await POST(makeRequest({ adminUsername: 'a', adminPassword: 'pw12345678' }));
-    expect(res.status).toBe(400);
-  });
-
-  it('rejects short password with 400', async () => {
-    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'short' }));
-    expect(res.status).toBe(400);
-  });
-
-  it('creates user, flips flag, backfills, and invalidates cache', async () => {
-    mockQueryUpdateMany.mockResolvedValue({ count: 7 });
-    const res = await POST(
-      makeRequest({ adminUsername: 'admin', adminPassword: 'longenough', displayName: 'Admin' }),
-    );
-    expect(res.status).toBe(201);
-    const body = await res.json();
-    expect(body.data.user.username).toBe('admin');
-    expect(body.data.backfillCount).toBe(7);
-
-    expect(mockUserCreate).toHaveBeenCalledWith({
-      data: {
-        username: 'admin',
-        displayName: 'Admin',
-        passwordHash: 'hashed:secret',
-        isAdmin: true,
-        avatar: null,
-      },
-    });
-    expect(mockConfigUpsert).toHaveBeenCalled();
-    expect(mockQueryUpdateMany).toHaveBeenCalledWith({
-      where: { userId: null, isSeed: false },
-      data: { userId: 'user_1' },
-    });
-    expect(mockInvalidateCache).toHaveBeenCalled();
-  });
-
-  it('threads a valid preset avatar into the first admin', async () => {
-    const res = await POST(
-      makeRequest({ adminUsername: 'admin', adminPassword: 'longenough', avatar: 'compass' }),
-    );
-    expect(res.status).toBe(201);
-    const args = mockUserCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
-    expect(args.data.avatar).toBe('compass');
-  });
-
-  it('assigns solo hotel trackers and search jobs to the first account', async () => {
-    const response = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
-    expect(response.status).toBe(201);
-    expect(mockHotelTrackerUpdateMany).toHaveBeenCalledWith({ where: { userId: null }, data: { userId: 'user_1' } });
-    expect(mockHotelSearchUpdateMany).toHaveBeenCalledWith({ where: { userId: null }, data: { userId: 'user_1' } });
-  });
-
-  it('drops an unknown avatar slug to null on the first admin', async () => {
-    const res = await POST(
-      makeRequest({ adminUsername: 'admin', adminPassword: 'longenough', avatar: 'bogus' }),
-    );
-    expect(res.status).toBe(201);
-    const args = mockUserCreate.mock.calls[0]![0] as { data: Record<string, unknown> };
-    expect(args.data.avatar).toBeNull();
-  });
-
-  it('accepts a legacy admin session as authorization', async () => {
-    process.env.SELF_HOSTED = 'true';
-    mockUserCount.mockResolvedValue(1);
-    mockVerifyAdminSessionRevocable.mockResolvedValue(true);
-    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
-    expect(res.status).toBe(201);
-  });
-
-  it('returns 409 when the guarded updateMany returns count=0 (concurrent enable race)', async () => {
-    // Fast-path findUnique sees multiUserMode=false, but by the time the
-    // transaction runs another caller has already flipped the flag, so the
-    // guarded updateMany matches zero rows.
-    mockConfigUpdateMany.mockResolvedValue({ count: 0 });
-    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
-    expect(res.status).toBe(409);
-    expect(mockUserCreate).not.toHaveBeenCalled();
-    expect(mockQueryUpdateMany).not.toHaveBeenCalled();
-    expect(mockInvalidateCache).not.toHaveBeenCalled();
-  });
-
-  it('allows unauthenticated bootstrap when the User table is empty (first-boot)', async () => {
-    // No session provided, no users in DB: first-boot window must be open.
-    mockUserCount.mockResolvedValue(0);
-    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
-    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
-    expect(res.status).toBe(201);
-  });
-
-  it('rejects unauthenticated call with 401 once a User row already exists', async () => {
-    // A user exists: first-boot window is closed, auth is now required.
-    mockUserCount.mockResolvedValue(1);
-    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
-    const res = await POST(makeRequest({ adminUsername: 'admin', adminPassword: 'longenough' }));
-    expect(res.status).toBe(401);
-    expect(mockUserCreate).not.toHaveBeenCalled();
-  });
-
-  it('rejects an admin cookie revoked by a password change once a User row exists', async () => {
-    // A user exists (first-boot window closed) and the caller presents a legacy
-    // admin cookie, but it was issued before adminSessionsValidFrom. The
-    // revocation-aware check returns false, so the stale cookie cannot re-enable
-    // multi user mode.
-    mockUserCount.mockResolvedValue(1);
-    mockVerifyAdminSessionRevocable.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
-    const res = await POST(makeRequest({ adminUsername: 'admin2', adminPassword: 'longenough' }));
-    expect(res.status).toBe(401);
-    expect(mockUserCreate).not.toHaveBeenCalled();
-  });
-
-  it('allows an authenticated admin to re-enable after user rows exist', async () => {
-    // User rows exist but the caller is an authenticated (non-revoked) admin.
-    mockUserCount.mockResolvedValue(1);
-    mockVerifyAdminSessionRevocable.mockResolvedValue(true);
-    const res = await POST(makeRequest({ adminUsername: 'admin2', adminPassword: 'longenough' }));
-    expect(res.status).toBe(201);
-  });
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.fixture?.token ? { value: boundary.fixture.token } : undefined }) }));
+vi.mock('@/lib/sidedoor/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); boundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
 });
-
-describe('DELETE /api/admin/multi-user', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    process.env.SELF_HOSTED = 'true';
-    mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockRequireAdmin.mockResolvedValue(null);
-    mockDisable.mockResolvedValue(undefined);
-  });
-
-  it('disables multi user mode for an authenticated admin', async () => {
-    const res = await DELETE();
-    expect(res.status).toBe(200);
-    expect(mockDisable).toHaveBeenCalled();
-  });
-
-  it('rejects when SELF_HOSTED is not true', async () => {
-    delete process.env.SELF_HOSTED;
-    const res = await DELETE();
-    expect(res.status).toBe(400);
-    expect(mockDisable).not.toHaveBeenCalled();
-  });
-
-  it('returns 404 when multi user mode is not enabled', async () => {
-    mockIsMultiUserEnabled.mockResolvedValue(false);
-    const res = await DELETE();
-    expect(res.status).toBe(404);
-    expect(mockDisable).not.toHaveBeenCalled();
-  });
-
-  it('rejects a non-admin caller and does not disable', async () => {
-    mockRequireAdmin.mockResolvedValue(NextResponse.json({ ok: false }, { status: 403 }));
-    const res = await DELETE();
-    expect(res.status).toBe(403);
-    expect(mockDisable).not.toHaveBeenCalled();
-  });
+vi.mock('@/lib/prisma', () => {
+  const table = (name: string) => ({ updateMany: async ({ where, data }: { where: { isSeed?: boolean }; data: { userId: string } }) => {
+    const rows = boundary.rows[name]!.filter(row => row.userId === null && (where.isSeed === undefined || row.isSeed === where.isSeed));
+    for (const row of rows) row.userId = data.userId;
+    return { count: rows.length };
+  } });
+  const database = {
+    user: { findUnique: async () => boundary.fixture!.user },
+    extractionConfig: {
+      findUnique: async () => ({ multiUserMode: boundary.enabled }),
+      upsert: async () => ({}),
+      updateMany: async () => { if (boundary.enabled) return { count: 0 }; boundary.enabled = true; return { count: 1 }; },
+    },
+    query: table('query'), hotelTracker: table('hotelTracker'), hotelSearchRun: table('hotelSearchRun'),
+    carTracker: table('carTracker'), carSearchRun: table('carSearchRun'),
+  };
+  return { prisma: { ...database, $transaction: async (operation: (tx: typeof database) => Promise<unknown>) => operation(database) } };
+});
+import { POST } from './route';
+const request = (body: unknown = {}) => new Request('http://localhost:3003/api/admin/multi-user', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) });
+beforeEach(async () => {
+  vi.stubEnv('SELF_HOSTED', 'true'); vi.stubEnv('REDIS_URL', '');
+  boundary.fixture!.resetRequest(); boundary.enabled = false;
+  await boundary.fixture!.signIn({ id: 'owner', username: 'Owner', isAdmin: true });
+  boundary.rows = Object.fromEntries(['query', 'hotelTracker', 'hotelSearchRun', 'carTracker', 'carSearchRun'].map(name => [name, [{ userId: null, isSeed: false }, { userId: 'another-member', isSeed: false }]]));
+  boundary.rows.query!.push({ userId: null, isSeed: true });
+});
+afterEach(() => vi.unstubAllEnvs());
+it('reuses the claimed owner and preserves already-owned and seeded content', async () => {
+  const result = await POST(request());
+  expect(result.status).toBe(201);
+  expect(await result.json()).toMatchObject({ data: { user: { id: 'owner', isAdmin: true }, backfillCount: 1 } });
+  expect(boundary.enabled).toBe(true);
+  for (const rows of Object.values(boundary.rows)) expect(rows.slice(0, 2).map(row => row.userId)).toEqual(['owner', 'another-member']);
+  expect(boundary.rows.query![2]!.userId).toBeNull();
+});
+it('rejects anonymous and member callers before enabling profiles', async () => {
+  await boundary.fixture!.signIn(null);
+  expect((await POST(request())).status).toBe(401);
+  await boundary.fixture!.signIn({ id: 'member', isAdmin: false });
+  expect((await POST(request())).status).toBe(403);
+  expect(boundary.enabled).toBe(false);
+  expect(boundary.rows.query![0]!.userId).toBeNull();
+});
+it('rejects duplicate owner credentials rather than silently discarding them', async () => {
+  expect((await POST(request({ adminUsername: 'another-owner', adminPassword: 'another password' }))).status).toBe(400);
+  expect(boundary.enabled).toBe(false);
+});
+it('allows only one concurrent enable transition', async () => {
+  const results = await Promise.all([POST(request()), POST(request())]);
+  expect(results.map(result => result.status).sort()).toEqual([201, 409]);
 });

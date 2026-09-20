@@ -5,4 +5,4 @@
 // `@` -> apps/web/src alias inlines the same module at build time, and the dev
 // loader resolves this relative path to it — so the behavior is always the
 // real crypto, never a stub. Same shim role as ./prisma.ts and ./redis.ts.
-export { encryptSecret, decryptSecret } from '../../../../apps/web/src/lib/secret-crypto.js';
+export { encryptSecret, decryptSecret, deriveSecretEncryptionKey } from '../../../../apps/web/src/lib/secret-crypto.js';

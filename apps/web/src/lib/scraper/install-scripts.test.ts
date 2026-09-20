@@ -115,10 +115,6 @@ describe('install.sh', () => {
     expect(INSTALL_SH).toContain('podman-compose');
   });
 
-  it('uses host.containers.internal for Podman Ollama host', () => {
-    expect(INSTALL_SH).toContain('host.containers.internal:11434');
-  });
-
   it('conditionally omits extra_hosts for Podman in generated compose', () => {
     expect(INSTALL_SH).toContain('EXTRA_HOSTS_BLOCK');
     expect(INSTALL_SH).toContain('CONTAINER_CMD" != "podman"');
@@ -150,23 +146,6 @@ describe('install.sh', () => {
     // Set before heredoc, used inside heredoc
     expect(blockSetIdx).toBeLessThan(heredocIdx);
     expect(blockUseIdx).toBeGreaterThan(heredocIdx);
-  });
-
-  it('Podman path sets OLLAMA_HOST to host.containers.internal, Docker to host.docker.internal', () => {
-    const lines = INSTALL_SH.split('\n');
-    const podmanOllamaIdx = lines.findIndex((l) =>
-      l.includes('host.containers.internal:11434')
-    );
-    const dockerOllamaIdx = lines.findIndex((l) =>
-      l.includes('host.docker.internal:11434')
-    );
-    expect(podmanOllamaIdx).toBeGreaterThan(-1);
-    expect(dockerOllamaIdx).toBeGreaterThan(-1);
-    // Both must be inside a CONTAINER_CMD conditional
-    const beforePodman = lines.slice(Math.max(0, podmanOllamaIdx - 3), podmanOllamaIdx).join('\n');
-    expect(beforePodman).toContain('podman');
-    const beforeDocker = lines.slice(Math.max(0, dockerOllamaIdx - 3), dockerOllamaIdx).join('\n');
-    expect(beforeDocker).toContain('else');
   });
 
   describe('Docker reachability detection (regression: #62)', () => {

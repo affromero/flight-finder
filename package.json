@@ -14,7 +14,7 @@
     "cli": "node --import tsx --import ./packages/cli/register.mjs packages/cli/src/index.tsx --headless",
     "cli:dev": "npm run dev --workspace=@flight-finder/cli",
     "ci": "npm run lint && npm run typecheck && npm run test && npm run build && npm run build --workspace=@flight-finder/cli",
-    "db:push": "npx prisma db push --schema=apps/web/prisma/schema.prisma && node scripts/apply-travel-constraints.mjs",
+    "db:push": "npx prisma db push --accept-data-loss --schema=apps/web/prisma/schema.prisma && node scripts/apply-travel-constraints.mjs",
     "db:generate": "npx prisma generate --schema=apps/web/prisma/schema.prisma",
     "db:migrate": "npx prisma migrate deploy --schema=apps/web/prisma/schema.prisma"
   },

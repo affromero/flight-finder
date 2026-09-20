@@ -1,4 +1,6 @@
-import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, type ExtractionUsage } from './ai-registry';
+import { EXTRACTION_PROVIDERS, CLI_PROVIDERS, LOCAL_PROVIDERS, resolveApiKey, resolveProviderCredentials, type ExtractionUsage } from './ai-registry';
+import type { CredentialValues } from 'thesidedoor-core/ai';
+import { sumTokenUsage, usageFromGenerationError } from 'thesidedoor-core/ai/usage';
 import { MAX_PRICE_VALUE } from '@/lib/limits';
 import { prisma } from '@/lib/prisma';
 import { coerceLayovers, parseDurationToMinutes, type Layover } from './duration';
@@ -408,6 +410,7 @@ function normalizeEntry(entry: unknown, travelDateFallback: string, currency: st
  * DB on every attempt. Issue 65 audit finding A4.
  */
 export interface ExtractionConfigOverride {
+  credentials?: CredentialValues;
   reasoningEffort?: import('./cli-model-types').ReasoningSelection;
   provider: string;
   model: string;
@@ -432,7 +435,7 @@ export async function extractPrices(
 ): Promise<ExtractionResult> {
   if (!resultsFound) {
     console.log(`[extract] skipped — page did not load results (source=${source})`);
-    return { prices: [], usage: { inputTokens: 0, outputTokens: 0 }, failureReason: 'page_not_loaded' };
+    return { prices: [], usage: sumTokenUsage(), failureReason: 'page_not_loaded' };
   }
 
   // When the caller already resolved the config (eg. preview-runner hoists
@@ -464,16 +467,13 @@ export async function extractPrices(
 
   const isCliProvider = provider in CLI_PROVIDERS;
   const isLocalProvider = LOCAL_PROVIDERS.has(provider);
+  const credentials = isCliProvider ? undefined : configOverride?.credentials ?? (configOverride?.apiKey !== undefined ? undefined : await resolveProviderCredentials(provider));
   const hasLocalEndpoint =
-    (provider === 'openai' && (config?.customBaseUrl || process.env.OPENAI_BASE_URL)) ||
+    (provider === 'openai' && (config?.customBaseUrl || typeof credentials?.baseUrl === 'string')) ||
     isLocalProvider;
-  // Override path may carry a pre-resolved key (preview-runner decrypts once);
-  // otherwise (or when the override omits it) resolve from the DB-stored key,
-  // falling back to the env var (#149). dbConfig is null on the override path,
-  // so resolveApiKey there yields the env var.
-  const apiKey = isCliProvider ? '' : (configOverride?.apiKey || resolveApiKey(provider, dbConfig));
+  const apiKey = isCliProvider ? '' : configOverride?.apiKey ?? await resolveApiKey(provider, credentials);
   if (!apiKey && !isCliProvider && !hasLocalEndpoint) {
-    throw new Error(`Missing API key: ${providerConfig.envKey}`);
+    throw new Error(`Missing saved credential for ${providerConfig.displayName}`);
   }
 
   const safeHtml = sanitizeScrapedHtml(html);
@@ -499,6 +499,7 @@ ${UNTRUSTED_CLOSE}`;
   let result;
   try {
     result = await providerConfig.extract(apiKey, model, systemPrompt, userPrompt, {
+      credentials,
       baseUrl: config?.customBaseUrl ?? undefined,
       reasoningEffort: config?.reasoningEffort as import('./cli-model-types').ReasoningSelection | undefined,
       // Honour the admin configured timeout from the DB when set; otherwise
@@ -510,7 +511,7 @@ ${UNTRUSTED_CLOSE}`;
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error(`[extract] FAIL llm_error provider=${provider} model=${model} err=${msg}`);
-    return { prices: [], usage: { inputTokens: 0, outputTokens: 0 }, failureReason: 'llm_error' };
+    return { prices: [], usage: usageFromGenerationError(err), failureReason: 'llm_error' };
   }
 
   const parsed = extractJsonArray(result.content);

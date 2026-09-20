@@ -1,8 +1,7 @@
 import { prisma } from '@/lib/prisma';
-import { cached, redis } from '@/lib/redis';
+import { redis } from '@/lib/redis';
 
 const CACHE_KEY = 'ft:multi-user';
-const TTL_SECONDS = 60;
 
 /**
  * Self-hosted only feature. When SELF_HOSTED is unset (flight-finder.org or any
@@ -12,17 +11,10 @@ const TTL_SECONDS = 60;
  */
 export async function isMultiUserEnabled(): Promise<boolean> {
   if (process.env.SELF_HOSTED !== 'true') return false;
-  return cached(
-    CACHE_KEY,
-    async () => {
-      const cfg = await prisma.extractionConfig.findUnique({
-        where: { id: 'singleton' },
-        select: { multiUserMode: true },
-      });
-      return Boolean(cfg?.multiUserMode);
-    },
-    TTL_SECONDS,
-  );
+  const cfg = await prisma.extractionConfig.findUnique({
+    where: { id: 'singleton' }, select: { multiUserMode: true },
+  });
+  return Boolean(cfg?.multiUserMode);
 }
 
 export async function invalidateMultiUserCache(): Promise<void> {
@@ -30,6 +22,6 @@ export async function invalidateMultiUserCache(): Promise<void> {
   try {
     await redis.del(CACHE_KEY);
   } catch {
-    // Redis unavailable; next read falls through to DB anyway
+    // Current workers read authoritative mode directly.
   }
 }

@@ -70,16 +70,10 @@ services:
     environment:
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@db:5432/flight_finder
       REDIS_URL: redis://redis:6379
-      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY}
-      OPENAI_API_KEY: ${OPENAI_API_KEY}
-      GOOGLE_AI_API_KEY: ${GOOGLE_AI_API_KEY}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       ADMIN_SESSION_SECRET: ${ADMIN_SESSION_SECRET}
       CRON_SECRET: ${CRON_SECRET}
       # Private instances only. Empty on the public stack, where the gate is
       # inert and the site stays open to everyone.
-      FF_ACCESS_PASSWORD: ${FF_ACCESS_PASSWORD:-}
-      FF_MACHINE_TOKEN: ${FF_MACHINE_TOKEN:-}
       CHROME_PATH: /usr/bin/chromium-browser
       # Pin the analytics SQLite path to the mounted volume. The default derives
       # from process.cwd() (/app/apps/web/data), which is NOT the volume mount

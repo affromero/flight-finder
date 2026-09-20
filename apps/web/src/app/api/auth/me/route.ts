@@ -1,5 +1,5 @@
 import { apiSuccess, apiError } from '@/lib/api-response';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 
 export async function GET() {
@@ -7,7 +7,7 @@ export async function GET() {
     return apiError('Not found', 404);
   }
 
-  const user = await getCurrentUser();
+  const user = await getCurrentProfile();
   if (!user) return apiError('Unauthorized', 401);
 
   return apiSuccess({

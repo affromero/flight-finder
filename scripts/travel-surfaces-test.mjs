@@ -32,7 +32,7 @@ async function startServer(name, port, selfHosted) {
   const log = createWriteStream(resolve(output, `${name}-server.log`));
   const child = spawn(process.execPath, [resolve('node_modules/next/dist/bin/next'), 'start', '-p', String(port), '-H', '127.0.0.1'], {
     cwd: resolve('apps/web'),
-    env: { ...process.env, SELF_HOSTED: String(selfHosted), CRON_ENABLED: 'false', REDIS_URL: '', FF_ACCESS_PASSWORD: '', FF_MACHINE_TOKEN: '', ADMIN_SESSION_SECRET: 'travel-surface-test-only-session-secret', NEXT_TELEMETRY_DISABLED: '1' },
+    env: { ...process.env, SELF_HOSTED: String(selfHosted), CRON_ENABLED: 'false', REDIS_URL: '', ADMIN_SESSION_SECRET: 'travel-surface-test-only-session-secret', NEXT_TELEMETRY_DISABLED: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.pipe(log); child.stderr.pipe(log);
@@ -95,7 +95,7 @@ async function seedTravel(user, kind) {
 }
 
 try {
-  await db.query(`INSERT INTO "ExtractionConfig" (id,"adminPasswordHash",enabled,"updatedAt") VALUES ('singleton','self-hosted',false,now())`);
+  await db.query(`INSERT INTO "ExtractionConfig" (id,"setupComplete",enabled,"updatedAt") VALUES ('singleton',true,false,now())`);
   const publicUrl = await startServer('public', 3015, false);
   const privateUrl = await startServer('private', 3016, true);
   for (const locale of ['en', 'es', 'pt', 'de', 'fr']) {

@@ -6,7 +6,7 @@ import { ClientBeacon } from '@/components/analytics/ClientBeacon';
 import { HomeBrand } from '@/components/HomeBrand/HomeBrand';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { THEME_OPTIONS, getThemeMode, isThemeId, DEFAULT_THEME } from '@/lib/theme';
 import adminNamespaces from '../../messages/en/admin.json';
 
@@ -112,7 +112,7 @@ export default async function RootLayout({
   let perUserTheme = false;
   try {
     if (await isMultiUserEnabled()) {
-      const user = await getCurrentUser();
+      const user = await getCurrentProfile();
       if (user) {
         perUserTheme = true;
         if (isThemeId(user.theme)) theme = user.theme;

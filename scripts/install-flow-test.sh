@@ -482,12 +482,11 @@ test_env_merge_non_destructive() {
     fail "install.sh .env merge must check '^KEY=' before appending so it never clobbers"
   fi
 
-  # The detected provider key and OLLAMA_HOST are both merge candidates.
-  if grep -qF 'append_env_if_missing "$API_KEY_VAR"' "$installer" \
-     && grep -qF 'append_env_if_missing "OLLAMA_HOST"' "$installer"; then
-    pass "install.sh .env merge covers the provider key and OLLAMA_HOST"
+  # CLI subscription authentication remains an operational deployment setting.
+  if grep -qF 'append_env_if_missing "CLAUDE_CODE_OAUTH_TOKEN"' "$installer"; then
+    pass "install.sh can add CLI subscription authentication"
   else
-    fail "install.sh .env merge should cover API_KEY_VAR and OLLAMA_HOST"
+    fail "install.sh should preserve CLI subscription setup"
   fi
 
   # Clear messaging either way.

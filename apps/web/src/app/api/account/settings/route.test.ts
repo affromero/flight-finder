@@ -1,13 +1,21 @@
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+beforeEach(() => sessionBoundary.fixture!.resetRequest());
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockUpdate = vi.fn();
 const mockIsMultiUserEnabled = vi.fn();
-const mockGetCurrentUser = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
-    user: { update: (...args: unknown[]) => mockUpdate(...args) },
+    user: { findUnique: async () => sessionBoundary.fixture!.user, update: (...args: unknown[]) => mockUpdate(...args) },
   },
 }));
 
@@ -15,9 +23,6 @@ vi.mock('@/lib/multi-user', () => ({
   isMultiUserEnabled: () => mockIsMultiUserEnabled(),
 }));
 
-vi.mock('@/lib/user-auth', () => ({
-  getCurrentUser: () => mockGetCurrentUser(),
-}));
 
 import { GET, PATCH } from './route';
 
@@ -30,7 +35,7 @@ function makePatch(body: unknown): NextRequest {
 }
 
 describe('GET /api/account/settings', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockIsMultiUserEnabled.mockResolvedValue(true);
   });
@@ -42,13 +47,13 @@ describe('GET /api/account/settings', () => {
   });
 
   it('returns 401 when no session', async () => {
-    mockGetCurrentUser.mockResolvedValue(null);
+    await sessionBoundary.fixture!.signIn(null);
     const res = await GET();
     expect(res.status).toBe(401);
   });
 
   it('returns the user preferences', async () => {
-    mockGetCurrentUser.mockResolvedValue({
+    await sessionBoundary.fixture!.signIn({
       id: 'u1', username: 'alice', displayName: 'Alice', avatar: 'globe', theme: 'tron-dark',
       defaultCurrency: 'USD', defaultCountry: 'US',
       preferredAirlines: ['Delta'], preferredAggregators: ['google_flights', 'skyscanner'],
@@ -65,10 +70,10 @@ describe('GET /api/account/settings', () => {
 });
 
 describe('PATCH /api/account/settings', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockGetCurrentUser.mockResolvedValue({ id: 'u1' });
+    await sessionBoundary.fixture!.signIn({ id: 'u1' });
     mockUpdate.mockResolvedValue({ username: 'alice', defaultCurrency: 'EUR' });
   });
 

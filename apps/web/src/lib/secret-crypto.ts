@@ -35,6 +35,8 @@ function getKey(): Buffer {
   });
 }
 
+export { getKey as deriveSecretEncryptionKey };
+
 function getLegacyKey(): Buffer {
   const secret = process.env.ADMIN_SESSION_SECRET;
   if (!secret) throw new Error('ADMIN_SESSION_SECRET is required to encrypt stored secrets');

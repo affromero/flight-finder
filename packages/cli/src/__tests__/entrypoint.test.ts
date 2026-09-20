@@ -70,6 +70,21 @@ describe('flight CLI entrypoint alongside hotel and car commands', () => {
     expect(result.stderr).toContain('--new-password');
   });
 
+  it('validates local access commands before opening the database', async () => {
+    const result = await runCli(['access', 'recover']);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('access recover <principalId>');
+    expect(result.stdout).toBe('');
+  });
+
+  it('reports local access database failures without issuing a recovery code', async () => {
+    const result = await runCli(['access', 'list']);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Error:');
+    expect(result.stderr).not.toContain('Cannot find module');
+    expect(result.stdout).toBe('');
+  });
+
   it('reports a JSON database error from the flight handler', async () => {
     const result = await runCli(['--json']);
     expect(result.code).toBe(1);

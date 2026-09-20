@@ -1,6 +1,6 @@
 import { notFound, redirect } from 'next/navigation';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { HotelDetail } from '@/components/hotels/HotelDetail';
 import { TravelNav } from '@/components/hotels/TravelNav';
 import styles from '@/components/hotels/Hotels.module.css';
@@ -9,7 +9,7 @@ export default async function HotelPage({ params }: { params: Promise<{ id: stri
   if (process.env.SELF_HOSTED !== 'true') notFound();
   const { id } = await params;
   const multiUser = await isMultiUserEnabled();
-  const user = multiUser ? await getCurrentUser() : null;
+  const user = multiUser ? await getCurrentProfile() : null;
   if (multiUser && !user) redirect(`/login?next=${encodeURIComponent(`/hotels/${id}`)}`);
   return <main className={styles.root}><TravelNav active="hotels" /><HotelDetail id={id} canReassign={Boolean(user?.isAdmin)} /></main>;
 }

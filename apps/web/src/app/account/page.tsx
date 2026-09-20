@@ -6,7 +6,7 @@ import { redirect, notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { groupQueries, type GroupableQuery } from '@/lib/query-grouping';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
@@ -28,11 +28,11 @@ export default async function AccountPage() {
 
   const t = await getTranslations('Account');
 
-  const user = await getCurrentUser();
+  const user = await getCurrentProfile();
   if (!user) redirect('/login?next=/account');
 
   const queries = await prisma.query.findMany({
-    where: { userId: user.id, isSeed: false },
+    where: { ...(user.isAdmin ? { OR: [{ userId: user.id }, { userId: null }] } : { userId: user.id }), isSeed: false },
     orderBy: { createdAt: 'desc' },
     select: {
       id: true,

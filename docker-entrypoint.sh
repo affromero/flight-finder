@@ -41,19 +41,6 @@ if [ "$SELF_HOSTED" = "true" ] && [ -z "$CRON_SECRET" ]; then
   echo "[setup] Generated CRON_SECRET (set it in .env to persist across restarts)"
 fi
 
-if [ -z "$ADMIN_PASSWORD" ]; then
-  GENERATED_PW=$(generate_secret | head -c 16)
-  export ADMIN_PASSWORD="$GENERATED_PW"
-  echo ""
-  echo "  ┌──────────────────────────────────────────┐"
-  echo "  │  Admin password (auto-generated):        │"
-  echo "  │  $GENERATED_PW  │"
-  echo "  │                                          │"
-  echo "  │  Set ADMIN_PASSWORD in .env to persist.  │"
-  echo "  └──────────────────────────────────────────┘"
-  echo ""
-fi
-
 # --- Wait for database ---
 echo "[setup] Waiting for database..."
 RETRIES=30
@@ -86,7 +73,7 @@ echo "[setup] Database is ready"
 # so the entrypoint drives the CLI with explicit --schema/--url flags instead.
 echo "[setup] Applying database schema..."
 if node /app/prisma-cli/node_modules/prisma/build/index.js db push \
-     --schema=apps/web/prisma/schema.prisma --url="$DATABASE_URL"; then
+     --accept-data-loss --schema=apps/web/prisma/schema.prisma --url="$DATABASE_URL"; then
   echo "[setup] Schema ready"
 else
   echo "[setup] ERROR: database schema push failed" >&2
@@ -95,6 +82,16 @@ fi
 
 # Relational job invariants and partial indexes are not represented by Prisma.
 node /app/scripts/apply-travel-constraints.mjs
+
+if [ "${SIDEDOOR_PREPARE_ONLY:-false}" = "true" ]; then
+  node /app/packages/cli/dist/index.js access initialize
+  access_listing="$(node /app/packages/cli/dist/index.js access list)"
+  printf '%s\n' "$access_listing"
+  if ! printf '%s\n' "$access_listing" | grep -q '"role": "owner"'; then
+    node /app/packages/cli/dist/index.js access claim
+  fi
+  exit 0
+fi
 
 # --- CLI provider auth + install (Claude Code / Codex) ---
 # Gated on INSTALL_CLI_PROVIDERS (default true), independent of app mode: the hosted

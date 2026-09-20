@@ -43,7 +43,7 @@ export function ProfileMenu({ user }: ProfileMenuProps) {
   }, [open]);
 
   const logout = async (dest: string) => {
-    await fetch('/api/auth/logout', { method: 'POST' });
+    await fetch('/api/access/logout', { method: 'POST' });
     window.location.href = dest;
   };
 

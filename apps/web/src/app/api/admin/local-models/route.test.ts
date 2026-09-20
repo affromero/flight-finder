@@ -5,6 +5,7 @@ const mockCached = vi.fn();
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    user: { findUnique: async () => ({ id: 'owner', isAdmin: true }) },
     extractionConfig: { findFirst: (...args: unknown[]) => mockFindFirst(...args) },
   },
 }));
@@ -12,6 +13,10 @@ vi.mock('@/lib/prisma', () => ({
 vi.mock('@/lib/redis', () => ({
   redis: null,
   cached: (...args: unknown[]) => mockCached(...args),
+}));
+
+vi.mock('@/lib/sidedoor/provider-credentials', () => ({
+  resolveProviderCredentials: async () => ({}),
 }));
 
 const mockFetch = vi.fn();
@@ -26,7 +31,9 @@ function makeRequest(provider?: string): NextRequest {
   return new NextRequest(url);
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  sessionBoundary.fixture!.reset();
+  sessionBoundary.token = await sessionBoundary.fixture!.issue('owner', true);
   vi.clearAllMocks();
   mockCached.mockImplementation(async (_key: string, fn: () => Promise<unknown>) => fn());
   mockFindFirst.mockResolvedValue({ provider: 'ollama', customBaseUrl: null });
@@ -153,4 +160,12 @@ describe('GET /api/admin/local-models', () => {
     expect(body.data).toEqual(cachedModels);
     expect(mockFetch).not.toHaveBeenCalled();
   });
+});
+import type { createAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, token: '' }));
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.token ? { value: sessionBoundary.token } : undefined }) }));
+vi.mock('@/lib/sidedoor/service', async () => {
+  const { createAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
 });

@@ -1,15 +1,36 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { writeFileSync } from 'node:fs';
+import { writeFileSync, mkdtempSync, readFileSync, rmSync } from 'node:fs';
+import { join } from 'node:path';
+import { tmpdir } from 'node:os';
 import { NextRequest } from 'next/server';
 import type { ExtractionConfig, TravelJob } from '@/generated/prisma/client';
+import type { createAccessFixture } from '@/test/access-fixture';
+import type { createStateBoundary } from '@/test/state-fixture';
+const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null }));
+vi.mock('@/lib/sidedoor/store', async () => {
+  const { createStateBoundary } = await import('@/test/state-fixture');
+  persistence.state = createStateBoundary();
+  return { sharedStateStore: <State>(id: string, parse: (value: unknown) => State, initial: () => State) => id === 'access' ? boundary.fixture!.access.store : persistence.state!.store(id, parse, initial) };
+});
 
-const boundary = vi.hoisted(() => ({ config: {} as Record<string, unknown>, user: null as Record<string, unknown> | null, token: '', spawn: vi.fn(), upsert: vi.fn(), output: '{}' }));
-vi.mock('@/lib/prisma', () => ({ prisma: {
-  extractionConfig: { findFirst: async () => boundary.config, findUnique: async () => boundary.config, upsert: boundary.upsert },
-  user: { findUnique: async () => boundary.user }, apiUsageLog: { create: async () => ({}) },
-} }));
+const boundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, config: {} as Record<string, unknown>, user: null as Record<string, unknown> | null, token: '', spawn: vi.fn(), upsert: vi.fn(), output: '{}' }));
+vi.mock('@/lib/sidedoor/service', async () => {
+  const { createAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createAccessFixture();
+  boundary.fixture = fixture;
+  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access-store');
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, sharedAccessStore: new FlightFinderAccessStore(), SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('@/lib/prisma', () => {
+  const database = {
+    sidedoorState: { findUnique: async () => ({ state: await boundary.fixture!.access.store.read() }) },
+    extractionConfig: { findFirst: async () => boundary.config, findUnique: async () => boundary.config, findUniqueOrThrow: async () => boundary.config, upsert: boundary.upsert },
+    user: { findUnique: async () => boundary.user, findMany: async () => boundary.user ? [{ ...boundary.user, username: boundary.user.id, createdAt: new Date() }] : [] }, apiUsageLog: { create: async () => ({}) },
+  };
+  return { prisma: { ...database, $transaction: async (operation: (value: typeof database) => Promise<unknown>) => operation(database) } };
+});
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.token ? { value: boundary.token } : undefined }) }));
 vi.mock('node:child_process', () => ({ spawn: boundary.spawn, execSync: vi.fn() }));
 vi.mock('./navigate', async importOriginal => ({
@@ -17,12 +38,45 @@ vi.mock('./navigate', async importOriginal => ({
   navigateGoogleFlights: async () => ({ html: 'Delta $623', url: 'https://www.google.com/travel/flights', source: 'google_flights', resultsFound: true }),
 }));
 
-beforeEach(() => {
+let executableDirectory = '';
+function executionArgs(): string[] {
+  return JSON.parse(readFileSync(join(executableDirectory, 'args.json'), 'utf8')) as string[];
+}
+function answer(value: string) {
+  boundary.output = value;
+  writeFileSync(join(executableDirectory, 'answer.txt'), value);
+}
+
+beforeEach(async () => {
   vi.resetModules(); vi.clearAllMocks();
+  executableDirectory = mkdtempSync(join(tmpdir(), 'flight-cli-selection-'));
+  writeFileSync(join(executableDirectory, 'codex'), `#!${process.execPath}
+const fs = require('node:fs');
+const path = require('node:path');
+const args = process.argv.slice(2);
+fs.writeFileSync(path.join(__dirname, 'args.json'), JSON.stringify(args));
+process.stdin.resume();
+process.stdin.on('end', () => {
+  fs.writeFileSync(args[args.indexOf('-o') + 1], fs.readFileSync(path.join(__dirname, 'answer.txt')));
+  process.stdout.write(JSON.stringify({type:'turn.completed',usage:{input_tokens:4,output_tokens:2}})+'\\n');
+});
+`, { mode: 0o755 });
+  vi.stubEnv('PATH', executableDirectory);
+  answer('{}');
   vi.stubEnv('REDIS_URL', ''); vi.stubEnv('SELF_HOSTED', 'true');
-  boundary.config = { id: 'singleton', provider: 'codex', model: 'gpt-5.6-luna', reasoningEffort: 'default', multiUserMode: false, adminPasswordHash: 'configured' };
-  boundary.token = ''; boundary.user = null;
-  boundary.upsert.mockImplementation(async ({ update }) => ({ ...boundary.config, ...update }));
+  boundary.config = { id: 'singleton', provider: 'codex', model: 'gpt-5.6-luna', reasoningEffort: 'default', multiUserMode: false, setupComplete: true };
+  boundary.config.updatedAt = new Date(0);
+  boundary.config.providerRevision = 0;
+  await import('@/lib/sidedoor/service');
+  boundary.fixture!.reset();
+  boundary.token = await boundary.fixture!.issue('owner', true); boundary.user = { id: 'owner', isAdmin: true };
+  persistence.state!.reset();
+  await (await import('@/lib/sidedoor/provider-credentials')).initializeProviderCredentials();
+  const { providerVault } = await import('@/lib/sidedoor/provider-credentials');
+  const { prisma } = await import('@/lib/prisma');
+  await providerVault(prisma).vault.configure('openai', { apiKey: 'saved-openai-key' });
+  await boundary.fixture!.access.store.transact(state => { state.initializations.push('flight-finder-access-v2'); state.principals[0]!.sourceVersion = ''; });
+  boundary.upsert.mockImplementation(async ({ update }) => { boundary.config = { ...boundary.config, ...update, updatedAt: new Date(), providerRevision: Number(boundary.config.providerRevision) + 1 }; return boundary.config; });
   boundary.spawn.mockImplementation((_binary: string, args: string[]) => {
     const child = Object.assign(new EventEmitter(), { stdin: new PassThrough(), stdout: new PassThrough(), stderr: new PassThrough(), kill: vi.fn() });
     child.kill.mockImplementation(() => { queueMicrotask(() => child.emit('close', null)); return true; });
@@ -39,10 +93,13 @@ beforeEach(() => {
     return child;
   });
 });
-afterEach(() => vi.unstubAllEnvs());
+afterEach(() => {
+  vi.unstubAllEnvs();
+  rmSync(executableDirectory, { recursive: true, force: true });
+});
 
 function request(body: unknown) {
-  return new NextRequest('http://localhost/api/admin/config', { method: 'PATCH', body: JSON.stringify(body), headers: { 'content-type': 'application/json' } });
+  return new NextRequest('http://localhost:3003/api/admin/config', { method: 'PATCH', body: JSON.stringify(body), headers: { 'content-type': 'application/json', origin: 'http://localhost:3003', host: 'localhost:3003', cookie: `ft-session=${boundary.token}` } });
 }
 
 it('validates partial effort changes against the saved provider and model', async () => {
@@ -77,47 +134,47 @@ it('closes setup model discovery and tests after setup completes', async () => {
 });
 
 it('rejects anonymous and non-admin household members on model and update endpoints', async () => {
+  boundary.token = ''; boundary.user = null;
   boundary.config.multiUserMode = true;
   const route = await import('../../app/api/admin/cli-models/route');
   const updates = await import('../../app/api/admin/cli-models/update/route');
   const get = new Request('http://localhost/api/admin/cli-models?provider=codex');
   expect((await route.GET(get)).status).toBe(401);
-  const { createUserSessionToken } = await import('../user-auth');
-  boundary.token = createUserSessionToken('member'); boundary.user = { id: 'member', isAdmin: false };
+  boundary.token = await boundary.fixture!.issue('member'); boundary.user = { id: 'member', isAdmin: false };
   expect((await route.GET(get)).status).toBe(403);
   expect((await route.POST(new Request(get.url, { method: 'POST', body: '{}' }))).status).toBe(403);
   expect((await updates.GET(get)).status).toBe(403);
   expect((await updates.POST(new Request(get.url, { method: 'POST', body: '{"provider":"codex"}' }))).status).toBe(403);
   boundary.user.isAdmin = true;
+  await boundary.fixture!.access.store.transact(state => { state.principals.find(principal => principal.id === 'member')!.role = 'owner'; });
   expect((await route.GET(get)).status).toBe(200);
 });
 
 it('passes saved model-default thinking through flight parsing into the real CLI adapter', async () => {
-  boundary.output = JSON.stringify({ confidence: 'low', parsed: null, ambiguities: [] });
+  answer(JSON.stringify({ confidence: 'low', parsed: null, ambiguities: [] }));
   const { parseFlightQuery } = await import('./parse-query');
   expect((await parseFlightQuery('Where should I fly?')).response.confidence).toBe('low');
-  const invocation = boundary.spawn.mock.calls.find(([, args]) => args[0] === 'exec');
-  expect(invocation?.[1]).toEqual(expect.arrayContaining(['--model', 'gpt-5.6-luna', '-c', 'model_reasoning_effort="medium"']));
+  expect(executionArgs()).toEqual(expect.arrayContaining(['--model', 'gpt-5.6-luna', '-c', 'model_reasoning_effort="medium"']));
 });
 
 it.each(['hotel_extract', 'car_extract'])('passes saved effort to shared %s inference', async operation => {
-  boundary.config.reasoningEffort = 'low'; boundary.output = '{"result":[{"ready":true}]}';
+  boundary.config.reasoningEffort = 'low'; answer('{"result":[{"ready":true}]}');
   const { travelJson } = await import('../travel/ai-json');
   expect(await travelJson('Return JSON', 'test', operation)).toEqual({ ready: true });
-  expect(boundary.spawn.mock.calls.find(([, args]) => args[0] === 'exec')?.[1]).toEqual(expect.arrayContaining(['model_reasoning_effort="low"']));
+  expect(executionArgs()).toEqual(expect.arrayContaining(['model_reasoning_effort="low"']));
 });
 
 it.each([false, true])('passes thinking through price extraction with override=%s', async override => {
-  boundary.output = JSON.stringify([{ travelDate: '2026-11-09', price: 623, currency: 'USD', airline: 'Delta', bookingUrl: 'https://delta.com', stops: 0, duration: '5h 30m' }]);
+  answer(JSON.stringify([{ travelDate: '2026-11-09', price: 623, currency: 'USD', airline: 'Delta', bookingUrl: 'https://delta.com', stops: 0, duration: '5h 30m' }]));
   const { extractPrices } = await import('./extract-prices');
   const config = override ? { provider: 'codex', model: 'gpt-5.6-luna', reasoningEffort: 'low' as const, customBaseUrl: null, apiKey: '' } : undefined;
   const result = await extractPrices('Delta $623', 'https://www.google.com/travel/flights', '2026-11-09', undefined, undefined, true, 'google_flights', 'USD', config);
   expect(result.prices[0]).toMatchObject({ price: 623, airline: 'Delta' });
-  expect(boundary.spawn.mock.calls.find(([, args]) => args[0] === 'exec')?.[1]).toEqual(expect.arrayContaining([`model_reasoning_effort="${override ? 'low' : 'medium'}"`]));
+  expect(executionArgs()).toEqual(expect.arrayContaining([`model_reasoning_effort="${override ? 'low' : 'medium'}"`]));
 });
 
 it('keeps the admitted preview thinking selection through navigation and extraction', async () => {
-  boundary.output = JSON.stringify([{ travelDate: '2026-11-09', price: 623, currency: 'USD', airline: 'Delta', bookingUrl: 'https://delta.com', stops: 0, duration: '5h 30m' }]);
+  answer(JSON.stringify([{ travelDate: '2026-11-09', price: 623, currency: 'USD', airline: 'Delta', bookingUrl: 'https://delta.com', stops: 0, duration: '5h 30m' }]));
   const { runPreview } = await import('../preview-runner');
   const { withTravelContext } = await import('../travel/context');
   const { TravelVpnSession } = await import('../travel/vpn');
@@ -129,5 +186,5 @@ it('keeps the admitted preview thinking selection through navigation and extract
     maxPrice: null, maxStops: null, maxDurationHours: null, preferredAirlines: [], timePreference: 'any',
   }, { concurrency: 1 }));
   expect(result.routes[0]?.flights[0]).toMatchObject({ price: 623, airline: 'Delta' });
-  expect(boundary.spawn.mock.calls.find(([, args]) => args[0] === 'exec')?.[1]).toEqual(expect.arrayContaining(['model_reasoning_effort="medium"']));
+  expect(executionArgs()).toEqual(expect.arrayContaining(['model_reasoning_effort="medium"']));
 });

@@ -144,6 +144,7 @@ fn install_stack() -> Result<String, String> {
 #[tauri::command]
 fn start_stack() -> Result<String, String> {
     let cmd = container_cmd().ok_or("Docker or Podman is required.")?;
+    prepare_access(&cmd)?;
     let out = compose(&cmd, &["up", "-d"]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok("started".into())
@@ -173,12 +174,34 @@ fn restart_stack() -> Result<String, String> {
     restart_with(&cmd)
 }
 
-/// Recreate the stack with a resolved container command. Split out from the
-/// tauri command so it can be tested with a fake container binary.
+/// Prepare access using the same compose environment as the serving container.
+fn prepare_access(cmd: &str) -> Result<(), String> {
+    for args in [
+        vec!["stop", "web"],
+        vec!["up", "-d", "--no-recreate", "db", "redis"],
+        vec![
+            "run",
+            "--rm",
+            "--no-deps",
+            "-e",
+            "SIDEDOOR_PREPARE_ONLY=true",
+            "web",
+        ],
+    ] {
+        let out = compose(cmd, &args).map_err(|e| e.to_string())?;
+        if !out.status.success() {
+            return Err(String::from_utf8_lossy(&out.stderr).into_owned());
+        }
+    }
+    Ok(())
+}
+
+/// Recreate the stack with a resolved container command, including preparation.
 fn restart_with(cmd: &str) -> Result<String, String> {
     // `down` may exit non-zero if nothing is running; that is fine, only the
     // bring-up result decides success.
     let _ = compose(cmd, &["down"]).map_err(|e| e.to_string())?;
+    prepare_access(cmd)?;
     let out = compose(cmd, &["up", "-d", "--force-recreate"]).map_err(|e| e.to_string())?;
     if out.status.success() {
         Ok("restarted".into())
@@ -241,8 +264,12 @@ fn lan_url(port: u16) -> Option<String> {
 /// file (not a pipe) so cloudflared never blocks on a full stderr buffer.
 #[tauri::command]
 fn start_tunnel(app: tauri::AppHandle, port: u16) -> Result<String, String> {
-    let cloudflared = which("cloudflared")
-        .ok_or_else(|| format!("cloudflared isn't installed -- {}, then try again.", install_hint("cloudflared")))?;
+    let cloudflared = which("cloudflared").ok_or_else(|| {
+        format!(
+            "cloudflared isn't installed -- {}, then try again.",
+            install_hint("cloudflared")
+        )
+    })?;
 
     let dir = app.path().app_config_dir().map_err(|e| e.to_string())?;
     fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
@@ -377,8 +404,8 @@ mod tests {
     use super::*;
     use std::os::unix::fs::PermissionsExt;
 
-    /// restart_with must recreate the stack: `compose down` first, then
-    /// `compose up -d --force-recreate` (a plain `up -d` would not reload an
+    /// restart_with must prepare access before `compose up -d --force-recreate`
+    /// (a plain `up -d` would not reload an
     /// edited env_file). Drive it with a fake container binary that records its
     /// args, and point FLIGHT_FINDER_DIR at a temp dir so compose() has a real
     /// working directory. #151.
@@ -391,7 +418,11 @@ mod tests {
         let log = tmp.join("calls.log");
         let _ = std::fs::remove_file(&log);
         let shim = tmp.join("fake-container.sh");
-        std::fs::write(&shim, format!("#!/bin/sh\necho \"$@\" >> \"{}\"\n", log.display())).unwrap();
+        std::fs::write(
+            &shim,
+            format!("#!/bin/sh\necho \"$@\" >> \"{}\"\n", log.display()),
+        )
+        .unwrap();
         std::fs::set_permissions(&shim, std::fs::Permissions::from_mode(0o755)).unwrap();
 
         let res = restart_with(shim.to_str().unwrap());
@@ -399,7 +430,32 @@ mod tests {
 
         let calls = std::fs::read_to_string(&log).unwrap();
         let lines: Vec<&str> = calls.lines().collect();
-        assert_eq!(lines, vec!["compose down", "compose up -d --force-recreate"]);
+        assert_eq!(
+            lines,
+            vec![
+                "compose down",
+                "compose stop web",
+                "compose up -d --no-recreate db redis",
+                "compose run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web",
+                "compose up -d --force-recreate"
+            ]
+        );
+
+        std::fs::write(&log, "").unwrap();
+        std::fs::write(&shim, format!("#!/bin/sh\necho \"$@\" >> \"{}\"\ncase \"$*\" in *SIDEDOOR_PREPARE_ONLY*) echo 'Preparation failed' >&2; exit 1;; esac\n", log.display())).unwrap();
+        assert!(restart_with(shim.to_str().unwrap())
+            .unwrap_err()
+            .contains("Preparation failed"));
+        let failed_calls = std::fs::read_to_string(&log).unwrap();
+        assert!(!failed_calls.contains("--force-recreate"));
+
+        std::fs::write(&log, "").unwrap();
+        std::fs::write(&shim, format!("#!/bin/sh\necho \"$@\" >> \"{}\"\ncase \"$*\" in *'stop web'*) echo 'Stop failed' >&2; exit 1;; esac\n", log.display())).unwrap();
+        assert!(prepare_access(shim.to_str().unwrap())
+            .unwrap_err()
+            .contains("Stop failed"));
+        let failed_calls = std::fs::read_to_string(&log).unwrap();
+        assert!(!failed_calls.contains("SIDEDOOR_PREPARE_ONLY"));
 
         std::env::remove_var("FLIGHT_FINDER_DIR");
         let _ = std::fs::remove_dir_all(&tmp);

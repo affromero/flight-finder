@@ -1,22 +1,23 @@
-import type { MetadataRoute } from 'next';
-import { gateEnabled } from '@/lib/access/gate';
+import type { MetadataRoute } from "next";
+import { sharedAccessStore } from "@/lib/sidedoor/service";
 
-export default function robots(): MetadataRoute.Robots {
+export default async function robots(): Promise<MetadataRoute.Robots> {
   // A gated instance is private: say so plainly rather than advertising routes
   // no crawler can reach anyway, and do not point at the public sitemap, which
   // belongs to a different deployment.
-  if (gateEnabled()) {
-    return { rules: [{ userAgent: '*', disallow: ['/'] }] };
+  const policy = await sharedAccessStore.admissionPolicy().catch(() => null);
+  if (!policy || policy.passwordRequired || policy.mode === "individual") {
+    return { rules: [{ userAgent: "*", disallow: ["/"] }] };
   }
 
   return {
     rules: [
       {
-        userAgent: '*',
-        allow: ['/', '/explore', '/q/'],
-        disallow: ['/admin/', '/api/'],
+        userAgent: "*",
+        allow: ["/", "/explore", "/q/"],
+        disallow: ["/admin/", "/api/"],
       },
     ],
-    sitemap: 'https://flight-finder.org/sitemap.xml',
+    sitemap: "https://flight-finder.org/sitemap.xml",
   };
 }

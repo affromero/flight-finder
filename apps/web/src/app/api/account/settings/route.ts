@@ -2,7 +2,7 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { isPresetSlug } from '@/lib/avatars';
 import { isThemeId } from '@/lib/theme';
@@ -12,7 +12,7 @@ import { hotelMapActorScope, validateHotelMapPreferences } from '@/lib/hotels/ma
 
 async function requireUser() {
   if (!(await isMultiUserEnabled())) return { ok: false as const, status: 404 };
-  const user = await getCurrentUser();
+  const user = await getCurrentProfile();
   if (!user) return { ok: false as const, status: 401 };
   return { ok: true as const, user };
 }

@@ -1,78 +1,36 @@
-import { NextRequest } from 'next/server';
-import { apiSuccess, apiError } from '@/lib/api-response';
+import { apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
-import { verifyHashedPassword } from '@/lib/password';
-import { setSessionCookie } from '@/lib/admin-auth';
-import { createUserSessionToken } from '@/lib/user-auth';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getClientIp } from '@/lib/trusted-ip';
-import {
-  incrementAuthFailure,
-  getAuthFailureCount,
-  getRetryAfterSeconds,
-  clearAuthFailures,
-} from '@/lib/rate-limit';
+import { accessRouteResponse } from '@/lib/sidedoor/access-http';
+import { currentAccessSession } from '@/lib/sidedoor/session';
+import { sharedAccess } from '@/lib/sidedoor/service';
+import { readAccessJson } from 'thesidedoor-core/access/http';
 
-const MAX_FAILURES = 5;
-
-export async function POST(request: NextRequest) {
-  if (!(await isMultiUserEnabled())) {
-    return apiError('Not found', 404);
-  }
-
-  const body = await request.json().catch(() => null);
-  const username = typeof body?.username === 'string' ? body.username.trim() : '';
-  const password = typeof body?.password === 'string' ? body.password : '';
-
-  // Password is optional: passwordless members (passwordHash null) tap to sign in.
-  if (!username) {
+export async function POST(request: Request) {
+  const origin = await accessRouteResponse(request, 'check-origin', {});
+  if (!origin.ok) return origin;
+  if (!(await isMultiUserEnabled())) return apiError('Not found', 404);
+  const body = await readAccessJson(request).catch(() => null);
+  if (!body || typeof body !== 'object' || !('username' in body) || typeof body.username !== 'string')
     return apiError('Missing username', 400);
-  }
-
-  const ip = getClientIp(request);
-  const rateKey = `${ip}:${username}`;
-
-  const failures = await getAuthFailureCount(rateKey);
-  if (failures >= MAX_FAILURES) {
-    const retryAfter = await getRetryAfterSeconds(rateKey);
-    return new Response(
-      JSON.stringify({ ok: false, error: 'Too many failed attempts; try again later' }),
-      {
-        status: 429,
-        headers: {
-          'Content-Type': 'application/json',
-          'Retry-After': String(retryAfter || 60),
-        },
-      },
-    );
-  }
-
+  const username = body.username.trim();
+  if (!username) return apiError('Missing username', 400);
+  const password = 'password' in body && typeof body.password === 'string' ? body.password : '';
   const user = await prisma.user.findUnique({ where: { username } });
-  if (!user) {
-    await incrementAuthFailure(rateKey);
-    return apiError('Invalid username or password', 401);
+  if (!user) return accessRouteResponse(request, 'login', { name: username, password });
+  const state = await sharedAccess.store.read();
+  const principal = state.principals.find(candidate => candidate.id === user.id);
+  if (!principal) return apiError('Unauthorized', 401);
+  const profile = { id: user.id, username: user.username, displayName: user.displayName, isAdmin: false };
+  if (principal.passwordHash !== null || state.passkeys.some(passkey => passkey.principalId === principal.id) || password) {
+    return accessRouteResponse(request, 'login', { name: username, password }, payload => {
+      const principal = payload && typeof payload === 'object' && 'principal' in payload ? payload.principal : null;
+      const owner = principal && typeof principal === 'object' && 'role' in principal && principal.role === 'owner';
+      return { user: { ...profile, isAdmin: Boolean(owner) } };
+    });
   }
-
-  // Passwordless members (passwordHash null) sign in directly; everyone with a
-  // password must present a valid one.
-  if (user.passwordHash !== null) {
-    const ok = await verifyHashedPassword(password, user.passwordHash);
-    if (!ok) {
-      await incrementAuthFailure(rateKey);
-      return apiError('Invalid username or password', 401);
-    }
+  if (await currentAccessSession()) {
+    return accessRouteResponse(request, 'select-profile', { id: user.id }, () => ({ user: profile }));
   }
-
-  await clearAuthFailures(rateKey);
-  const token = createUserSessionToken(user.id);
-  await setSessionCookie(token);
-
-  return apiSuccess({
-    user: {
-      id: user.id,
-      username: user.username,
-      displayName: user.displayName,
-      isAdmin: user.isAdmin,
-    },
-  });
+  return accessRouteResponse(request, 'open-profile', { id: user.id }, () => ({ user: profile }));
 }

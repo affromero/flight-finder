@@ -2,6 +2,9 @@
 
 setup: ## First-time setup: copy env and start all services
 	@test -f .env || cp .env.example .env
+	docker compose stop web
+	docker compose up -d --no-recreate db redis
+	docker compose run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
 	docker compose up -d
 	@echo "Open http://localhost:3003 to complete setup"
 
@@ -10,6 +13,7 @@ dev: ## Start DB + Redis, run Next.js in dev mode
 	npm install
 	npm run db:push
 	npm run db:generate
+	npm run cli -- access initialize
 	npm run dev
 
 build: ## Build production image

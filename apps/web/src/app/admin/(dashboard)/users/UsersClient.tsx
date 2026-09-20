@@ -19,14 +19,16 @@ interface UserRow {
 
 interface Props {
   initialUsers: UserRow[];
+  individual: boolean;
 }
 
 // "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const BACKFILL_BANNER_KEY = 'ft-backfill-banner-dismissed';
 const BACKFILL_COUNT_KEY = 'ft-backfill-count';
 
-export function UsersClient({ initialUsers }: Props) {
+export function UsersClient({ initialUsers, individual }: Props) {
   const t = useTranslations('AdminUsers');
+  const security = useTranslations('SharedSecurity');
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
   const [banner, setBanner] = useState<number | null>(null);
 
@@ -140,11 +142,12 @@ export function UsersClient({ initialUsers }: Props) {
         </div>
       )}
 
-      <AddUserForm onCreated={refresh} />
+      <p className={styles.rowMeta}>{security('verify')} <a href="/access/security">{security('title')}</a></p>
+      <AddUserForm onCreated={refresh} individual={individual} />
 
-      <button type="button" className={styles.action} onClick={handleQuickAddGuest}>
+      {!individual && <button type="button" className={styles.action} onClick={handleQuickAddGuest}>
         {t('addGuest')}
-      </button>
+      </button>}
 
       <div className={styles.list}>
         {users.length === 0 ? (
@@ -193,7 +196,7 @@ export function UsersClient({ initialUsers }: Props) {
   );
 }
 
-function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
+function AddUserForm({ onCreated, individual }: { onCreated: () => Promise<void>; individual: boolean }) {
   const t = useTranslations('AdminUsers');
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
@@ -258,12 +261,12 @@ function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
         <input
           className={styles.input}
           type="password"
-          placeholder={isAdmin ? t('addUser.passwordAdmin') : t('addUser.passwordOptional')}
+          placeholder={isAdmin || individual ? t('addUser.passwordAdmin') : t('addUser.passwordOptional')}
           value={password}
           onChange={(e) => setPassword(e.target.value)}
           autoComplete="new-password"
-          minLength={isAdmin ? 8 : undefined}
-          required={isAdmin}
+          minLength={12}
+          required={isAdmin || individual}
         />
         <label className={styles.checkboxLabel}>
           <input
