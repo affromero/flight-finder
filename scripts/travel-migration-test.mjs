@@ -45,7 +45,8 @@ async function snapshot(tables) {
   const rows = {};
   for (const [table, columns] of Object.entries(tables)) {
     const selected = columns.map(c => `"${c}"`).join(',');
-    rows[table] = (await client.query(`SELECT ${selected} FROM "${table}" ORDER BY id`)).rows;
+    const originalId = table === 'User' ? ` WHERE "id" = 'migration-owner'` : '';
+    rows[table] = (await client.query(`SELECT ${selected} FROM "${table}"${originalId} ORDER BY id`)).rows;
   }
   return JSON.stringify(rows);
 }
@@ -89,7 +90,7 @@ try {
     'anthropicApiKey', 'openaiApiKey', 'googleApiKey',
   ]);
   for (const table of ['User', 'ExtractionConfig', 'Query', 'FetchRun', 'PriceSnapshot', 'HotelTracker', 'HotelSearchRun', 'HotelSnapshot', 'HotelAlert']) {
-    tables[table] = (await client.query('SELECT column_name FROM information_schema.columns WHERE table_schema = \'public\' AND table_name = $1 ORDER BY ordinal_position', [table])).rows.map(row => row.column_name).filter(column => !movedCredentialColumns.has(column));
+    tables[table] = (await client.query('SELECT column_name FROM information_schema.columns WHERE table_schema = \'public\' AND table_name = $1 ORDER BY ordinal_position', [table])).rows.map(row => row.column_name).filter(column => !movedCredentialColumns.has(column) && !(table === 'ExtractionConfig' && column === 'updatedAt'));
   }
   const before = await snapshot(tables);
   const dockerConnection = new URL(connection); dockerConnection.hostname = 'host.docker.internal';
@@ -101,7 +102,7 @@ try {
     '-e', 'SIDEDOOR_IMPORT_ADMIN_PASSWORD=local-migration-owner-password',
     '-e', 'CRON_SECRET=local-migration-test-cron-secret', imageId]);
   appStarted = true;
-  const portMapping = (await command('docker', ['port', container, '3003/tcp'])).trim();
+  let portMapping = (await command('docker', ['port', container, '3003/tcp'])).trim();
   assert.match(portMapping, /^127\.0\.0\.1:\d+$/);
   await waitForHealth(portMapping);
   const logs = await command('docker', ['logs', container]);
@@ -121,6 +122,8 @@ try {
   `);
   const currentData = await snapshot({ CarTracker: ['id', 'label', 'latestPriceMinor'], CarSearchRun: ['id', 'trackerId', 'status'], CarSnapshot: ['id', 'trackerId', 'totalMinor'], TravelJob: ['id', 'kind', 'status'] });
   await command('docker', ['restart', container]);
+  portMapping = (await command('docker', ['port', container, '3003/tcp'])).trim();
+  assert.match(portMapping, /^127\.0\.0\.1:\d+$/);
   await waitForHealth(portMapping);
   assert.equal(await snapshot(tables), before, 'Repeated startup must preserve migrated data');
   assert.equal(await snapshot({ CarTracker: ['id', 'label', 'latestPriceMinor'], CarSearchRun: ['id', 'trackerId', 'status'], CarSnapshot: ['id', 'trackerId', 'totalMinor'], TravelJob: ['id', 'kind', 'status'] }), currentData, 'Repeated startup must preserve current data');

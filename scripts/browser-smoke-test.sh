@@ -137,22 +137,17 @@ try {
     await page.close();
   }
 
-  // ── Test 3: Admin login page or redirect ───────────────────────
+  // ── Test 3: Shared account security surface ────────────────────
   {
     const page = await context.newPage();
-    const response = await page.goto(BASE + '/admin/login', { waitUntil: 'networkidle', timeout: 30000 });
-
-    const url = page.url();
-    const passwordInput = page.locator('input[type="password"]');
-    if (await passwordInput.isVisible({ timeout: 5000 }).catch(() => false)) {
-      ok('Admin login page has password input');
-    } else if (url.includes('/admin') && response && response.ok()) {
-      // Self-hosted mode may skip login and redirect to dashboard
-      ok('Admin page loaded (self-hosted mode, login skipped)');
-    } else if (response && (response.status() === 307 || response.status() === 302)) {
-      ok('Admin login redirects (expected in self-hosted mode)');
+    const response = await page.goto(BASE + '/access/security', { waitUntil: 'networkidle', timeout: 30000 });
+    const heading = page.getByRole('heading', { name: 'Account security' });
+    const passkeys = page.getByText('Passkeys', { exact: true });
+    if (response?.ok() && await heading.isVisible({ timeout: 5000 }).catch(() => false) &&
+        await passkeys.isVisible({ timeout: 5000 }).catch(() => false)) {
+      ok('Account security page exposes passkey management');
     } else {
-      bad('Admin login page', 'unexpected state: url=' + url + ' status=' + (response?.status() ?? 'null'));
+      bad('Account security page', 'missing account security or passkey controls');
     }
 
     await page.close();
