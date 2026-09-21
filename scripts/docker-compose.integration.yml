@@ -38,3 +38,4 @@ services:
       CHROME_PATH: /usr/bin/chromium-browser
       NODE_ENV: production
       SELF_HOSTED: "true"
+      APP_URL: http://localhost:${HOST_PORT:-3399}

@@ -89,6 +89,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
   });
   it('does not let administrators alter another account or inspect its revision', async () => {
     await prisma.user.update({ where: { id: owner }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(owner);
     expect((await setPreferences(preferenceRequest(['autoeurope'], 0), context(other))).status).toBe(404);
     expect(await prisma.user.findUnique({ where: { id: other } })).toMatchObject({ preferredCarProviders: [], carPreferencesRevision: 0 });
   });
@@ -97,6 +98,8 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     expect((await (await preferences()).json()).data.revision).toBe(0);
   });
   it('keeps single-user defaults read-only and public preferences unavailable', async () => {
+    await prisma.user.update({ where: { id: owner }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(owner);
     await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { multiUserMode: false } });
     await invalidateMultiUserCache();
     try {
@@ -114,17 +117,20 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     return createCarTracker({ searchId: run.id, offerId: 'verified-quote' }, { userId: owner, isAdmin: false });
   }
 
-  it('returns distinct authenticated account scopes and current administrator authority without credentials', async () => {
+  it('returns distinct authenticated account scopes and current administrator authority', async () => {
     const first = await session();
     expect(first.headers.get('cache-control')).toBe('private, no-store');
     expect(await first.json()).toEqual({ ok: true, data: { scope: `user:${owner}`, isAdmin: false } });
     boundary.token = await createDatabaseSession(other);
     await prisma.user.update({ where: { id: other }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(other);
     expect(await (await session()).json()).toEqual({ ok: true, data: { scope: `user:${other}`, isAdmin: true } });
   });
   it('reports single-user scope only when self-hosted account mode is explicitly disabled', async () => {
+    await prisma.user.update({ where: { id: owner }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(owner);
     await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { multiUserMode: false } });
-    await invalidateMultiUserCache(); boundary.token = '';
+    await invalidateMultiUserCache();
     try { expect(await (await session()).json()).toEqual({ ok: true, data: { scope: 'single', isAdmin: true } }); }
     finally {
       await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { multiUserMode: true } });
@@ -165,6 +171,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     expect(await prisma.travelJob.count({ where: { userId: owner } })).toBe(1);
     boundary.token = await createDatabaseSession(other);
     await prisma.user.update({ where: { id: other }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(other);
     expect((await protect(request(body, 'POST'), context(run.id))).status).toBe(404);
   });
   it('requires refresh identity and revision and correlates a recovered cancelled check', async () => {
@@ -242,6 +249,7 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
     const adminRequest = new Request('http://localhost/api/cars?admin=true');
     expect((await list(adminRequest)).status).toBe(403);
     await prisma.user.update({ where: { id: other }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(other);
     expect((await (await list(request())).json()).data.trackers).toEqual([]);
     expect((await (await list(adminRequest)).json()).data.trackers).toEqual(expect.arrayContaining([expect.objectContaining({ id: row.id })]));
   });
@@ -354,8 +362,10 @@ describe.skipIf(process.env.CAR_HTTP_INTEGRATION_TESTS !== '1')('car HTTP owners
   it('preserves owned search visibility across tracker reassignment without exposing the tracker', async () => {
     const row = await tracker(), run = await prisma.carSearchRun.findFirstOrThrow({ where: { trackerId: row.id } });
     await prisma.user.update({ where: { id: owner }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(owner);
     expect((await edit(request({ userId: other }, 'PATCH'), context(row.id))).status).toBe(200);
     await prisma.user.update({ where: { id: owner }, data: { isAdmin: false } });
+    boundary.token = await createDatabaseSession(owner);
     expect((await detail(request(), context(row.id))).status).toBe(404);
     expect((await status(request(), context(run.id))).status).toBe(200);
     const retry = request({ label: 'Late owner request' }, 'PATCH'); retry.headers.set('X-Car-Revision', '0');

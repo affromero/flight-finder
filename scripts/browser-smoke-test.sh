@@ -34,6 +34,18 @@ function bad(msg, detail) { fail++; console.log('\x1b[31mFAIL\x1b[0m ' + msg + '
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 
+if (process.env.BROWSER_SMOKE_OWNER && process.env.BROWSER_SMOKE_PASSWORD) {
+  const response = await context.request.post(BASE + '/api/access/login', {
+    headers: { Origin: BASE },
+    data: { name: process.env.BROWSER_SMOKE_OWNER, password: process.env.BROWSER_SMOKE_PASSWORD },
+  });
+  if (!response.ok()) throw new Error('Browser smoke owner login failed: ' + response.status());
+  const cookie = response.headers()['set-cookie'];
+  const token = cookie?.match(/(?:^|[,;]\s*)ft-session=([^;]+)/)?.[1];
+  if (!token) throw new Error('Browser smoke owner login did not issue a session');
+  await context.addCookies([{ name: 'ft-session', value: token, url: BASE, httpOnly: true, sameSite: 'Lax' }]);
+}
+
 try {
   // ── Test 1: Landing page loads with search bar ──────────────
   {

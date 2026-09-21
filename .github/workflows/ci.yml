@@ -99,7 +99,7 @@ jobs:
       - run: npm run db:generate
       - run: npm run db:push
       - run: npm run test --workspace=@flight-finder/web -- src/lib/sidedoor/access/access-store.test.ts
-      - run: npm run test --workspace=@flight-finder/web -- src/lib/sidedoor/platform-cutover.test.ts
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/sidedoor/migration/platform-cutover.test.ts
       - run: node scripts/usage-migration-test.mjs
 
   integration:
@@ -114,6 +114,9 @@ jobs:
           image=$(docker image inspect --format '{{.Id}}' flight-finder-test:latest)
           bash scripts/staging-test.sh "$image" "$sha" --keep-alive
       - name: Browser smoke tests
+        env:
+          BROWSER_SMOKE_OWNER: integration-owner
+          BROWSER_SMOKE_PASSWORD: integration-owner-test-password
         run: |
           npm ci
           npx playwright install chromium --with-deps

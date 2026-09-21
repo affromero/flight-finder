@@ -84,7 +84,10 @@ try {
     INSERT INTO "HotelAlert" (id, "trackerId", message, "deliveredIds", pending) VALUES ('migration-hotel-alert', 'migration-hotel', '{"title":"Pending hotel alert"}', ARRAY['already-delivered-channel'], true);
   `);
   const tables = {};
-  const movedCredentialColumns = new Set(['passwordHash', 'adminPasswordHash', 'anthropicApiKey', 'openaiApiKey', 'googleApiKey']);
+  const movedCredentialColumns = new Set([
+    'passwordHash', 'sessionsValidFrom', 'adminPasswordHash', 'adminSessionsValidFrom',
+    'anthropicApiKey', 'openaiApiKey', 'googleApiKey',
+  ]);
   for (const table of ['User', 'ExtractionConfig', 'Query', 'FetchRun', 'PriceSnapshot', 'HotelTracker', 'HotelSearchRun', 'HotelSnapshot', 'HotelAlert']) {
     tables[table] = (await client.query('SELECT column_name FROM information_schema.columns WHERE table_schema = \'public\' AND table_name = $1 ORDER BY ordinal_position', [table])).rows.map(row => row.column_name).filter(column => !movedCredentialColumns.has(column));
   }

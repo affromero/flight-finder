@@ -2,6 +2,7 @@ import { chromium } from 'playwright';
 import assert from 'node:assert/strict';
 import { mkdir, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
+import { addBrowserSession, claimBrowserOwner } from './access-browser-test.mjs';
 
 // HTTP fixtures exercise the actual production UI. Only validation reaches the
 // disposable backend; this harness never starts live provider scrapes.
@@ -26,10 +27,12 @@ const offer = {
   stars: 4, rating: 8.6, amenities: {}, match: 'exact',
 };
 const browser = await chromium.launch({ headless: true, ...(process.env.HOTEL_BROWSER_EXECUTABLE ? { executablePath: process.env.HOTEL_BROWSER_EXECUTABLE } : {}) });
+const ownerSession = await claimBrowserOwner({ origin: server, name: 'hotel-browser-owner', password: 'hotel-browser-owner-test-password' });
 const passed = [];
 
 async function scenario(name, test, { real = false } = {}) {
   const context = await browser.newContext({ viewport: { width: 1280, height: 1000 }, locale: 'en-US' });
+  await addBrowserSession(context, server, ownerSession);
   const page = await context.newPage();
   page.setDefaultTimeout(15000);
   const errors = [];

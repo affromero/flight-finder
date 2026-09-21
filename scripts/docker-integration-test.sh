@@ -35,6 +35,7 @@ COMPOSE_FILE="scripts/docker-compose.integration.yml"
 
 cleanup() {
   printf "\n${DIM}Cleaning up...${RESET}\n"
+  rm -f "${COOKIE_JAR:-}"
   docker compose -p "$PROJECT" -f "$COMPOSE_FILE" down -v --remove-orphans 2>/dev/null || true
 }
 if [ "$KEEP_ALIVE" = false ]; then
@@ -76,10 +77,19 @@ until curl -sf "http://localhost:${PORT}/api/health" >/dev/null 2>&1; do
 done
 echo ""
 
+COOKIE_JAR=$(mktemp)
+claim_output=$(HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T web \
+  node /app/packages/cli/dist/index.js access claim)
+claim_code=$(printf '%s\n' "$claim_output" | python3 -c 'import json,sys; print(json.loads(next(line for line in reversed(sys.stdin.read().splitlines()) if line.strip().startswith("{")))["code"])')
+claim_body=$(CLAIM_CODE="$claim_code" python3 -c 'import json,os; print(json.dumps({"token":os.environ["CLAIM_CODE"],"name":"integration-owner","password":"integration-owner-test-password","mode":"household"}))')
+curl -fsS -c "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" -H 'Content-Type: application/json' \
+  --data "$claim_body" "http://localhost:${PORT}/api/access/claim" >/dev/null
+app_curl() { curl -b "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" "$@"; }
+
 # ── Test 1: Health endpoint ──────────────────────────────────────
 test_health() {
   local res
-  res=$(curl -sf "http://localhost:${PORT}/api/health")
+  res=$(app_curl -sf "http://localhost:${PORT}/api/health")
   local status
   status=$(echo "$res" | python3 -c "import json,sys; print(json.load(sys.stdin)['status'])" 2>/dev/null)
   if [ "$status" = "ok" ]; then
@@ -108,7 +118,7 @@ test_health() {
 # ── Test 2: Landing page serves HTML ─────────────────────────────
 test_landing_page() {
   local status_code
-  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/")
+  status_code=$(app_curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/")
   if [ "$status_code" = "200" ]; then
     pass "GET / returns 200"
   else
@@ -116,7 +126,7 @@ test_landing_page() {
   fi
 
   local body
-  body=$(curl -sf "http://localhost:${PORT}/")
+  body=$(app_curl -sf "http://localhost:${PORT}/")
   if grep -qi "flight finder" <<< "$body"; then
     pass "Landing page contains 'Flight Finder'"
   else
@@ -127,7 +137,7 @@ test_landing_page() {
 # ── Test 3: Settings page loads ───────────────────────────────────
 test_settings_page() {
   local status_code
-  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/settings")
+  status_code=$(app_curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/settings")
   if [ "$status_code" = "200" ]; then
     pass "GET /settings returns 200"
   else
@@ -138,7 +148,7 @@ test_settings_page() {
 # ── Test 4: Config API returns data with currency/country fields ─
 test_config_api() {
   local res
-  res=$(curl -sf "http://localhost:${PORT}/api/admin/config")
+  res=$(app_curl -sf "http://localhost:${PORT}/api/admin/config")
   local ok
   ok=$(echo "$res" | python3 -c "import json,sys; print(json.load(sys.stdin)['ok'])" 2>/dev/null)
   if [ "$ok" = "True" ]; then
@@ -161,7 +171,7 @@ test_config_api() {
 # ── Test 5: Config API PATCH -- save and read back currency ──────
 test_config_patch_currency() {
   local res
-  res=$(curl -sf "http://localhost:${PORT}/api/admin/config" \
+  res=$(app_curl -sf "http://localhost:${PORT}/api/admin/config" \
     -X PATCH \
     -H 'Content-Type: application/json' \
     -d '{"defaultCurrency":"EUR","defaultCountry":"DE"}')
@@ -175,7 +185,7 @@ test_config_patch_currency() {
 
   # Read back and verify persistence
   local readback
-  readback=$(curl -sf "http://localhost:${PORT}/api/admin/config")
+  readback=$(app_curl -sf "http://localhost:${PORT}/api/admin/config")
   local currency country
   currency=$(echo "$readback" | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['defaultCurrency'])" 2>/dev/null)
   country=$(echo "$readback" | python3 -c "import json,sys; print(json.load(sys.stdin)['data']['defaultCountry'])" 2>/dev/null)
@@ -189,7 +199,7 @@ test_config_patch_currency() {
 # ── Test 6: Providers API returns all providers with status ──────
 test_providers_api() {
   local res
-  res=$(curl -sf "http://localhost:${PORT}/api/admin/providers")
+  res=$(app_curl -sf "http://localhost:${PORT}/api/admin/providers")
   local ok
   ok=$(echo "$res" | python3 -c "import json,sys; print(json.load(sys.stdin)['ok'])" 2>/dev/null)
   if [ "$ok" = "True" ]; then
@@ -212,7 +222,7 @@ test_providers_api() {
 test_config_validation() {
   local res
   # Don't use -f here -- we expect a 400 response
-  res=$(curl -s "http://localhost:${PORT}/api/admin/config" \
+  res=$(app_curl -s "http://localhost:${PORT}/api/admin/config" \
     -X PATCH \
     -H 'Content-Type: application/json' \
     -d '{"defaultCurrency":"TOOLONG"}')
@@ -228,14 +238,14 @@ test_config_validation() {
 # ── Test 8: Static assets served ─────────────────────────────────
 test_static_assets() {
   local status_code
-  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/flight-finder-cli")
+  status_code=$(app_curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/flight-finder-cli")
   if [ "$status_code" = "200" ]; then
     pass "GET /flight-finder-cli serves the CLI script"
   else
     fail "GET /flight-finder-cli" "status=$status_code"
   fi
 
-  status_code=$(curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/install.sh")
+  status_code=$(app_curl -so /dev/null -w "%{http_code}" "http://localhost:${PORT}/install.sh")
   if [ "$status_code" = "200" ]; then
     pass "GET /install.sh serves the installer"
   else
@@ -284,4 +294,5 @@ test_volume_migration
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"
 echo ""
+rm -f "$COOKIE_JAR"
 [ "$FAIL" -eq 0 ] || exit 1
