@@ -167,11 +167,13 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     expect(finalized).toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic', 'google', 'openai'] });
 
     const { prisma } = await import('@/lib/prisma');
-    expect(await prisma.user.findMany({ orderBy: { username: 'asc' }, select: { id: true, username: true } })).toEqual([
+    const migratedUsers = await prisma.user.findMany({ select: { id: true, username: true } });
+    expect(migratedUsers).toHaveLength(3);
+    expect(migratedUsers).toEqual(expect.arrayContaining([
       { id: configuredAdmin!.id, username: 'admin' },
       { id: 'guest-id', username: 'Guest' },
       { id: 'owner-id', username: 'Owner' },
-    ]);
+    ]));
     expect((await prisma.extractionConfig.findUniqueOrThrow({ where: { id: 'singleton' } })).setupComplete).toBe(true);
     expect(await prisma.sidedoorState.findUnique({ where: { id: 'flight-finder-platform-cutover' } })).toBeNull();
 
