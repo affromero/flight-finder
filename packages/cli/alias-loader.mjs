@@ -1,5 +1,5 @@
 import path from 'node:path';
-import { fileURLToPath, pathToFileURL } from 'node:url';
+import { fileURLToPath, pathToFileURL, URL } from 'node:url';
 
 const cliRoot = path.dirname(fileURLToPath(import.meta.url));
 
@@ -11,6 +11,9 @@ const cliSrc = path.resolve(cliRoot, 'src');
 const generatedSrc = path.resolve(cliRoot, '../../apps/web/src/generated');
 
 export function resolve(specifier, context, nextResolve) {
+  if (specifier === '@/generated/prisma/client') {
+    return nextResolve(new URL('./generated-client.mjs', import.meta.url).href, context);
+  }
   if (specifier.startsWith('@/generated/')) {
     return nextResolve(pathToFileURL(path.join(generatedSrc, specifier.slice('@/generated/'.length))).href, context);
   }

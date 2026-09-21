@@ -1,7 +1,7 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '@/lib/prisma';
-import { createUserSessionToken } from '../user-auth';
-import { createSessionToken } from '../admin-auth';
+import { createDatabaseSession } from '@/test/database-session';
+import { sharedAccess } from '@/lib/sidedoor/access/service';
 import { acquireTravelLease, getTravelAdmission, quarantineTravelLease } from './admission';
 import { GET, POST } from '@/app/api/admin/travel/route';
 import { GET as hotelStatus } from '@/app/api/hotels/search/[id]/route';
@@ -25,7 +25,7 @@ describe.skipIf(process.env.TRAVEL_INTEGRATION_TESTS !== '1')('administrator tra
   });
   beforeEach(async () => {
     vi.stubEnv('SELF_HOSTED', 'true'); vi.stubEnv('REDIS_URL', '');
-    boundary.token = createUserSessionToken(adminId);
+    boundary.token = await createDatabaseSession(adminId);
     await prisma.travelJob.deleteMany();
     await prisma.travelLease.deleteMany();
     await prisma.travelAdmission.deleteMany();
@@ -50,21 +50,20 @@ describe.skipIf(process.env.TRAVEL_INTEGRATION_TESTS !== '1')('administrator tra
   }
   it('rejects confirmations from another administrator before changing admission or worker leases', async () => {
     const original = await getTravelAdmission(), payload = await request();
-    await prisma.user.update({ where: { id: memberId }, data: { isAdmin: true, sessionsValidFrom: null } });
-    boundary.token = createUserSessionToken(memberId);
+    await prisma.user.update({ where: { id: memberId }, data: { isAdmin: true } });
+    boundary.token = await createDatabaseSession(memberId);
     try {
       expect((await POST(payload)).status).toBe(412);
       expect(await getTravelAdmission()).toEqual(original);
       expect(await prisma.travelAdmission.findUnique({ where: { id: 'singleton' } })).toMatchObject({ recoveredBy: null });
     } finally { await prisma.user.update({ where: { id: memberId }, data: { isAdmin: false } }); }
   });
-  it.each(['public', 'anonymous', 'member', 'revoked'] as const)('denies %s status and recovery without clearing the incident', async mode => {
-    if (mode === 'public') vi.stubEnv('SELF_HOSTED', 'false');
+  it.each(['anonymous', 'member', 'revoked'] as const)('denies %s status and recovery without clearing the incident', async mode => {
     if (mode === 'anonymous') boundary.token = '';
-    if (mode === 'member') boundary.token = createUserSessionToken(memberId);
+    if (mode === 'member') boundary.token = await createDatabaseSession(memberId);
     if (mode === 'revoked') {
-      boundary.token = createUserSessionToken(memberId);
-      await prisma.user.update({ where: { id: memberId }, data: { sessionsValidFrom: new Date(Date.now() + 1000) } });
+      boundary.token = await createDatabaseSession(memberId);
+      await sharedAccess.store.transact(state => { state.principals.find(principal => principal.id === memberId)!.epoch++; });
     }
     const expected = mode === 'member' ? 403 : 401;
     const status = await GET(), recovery = await POST(await request());
@@ -75,20 +74,15 @@ describe.skipIf(process.env.TRAVEL_INTEGRATION_TESTS !== '1')('administrator tra
   });
   it('allows a public-site administrator to recover flights but rejects a revoked administrator session', async () => {
     vi.stubEnv('SELF_HOSTED', 'false');
-    boundary.token = createSessionToken();
+    boundary.token = await createDatabaseSession(adminId);
     expect((await (await GET()).json()).data.actorScope).toBe('instance');
-    const previousRevocation = await prisma.extractionConfig.findUniqueOrThrow({ where: { id: 'singleton' }, select: { adminSessionsValidFrom: true } });
-    try {
-      await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { adminSessionsValidFrom: new Date(Date.now() + 1000) } });
-      expect((await GET()).status).toBe(401);
-      expect((await POST(await request())).status).toBe(401);
-      expect((await getTravelAdmission()).quarantinedAt).toBeInstanceOf(Date);
-      await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { adminSessionsValidFrom: null } });
-      expect((await POST(await request())).status).toBe(200);
-      expect((await getTravelAdmission()).quarantinedAt).toBeNull();
-    } finally {
-      await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: previousRevocation });
-    }
+    await sharedAccess.store.transact(state => { state.principals.find(principal => principal.id === adminId)!.epoch++; });
+    expect((await GET()).status).toBe(401);
+    expect((await POST(await request())).status).toBe(401);
+    expect((await getTravelAdmission()).quarantinedAt).toBeInstanceOf(Date);
+    boundary.token = await createDatabaseSession(adminId);
+    expect((await POST(await request())).status).toBe(200);
+    expect((await getTravelAdmission()).quarantinedAt).toBeNull();
   });
   it('returns sanitized recovery state and applies one acknowledged administrator recovery', async () => {
     const status = await GET(); expect(status.status).toBe(200);
@@ -109,7 +103,6 @@ describe.skipIf(process.env.TRAVEL_INTEGRATION_TESTS !== '1')('administrator tra
     expect((await getTravelAdmission()).quarantinedAt).toBeInstanceOf(Date);
   });
   it.each(['hotel', 'car'] as const)('keeps %s search ownership private and gives members appropriate recovery guidance', async kind => {
-    await prisma.user.update({ where: { id: memberId }, data: { sessionsValidFrom: null } });
     const row = kind === 'hotel'
       ? await prisma.hotelSearchRun.create({ data: { userId: adminId, request: {} } })
       : await prisma.carSearchRun.create({ data: { userId: adminId, request: json(carSearchFixture()) } });
@@ -119,7 +112,7 @@ describe.skipIf(process.env.TRAVEL_INTEGRATION_TESTS !== '1')('administrator tra
       const admin = await read(new Request('http://localhost'), context);
       expect(admin.status).toBe(503);
       expect((await admin.json()).error).toContain('/admin');
-      boundary.token = createUserSessionToken(memberId);
+      boundary.token = await createDatabaseSession(memberId);
       expect((await read(new Request('http://localhost'), context)).status).toBe(404);
       if (kind === 'hotel') await prisma.hotelSearchRun.update({ where: { id: row.id }, data: { userId: memberId } });
       else await prisma.carSearchRun.update({ where: { id: row.id }, data: { userId: memberId } });

@@ -4,6 +4,7 @@ import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
 import { LOCAL_PROVIDERS } from '@/lib/scraper/ai-registry';
 import { requireAdminApi } from '@/lib/admin-guard';
+import { resolveProviderCredentials } from '@/lib/sidedoor/providers/provider-credentials';
 
 interface OllamaModel {
   name: string;
@@ -26,10 +27,6 @@ function resolveOllamaHost(customBaseUrl: string | null): string {
   // Strip it to get the raw Ollama host for the native API
   if (customBaseUrl) {
     return customBaseUrl.replace(/\/v1\/?$/, '');
-  }
-  const envHost = process.env.OLLAMA_HOST;
-  if (envHost) {
-    return envHost.replace(/\/+$/, '');
   }
   return 'http://localhost:11434';
 }
@@ -95,10 +92,12 @@ export async function GET(request: NextRequest) {
 
   // Only use stored customBaseUrl if it belongs to the requested provider
   const storedUrl = config?.provider === provider ? config.customBaseUrl : null;
+  const credentials = await resolveProviderCredentials(provider);
+  const endpoint = storedUrl ?? (typeof credentials.baseUrl === 'string' ? credentials.baseUrl : null);
 
   const host = provider === 'ollama'
-    ? resolveOllamaHost(storedUrl)
-    : resolveOpenAICompatHost(provider, storedUrl);
+    ? resolveOllamaHost(endpoint)
+    : resolveOpenAICompatHost(provider, endpoint);
   const cacheKey = `local-models:${provider}:${host}`;
 
   try {

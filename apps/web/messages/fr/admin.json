@@ -54,6 +54,8 @@
     "logout": "Déconnexion"
   },
   "AdminDashboard": {
+    "unknownCost": "Inconnu",
+    "knownCostSubtotal": "Sous-total connu : {amount} $. Enregistrements sans prix : {count}.",
     "title": "Tableau de bord",
     "stats": {
       "activeQueries": "Requêtes actives",
@@ -97,6 +99,9 @@
     "provider": "Fournisseur",
     "status": "Statut : {status}",
     "providerStatus": {
+      "configured": "Configuré ; authentification non vérifiée",
+      "invalidCredentials": "Les identifiants enregistrés doivent être réparés",
+      "notAuthenticated": "Connectez-vous à la CLI",
       "ready": "Prêt",
       "noKey": "Aucune clé configurée",
       "unreachable": "Injoignable",
@@ -108,8 +113,8 @@
     "apiKey": "Clé API",
     "apiKeySavedPlaceholder": "Enregistrée — colle une nouvelle clé pour la remplacer",
     "apiKeyPlaceholder": "Colle ta clé API {provider}",
-    "apiKeySavedHint": "Une clé est enregistrée. Laisse vide pour la conserver, ou colle-en une nouvelle pour la remplacer. Stockée chiffrée ; repli sur la variable d’environnement {envKey}.",
-    "apiKeyNewHint": "Colle une clé pour la stocker (chiffrée) ici, ou définis la variable d’environnement {envKey}. Aucun redémarrage nécessaire.",
+    "apiKeySavedHint": "Une clé est enregistrée. Laisse vide pour la conserver, ou colle-en une nouvelle pour la remplacer. Elle est stockée chiffrée.",
+    "apiKeyNewHint": "Colle une clé pour la stocker chiffrée. Aucun redémarrage nécessaire.",
     "model": "Modèle",
     "modelCostFree": "Gratuit (Max)",
     "modelCost": "{cost} $/1k en entrée",
@@ -179,7 +184,7 @@
     "hubHint": "Permet à d’autres instances Flight Finder de s’enregistrer auprès de celle-ci et d’y envoyer leurs données anonymisées. Utile uniquement pour le hub central. Les nouvelles inscriptions sont limitées en débit et plafonnées globalement.",
     "providerDetails": "Détails du fournisseur",
     "apiKeyDetail": "Clé API :",
-    "apiKeyFromEnv": "saisie ci-dessus (stockée chiffrée), ou lue depuis <code>{envKey}</code> si aucune n’est définie",
+    "apiKeySaved": "stockée chiffrée dans cette instance",
     "apiKeyNotRequired": "non requise — ce fournisseur se connecte via sa CLI locale, aucune clé API nécessaire",
     "modelsAvailable": "Modèles disponibles :"
   },
@@ -268,7 +273,7 @@
     "demote": "Rétrograder",
     "delete": "Supprimer",
     "deleteConfirm": "Supprimer l’utilisateur {username} ? Ses suivis deviendront sans propriétaire.",
-    "resetPrompt": "Nouveau mot de passe pour {username} (8 caractères min) :",
+    "resetPrompt": "Nouveau mot de passe pour {username} (12 caractères min) :",
     "passwordReset": "Mot de passe réinitialisé.",
     "disableConfirm": "Désactiver le mode multi-utilisateur ? Cela désactive toutes les connexions et efface le mot de passe admin, pour revenir à une instance auto-hébergée mono-utilisateur. Les comptes restent en base de données mais deviennent inaccessibles jusqu’à la réactivation du mode multi-utilisateur. Continuer ?",
     "dangerZone": "Zone de danger",
@@ -286,7 +291,7 @@
       "title": "Ajouter un utilisateur",
       "username": "Nom d’utilisateur",
       "displayName": "Nom d’affichage (facultatif)",
-      "passwordAdmin": "Mot de passe (8 caractères min)",
+      "passwordAdmin": "Mot de passe (12 caractères min)",
       "passwordOptional": "Mot de passe (facultatif)",
       "admin": "Admin",
       "note": "Laisse le mot de passe vide pour un membre qui se connecte d’un simple tap. Quiconque peut atteindre cette instance peut se connecter comme membre sans mot de passe : ajoute un mot de passe si elle est publique. Les admins ont toujours besoin d’un mot de passe.",

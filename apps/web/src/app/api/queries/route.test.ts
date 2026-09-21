@@ -1,3 +1,12 @@
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/access/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+beforeEach(() => sessionBoundary.fixture!.resetRequest());
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
@@ -21,30 +30,29 @@ vi.mock('@/lib/redis', () => ({
   },
 }));
 
-vi.mock('next/headers', () => ({
-  cookies: vi.fn().mockResolvedValue({ get: vi.fn(), set: vi.fn(), delete: vi.fn() }),
-}));
 
 vi.mock('@/lib/prisma', () => {
-  const db = {
+  const database = {
+    user: { findUnique: async () => sessionBoundary.fixture!.user },
     query: { create: mockQueryCreate },
     priceSnapshot: { createMany: mockSnapshotCreateMany },
     extractionConfig: { findUnique: async () => ({ multiUserMode: false }) },
     $executeRaw: vi.fn().mockResolvedValue(0),
   };
-  return { prisma: { ...db, $transaction: async (work: (tx: typeof db) => Promise<unknown>) => work(db) } };
+  return {
+    prisma: {
+      ...database,
+      $transaction: async (operation: (tx: typeof database) => Promise<unknown>) => operation(database),
+    },
+  };
 });
 
 const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
-const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
 
 vi.mock('@/lib/multi-user', () => ({
   isMultiUserEnabled: () => mockIsMultiUserEnabled(),
 }));
 
-vi.mock('@/lib/user-auth', () => ({
-  getCurrentUser: () => mockGetCurrentUser(),
-}));
 
 import { POST } from './route';
 import { FLIGHT_IMPORT_URL } from '@/test/import-fixtures';
@@ -84,12 +92,14 @@ describe('POST /api/queries', () => {
     expect(mockQueryCreate.mock.calls.at(-1)?.[0].data).toMatchObject({ sourceUrl: FLIGHT_IMPORT_URL, origin: 'ORD', destination: 'DUS', flexibility: 0 });
     expect(mockSnapshotCreateMany).not.toHaveBeenCalled();
   });
+
   it('rejects changing the return date of an imported itinerary before creating a tracker', async () => {
     const parsed = flightLinkQuery(FLIGHT_IMPORT_URL);
     const res = await POST(makeRequest({ ...parsed, dateTo: '2026-10-20', rawInput: 'Selected flight', origin: 'ORD', destination: 'DUS' }));
     expect(res.status).toBe(400);
     expect(mockQueryCreate).not.toHaveBeenCalled();
   });
+
   it('rejects old split estimates before writing trackers or snapshots', async () => {
     const res = await POST(makeRequest({ ...validBody, routes: [{ ...validBody.routes[0], selectedFlights: [{
       travelDate: '2026-06-15', price: 2991, currency: 'CAD',
@@ -100,11 +110,11 @@ describe('POST /api/queries', () => {
     expect(mockQueryCreate).not.toHaveBeenCalled();
     expect(mockSnapshotCreateMany).not.toHaveBeenCalled();
   });
-  beforeEach(() => {
+  beforeEach(async () => {
     mockQueryCreate.mockClear();
     mockSnapshotCreateMany.mockClear();
     mockIsMultiUserEnabled.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
+    await sessionBoundary.fixture!.signIn(null);
     mockRedisIncr.mockResolvedValue(1);
     mockRedisExpire.mockResolvedValue(1);
     mockRedisTtl.mockResolvedValue(600);
@@ -324,7 +334,7 @@ describe('POST /api/queries', () => {
 
   it('rejects anonymous submission with 401 when multi user mode is on', async () => {
     mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockGetCurrentUser.mockResolvedValue(null);
+    await sessionBoundary.fixture!.signIn(null);
     const res = await POST(makeRequest(validBody));
     expect(res.status).toBe(401);
     expect(mockQueryCreate).not.toHaveBeenCalled();
@@ -332,7 +342,7 @@ describe('POST /api/queries', () => {
 
   it('attaches userId when a user session is present in multi user mode', async () => {
     mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockGetCurrentUser.mockResolvedValue({ id: 'user_42' });
+    await sessionBoundary.fixture!.signIn({ id: 'user_42' });
     const res = await POST(makeRequest(validBody));
     expect(res.status).toBe(201);
     const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { userId: string | null } };
@@ -341,7 +351,7 @@ describe('POST /api/queries', () => {
 
   it('leaves userId null in solo mode even when a user session is present', async () => {
     mockIsMultiUserEnabled.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue({ id: 'user_42' });
+    await sessionBoundary.fixture!.signIn({ id: 'user_42' });
     const res = await POST(makeRequest(validBody));
     expect(res.status).toBe(201);
     const createCall = mockQueryCreate.mock.calls[0]![0] as { data: { userId: string | null } };

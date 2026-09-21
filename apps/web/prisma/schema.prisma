@@ -122,6 +122,7 @@ model FetchRun {
 }
 
 model ExtractionConfig {
+  providerRevision     Int       @default(0)
   id                   String    @id @default("singleton")
   provider             String    @default("anthropic")
   model                String    @default("claude-haiku-4-5-20251001")
@@ -130,7 +131,7 @@ model ExtractionConfig {
   enabled              Boolean   @default(true)
   scrapeInterval       Int       @default(3) // hours — global default
   defaultSearchMethod  String    @default("ai") // 'ai' | 'manual'
-  adminPasswordHash    String?
+  setupComplete        Boolean   @default(false)
   communitySharing     Boolean   @default(false)
   communityRegistrationOpen Boolean @default(false) // hub side: accept new community key registrations (opt-in). Env COMMUNITY_REGISTRATION_OPEN still works as an override.
   communityApiKey      String?
@@ -138,18 +139,10 @@ model ExtractionConfig {
   defaultCurrency      String?   // ISO 4217 (EUR, GBP). null = Google auto-detects
   defaultCountry       String?   // ISO 3166-1 alpha-2 (DE, GB). null = Google auto-detects
   customBaseUrl        String?   // e.g. http://localhost:11434/v1
-  // Admin-entered provider API keys, encrypted at rest via lib/secret-crypto
-  // (AES-256-GCM, keyed on ADMIN_SESSION_SECRET) exactly like vpnActivationCode.
-  // Resolved BEFORE the matching env var so a self-hosted user can set a key in
-  // the GUI without editing ~/.flight-finder/.env or restarting the stack (#149).
-  anthropicApiKey      String?   // encrypted ANTHROPIC_API_KEY override
-  openaiApiKey         String?   // encrypted OPENAI_API_KEY override
-  googleApiKey         String?   // encrypted GOOGLE_AI_API_KEY override
   vpnProvider          String?   // 'none' | 'expressvpn'
   vpnCountries         String[]  @default([]) // default VPN countries (used when query has none)
   vpnActivationCode    String?   // encrypted VPN activation code
   multiUserMode        Boolean   @default(false) // self-hosted only; admin manages User table for households
-  adminSessionsValidFrom DateTime? // admin sessions issued before this instant are revoked (set on admin password change)
   cabinAlertBaselineCutoff DateTime? // set once on the first notify cycle after the cabin-class scrape fix; non-economy queries ignore snapshots scraped before it for the new-low baseline (pre-fix snapshots are Economy fares mislabeled as the requested cabin)
   updatedAt            DateTime  @updatedAt
   extractTimeoutSeconds Int @default(90)
@@ -168,12 +161,16 @@ model ExtractionConfig {
   previewAdmissionCap   Int?     // max concurrent preview runs per client IP; null = PREVIEW_ADMISSION_CAP env / default
 }
 
+model SidedoorState {
+  id       String @id
+  revision String
+  state    Json
+}
+
 model User {
   id                String   @id @default(cuid())
   username          String   @unique
   displayName       String?
-  passwordHash      String?  // null = passwordless member (taps to sign in); admins always have one
-  sessionsValidFrom DateTime? // sessions issued before this instant are revoked (set on password change/reset)
   isAdmin           Boolean  @default(false)
   avatar            String?  // preset avatar slug (see lib/avatars.ts); null falls back to initials
   theme             String?  // personal theme id (see lib/theme.ts); null falls back to ExtractionConfig.theme
@@ -547,9 +544,12 @@ model ApiUsageLog {
   id           String   @id @default(cuid())
   provider     String
   model        String
-  inputTokens  Int
-  outputTokens Int
-  costUsd      Float
+  inputTokens  Int?
+  outputTokens Int?
+  cachedInputTokens Int?
+  cacheWriteTokens Int?
+  reasoningTokens Int?
+  costUsd      Float?
   operation    String
   durationMs   Int
   error        String?

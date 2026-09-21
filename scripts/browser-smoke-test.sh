@@ -34,6 +34,18 @@ function bad(msg, detail) { fail++; console.log('\x1b[31mFAIL\x1b[0m ' + msg + '
 const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 
+if (process.env.BROWSER_SMOKE_OWNER && process.env.BROWSER_SMOKE_PASSWORD) {
+  const response = await context.request.post(BASE + '/api/access/login', {
+    headers: { Origin: BASE },
+    data: { name: process.env.BROWSER_SMOKE_OWNER, password: process.env.BROWSER_SMOKE_PASSWORD },
+  });
+  if (!response.ok()) throw new Error('Browser smoke owner login failed: ' + response.status());
+  const cookie = response.headers()['set-cookie'];
+  const token = cookie?.match(/(?:^|[,;]\s*)ft-session=([^;]+)/)?.[1];
+  if (!token) throw new Error('Browser smoke owner login did not issue a session');
+  await context.addCookies([{ name: 'ft-session', value: token, url: BASE, httpOnly: true, sameSite: 'Lax' }]);
+}
+
 try {
   // ── Test 1: Landing page loads with search bar ──────────────
   {
@@ -125,22 +137,17 @@ try {
     await page.close();
   }
 
-  // ── Test 3: Admin login page or redirect ───────────────────────
+  // ── Test 3: Shared account security surface ────────────────────
   {
     const page = await context.newPage();
-    const response = await page.goto(BASE + '/admin/login', { waitUntil: 'networkidle', timeout: 30000 });
-
-    const url = page.url();
-    const passwordInput = page.locator('input[type="password"]');
-    if (await passwordInput.isVisible({ timeout: 5000 }).catch(() => false)) {
-      ok('Admin login page has password input');
-    } else if (url.includes('/admin') && response && response.ok()) {
-      // Self-hosted mode may skip login and redirect to dashboard
-      ok('Admin page loaded (self-hosted mode, login skipped)');
-    } else if (response && (response.status() === 307 || response.status() === 302)) {
-      ok('Admin login redirects (expected in self-hosted mode)');
+    const response = await page.goto(BASE + '/access/security', { waitUntil: 'networkidle', timeout: 30000 });
+    const heading = page.getByRole('heading', { name: 'Account security' });
+    const passkeys = page.getByText('Passkeys', { exact: true });
+    if (response?.ok() && await heading.isVisible({ timeout: 5000 }).catch(() => false) &&
+        await passkeys.isVisible({ timeout: 5000 }).catch(() => false)) {
+      ok('Account security page exposes passkey management');
     } else {
-      bad('Admin login page', 'unexpected state: url=' + url + ' status=' + (response?.status() ?? 'null'));
+      bad('Account security page', 'missing account security or passkey controls');
     }
 
     await page.close();

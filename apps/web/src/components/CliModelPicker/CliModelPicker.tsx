@@ -45,8 +45,7 @@ export function CliModelPicker({ provider, model, reasoning, onModelChange, onRe
   }, [endpoint, provider, revision]);
   useEffect(() => { setResult(''); return () => { testController.current?.abort(); }; }, [provider, model, reasoning]);
   const selected = catalog?.models.find(entry => entry.id === model);
-  const legacy = provider === 'codex' && model === 'codex';
-  const unavailable = Boolean(catalog && !selected && !legacy);
+  const unavailable = Boolean(catalog && !selected);
   async function update() {
     setUpdating(true); setConfirmUpdate(false); setUpdateResult('');
     try {
@@ -87,11 +86,10 @@ export function CliModelPicker({ provider, model, reasoning, onModelChange, onRe
     <div className={styles.fields}>
       <div className={styles.field}><label htmlFor={`${id}-model`}>{t('model')}</label><select id={`${id}-model`} value={model} disabled={loading || testing || !catalog}
         onChange={event => { onModelChange(event.target.value); onReasoningChange(null); }}>
-        {provider === 'codex' && <option value="codex">{t('cliConfigured')}</option>}
-        {!selected && !legacy && <option value={model}>{model || t('chooseModel')}{model ? ` — ${t('savedSelection')}` : ''}</option>}
+        {!selected && <option value={model}>{model || t('chooseModel')}{model ? ` — ${t('savedSelection')}` : ''}</option>}
         {catalog?.models.map(entry => <option key={entry.id} value={entry.id}>{entry.name}</option>)}
       </select></div>
-      {provider === 'codex' && <div className={styles.field}><label htmlFor={`${id}-reasoning`}>{t('reasoning')}</label><select id={`${id}-reasoning`} value={reasoning ?? ''} disabled={loading || testing || !catalog || unavailable || legacy}
+      {provider === 'codex' && <div className={styles.field}><label htmlFor={`${id}-reasoning`}>{t('reasoning')}</label><select id={`${id}-reasoning`} value={reasoning ?? ''} disabled={loading || testing || !catalog || unavailable}
         onChange={event => onReasoningChange((event.target.value || null) as ReasoningSelection)}>
         <option value="">{t('cliConfigured')}</option>
         <option value="default">{selected?.defaultReasoningEffort ? t('modelDefault', { effort: selected.defaultReasoningEffort }) : t('default')}</option>

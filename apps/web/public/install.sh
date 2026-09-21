@@ -35,8 +35,6 @@ esac
 BASE_URL="${FLIGHT_FINDER_URL:-https://flight-finder.org}"
 # Test overrides (used by scripts/install-flow-test.sh)
 FLIGHT_FINDER_REPO="https://github.com/affromero/flight-finder.git"
-FLIGHT_FINDER_API_KEY="${FLIGHT_FINDER_API_KEY:-}"
-FLIGHT_FINDER_API_PROVIDER="${FLIGHT_FINDER_API_PROVIDER:-}"
 FLIGHT_FINDER_EXTRA_ENV="${FLIGHT_FINDER_EXTRA_ENV:-}"
 
 # Parse install-time flags. --no-browser suppresses the auto-open at the end
@@ -525,14 +523,11 @@ if ! echo "$PATH" | tr ':' '\n' | grep -qx "$INSTALL_BIN"; then
 fi
 
 # ---------------------------------------------------------------------------
-# 5. Detect LLM providers (Claude Code CLI / Codex CLI / Ollama / API key)
+# 5. Detect local AI runtimes
 # ---------------------------------------------------------------------------
 CLAUDE_CODE_DETECTED=false
 CODEX_DETECTED=false
 OLLAMA_DETECTED=false
-OLLAMA_HOST_VAL=""
-API_KEY_VAR=""
-API_KEY_VAL=""
 
 if command -v claude &>/dev/null && [ -d "$HOME/.claude" ]; then
   CLAUDE_CODE_DETECTED=true
@@ -582,79 +577,13 @@ if curl -sf http://localhost:11434/api/tags >/dev/null 2>&1; then
   OLLAMA_MODEL_COUNT=$(echo "$OLLAMA_MODELS" | grep -c . 2>/dev/null || echo 0)
   ok "Ollama detected — ${OLLAMA_MODEL_COUNT} model(s) installed locally"
 
-  if [ "$CONTAINER_CMD" = "podman" ]; then
-    OLLAMA_HOST_VAL="http://host.containers.internal:11434"
-  else
-    OLLAMA_HOST_VAL="http://host.docker.internal:11434"
-  fi
-fi
-
-HAS_CLI_OR_LOCAL=false
-if [ "$CLAUDE_CODE_DETECTED" = true ] || [ "$CODEX_DETECTED" = true ] || [ "$OLLAMA_DETECTED" = true ]; then
-  HAS_CLI_OR_LOCAL=true
-fi
-
-# Pre-set API key from env (for testing)
-if [ -n "$FLIGHT_FINDER_API_KEY" ] && [ -n "$FLIGHT_FINDER_API_PROVIDER" ]; then
-  API_KEY_VAR="$FLIGHT_FINDER_API_PROVIDER"
-  API_KEY_VAL="$FLIGHT_FINDER_API_KEY"
-  HAS_CLI_OR_LOCAL=true
-  ok "Using pre-configured $FLIGHT_FINDER_API_PROVIDER"
-fi
-
-if [ "$HAS_CLI_OR_LOCAL" = false ]; then
-  warn "No Claude Code, Codex CLI, or Ollama found"
-
-  if [ "${FLIGHT_FINDER_YES:-}" = "1" ]; then
-    warn "Non-interactive mode — skipping API key prompt"
-  else
-    echo ""
-    printf "  Paste an API key from any provider, or press Enter to skip:\n"
-    printf "  ${DIM}1. Anthropic  — https://console.anthropic.com/${RESET}\n"
-    printf "  ${DIM}2. OpenAI     — https://platform.openai.com/api-keys${RESET}\n"
-    printf "  ${DIM}3. Google AI  — https://aistudio.google.com/apikey${RESET}\n"
-    printf "  ${DIM}4. Ollama     — https://ollama.com (install locally, then re-run)${RESET}\n"
-    echo ""
-    read -rsp "  API key (or Enter to skip): " API_KEY_VAL < /dev/tty
-    echo ""
-  fi
-
-  if [ -z "$API_KEY_VAL" ]; then
-    warn "No API key — you can configure a provider later in the admin panel"
-  elif [[ "$API_KEY_VAL" == sk-ant-* ]]; then
-    API_KEY_VAR="ANTHROPIC_API_KEY"
-    ok "Detected Anthropic key"
-  elif [[ "$API_KEY_VAL" == sk-* ]]; then
-    API_KEY_VAR="OPENAI_API_KEY"
-    ok "Detected OpenAI key"
-  elif [[ "$API_KEY_VAL" == AI* ]]; then
-    API_KEY_VAR="GOOGLE_AI_API_KEY"
-    ok "Detected Google AI key"
-  else
-    echo ""
-    echo "  Which provider is this key for?"
-    echo "  1) Anthropic"
-    echo "  2) OpenAI"
-    echo "  3) Google AI"
-    read -rp "  Choice [1-3]: " PROVIDER_CHOICE < /dev/tty
-    case "$PROVIDER_CHOICE" in
-      1) API_KEY_VAR="ANTHROPIC_API_KEY" ;;
-      2) API_KEY_VAR="OPENAI_API_KEY" ;;
-      3) API_KEY_VAR="GOOGLE_AI_API_KEY" ;;
-      *) fail "Invalid choice" ;;
-    esac
-    ok "Using ${API_KEY_VAR}"
-  fi
 fi
 
 # ---------------------------------------------------------------------------
 # 6. Generate .env
 # ---------------------------------------------------------------------------
 if [ -f "$FLIGHT_FINDER_DIR/.env" ]; then
-  # Never clobber an existing .env, but non-destructively add any provider key
-  # detected or provided in this run that is not already present. Without this,
-  # re-running the installer to add a key was a silent no-op (#152). Existing
-  # lines (and any unrelated config) are left exactly as they are.
+  # Never clobber an existing deployment configuration.
   ENV_FILE="$FLIGHT_FINDER_DIR/.env"
   ENV_ADDED=0
   append_env_if_missing() {
@@ -672,10 +601,6 @@ if [ -f "$FLIGHT_FINDER_DIR/.env" ]; then
     ENV_ADDED=$((ENV_ADDED + 1))
     ok "Added ${_key} to existing .env"
   }
-  if [ -n "$API_KEY_VAR" ]; then
-    append_env_if_missing "$API_KEY_VAR" "$API_KEY_VAL"
-  fi
-  append_env_if_missing "OLLAMA_HOST" "$OLLAMA_HOST_VAL" "# Ollama (Docker-compatible address)"
   append_env_if_missing "CLAUDE_CODE_OAUTH_TOKEN" "${CLAUDE_SETUP_TOKEN:-}" "# Claude Code setup token (long-lived, from 'claude setup-token')"
   if [ "$ENV_ADDED" -eq 0 ]; then
     warn "Existing .env found — no new keys to add, keeping it as is"
@@ -696,14 +621,6 @@ else
     echo "# The container always listens on 3003 internally; do NOT set PORT."
     echo "HOST_PORT=${HOST_PORT}"
     echo ""
-    if [ -n "$API_KEY_VAR" ]; then
-      echo "${API_KEY_VAR}=${API_KEY_VAL}"
-    fi
-    if [ -n "$OLLAMA_HOST_VAL" ]; then
-      echo ""
-      echo "# Ollama (Docker-compatible address)"
-      echo "OLLAMA_HOST=${OLLAMA_HOST_VAL}"
-    fi
     if [ -n "${CLAUDE_SETUP_TOKEN:-}" ]; then
       echo ""
       echo "# Claude Code setup token (long-lived, from 'claude setup-token')"
@@ -901,9 +818,17 @@ else
 fi
 
 
+CLAIM_CODE=""
 if [ "${FLIGHT_FINDER_SKIP_START:-}" = "1" ]; then
   ok "Skipping container start (test mode)"
 else
+  $DC stop web
+  $DC up -d --no-recreate db redis
+  if ! PREPARE_OUTPUT=$($DC run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web); then
+    fail "Access preparation failed. The new app was not started."
+  fi
+  printf '%s\n' "$PREPARE_OUTPUT"
+  CLAIM_CODE=$(printf '%s\n' "$PREPARE_OUTPUT" | sed -nE 's/.*"code"[[:space:]]*:[[:space:]]*"([^"]+)".*/\1/p' | tail -n 1)
   $DC up -d 2>&1 | while IFS= read -r line; do
     printf "  ${DIM}%s${RESET}\n" "$line"
   done
@@ -945,16 +870,17 @@ if [ "$CLAUDE_CODE_DETECTED" = true ] || [ "$CODEX_DETECTED" = true ]; then
   printf "${BOLD}  │${RESET}   LLM:   ${GREEN}Using your existing CLI subscription${RESET}  ${BOLD}│${RESET}\n"
 elif [ "$OLLAMA_DETECTED" = true ]; then
   printf "${BOLD}  │${RESET}   LLM:   ${GREEN}Ollama (local)${RESET}                         ${BOLD}│${RESET}\n"
-elif [ -n "$API_KEY_VAR" ]; then
-  printf "${BOLD}  │${RESET}   LLM:   API key configured                     ${BOLD}│${RESET}\n"
 else
-  printf "${BOLD}  │${RESET}   LLM:   Configure in admin panel               ${BOLD}│${RESET}\n"
+  printf "${BOLD}  │${RESET}   LLM:   Configure in browser setup              ${BOLD}│${RESET}\n"
 fi
 
 printf "${BOLD}  │${RESET}                                                  ${BOLD}│${RESET}\n"
 printf "${BOLD}  └──────────────────────────────────────────────────┘${RESET}\n"
 echo ""
 printf "  Next time, just run: ${BOLD}flight-finder${RESET}\n"
+if [ -n "$CLAIM_CODE" ]; then
+  printf "  Owner claim: ${BOLD}%s${RESET} ${DIM}(enter at /access within 15 minutes)${RESET}\n" "$CLAIM_CODE"
+fi
 printf "  ${DIM}Ctrl+C to stop  |  flight-finder stop  |  flight-finder help${RESET}\n"
 echo ""
 

@@ -1,33 +1,24 @@
 import { apiSuccess } from '@/lib/api-response';
-import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders } from '@/lib/scraper/ai-registry';
+import { EXTRACTION_PROVIDERS, detectProviderReadiness, type ProviderAvailability } from '@/lib/scraper/ai-registry';
 import { requireAdminApi } from '@/lib/admin-guard';
 
 interface ProviderStatus {
   displayName: string;
-  status: 'ready' | 'no_key' | 'not_installed' | 'unreachable';
+  status: ProviderAvailability;
   models: string[];
 }
 
-export async function GET() {
+export async function GET(request?: Request) {
   const denial = await requireAdminApi();
   if (denial) return denial;
 
-  const available = await detectAvailableProviders();
-  const isSelfHosted = process.env.SELF_HOSTED === 'true';
+  const readiness = await detectProviderReadiness(request?.signal);
 
   const statuses: Record<string, ProviderStatus> = {};
 
   for (const [key, config] of Object.entries(EXTRACTION_PROVIDERS)) {
-    let status: ProviderStatus['status'];
-    if (available.includes(key)) {
-      status = 'ready';
-    } else if (LOCAL_PROVIDERS.has(key)) {
-      status = isSelfHosted ? 'unreachable' : 'not_installed';
-    } else if (key === 'claude-code' || key === 'codex') {
-      status = 'not_installed';
-    } else {
-      status = 'no_key';
-    }
+    const status = readiness[key];
+    if (!status) throw new Error('Missing provider readiness result');
 
     statuses[key] = {
       displayName: config.displayName,

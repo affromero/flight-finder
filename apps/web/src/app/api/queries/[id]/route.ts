@@ -3,7 +3,7 @@ import type { Prisma } from '@/generated/prisma/client';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { authorizeMutation } from '@/lib/query-auth';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { isValidPriceAmount } from '@/lib/limits';
 
@@ -314,7 +314,7 @@ export async function PATCH(
   if (hasOwn(cascadeData, 'preferredAirlines')) eventData.preferredAirlines = cascadeData.preferredAirlines ?? [];
 
   const editedAt = new Date();
-  const user = await getCurrentUser().catch(() => null);
+  const user = await getCurrentProfile();
   const events: QueryEditEventCreate[] = [];
   for (const target of cascadeTargets) {
     const changes = buildEditChanges(target, eventData);

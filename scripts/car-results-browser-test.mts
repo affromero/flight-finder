@@ -28,7 +28,7 @@ search.dropoff.providerNames = { discovercars: 'London Heathrow Airport return a
 async function start(name: string, port: number, selfHosted: boolean) {
   const log = createWriteStream(resolve(output, `${name}.log`));
   const child = spawn(process.execPath, [resolve('node_modules/next/dist/bin/next'), 'start', '-p', String(port), '-H', '127.0.0.1'], {
-    cwd: resolve('apps/web'), env: { ...process.env, SELF_HOSTED: String(selfHosted), CRON_ENABLED: 'false', REDIS_URL: '', FF_ACCESS_PASSWORD: '', FF_MACHINE_TOKEN: '', ADMIN_SESSION_SECRET: 'car-results-disposable-test-secret', NEXT_TELEMETRY_DISABLED: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
+    cwd: resolve('apps/web'), env: { ...process.env, SELF_HOSTED: String(selfHosted), CRON_ENABLED: 'false', REDIS_URL: '', ADMIN_SESSION_SECRET: 'car-results-disposable-test-secret', NEXT_TELEMETRY_DISABLED: '1' }, stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout?.pipe(log); child.stderr?.pipe(log); servers.push({ child, log });
   const url = `http://127.0.0.1:${port}`;
@@ -62,7 +62,7 @@ try {
   }
   browser = await chromium.launch({ headless: true, ...(process.env.CHROME_PATH ? { executablePath: process.env.CHROME_PATH } : {}) });
   seeded = true;
-  await db.query(`INSERT INTO "ExtractionConfig" (id,"adminPasswordHash",enabled,"multiUserMode","updatedAt") VALUES ('singleton','self-hosted',false,true,now())`);
+  await db.query(`INSERT INTO "ExtractionConfig" (id,"setupComplete",enabled,"multiUserMode","updatedAt") VALUES ('singleton',true,false,true,now())`);
   for (const name of ['alice', 'bob']) await db.query(`INSERT INTO "User" (id,username,"updatedAt") VALUES ($1,$1,now())`, [`car-browser-${name}`]);
   await db.query(`INSERT INTO "CarSearchRun" (id,"userId",request,result,status,"createdAt","completedAt") VALUES ('car-browser-search','car-browser-alice',$1,$2,'success',$3,$3)`, [search, report, now]);
   const privateUrl = await start('private', 3017, true), publicUrl = await start('public', 3018, false);

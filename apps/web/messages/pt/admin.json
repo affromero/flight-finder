@@ -54,6 +54,8 @@
     "logout": "Sair"
   },
   "AdminDashboard": {
+    "unknownCost": "Desconhecido",
+    "knownCostSubtotal": "Subtotal conhecido: US$ {amount}. Registros sem preço: {count}.",
     "title": "Painel",
     "stats": {
       "activeQueries": "Consultas Ativas",
@@ -97,6 +99,9 @@
     "provider": "Provedor",
     "status": "Status: {status}",
     "providerStatus": {
+      "configured": "Configurado; autenticação não verificada",
+      "invalidCredentials": "As credenciais salvas precisam de reparo",
+      "notAuthenticated": "Entre na CLI",
       "ready": "Pronto",
       "noKey": "Nenhuma chave configurada",
       "unreachable": "Inacessível",
@@ -108,8 +113,8 @@
     "apiKey": "Chave de API",
     "apiKeySavedPlaceholder": "Salva — cole uma nova chave para substituir",
     "apiKeyPlaceholder": "Cole sua chave de API da {provider}",
-    "apiKeySavedHint": "Há uma chave salva. Deixe em branco para mantê-la, ou cole uma nova para substituí-la. Armazenada criptografada; recorre à variável de ambiente {envKey}.",
-    "apiKeyNewHint": "Cole uma chave para armazená-la (criptografada) aqui, ou defina a variável de ambiente {envKey}. Não é preciso reiniciar.",
+    "apiKeySavedHint": "Há uma chave salva. Deixe em branco para mantê-la, ou cole uma nova para substituí-la. Ela é armazenada criptografada.",
+    "apiKeyNewHint": "Cole uma chave para armazená-la criptografada. Não é preciso reiniciar.",
     "model": "Modelo",
     "modelCostFree": "Grátis (Max)",
     "modelCost": "US$ {cost}/1k entrada",
@@ -179,7 +184,7 @@
     "hubHint": "Permite que outras instâncias do Flight Finder se registrem nesta e enviem seus dados anonimizados para cá. Relevante apenas para o hub central. Novos registros têm limite de taxa e um teto global.",
     "providerDetails": "Detalhes do Provedor",
     "apiKeyDetail": "Chave de API:",
-    "apiKeyFromEnv": "inserida acima (armazenada criptografada), ou lida de <code>{envKey}</code> se nenhuma estiver definida",
+    "apiKeySaved": "armazenada criptografada nesta instância",
     "apiKeyNotRequired": "não é necessária — este provedor autentica pela sua própria CLI local, sem chave de API",
     "modelsAvailable": "Modelos disponíveis:"
   },
@@ -268,7 +273,7 @@
     "demote": "Rebaixar",
     "delete": "Excluir",
     "deleteConfirm": "Excluir o usuário {username}? Os rastreadores dele ficarão sem dono.",
-    "resetPrompt": "Nova senha para {username} (8+ caracteres):",
+    "resetPrompt": "Nova senha para {username} (12+ caracteres):",
     "passwordReset": "Senha redefinida.",
     "disableConfirm": "Desativar o modo multiusuário? Isso desliga todos os logins e limpa a senha de administrador, revertendo para uma instância auto-hospedada de usuário único. As contas permanecem no banco de dados, mas ficam inacessíveis até você reativar o modo multiusuário. Continuar?",
     "dangerZone": "Zona de perigo",
@@ -286,7 +291,7 @@
       "title": "Adicionar usuário",
       "username": "Nome de usuário",
       "displayName": "Nome de exibição (opcional)",
-      "passwordAdmin": "Senha (8+ caracteres)",
+      "passwordAdmin": "Senha (12+ caracteres)",
       "passwordOptional": "Senha (opcional)",
       "admin": "Administrador",
       "note": "Deixe a senha em branco para um membro que entra com um toque. Qualquer pessoa que alcance esta instância pode entrar como um membro sem senha, então adicione uma senha se ela for pública. Administradores sempre precisam de senha.",

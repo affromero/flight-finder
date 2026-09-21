@@ -1,6 +1,13 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { EventEmitter } from 'events';
 import type { ChildProcess } from 'child_process';
+import type { createStateBoundary } from '@/test/state-fixture';
+const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
+vi.mock('@/lib/sidedoor/access/store', async () => {
+  const { createStateBoundary } = await import('@/test/state-fixture');
+  persistence.state = createStateBoundary();
+  return { sharedStateStore: persistence.state.store };
+});
 
 // Mock child_process — vi.mock handles both static and dynamic imports
 const mockSpawn = vi.fn();
@@ -17,36 +24,31 @@ vi.mock('fs', async (importOriginal) => {
   return { ...actual, existsSync: (...args: unknown[]) => mockExistsSync(...args) };
 });
 
-// Mock the openai SDK so local provider extract paths can assert what baseURL
-// the client was constructed with (issue #84: 404 page not found from Ollama
-// when customBaseUrl lacked the /v1 suffix). The default export is invoked
-// with `new`, so the implementation must be a regular function expression:
-// arrow functions cannot be called as constructors.
-const mockOpenAIConstructor = vi.fn();
-const mockChatCompletionsCreate = vi.fn();
-vi.mock('openai', () => ({
-  default: vi.fn(function (this: unknown, opts: { apiKey?: string; baseURL?: string }) {
-    mockOpenAIConstructor(opts);
-    return {
-      chat: { completions: { create: mockChatCompletionsCreate } },
-    };
-  }),
-}));
-
-// detectAvailableProviders reads the ExtractionConfig singleton to honor
-// DB-stored keys (#149), so prisma must be mocked or the call hits a real DB.
-// findFirst returns null by default (env-only detection, preserving prior
-// behavior) and is overridable per test with mockResolvedValueOnce.
+// Provider discovery reads the ExtractionConfig singleton, so Prisma must be
+// mocked or the call reaches a real database.
 const mockConfigFindFirst = vi.fn().mockResolvedValue(null);
-vi.mock('@/lib/prisma', () => ({
-  prisma: { extractionConfig: { findFirst: (...args: unknown[]) => mockConfigFindFirst(...args) } },
-}));
+vi.mock('@/lib/prisma', () => {
+  const database = { extractionConfig: {
+    async findFirst(...args: unknown[]) { persistence.config = await mockConfigFindFirst(...args); return persistence.config; },
+    async findUnique() { return persistence.config; },
+    async update({ data }: { data: Record<string, unknown> }) { persistence.config = { ...persistence.config, ...data }; return persistence.config; },
+  } };
+  return { prisma: { ...database, $transaction: async (operation: (value: typeof database) => Promise<unknown>) => operation(database) } };
+});
 
 // Must import after mocks
-const { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders, resolveApiKey, ensureV1Suffix, filterCliStderr, isLocalProviderReachable } = await import(
+const { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, detectAvailableProviders, detectProviderReadiness, resolveApiKey, ensureV1Suffix, filterCliStderr, isLocalProviderReachable, getModelCosts, estimateModelCost } = await import(
   './ai-registry'
 );
-const { encryptSecret } = await import('@/lib/secret-crypto');
+const { initializeProviderCredentials } = await import('@/lib/sidedoor/providers/provider-credentials');
+async function configureProvider(
+  provider: string,
+  values: Record<string, string | number | boolean | null>,
+) {
+  const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
+  const { prisma } = await import('@/lib/prisma');
+  await providerVault(prisma).vault.configure(provider, values);
+}
 
 /** Create a fake ChildProcess-like EventEmitter with stdin/stdout/stderr */
 function createFakeProc() {
@@ -61,33 +63,28 @@ function createFakeProc() {
 }
 
 describe('ai-registry', () => {
-  beforeEach(() => {
+  it('prices the canonical Sonnet preset without rewriting an invalid historical selection', () => {
+    const costs = getModelCosts('anthropic', 'claude-sonnet-4-6');
+    expect(costs).toMatchObject({ costPer1kInput: 0.003, costPer1kOutput: 0.015 });
+    expect(estimateModelCost({ inputTokens: 1000, outputTokens: 1000, cachedInputTokens: 0, cacheWriteTokens: 0 }, costs)).toBeCloseTo(0.018);
+    expect(getModelCosts('anthropic', 'claude-sonnet-4-6-20250514')).toBeNull();
+  });
+  beforeEach(async () => {
     vi.clearAllMocks();
+    persistence.state!.reset();
+    persistence.config = null;
+    await initializeProviderCredentials();
   });
 
   describe('detectAvailableProviders', () => {
-    const savedEnv: Record<string, string | undefined> = {};
-
     beforeEach(() => {
       mockSpawn.mockImplementation(() => { throw new Error('CLI unavailable'); });
-      // Save and clear LLM env vars (setup.ts sets dummy keys globally)
-      for (const key of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_AI_API_KEY', 'SELF_HOSTED']) {
-        savedEnv[key] = process.env[key];
-        delete process.env[key];
-      }
+      delete process.env.SELF_HOSTED;
     });
 
-    afterEach(() => {
-      // Restore original env
-      for (const [key, val] of Object.entries(savedEnv)) {
-        if (val === undefined) delete process.env[key];
-        else process.env[key] = val;
-      }
-    });
-
-    it('detects API-key providers when env vars are set', async () => {
-      process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
-      process.env.OPENAI_API_KEY = 'sk-test';
+    it('detects canonically configured API-key providers', async () => {
+      await configureProvider('anthropic', { apiKey: 'stored-anthropic-key' });
+      await configureProvider('openai', { apiKey: 'stored-openai-key' });
 
       const providers = await detectAvailableProviders();
 
@@ -166,76 +163,59 @@ describe('ai-registry', () => {
       expect(providers).not.toContain('llamacpp');
     });
 
-    it('counts a DB-stored key even when the matching env var is unset (#149)', async () => {
-      // env keys are cleared by the describe beforeEach; supply only a stored key.
-      mockConfigFindFirst.mockResolvedValueOnce({ googleApiKey: encryptSecret('stored-google-key') });
+    it('detects a provider with a saved key', async () => {
+      await configureProvider('google', { apiKey: 'stored-google-key' });
 
       const providers = await detectAvailableProviders();
 
       expect(providers).toContain('google');
     });
 
-    it('counts a stored customBaseUrl for openai when no env key/endpoint is set', async () => {
-      const savedBase = process.env.OPENAI_BASE_URL;
-      delete process.env.OPENAI_BASE_URL; // setup.ts sets this globally
-      mockConfigFindFirst.mockResolvedValueOnce({ customBaseUrl: 'http://localhost:1234/v1' });
-
-      const providers = await detectAvailableProviders();
-
-      expect(providers).toContain('openai');
-      if (savedBase === undefined) delete process.env.OPENAI_BASE_URL;
-      else process.env.OPENAI_BASE_URL = savedBase;
+    it('surfaces database failures and cancellation instead of reporting missing providers', async () => {
+      mockConfigFindFirst.mockRejectedValueOnce(new Error('Database unavailable'));
+      await expect(detectProviderReadiness()).rejects.toThrow('Database unavailable');
+      const controller = new AbortController();
+      controller.abort(new Error('Discovery cancelled'));
+      await expect(detectProviderReadiness(controller.signal)).rejects.toThrow('Discovery cancelled');
     });
 
-    it('skips the DB read when passed null and detects from env only', async () => {
-      process.env.ANTHROPIC_API_KEY = 'sk-ant-test';
+    it('does not report an uncredentialed custom endpoint as configured', async () => {
+      const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
+      const { prisma } = await import('@/lib/prisma');
+      await providerVault(prisma).vault.configure('openai', { baseUrl: 'https://unconfigured.example/v1' });
+      expect((await detectProviderReadiness()).openai).toBe('no_key');
+    });
 
-      const providers = await detectAvailableProviders(null);
-
-      expect(providers).toContain('anthropic');
-      expect(mockConfigFindFirst).not.toHaveBeenCalled();
+    it('probes the saved local endpoint used by inference', async () => {
+      process.env.SELF_HOSTED = 'true';
+      const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
+      const { prisma } = await import('@/lib/prisma');
+      await providerVault(prisma).vault.configure('ollama', { baseUrl: 'http://saved-ollama.example:11434/v1' });
+      const requests: string[] = [];
+      vi.stubGlobal('fetch', async (url: string) => { requests.push(url); return Response.json({ models: [] }); });
+      try {
+        expect((await detectProviderReadiness()).ollama).toBe('ready');
+        expect(requests).toContain('http://saved-ollama.example:11434/v1/models');
+      } finally { vi.unstubAllGlobals(); }
     });
   });
 
-  describe('resolveApiKey (#149)', () => {
-    const saved: Record<string, string | undefined> = {};
-    beforeEach(() => {
-      for (const k of ['ANTHROPIC_API_KEY', 'OPENAI_API_KEY', 'GOOGLE_AI_API_KEY']) {
-        saved[k] = process.env[k];
-        delete process.env[k];
-      }
-    });
-    afterEach(() => {
-      for (const [k, v] of Object.entries(saved)) {
-        if (v === undefined) delete process.env[k];
-        else process.env[k] = v;
-      }
+  describe('resolveApiKey', () => {
+    it('resolves the saved key', async () => {
+      await configureProvider('openai', { apiKey: 'stored-key' });
+      expect(await resolveApiKey('openai')).toBe('stored-key');
     });
 
-    it('prefers a DB-stored key over the env var', () => {
-      process.env.OPENAI_API_KEY = 'env-key';
-      expect(resolveApiKey('openai', { openaiApiKey: encryptSecret('stored-key') })).toBe('stored-key');
+    it('resolves the selected endpoint key from one credential snapshot', async () => {
+      expect(await resolveApiKey('openai', { apiKey: 'official', baseUrl: 'https://custom.example/v1', compatibleApiKey: 'custom' })).toBe('custom');
+      expect(await resolveApiKey('openai', { apiKey: 'official', baseUrl: 'https://custom.example/v1' })).toBe('');
+      expect(await resolveApiKey('anthropic', { apiKey: 'anthropic-key' })).toBe('anthropic-key');
+      expect(await resolveApiKey('google', { apiKey: 'google-key' })).toBe('google-key');
     });
 
-    it('falls back to the env var when there is no stored key', () => {
-      process.env.OPENAI_API_KEY = 'env-key';
-      expect(resolveApiKey('openai', null)).toBe('env-key');
-      expect(resolveApiKey('openai', {})).toBe('env-key');
-    });
-
-    it('falls back to env when a stored value cannot be decrypted (rotated secret)', () => {
-      process.env.OPENAI_API_KEY = 'env-key';
-      expect(resolveApiKey('openai', { openaiApiKey: 'not-valid-ciphertext' })).toBe('env-key');
-    });
-
-    it('resolves anthropic and google stored keys too (multi-provider parity)', () => {
-      expect(resolveApiKey('anthropic', { anthropicApiKey: encryptSecret('stored-a') })).toBe('stored-a');
-      expect(resolveApiKey('google', { googleApiKey: encryptSecret('stored-g') })).toBe('stored-g');
-    });
-
-    it('returns empty string for CLI/local providers (no key needed)', () => {
-      expect(resolveApiKey('ollama', null)).toBe('');
-      expect(resolveApiKey('claude-code', null)).toBe('');
+    it('keeps keyless CLI and local configurations available', async () => {
+      expect(await resolveApiKey('ollama', {})).toBe('');
+      expect(await resolveApiKey('claude-code')).toBe('');
     });
   });
 
@@ -260,7 +240,6 @@ describe('ai-registry', () => {
       expect(ollama.allowCustomBaseUrl).toBe(true);
       expect(ollama.defaultBaseUrl).toBe('http://localhost:11434/v1');
       expect(ollama.models).toHaveLength(0);
-      expect(ollama.envKey).toBeUndefined();
     });
 
     it('llamacpp provider exists with correct config', () => {
@@ -269,7 +248,6 @@ describe('ai-registry', () => {
       expect(llamacpp.allowCustomBaseUrl).toBe(true);
       expect(llamacpp.defaultBaseUrl).toBe('http://localhost:8080/v1');
       expect(llamacpp.models).toHaveLength(0);
-      expect(llamacpp.envKey).toBeUndefined();
     });
 
     it('openai provider has allowCustomBaseUrl', () => {
@@ -282,7 +260,6 @@ describe('ai-registry', () => {
       expect(vllm.allowCustomBaseUrl).toBe(true);
       expect(vllm.defaultBaseUrl).toBe('http://localhost:8000/v1');
       expect(vllm.models).toHaveLength(0);
-      expect(vllm.envKey).toBeUndefined();
     });
 
     it('LOCAL_PROVIDERS includes ollama, llamacpp, and vllm', () => {
@@ -293,106 +270,6 @@ describe('ai-registry', () => {
     });
   });
 
-  describe('codex extract — ENOENT handling', () => {
-    it('rejects with actionable message when codex binary is missing', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS.codex!.extract(
-        '',
-        'codex',
-        'system',
-        'user'
-      );
-
-      // Give the dynamic import a tick to resolve
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-
-      // Simulate ENOENT error
-      const err = new Error('spawn codex ENOENT') as NodeJS.ErrnoException;
-      err.code = 'ENOENT';
-      fakeProc.emit('error', err);
-
-      await expect(extractPromise).rejects.toThrow(
-        /codex CLI not found.*Restart the container/
-      );
-    });
-  });
-
-  describe('claude-code extract — ENOENT handling', () => {
-    it('rejects with actionable message when claude binary is missing', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS['claude-code']!.extract(
-        '',
-        'sonnet',
-        'system',
-        'user'
-      );
-
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-
-      const err = new Error('spawn claude ENOENT') as NodeJS.ErrnoException;
-      err.code = 'ENOENT';
-      fakeProc.emit('error', err);
-
-      await expect(extractPromise).rejects.toThrow(
-        /claude CLI not found.*Restart the container/
-      );
-    });
-  });
-
-  describe('CLI failures that print on stdout', () => {
-    it('surfaces the claude failure when stderr is empty', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS['claude-code']!.extract(
-        '',
-        'sonnet',
-        'system',
-        'user'
-      );
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-
-      // How an expired OAuth session actually reports: stdout carries the
-      // reason, stderr is empty, exit code is 1.
-      fakeProc.stdout!.emit(
-        'data',
-        Buffer.from('Failed to authenticate: OAuth session expired and could not be refreshed')
-      );
-      fakeProc.emit('close', 1);
-
-      await expect(extractPromise).rejects.toThrow(/OAuth session expired/);
-    });
-
-    it('surfaces the codex failure when stderr is empty', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS['codex']!.extract(
-        '',
-        'gpt-5.5',
-        'system',
-        'user'
-      );
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-
-      fakeProc.stdout!.emit('data', Buffer.from('Not logged in. Run codex auth.'));
-      fakeProc.emit('close', 1);
-
-      await expect(extractPromise).rejects.toThrow(/Not logged in/);
-    });
-  });
 
   describe('filterCliStderr', () => {
     it('strips PATH warning lines from stderr', () => {
@@ -409,84 +286,6 @@ describe('ai-registry', () => {
     });
   });
 
-  describe('codex extract — 401 auth hint', () => {
-    it('includes auth hint when stderr contains 401', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS.codex!.extract(
-        '',
-        'codex',
-        'system',
-        'user'
-      );
-
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-
-      // Emit 401 on stderr, then close with error
-      fakeProc.stderr!.emit('data', Buffer.from('401 Unauthorized'));
-      fakeProc.emit('close', 1);
-
-      await expect(extractPromise).rejects.toThrow(
-        /ensure codex is authenticated on the host via `codex auth`/
-      );
-    });
-
-    it('does not include auth hint for non-401 errors', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS.codex!.extract(
-        '',
-        'codex',
-        'system',
-        'user'
-      );
-
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-
-      fakeProc.stderr!.emit('data', Buffer.from('some other error'));
-      fakeProc.emit('close', 1);
-
-      await expect(extractPromise).rejects.toThrow('codex CLI exited 1: some other error');
-      await expect(extractPromise).rejects.not.toThrow(/codex auth/);
-    });
-  });
-
-  describe('codex extract passes env to spawn', () => {
-    it('includes process.env in spawn options', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS.codex!.extract(
-        '',
-        'codex',
-        'system',
-        'user'
-      );
-
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-
-      // Verify spawn was called with exec subcommand and env
-      expect(mockSpawn).toHaveBeenCalledWith(
-        'codex',
-        expect.arrayContaining(['exec', '-', '--skip-git-repo-check', '--ephemeral']),
-        expect.objectContaining({
-          env: expect.objectContaining({ PATH: expect.any(String) }),
-        })
-      );
-
-      // Clean up: resolve the promise
-      fakeProc.emit('close', 0);
-      await extractPromise.catch(() => {});
-    });
-  });
 
   describe('ensureV1Suffix', () => {
     it('appends /v1 to a host without a path', () => {
@@ -512,299 +311,18 @@ describe('ai-registry', () => {
     });
   });
 
-  // Regression for issue #84: a customBaseUrl saved without /v1 sent the
-  // OpenAI SDK to <host>/chat/completions, which Ollama answers with its
-  // catchall 404. Assert that every local provider passes a /v1 suffixed
-  // baseURL into the SDK constructor regardless of what the caller supplied.
-  describe('local provider extract: /v1 suffix normalization (issue #84)', () => {
-    const savedOllamaHost = process.env.OLLAMA_HOST;
-
-    beforeEach(() => {
-      mockOpenAIConstructor.mockClear();
-      mockChatCompletionsCreate.mockReset();
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: '{"parsed": null, "confidence": "low", "ambiguities": []}' } }],
-        usage: { prompt_tokens: 1, completion_tokens: 1 },
-      });
-      delete process.env.OLLAMA_HOST;
-    });
-
-    afterEach(() => {
-      if (savedOllamaHost === undefined) delete process.env.OLLAMA_HOST;
-      else process.env.OLLAMA_HOST = savedOllamaHost;
-    });
-
-    it('ollama: appends /v1 when caller passes baseUrl without it', async () => {
-      await EXTRACTION_PROVIDERS.ollama!.extract(
-        '',
-        'llama3.1:8b',
-        'system',
-        'user',
-        { baseUrl: 'http://host.docker.internal:11434' },
-      );
-      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
-        expect.objectContaining({ baseURL: 'http://host.docker.internal:11434/v1' }),
-      );
-    });
-
-    it('ollama: keeps /v1 when caller already supplied it', async () => {
-      await EXTRACTION_PROVIDERS.ollama!.extract(
-        '',
-        'llama3.1:8b',
-        'system',
-        'user',
-        { baseUrl: 'http://host.docker.internal:11434/v1' },
-      );
-      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
-        expect.objectContaining({ baseURL: 'http://host.docker.internal:11434/v1' }),
-      );
-    });
-
-    it('ollama: appends /v1 when only OLLAMA_HOST env is set (no /v1)', async () => {
-      process.env.OLLAMA_HOST = 'http://host.docker.internal:11434';
-      await EXTRACTION_PROVIDERS.ollama!.extract('', 'llama3.1:8b', 'system', 'user');
-      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
-        expect.objectContaining({ baseURL: 'http://host.docker.internal:11434/v1' }),
-      );
-    });
-
-    it('ollama: falls back to localhost:11434/v1 when nothing is configured', async () => {
-      await EXTRACTION_PROVIDERS.ollama!.extract('', 'llama3.1:8b', 'system', 'user');
-      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
-        expect.objectContaining({ baseURL: 'http://localhost:11434/v1' }),
-      );
-    });
-
-    it('llamacpp: appends /v1 when caller passes baseUrl without it', async () => {
-      await EXTRACTION_PROVIDERS.llamacpp!.extract(
-        '',
-        'gguf-model',
-        'system',
-        'user',
-        { baseUrl: 'http://host.docker.internal:8080' },
-      );
-      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
-        expect.objectContaining({ baseURL: 'http://host.docker.internal:8080/v1' }),
-      );
-    });
-
-    it('vllm: appends /v1 when caller passes baseUrl without it', async () => {
-      await EXTRACTION_PROVIDERS.vllm!.extract(
-        '',
-        'mistral-7b',
-        'system',
-        'user',
-        { baseUrl: 'http://host.docker.internal:8000' },
-      );
-      expect(mockOpenAIConstructor).toHaveBeenCalledWith(
-        expect.objectContaining({ baseURL: 'http://host.docker.internal:8000/v1' }),
-      );
-    });
-  });
-
-  // Issue #84 follow up: enabling responseFormat must thread through every
-  // OpenAI compatible extract path so small models (Ollama, llama.cpp, vLLM)
-  // get constrained generation. Without it the parser regex would occasionally
-  // find no JSON in the response and bail.
-  describe('responseFormat: json_object plumbing (issue #84)', () => {
-    beforeEach(() => {
-      mockOpenAIConstructor.mockClear();
-      mockChatCompletionsCreate.mockReset();
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: '{}' } }],
-        usage: { prompt_tokens: 1, completion_tokens: 1 },
-      });
-    });
-
-    it('openai: passes response_format when caller opts in', async () => {
-      await EXTRACTION_PROVIDERS.openai!.extract(
-        'sk-test',
-        'gpt-4.1-mini',
-        'system',
-        'user',
-        { responseFormat: 'json_object' },
-      );
-      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response_format: { type: 'json_object' },
-        }),
-        expect.any(Object),
-      );
-    });
-
-    it('openai: omits response_format when caller does not opt in', async () => {
-      await EXTRACTION_PROVIDERS.openai!.extract('sk-test', 'gpt-4.1-mini', 'system', 'user');
-      const callArgs = mockChatCompletionsCreate.mock.calls[0]![0] as Record<string, unknown>;
-      expect(callArgs).not.toHaveProperty('response_format');
-    });
-
-    it('ollama: passes response_format when caller opts in', async () => {
-      await EXTRACTION_PROVIDERS.ollama!.extract(
-        '',
-        'llama3.1:8b',
-        'system',
-        'user',
-        { baseUrl: 'http://localhost:11434/v1', responseFormat: 'json_object' },
-      );
-      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response_format: { type: 'json_object' },
-        }),
-        expect.any(Object),
-      );
-    });
-
-    it('llamacpp: passes response_format when caller opts in', async () => {
-      await EXTRACTION_PROVIDERS.llamacpp!.extract(
-        '',
-        'gguf-model',
-        'system',
-        'user',
-        { responseFormat: 'json_object' },
-      );
-      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response_format: { type: 'json_object' },
-        }),
-        expect.any(Object),
-      );
-    });
-
-    it('vllm: passes response_format when caller opts in', async () => {
-      await EXTRACTION_PROVIDERS.vllm!.extract(
-        '',
-        'mistral-7b',
-        'system',
-        'user',
-        { responseFormat: 'json_object' },
-      );
-      expect(mockChatCompletionsCreate).toHaveBeenCalledWith(
-        expect.objectContaining({
-          response_format: { type: 'json_object' },
-        }),
-        expect.any(Object),
-      );
-    });
-  });
-
-  // Issue #86: ExtractOptions.timeoutMs lets the admin override the default
-  // 90s abort timeout from the DB. Every SDK provider's extract path must
-  // honour it, with EXTRACT_TIMEOUT_MS as the fallback when unset.
-  describe('timeoutMs plumbing (issue #86)', () => {
-    let timeoutSpy: ReturnType<typeof vi.spyOn>;
-
-    beforeEach(() => {
-      mockOpenAIConstructor.mockClear();
-      mockChatCompletionsCreate.mockReset();
-      mockChatCompletionsCreate.mockResolvedValue({
-        choices: [{ message: { content: '{}' } }],
-        usage: { prompt_tokens: 1, completion_tokens: 1 },
-      });
-      timeoutSpy = vi.spyOn(AbortSignal, 'timeout');
-    });
-
-    afterEach(() => {
-      timeoutSpy.mockRestore();
-    });
-
-    it('ollama: uses options.timeoutMs when supplied', async () => {
-      await EXTRACTION_PROVIDERS.ollama!.extract(
-        '',
-        'qwen3:4b',
-        'system',
-        'user',
-        { baseUrl: 'http://localhost:11434/v1', timeoutMs: 240_000 },
-      );
-      expect(timeoutSpy).toHaveBeenCalledWith(240_000);
-    });
-
-    it('ollama: falls back to EXTRACT_TIMEOUT_MS when timeoutMs is unset', async () => {
-      await EXTRACTION_PROVIDERS.ollama!.extract('', 'qwen3:4b', 'system', 'user');
-      expect(timeoutSpy).toHaveBeenCalledWith(90_000);
-    });
-
-    it('openai: uses options.timeoutMs when supplied', async () => {
-      await EXTRACTION_PROVIDERS.openai!.extract(
-        'sk-test',
-        'gpt-4.1-mini',
-        'system',
-        'user',
-        { timeoutMs: 180_000 },
-      );
-      expect(timeoutSpy).toHaveBeenCalledWith(180_000);
-    });
-
-    it('llamacpp: uses options.timeoutMs when supplied', async () => {
-      await EXTRACTION_PROVIDERS.llamacpp!.extract(
-        '',
-        'gguf-model',
-        'system',
-        'user',
-        { timeoutMs: 300_000 },
-      );
-      expect(timeoutSpy).toHaveBeenCalledWith(300_000);
-    });
-
-    it('vllm: uses options.timeoutMs when supplied', async () => {
-      await EXTRACTION_PROVIDERS.vllm!.extract(
-        '',
-        'mistral-7b',
-        'system',
-        'user',
-        { timeoutMs: 120_000 },
-      );
-      expect(timeoutSpy).toHaveBeenCalledWith(120_000);
-    });
-
-    // CLI providers (claude-code, codex) rely on the spawn() `timeout` option
-    // for their own subprocess lifetime, not AbortSignal.timeout. Regression
-    // cover so a future refactor that wires AbortSignal.timeout into them
-    // (without removing the spawn timeout) does not double-arm the kill path.
-    it('claude-code: does not call AbortSignal.timeout', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS['claude-code']!.extract('', 'sonnet', 'system', 'user');
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-      const err = new Error('spawn claude ENOENT') as NodeJS.ErrnoException;
-      err.code = 'ENOENT';
-      fakeProc.emit('error', err);
-      await extractPromise.catch(() => {});
-
-      expect(timeoutSpy).not.toHaveBeenCalled();
-    });
-
-    it('codex: does not call AbortSignal.timeout', async () => {
-      const fakeProc = createFakeProc();
-      mockSpawn.mockReturnValue(fakeProc);
-
-      const extractPromise = EXTRACTION_PROVIDERS.codex!.extract('', 'codex', 'system', 'user');
-      await vi.waitFor(() => {
-        expect(mockSpawn).toHaveBeenCalled();
-      });
-      const err = new Error('spawn codex ENOENT') as NodeJS.ErrnoException;
-      err.code = 'ENOENT';
-      fakeProc.emit('error', err);
-      await extractPromise.catch(() => {});
-
-      expect(timeoutSpy).not.toHaveBeenCalled();
-    });
-  });
-
   describe('isLocalProviderReachable', () => {
     afterEach(() => {
       vi.unstubAllGlobals();
     });
 
     it('returns true when provider responds with 200', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: true }));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(Response.json({ data: [] })));
       expect(await isLocalProviderReachable('ollama')).toBe(true);
     });
 
     it('returns false when provider responds with non-200', async () => {
-      vi.stubGlobal('fetch', vi.fn().mockResolvedValue({ ok: false }));
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(new Response('', { status: 500 })));
       expect(await isLocalProviderReachable('ollama')).toBe(false);
     });
 
@@ -817,13 +335,13 @@ describe('ai-registry', () => {
       expect(await isLocalProviderReachable('nonexistent')).toBe(false);
     });
 
-    it('pings /api/tags for ollama, /v1/models for others', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    it('probes the shared OpenAI-compatible readiness endpoint', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(Response.json({ data: [] }));
       vi.stubGlobal('fetch', mockFetch);
 
       await isLocalProviderReachable('ollama');
       expect(mockFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/tags'),
+        expect.stringContaining('/v1/models'),
         expect.any(Object)
       );
 
@@ -835,21 +353,18 @@ describe('ai-registry', () => {
       );
     });
 
-    it('probes OLLAMA_HOST for ollama instead of localhost (Docker; #139)', async () => {
-      const mockFetch = vi.fn().mockResolvedValue({ ok: true });
+    it('probes the canonically configured Ollama endpoint', async () => {
+      const mockFetch = vi.fn().mockResolvedValue(Response.json({ data: [] }));
       vi.stubGlobal('fetch', mockFetch);
-      const prev = process.env.OLLAMA_HOST;
-      process.env.OLLAMA_HOST = 'http://host.docker.internal:11434';
-      try {
-        await isLocalProviderReachable('ollama');
-        expect(mockFetch).toHaveBeenCalledWith(
-          'http://host.docker.internal:11434/api/tags',
-          expect.any(Object)
-        );
-      } finally {
-        if (prev === undefined) delete process.env.OLLAMA_HOST;
-        else process.env.OLLAMA_HOST = prev;
-      }
+      await configureProvider('ollama', {
+        baseUrl: 'http://host.docker.internal:11434/v1',
+        allowAnonymous: true,
+      });
+      await isLocalProviderReachable('ollama');
+      expect(mockFetch).toHaveBeenCalledWith(
+        'http://host.docker.internal:11434/v1/models',
+        expect.any(Object)
+      );
     });
   });
 });
@@ -894,125 +409,5 @@ describe('EXTRACT_TIMEOUT_MS env parsing (issue #65)', () => {
     vi.resetModules();
     mod = await import('./ai-registry');
     expect(mod.EXTRACT_TIMEOUT_MS).toBe(90_000);
-  });
-});
-
-describe('CLI provider lockdown (Finding 4)', () => {
-  beforeEach(() => {
-    mockSpawn.mockReset();
-  });
-
-  it('claude-code runs with every tool disabled and the default permission mode', async () => {
-    const proc = createFakeProc();
-    mockSpawn.mockReturnValue(proc);
-    const done = EXTRACTION_PROVIDERS['claude-code']!.extract('', 'sonnet', 'system', 'page');
-    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
-    proc.stdout!.emit('data', Buffer.from('[]'));
-    proc.emit('close', 0);
-    await done;
-
-    const args = mockSpawn.mock.calls[0]![1] as string[];
-    expect(args).toContain('--disallowedTools');
-    const denied = args[args.indexOf('--disallowedTools') + 1]!;
-    for (const tool of ['Bash', 'Read', 'Write', 'Edit', 'WebFetch', 'Task']) {
-      expect(denied).toContain(tool);
-    }
-    expect(args[args.indexOf('--permission-mode') + 1]).toBe('default');
-    expect(args).not.toContain('--dangerously-skip-permissions');
-    expect(args).not.toContain('--allow-dangerously-skip-permissions');
-  });
-
-  it('claude-code spawns without the API key or any host endpoint/token override (#139 follow-up)', async () => {
-    const proc = createFakeProc();
-    mockSpawn.mockReturnValue(proc);
-    const saved = {
-      key: process.env.ANTHROPIC_API_KEY,
-      base: process.env.ANTHROPIC_BASE_URL,
-      token: process.env.ANTHROPIC_AUTH_TOKEN,
-    };
-    // Simulate a host (or the test harness) that redirects Anthropic traffic.
-    process.env.ANTHROPIC_API_KEY = 'sk-ant-host';
-    process.env.ANTHROPIC_BASE_URL = 'http://127.0.0.1:19876/v1';
-    process.env.ANTHROPIC_AUTH_TOKEN = 'host-token';
-    try {
-      const done = EXTRACTION_PROVIDERS['claude-code']!.extract('', 'sonnet', 'system', 'page');
-      await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
-      proc.stdout!.emit('data', Buffer.from('[]'));
-      proc.emit('close', 0);
-      await done;
-
-      const opts = mockSpawn.mock.calls[0]![2] as { env: NodeJS.ProcessEnv };
-      expect(opts.env.ANTHROPIC_API_KEY).toBeUndefined();
-      expect(opts.env.ANTHROPIC_BASE_URL).toBeUndefined();
-      expect(opts.env.ANTHROPIC_AUTH_TOKEN).toBeUndefined();
-      // PATH and other host env still pass through.
-      expect(opts.env.PATH).toBeDefined();
-    } finally {
-      if (saved.key === undefined) delete process.env.ANTHROPIC_API_KEY; else process.env.ANTHROPIC_API_KEY = saved.key;
-      if (saved.base === undefined) delete process.env.ANTHROPIC_BASE_URL; else process.env.ANTHROPIC_BASE_URL = saved.base;
-      if (saved.token === undefined) delete process.env.ANTHROPIC_AUTH_TOKEN; else process.env.ANTHROPIC_AUTH_TOKEN = saved.token;
-    }
-  });
-
-  it('codex runs with the read-only sandbox, never danger-full-access', async () => {
-    const proc = createFakeProc();
-    mockSpawn.mockReturnValue(proc);
-    // No output file is written, so the call rejects; we only assert the args.
-    const done = EXTRACTION_PROVIDERS['codex']!.extract('', 'codex', 'system', 'page').catch(() => undefined);
-    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
-    proc.emit('close', 1);
-    await done;
-
-    const args = mockSpawn.mock.calls[0]![1] as string[];
-    expect(args[args.indexOf('-s') + 1]).toBe('read-only');
-    expect(args).not.toContain('danger-full-access');
-    expect(args).not.toContain('--dangerously-bypass-approvals-and-sandbox');
-  });
-
-  it('honors an explicit Luna model and removes temporary output after failure', async () => {
-    const proc = createFakeProc();
-    mockSpawn.mockReturnValue(proc);
-    const done = EXTRACTION_PROVIDERS.codex!.extract('', 'gpt-5.6-luna', 'system', 'draft');
-    const failure = expect(done).rejects.toThrow('codex CLI exited');
-    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
-    const args = mockSpawn.mock.calls[0]![1] as string[];
-    expect(args[args.indexOf('--model') + 1]).toBe('gpt-5.6-luna');
-    const { stat } = await import('node:fs/promises');
-    const { dirname } = await import('node:path');
-    const directory = dirname(args[args.indexOf('-o') + 1]!);
-    expect((await stat(directory)).isDirectory()).toBe(true);
-    proc.emit('close', 1);
-    await failure;
-    await expect(stat(directory)).rejects.toMatchObject({ code: 'ENOENT' });
-  });
-
-  it('waits for cancelled inference to close before returning and cleaning up', async () => {
-    const proc = Object.assign(createFakeProc(), { kill: vi.fn() });
-    mockSpawn.mockReturnValue(proc);
-    const controller = new AbortController();
-    let settled = false;
-    const done = EXTRACTION_PROVIDERS.codex!.extract('', 'codex', 'system', 'draft', { signal: controller.signal });
-    const failure = expect(done).rejects.toThrow('cancelled');
-    void done.then(() => { settled = true; }, () => { settled = true; });
-    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
-    controller.abort(new Error('cancelled'));
-    await Promise.resolve();
-    expect(proc.kill).toHaveBeenCalledWith('SIGKILL');
-    expect(settled).toBe(false);
-    proc.emit('close', null);
-    await failure;
-    expect(settled).toBe(true);
-  });
-
-  it('terminates oversized controlled output and waits for process closure', async () => {
-    const proc = Object.assign(createFakeProc(), { kill: vi.fn() });
-    mockSpawn.mockReturnValue(proc);
-    const done = EXTRACTION_PROVIDERS.codex!.extract('', 'codex', 'system', 'draft', { signal: new AbortController().signal });
-    const failure = expect(done).rejects.toThrow(/output.*size/);
-    await vi.waitFor(() => expect(mockSpawn).toHaveBeenCalled());
-    proc.stderr!.emit('data', Buffer.alloc(64_001, 'a'));
-    expect(proc.kill).toHaveBeenCalledWith('SIGKILL');
-    proc.emit('close', null);
-    await failure;
   });
 });

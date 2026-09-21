@@ -1,3 +1,12 @@
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/access/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+beforeEach(() => sessionBoundary.fixture!.resetRequest());
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
@@ -31,6 +40,7 @@ const mockTransaction = vi.fn((callback: (tx: MockTransactionClient) => unknown)
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    user: { findUnique: async () => sessionBoundary.fixture!.user },
     $transaction: (callback: (tx: MockTransactionClient) => unknown) => mockTransaction(callback),
     query: {
       findUnique: (...args: unknown[]) => mockQueryFindUnique(...args),
@@ -48,26 +58,15 @@ vi.mock('@/lib/prisma', () => ({
 }));
 
 const mockIsMultiUserEnabled = vi.fn().mockResolvedValue(false);
-const mockGetCurrentUser = vi.fn().mockResolvedValue(null);
 
 vi.mock('@/lib/multi-user', () => ({
   isMultiUserEnabled: () => mockIsMultiUserEnabled(),
 }));
 
-vi.mock('@/lib/user-auth', () => ({
-  getCurrentUser: () => mockGetCurrentUser(),
-}));
 
 // After authorizeMutation moved to @/lib/query-auth, every hosted mode path
 // calls getSessionToken() -> cookies() from next/headers. Without this mock
 // jsdom-less Vitest blows up the moment authorizeMutation is invoked.
-const mockGetSessionToken = vi.fn().mockResolvedValue(undefined);
-const mockVerifySessionToken = vi.fn().mockReturnValue(false);
-vi.mock('@/lib/admin-auth', () => ({
-  getSessionToken: () => mockGetSessionToken(),
-  verifySessionToken: (token: string) => mockVerifySessionToken(token),
-  parseAdminTokenTimestamp: () => 1000,
-}));
 
 import { DELETE, PATCH } from './route';
 
@@ -83,12 +82,12 @@ function makeDeleteRequest(id: string, body?: Record<string, unknown>): [NextReq
 }
 
 describe('DELETE /api/queries/[id]', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockQueryDelete.mockResolvedValue({});
     mockQueryDeleteMany.mockResolvedValue({ count: 0 });
     mockIsMultiUserEnabled.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
+    await sessionBoundary.fixture!.signIn(null);
     delete process.env.SELF_HOSTED;
   });
 
@@ -129,8 +128,9 @@ describe('DELETE /api/queries/[id]', () => {
     expect(mockQueryDelete).toHaveBeenCalledWith({ where: { id: 'q1' } });
   });
 
-  it('deletes without token when SELF_HOSTED=true', async () => {
+  it('deletes without a tracker token for a signed-in solo owner', async () => {
     process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token' });
     const res = await DELETE(...makeDeleteRequest('q1', {}));
     const data = await res.json();
@@ -139,8 +139,9 @@ describe('DELETE /api/queries/[id]', () => {
     expect(mockQueryDelete).toHaveBeenCalledWith({ where: { id: 'q1' } });
   });
 
-  it('deletes with null token when SELF_HOSTED=true', async () => {
+  it('deletes with a null tracker token for a signed-in solo owner', async () => {
     process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     mockQueryFindUnique.mockResolvedValue({ deleteToken: null });
     const res = await DELETE(...makeDeleteRequest('q1'));
     const data = await res.json();
@@ -150,6 +151,7 @@ describe('DELETE /api/queries/[id]', () => {
 
   it('deletes with valid token when SELF_HOSTED=true', async () => {
     process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token' });
     const res = await DELETE(...makeDeleteRequest('q1', { deleteToken: 'real-token' }));
     const data = await res.json();
@@ -164,10 +166,9 @@ describe('DELETE /api/queries/[id]', () => {
     expect(res.status).toBe(401);
   });
 
-  it('hosted mode: legacy admin session cookie authorizes without a token', async () => {
+  it('hosted mode: persisted owner session cookie authorizes without a token', async () => {
     mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token' });
-    mockGetSessionToken.mockResolvedValueOnce('admin:1234.abc');
-    mockVerifySessionToken.mockReturnValueOnce(true);
+    await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     const res = await DELETE(...makeDeleteRequest('q1', {}));
     expect(res.status).toBe(200);
     expect(mockQueryDelete).toHaveBeenCalledWith({ where: { id: 'q1' } });
@@ -175,21 +176,22 @@ describe('DELETE /api/queries/[id]', () => {
 
   it('hosted mode: invalid admin session falls through to token check', async () => {
     mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token' });
-    mockGetSessionToken.mockResolvedValueOnce('admin:1234.deadbeef');
-    mockVerifySessionToken.mockReturnValueOnce(false);
+
+
     const res = await DELETE(...makeDeleteRequest('q1', {}));
     expect(res.status).toBe(401);
     expect(mockQueryDelete).not.toHaveBeenCalled();
   });
 
   describe('self hosted multi user mode', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockIsMultiUserEnabled.mockResolvedValue(true);
     });
 
     it('lets admin delete any query without token', async () => {
-      mockGetCurrentUser.mockResolvedValue({ id: 'admin_1', isAdmin: true });
+      await sessionBoundary.fixture!.signIn({ id: 'admin_1', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'someone_else' });
       const res = await DELETE(...makeDeleteRequest('q1'));
       expect(res.status).toBe(200);
@@ -197,14 +199,14 @@ describe('DELETE /api/queries/[id]', () => {
     });
 
     it('lets the owner delete via user session', async () => {
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'user_1', isAdmin: false });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'user_1' });
       const res = await DELETE(...makeDeleteRequest('q1'));
       expect(res.status).toBe(200);
     });
 
     it('rejects a non owner non admin user with 403', async () => {
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_2', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'user_2', isAdmin: false });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'user_1' });
       const res = await DELETE(...makeDeleteRequest('q1'));
       expect(res.status).toBe(403);
@@ -212,14 +214,14 @@ describe('DELETE /api/queries/[id]', () => {
     });
 
     it('still accepts a matching deleteToken even without a session', async () => {
-      mockGetCurrentUser.mockResolvedValue(null);
+      await sessionBoundary.fixture!.signIn(null);
       mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', userId: 'user_1' });
       const res = await DELETE(...makeDeleteRequest('q1', { deleteToken: 'real-token' }));
       expect(res.status).toBe(200);
     });
 
     it('rejects an unowned query (userId null) from a non admin user', async () => {
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_2', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'user_2', isAdmin: false });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, userId: null });
       const res = await DELETE(...makeDeleteRequest('q1'));
       expect(res.status).toBe(403);
@@ -248,8 +250,9 @@ describe('DELETE /api/queries/[id]', () => {
 
     it('admin can groupDelete without token in multi user mode', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockIsMultiUserEnabled.mockResolvedValue(true);
-      mockGetCurrentUser.mockResolvedValue({ id: 'admin_1', isAdmin: true });
+      await sessionBoundary.fixture!.signIn({ id: 'admin_1', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: 'someone_else' });
       mockQueryDeleteMany.mockResolvedValue({ count: 2 });
       const res = await DELETE(...makeDeleteRequest('q1', { groupDelete: true }));
@@ -259,8 +262,9 @@ describe('DELETE /api/queries/[id]', () => {
 
     it('owner can groupDelete via user session in multi user mode', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockIsMultiUserEnabled.mockResolvedValue(true);
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'user_1', isAdmin: false });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: 'g1', userId: 'user_1' });
       mockQueryDeleteMany.mockResolvedValue({ count: 4 });
       const res = await DELETE(...makeDeleteRequest('q1', { groupDelete: true }));
@@ -302,13 +306,13 @@ function makePatchRequest(id: string, body: Record<string, unknown>): [NextReque
 }
 
 describe('PATCH /api/queries/[id]', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     mockQueryFindMany.mockResolvedValue([]);
     mockQueryUpdateMany.mockResolvedValue({ count: 1 });
     mockQueryEditEventCreateMany.mockResolvedValue({ count: 0 });
     mockIsMultiUserEnabled.mockResolvedValue(false);
-    mockGetCurrentUser.mockResolvedValue(null);
+    await sessionBoundary.fixture!.signIn(null);
     delete process.env.SELF_HOSTED;
   });
 
@@ -330,8 +334,9 @@ describe('PATCH /api/queries/[id]', () => {
     expect(data.data.scrapeInterval).toBe(6);
   });
 
-  it('updates interval without token when SELF_HOSTED=true', async () => {
+  it('updates interval without a tracker token for a signed-in solo owner', async () => {
     process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     mockQueryFindUnique.mockResolvedValue({ deleteToken: 'real-token', groupId: null });
     const res = await PATCH(...makePatchRequest('q1', { scrapeInterval: 3 }));
     const data = await res.json();
@@ -341,6 +346,7 @@ describe('PATCH /api/queries/[id]', () => {
 
   it('rejects invalid interval even when SELF_HOSTED=true', async () => {
     process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null });
     const res = await PATCH(...makePatchRequest('q1', { scrapeInterval: 99 }));
     expect(res.status).toBe(400);
@@ -348,6 +354,7 @@ describe('PATCH /api/queries/[id]', () => {
 
   it('rejects empty body (no updatable fields)', async () => {
     process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
     mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null });
     const res = await PATCH(...makePatchRequest('q1', {}));
     const data = await res.json();
@@ -372,6 +379,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('updates active without cascade when groupId is null', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { active: true }));
       const data = await res.json();
@@ -385,6 +393,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('rejects non-boolean active', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { active: 'yes' }));
       const data = await res.json();
@@ -394,6 +403,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('updates both scrapeInterval and active in one call', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
       mockQueryFindMany.mockResolvedValue([{ id: 'q2' }]);
       const res = await PATCH(...makePatchRequest('q1', { scrapeInterval: 3, active: true }));
@@ -429,9 +439,10 @@ describe('PATCH /api/queries/[id]', () => {
       preferredAggregators: [],
     };
 
-    it('updates tracker filters across grouped queries and records edit events', async () => {
+    it('updates tracker filters across grouped queries and records owner edit events', async () => {
       process.env.SELF_HOSTED = 'true';
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
+      await sessionBoundary.fixture!.signIn({ id: 'user_1', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue(editableQuery);
       mockQueryFindMany.mockResolvedValue([{
         ...editableQuery,
@@ -488,6 +499,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('rejects invalid maxStops before updating', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue(editableQuery);
 
       const res = await PATCH(...makePatchRequest('q1', { maxStops: 11 }));
@@ -501,7 +513,8 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('accepts a high denomination maxPrice above the old 1M cap', async () => {
       process.env.SELF_HOSTED = 'true';
-      mockGetCurrentUser.mockResolvedValue({ id: 'user_1', isAdmin: false });
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
+      await sessionBoundary.fixture!.signIn({ id: 'user_1', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue(editableQuery);
       mockQueryFindMany.mockResolvedValue([]);
 
@@ -514,6 +527,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('rejects time and cabin edits because snapshots cannot enforce them', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue(editableQuery);
 
       const res = await PATCH(...makePatchRequest('q1', {
@@ -531,12 +545,13 @@ describe('PATCH /api/queries/[id]', () => {
   });
 
   describe('label', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       mockQueryUpdate.mockResolvedValue({});
     });
 
     it('updates label on the single id only (no group cascade)', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
       const res = await PATCH(...makePatchRequest('q1', { label: 'Paris via Google' }));
       const data = await res.json();
@@ -551,6 +566,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('clears label when set to null', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { label: null }));
       expect(res.status).toBe(200);
@@ -562,6 +578,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('rejects label longer than 60 characters', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { label: 'a'.repeat(61) }));
       expect(res.status).toBe(400);
@@ -570,6 +587,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('rejects non-string non-null label', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { label: 123 }));
       expect(res.status).toBe(400);
@@ -578,6 +596,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('trims whitespace and stores null for empty string', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { label: '   ' }));
       expect(res.status).toBe(200);
@@ -589,12 +608,13 @@ describe('PATCH /api/queries/[id]', () => {
   });
 
   describe('preferredAggregators', () => {
-    beforeEach(() => {
+    beforeEach(async () => {
       mockQueryUpdate.mockResolvedValue({});
     });
 
     it('updates preferredAggregators on the single id only (no group cascade)', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
       const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: ['skyscanner', 'google_flights'] }));
       const data = await res.json();
@@ -611,6 +631,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('rejects unknown aggregator with 422', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: ['google_flights', 'expedia'] }));
       expect(res.status).toBe(422);
@@ -619,6 +640,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('rejects non-array preferredAggregators with 422', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: 'google_flights' }));
       expect(res.status).toBe(422);
@@ -626,6 +648,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('accepts an empty array as clear', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: null, userId: null });
       const res = await PATCH(...makePatchRequest('q1', { preferredAggregators: [] }));
       expect(res.status).toBe(200);
@@ -637,6 +660,7 @@ describe('PATCH /api/queries/[id]', () => {
 
     it('combines with cascaded fields: scrapeInterval cascades, preferredAggregators does not', async () => {
       process.env.SELF_HOSTED = 'true';
+      await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue({ deleteToken: null, groupId: 'g1', userId: null });
       mockQueryFindMany.mockResolvedValue([{ id: 'q2' }]);
       const res = await PATCH(...makePatchRequest('q1', { scrapeInterval: 6, preferredAggregators: ['kayak'] }));

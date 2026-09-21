@@ -114,6 +114,8 @@ fi
 
 # --- Step 2: Start stack ---
 info "Starting stack (db + redis + llmock + web) on port $HOST_PORT..."
+compose up -d --no-build --no-recreate db redis llmock
+compose run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
 compose up -d --no-build
 
 # --- Step 3: Wait for health ---

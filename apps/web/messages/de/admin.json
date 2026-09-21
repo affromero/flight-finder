@@ -54,6 +54,8 @@
     "logout": "Abmelden"
   },
   "AdminDashboard": {
+    "unknownCost": "Unbekannt",
+    "knownCostSubtotal": "Bekannte Teilsumme: {amount} $. Datensätze ohne Preis: {count}.",
     "title": "Dashboard",
     "stats": {
       "activeQueries": "Aktive Anfragen",
@@ -97,6 +99,9 @@
     "provider": "Anbieter",
     "status": "Status: {status}",
     "providerStatus": {
+      "configured": "Konfiguriert; Anmeldung nicht geprüft",
+      "invalidCredentials": "Gespeicherte Zugangsdaten müssen repariert werden",
+      "notAuthenticated": "Bei der CLI anmelden",
       "ready": "Bereit",
       "noKey": "Kein Key konfiguriert",
       "unreachable": "Nicht erreichbar",
@@ -108,8 +113,8 @@
     "apiKey": "API-Key",
     "apiKeySavedPlaceholder": "Gespeichert — neuen Key einfügen zum Ersetzen",
     "apiKeyPlaceholder": "Füge deinen {provider}-API-Key ein",
-    "apiKeySavedHint": "Ein Key ist gespeichert. Leer lassen, um ihn zu behalten, oder neuen einfügen, um ihn zu ersetzen. Verschlüsselt gespeichert; fällt auf die Umgebungsvariable {envKey} zurück.",
-    "apiKeyNewHint": "Füge einen Key ein, um ihn hier (verschlüsselt) zu speichern, oder setze die Umgebungsvariable {envKey}. Kein Neustart nötig.",
+    "apiKeySavedHint": "Ein Key ist gespeichert. Leer lassen, um ihn zu behalten, oder einen neuen einfügen. Er wird verschlüsselt gespeichert.",
+    "apiKeyNewHint": "Füge einen Key ein, um ihn verschlüsselt zu speichern. Kein Neustart nötig.",
     "model": "Modell",
     "modelCostFree": "Kostenlos (Max)",
     "modelCost": "${cost}/1k in",
@@ -179,7 +184,7 @@
     "hubHint": "Erlaubt anderen Flight-Finder-Instanzen, sich bei dieser zu registrieren und ihre anonymisierten Daten hierher zu senden. Nur für den zentralen Hub relevant. Neue Registrierungen sind ratenlimitiert und global gedeckelt.",
     "providerDetails": "Anbieter-Details",
     "apiKeyDetail": "API-Key:",
-    "apiKeyFromEnv": "oben eingegeben (verschlüsselt gespeichert), sonst aus <code>{envKey}</code> gelesen, falls keiner gesetzt ist",
+    "apiKeySaved": "verschlüsselt in dieser Instanz gespeichert",
     "apiKeyNotRequired": "nicht erforderlich — dieser Anbieter meldet sich über seine lokale CLI an, kein API-Key nötig",
     "modelsAvailable": "Verfügbare Modelle:"
   },
@@ -268,7 +273,7 @@
     "demote": "Zurückstufen",
     "delete": "Löschen",
     "deleteConfirm": "Benutzer {username} löschen? Die zugehörigen Tracker werden besitzerlos.",
-    "resetPrompt": "Neues Passwort für {username} (mind. 8 Zeichen):",
+    "resetPrompt": "Neues Passwort für {username} (mind. 12 Zeichen):",
     "passwordReset": "Passwort zurückgesetzt.",
     "disableConfirm": "Mehrbenutzermodus deaktivieren? Das schaltet alle Logins ab und löscht das Admin-Passwort — zurück zur selbst gehosteten Einzelbenutzer-Instanz. Konten bleiben in der Datenbank, sind aber unzugänglich, bis du den Mehrbenutzermodus wieder aktivierst. Fortfahren?",
     "dangerZone": "Gefahrenzone",
@@ -286,7 +291,7 @@
       "title": "Benutzer hinzufügen",
       "username": "Benutzername",
       "displayName": "Anzeigename (optional)",
-      "passwordAdmin": "Passwort (mind. 8 Zeichen)",
+      "passwordAdmin": "Passwort (mind. 12 Zeichen)",
       "passwordOptional": "Passwort (optional)",
       "admin": "Admin",
       "note": "Lass das Passwort leer für ein Mitglied mit Tipp-Anmeldung. Jeder, der diese Instanz erreichen kann, kann sich als passwortloses Mitglied anmelden — vergib also ein Passwort, wenn sie öffentlich ist. Admins brauchen immer ein Passwort.",

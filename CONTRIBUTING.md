@@ -10,6 +10,7 @@ Requires Node.js >= 22.
 git clone git@github.com:affromero/flight-finder.git
 cd flight-finder
 npm install
+pre-commit install --install-hooks
 docker compose up -d db redis
 npm run db:push
 npm run db:generate
@@ -35,7 +36,7 @@ All three must pass. The linter runs with `--max-warnings 0` (zero tolerance).
 
 ## Architecture Guidelines
 
-- Keep files under 1000 lines — extract into focused modules
+- Keep source files at or below 1000 lines. The pre-commit hook also prevents adding source files to directories that already contain 10 files.
 - Use early returns, max 3 nesting levels
 - Test behavior, not implementation details
 - No `.env` files in commits — secrets via environment variables

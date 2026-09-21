@@ -264,7 +264,7 @@
       "badge": "https · öffentlich",
       "blurb": "Eine öffentliche https-URL. Ein Quick Tunnel ist in Sekunden ohne Konto bereit; ein benannter Tunnel gibt dir eine dauerhafte URL auf deiner Domain.",
       "install": "Installiere cloudflared:",
-      "quick": "Schnelle, temporäre URL (ohne Konto): Starte einen Tunnel, kopiere dann die ausgegebene Adresse https://<name>.trycloudflare.com und füge sie unten ein.",
+      "quick": "Schnelle, temporäre URL (ohne Konto): Starte einen Tunnel, kopiere dann die ausgegebene Adresse {tunnelUrl} und füge sie unten ein.",
       "permanent": "Dauerhafte URL auf deiner eigenen Domain (braucht ein kostenloses Cloudflare-Konto mit hinterlegter Domain): Melde dich an, erstelle einen benannten Tunnel, richte einen DNS-Eintrag darauf und starte ihn.",
       "paste": "Füge deine https-URL unten bei „Öffentliche URL“ ein."
     },

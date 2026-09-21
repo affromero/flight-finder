@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { ProviderCredentialFields } from '@/components/ProviderCredentialFields/ProviderCredentialFields';
+import { InstanceVerification } from '@/components/ProviderCredentialFields/InstanceVerification';
+import type { ProviderFieldsPatch, ProviderFieldStatus } from 'thesidedoor/react';
 import { useTranslations } from 'next-intl';
 import { PROVIDER_METADATA, LOCAL_PROVIDERS, CLI_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { CliModelPicker } from '@/components/CliModelPicker/CliModelPicker';
@@ -10,11 +13,13 @@ import { isThemeId, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
 
 interface Config {
+  providerRevision: number;
+  updatedAt: string;
+  providerCredentials?: Array<{ provider: string; error?: string; fields: ProviderFieldStatus[] }>;
   provider: string;
   model: string;
   enabled: boolean;
   scrapeInterval: number;
-  hasAdminPassword: boolean;
   communitySharing: boolean;
   communityRegistrationOpen: boolean;
   communityApiKey: string | null;
@@ -51,6 +56,7 @@ const AGGREGATOR_OPTIONS = [
 
 export default function ConfigPage() {
   const t = useTranslations('AdminConfig');
+  const security = useTranslations('SharedSecurity');
   const [config, setConfig] = useState<Config | null>(null);
   const [provider, setProvider] = useState('anthropic');
   const [model, setModel] = useState('claude-haiku-4-5-20251001');
@@ -65,11 +71,8 @@ export default function ConfigPage() {
   const [defaultCurrency, setDefaultCurrency] = useState('');
   const [defaultCountry, setDefaultCountry] = useState('');
   const [defaultSearchMethod, setDefaultSearchMethod] = useState<'ai' | 'manual'>('ai');
-  const [customBaseUrl, setCustomBaseUrl] = useState('');
-  // Provider API key the admin types in (#149). Never pre-filled from the
-  // server (keys never cross the wire); blank means "leave the saved key
-  // unchanged". setProviderStatuses tracks readiness from /api/admin/providers.
-  const [apiKey, setApiKey] = useState('');
+  const [credentialFields, setCredentialFields] = useState<ProviderFieldsPatch>({});
+  const [resetCredentials, setResetCredentials] = useState(false);
   const [providerStatuses, setProviderStatuses] = useState<Record<string, string>>({});
   const [vpnProvider, setVpnProvider] = useState('none');
   const [vpnCountries, setVpnCountries] = useState<string[]>([]);
@@ -82,11 +85,9 @@ export default function ConfigPage() {
   const [previewConcurrency, setPreviewConcurrency] = useState('');
   const [previewAdmissionCap, setPreviewAdmissionCap] = useState('');
   const [saving, setSaving] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [message, setMessage] = useState('');
 
-  const [adminPassword, setAdminPassword] = useState('');
-  const [savingPassword, setSavingPassword] = useState(false);
-  const [passwordMessage, setPasswordMessage] = useState('');
 
   const [localModels, setLocalModels] = useState<{ id: string; name: string; size: string }[]>([]);
   const [localModelsLoading, setLocalModelsLoading] = useState(false);
@@ -157,7 +158,6 @@ export default function ConfigPage() {
           setDefaultCurrency(d.data.defaultCurrency || '');
           setDefaultCountry(d.data.defaultCountry || '');
           setDefaultSearchMethod(d.data.defaultSearchMethod === 'manual' ? 'manual' : 'ai');
-          setCustomBaseUrl(d.data.customBaseUrl || '');
           setVpnProvider(d.data.vpnProvider || 'none');
           setVpnCountries(d.data.vpnCountries || []);
           setAggregatorsEnabled(d.data.aggregatorsEnabled ?? ['google_flights', 'airline_direct']);
@@ -183,15 +183,12 @@ export default function ConfigPage() {
 
   const providerConfig = PROVIDER_METADATA[provider];
   const models = providerConfig?.models ?? [];
-  // Whether a key is already stored for the selected provider (from the GET
-  // booleans) and its live readiness, to drive the API-key field's hint (#149).
-  const hasStoredKey =
-    provider === 'anthropic' ? !!config?.hasAnthropicKey
-    : provider === 'openai' ? !!config?.hasOpenaiKey
-    : provider === 'google' ? !!config?.hasGoogleKey
-    : false;
+  const credentials = config?.providerCredentials?.find(item => item.provider === provider);
   const providerStatus = providerStatuses[provider];
   const STATUS_LABEL: Record<string, string> = {
+    configured: t('providerStatus.configured'),
+    invalid_credentials: t('providerStatus.invalidCredentials'),
+    not_authenticated: t('providerStatus.notAuthenticated'),
     ready: t('providerStatus.ready'),
     no_key: t('providerStatus.noKey'),
     unreachable: t('providerStatus.unreachable'),
@@ -202,14 +199,8 @@ export default function ConfigPage() {
     setProvider(newProvider);
     setReasoning(null);
     setCustomModel('');
-    // Clear the key field so a key typed for one provider can't be saved
-    // against another. The saved key (if any) stays in the DB untouched.
-    setApiKey('');
-    // Leave the base URL empty so the default is only a placeholder, not a saved
-    // value. Persisting the localhost default would be stored as customBaseUrl,
-    // which overrides the OLLAMA_HOST env that install.sh sets to
-    // host.docker.internal, breaking Ollama in Docker. Issue #139 follow-up.
-    setCustomBaseUrl('');
+    setCredentialFields({});
+    setResetCredentials(false);
     const newModels = PROVIDER_METADATA[newProvider]?.models ?? [];
     if (newModels.length > 0) {
       setModel(newModels[0]!.id);
@@ -229,9 +220,6 @@ export default function ConfigPage() {
     setSaving(true);
     setMessage('');
 
-    const newBaseUrl = customBaseUrl.trim() || null;
-    // apiKey: a blank field is sent as undefined (dropped by JSON.stringify) so
-    // it leaves the saved key untouched; only a typed value is stored (#149).
     const res = await fetch('/api/admin/config', {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
@@ -248,8 +236,10 @@ export default function ConfigPage() {
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
         defaultSearchMethod,
-        customBaseUrl: newBaseUrl,
-        apiKey: apiKey.trim() || undefined,
+        credentials: credentialFields,
+        resetCredentials,
+        expectedUpdatedAt: config?.updatedAt,
+        expectedRevision: config?.providerRevision,
         vpnProvider: vpnProvider === 'none' ? null : vpnProvider,
         vpnCountries,
         aggregatorsEnabled,
@@ -267,7 +257,8 @@ export default function ConfigPage() {
       setConfig(data.data);
       setMessage(t('configSaved'));
       // Clear the typed key and refresh readiness now that it's stored.
-      setApiKey('');
+      setCredentialFields({});
+      setResetCredentials(false);
       fetchProviderStatuses();
       // Re-fetch models if the base URL changed (cache key includes host)
       if (LOCAL_PROVIDERS.has(provider)) {
@@ -277,28 +268,6 @@ export default function ConfigPage() {
       setMessage(data.error || t('failedToSave'));
     }
     setSaving(false);
-  };
-
-  const handleSavePassword = async () => {
-    if (!adminPassword) return;
-    setSavingPassword(true);
-    setPasswordMessage('');
-
-    const res = await fetch('/api/admin/config', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword }),
-    });
-
-    const data = await res.json();
-    if (data.ok) {
-      setConfig(data.data);
-      setAdminPassword('');
-      setPasswordMessage(t('passwordUpdated'));
-    } else {
-      setPasswordMessage(data.error || t('failedToSave'));
-    }
-    setSavingPassword(false);
   };
 
   if (!config) {
@@ -317,7 +286,7 @@ export default function ConfigPage() {
             value={provider}
             onChange={(e) => handleProviderChange(e.target.value)}
           >
-            {orderedProviders(Object.keys(providerStatuses).filter(key => providerStatuses[key] === 'ready')).map(([key, p]) => (
+            {orderedProviders(Object.keys(providerStatuses).filter(key => ['ready', 'configured'].includes(providerStatuses[key] ?? ''))).map(([key, p]) => (
               <option key={key} value={key}>{p.displayName}</option>
             ))}
           </select>
@@ -336,24 +305,7 @@ export default function ConfigPage() {
           )}
         </div>
 
-        {providerConfig?.envKey && (
-          <div className={styles.field}>
-            <label className={styles.label}>{t('apiKey')}</label>
-            <input
-              type="password"
-              className={styles.input}
-              autoComplete="off"
-              placeholder={hasStoredKey ? t('apiKeySavedPlaceholder') : t('apiKeyPlaceholder', { provider: providerConfig.displayName })}
-              value={apiKey}
-              onChange={(e) => setApiKey(e.target.value)}
-            />
-            <span className={styles.toggleHint}>
-              {hasStoredKey
-                ? t('apiKeySavedHint', { envKey: providerConfig.envKey })
-                : t('apiKeyNewHint', { envKey: providerConfig.envKey })}
-            </span>
-          </div>
-        )}
+        <ProviderCredentialFields provider={provider} fields={credentials?.fields} error={Boolean(credentials?.error)} patch={credentialFields} onChange={setCredentialFields} disabled={saving} reset={resetCredentials} onResetChange={setResetCredentials} />
 
         {CLI_PROVIDERS[provider] ? <CliModelPicker key={provider} provider={provider} model={effectiveModel} reasoning={reasoning}
           onModelChange={value => { setModel(value); setCustomModel(''); }} onReasoningChange={setReasoning} /> : <div className={styles.field}>
@@ -403,23 +355,6 @@ export default function ConfigPage() {
           )}
         </div>}
 
-        {providerConfig?.allowCustomBaseUrl && (
-          <div className={styles.field}>
-            <label className={styles.label}>{t('apiBaseUrl')}</label>
-            <input
-              type="url"
-              className={styles.input}
-              placeholder={providerConfig.defaultBaseUrl || 'https://...'}
-              value={customBaseUrl}
-              onChange={(e) => setCustomBaseUrl(e.target.value)}
-            />
-            <span className={styles.toggleHint}>
-              {providerConfig.defaultBaseUrl
-                ? t('baseUrlDefault', { url: providerConfig.defaultBaseUrl })
-                : t('baseUrlEmptyHint')}
-            </span>
-          </div>
-        )}
 
         <div className={styles.field}>
           <label className={styles.label}>{t('scrapeInterval')}</label>
@@ -639,8 +574,9 @@ export default function ConfigPage() {
           </div>
         </div>
 
+        <InstanceVerification disabled={saving} onBusyChange={setVerifying} />
         <div className={styles.actions}>
-          <button className={styles.saveButton} onClick={handleSave} disabled={saving}>
+          <button className={styles.saveButton} onClick={handleSave} disabled={saving || verifying}>
             {saving ? t('saving') : t('saveConfig')}
           </button>
           {message && <span className={styles.message}>{message}</span>}
@@ -649,26 +585,10 @@ export default function ConfigPage() {
 
 
       <div className={styles.form}>
-        <h2 className={styles.sectionTitle}>{t('adminPassword')}</h2>
-
-        <div className={styles.field}>
-          <label className={styles.label}>
-            {t('password')} {config.hasAdminPassword && <span className={styles.passwordSet}>{t('passwordSet')}</span>}
-          </label>
-          <input
-            type="password"
-            className={styles.input}
-            placeholder={config.hasAdminPassword ? t('passwordKeepPlaceholder') : t('passwordSetPlaceholder')}
-            value={adminPassword}
-            onChange={(e) => setAdminPassword(e.target.value)}
-          />
-        </div>
+        <h2 className={styles.sectionTitle}>{security('title')}</h2>
 
         <div className={styles.actions}>
-          <button className={styles.saveButton} onClick={handleSavePassword} disabled={savingPassword || !adminPassword}>
-            {savingPassword ? t('saving') : t('savePassword')}
-          </button>
-          {passwordMessage && <span className={styles.message}>{passwordMessage}</span>}
+          <a className={styles.saveButton} href="/access/security">{security('title')}</a>
         </div>
       </div>
 
@@ -751,14 +671,9 @@ export default function ConfigPage() {
         <h2 className={styles.infoTitle}>{t('providerDetails')}</h2>
         <p className={styles.infoText}>
           <strong>{t('apiKeyDetail')}</strong>{' '}
-          {providerConfig?.envKey ? (
-            t.rich('apiKeyFromEnv', {
-              envKey: providerConfig.envKey,
-              code: (chunks) => <code className={styles.code}>{chunks}</code>,
-            })
-          ) : (
-            t('apiKeyNotRequired')
-          )}
+          {providerConfig && !CLI_PROVIDERS[config.provider] && !LOCAL_PROVIDERS.has(config.provider)
+            ? t('apiKeySaved')
+            : t('apiKeyNotRequired')}
         </p>
         <p className={styles.infoText}>
           <strong>{t('modelsAvailable')}</strong> {models.length}

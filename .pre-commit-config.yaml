@@ -1,0 +1,19 @@
+---
+# Setup: pre-commit install --install-hooks
+default_install_hook_types: [pre-commit]
+repos:
+  - repo: local
+    hooks:
+      - id: file-line-count
+        name: file line count (<= 1000)
+        entry: scripts/hooks/check_file_line_count.sh
+        language: system
+        stages: [pre-commit]
+        files: ^(apps|packages|scripts)/.*\.(ts|tsx|js|jsx|mjs|cjs|css|rs|swift|py|sh)$
+
+      - id: dir-file-count
+        name: directory file count (new files <= 10)
+        entry: scripts/hooks/check_dir_file_count.sh
+        language: system
+        stages: [pre-commit]
+        files: ^(apps|packages|scripts)/.*\.(ts|tsx|js|jsx|mjs|cjs|rs|swift|py|sh)$

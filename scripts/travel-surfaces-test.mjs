@@ -5,6 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import pg from 'pg';
+import { addBrowserSession, claimBrowserOwner } from './access-browser-test.mjs';
 
 // Real pages, login, ownership checks and PostgreSQL. Only stored travel data
 // is seeded; no provider requests or live bookings are made by this matrix.
@@ -30,14 +31,14 @@ const options = { mode: 'best', targetPrice: null, notifyLows: true, allowApprox
 
 async function startServer(name, port, selfHosted) {
   const log = createWriteStream(resolve(output, `${name}-server.log`));
+  const url = `http://127.0.0.1:${port}`;
   const child = spawn(process.execPath, [resolve('node_modules/next/dist/bin/next'), 'start', '-p', String(port), '-H', '127.0.0.1'], {
     cwd: resolve('apps/web'),
-    env: { ...process.env, SELF_HOSTED: String(selfHosted), CRON_ENABLED: 'false', REDIS_URL: '', FF_ACCESS_PASSWORD: '', FF_MACHINE_TOKEN: '', ADMIN_SESSION_SECRET: 'travel-surface-test-only-session-secret', NEXT_TELEMETRY_DISABLED: '1' },
+    env: { ...process.env, APP_URL: url, SELF_HOSTED: String(selfHosted), CRON_ENABLED: 'false', REDIS_URL: '', ADMIN_SESSION_SECRET: 'travel-surface-test-only-session-secret', NEXT_TELEMETRY_DISABLED: '1' },
     stdio: ['ignore', 'pipe', 'pipe'],
   });
   child.stdout.pipe(log); child.stderr.pipe(log);
   servers.push({ child, log });
-  const url = `http://127.0.0.1:${port}`;
   for (let attempt = 0; attempt < 60; attempt++) {
     assert.equal(child.exitCode, null, `${name} server exited; see its log`);
     const response = await fetch(`${url}/api/health`).catch(() => null);
@@ -47,9 +48,10 @@ async function startServer(name, port, selfHosted) {
   throw new Error(`${name} server did not become healthy`);
 }
 
-async function context(url, locale = 'en') {
+async function context(url, locale = 'en', session = null) {
   const ctx = await browser.newContext({ baseURL: url, viewport: { width: 1280, height: 1000 }, locale: 'en-US' });
   await ctx.addCookies([{ name: 'ft-locale', value: locale, url }]);
+  if (session) await addBrowserSession(ctx, url, session);
   contexts.push(ctx);
   return ctx;
 }
@@ -95,9 +97,10 @@ async function seedTravel(user, kind) {
 }
 
 try {
-  await db.query(`INSERT INTO "ExtractionConfig" (id,"adminPasswordHash",enabled,"updatedAt") VALUES ('singleton','self-hosted',false,now())`);
+  await db.query(`INSERT INTO "ExtractionConfig" (id,"setupComplete",enabled,"updatedAt") VALUES ('singleton',true,false,now()) ON CONFLICT (id) DO UPDATE SET "setupComplete" = true, enabled = false, "updatedAt" = now()`);
   const publicUrl = await startServer('public', 3015, false);
   const privateUrl = await startServer('private', 3016, true);
+  const ownerSession = await claimBrowserOwner({ origin: privateUrl, name: 'surface-owner', password: 'surface-owner-test-password' });
   for (const locale of ['en', 'es', 'pt', 'de', 'fr']) {
     const t = await messages(locale);
     const ctx = await context(publicUrl, locale);
@@ -135,7 +138,7 @@ try {
     pass(`public-${locale}: product, metadata, mobile, install link and hotel access boundary`);
   }
 
-  const solo = await context(privateUrl);
+  const solo = await context(privateUrl, 'en', ownerSession);
   const soloPage = await pageFor(solo);
   await soloPage.goto('/');
   await soloPage.getByRole('link', { name: 'Hotels', exact: true }).waitFor();
@@ -147,12 +150,11 @@ try {
   await soloPage.getByLabel('City or hotel name').waitFor();
   pass('private solo: both travel sections without creating a flight');
 
-  await json(await solo.request.post('/api/admin/multi-user', { data: { adminUsername: 'surface-admin' } }), 201);
-  await json(await solo.request.post('/api/auth/login', { data: { username: 'surface-admin' } }));
+  await json(await solo.request.post('/api/admin/multi-user', { headers: { Origin: privateUrl }, data: {} }), 201);
   const users = [];
   for (const kind of ['flights', 'hotels', 'both']) {
     const displayName = { flights: 'Alex Rivera', hotels: 'Maya Torres', both: 'Jamie Chen' }[kind];
-    const { user } = await json(await solo.request.post('/api/admin/users', { data: { username: `surface-${kind}`, displayName } }), 201);
+    const { user } = await json(await solo.request.post('/api/admin/users', { headers: { Origin: privateUrl }, data: { username: `surface-${kind}`, displayName } }), 201);
     users.push({ user, kind, ...await seedTravel(user, kind) });
   }
 
@@ -170,7 +172,7 @@ try {
     for (const locale of member.kind === 'hotels' ? ['en', 'es', 'pt', 'de', 'fr'] : ['en']) {
       const t = await messages(locale);
       const ctx = await context(privateUrl, locale);
-      await json(await ctx.request.post('/api/auth/login', { data: { username: member.user.username } }));
+      await json(await ctx.request.post('/api/auth/login', { headers: { Origin: privateUrl }, data: { username: member.user.username } }));
       const page = await pageFor(ctx);
       await page.goto('/account');
       await page.getByRole('heading', { name: t.Account.yourTrackers, exact: true }).waitFor();

@@ -1,7 +1,7 @@
 import { notFound, redirect } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { HotelSearchExperience } from '@/components/hotels/HotelSearchExperience';
 import { HotelTrackers } from '@/components/hotels/HotelTrackers';
 import { TravelNav } from '@/components/hotels/TravelNav';
@@ -13,7 +13,7 @@ export const dynamic = 'force-dynamic';
 export default async function HotelsPage() {
   if (process.env.SELF_HOSTED !== 'true') notFound();
   const multiUser = await isMultiUserEnabled();
-  const user = multiUser ? await getCurrentUser() : null;
+  const user = multiUser ? await getCurrentProfile() : null;
   if (multiUser && !user) redirect('/login?next=/hotels');
   const t = await getTranslations('Hotels');
   let mapSettings: HotelMapSettings;

@@ -11,8 +11,6 @@ const CACHE_KEY = 'ft:multi-user';
  */
 export async function isMultiUserEnabled(): Promise<boolean> {
   if (process.env.SELF_HOSTED !== 'true') return false;
-  // This flag grants administrator access in solo mode. A stale cache entry
-  // must never reopen access after accounts have been enabled.
   const cfg = await prisma.extractionConfig.findUnique({
     where: { id: 'singleton' }, select: { multiUserMode: true },
   });
@@ -20,11 +18,10 @@ export async function isMultiUserEnabled(): Promise<boolean> {
 }
 
 export async function invalidateMultiUserCache(): Promise<void> {
-  // Remove entries left by earlier application versions during upgrades.
   if (!redis) return;
   try {
     await redis.del(CACHE_KEY);
   } catch {
-    // Redis unavailable; next read falls through to DB anyway
+    // Current workers read authoritative mode directly.
   }
 }

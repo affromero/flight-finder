@@ -1,17 +1,25 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/access/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+beforeEach(() => sessionBoundary.fixture!.resetRequest());
 
-const { mockQueryCount, mockFetchRunCount, mockSnapshotCount, mockAggregate, mockGetSessionToken, mockVerifySessionToken } =
+const { mockQueryCount, mockFetchRunCount, mockSnapshotCount, mockAggregate } =
   vi.hoisted(() => ({
     mockQueryCount: vi.fn(),
     mockFetchRunCount: vi.fn(),
     mockSnapshotCount: vi.fn(),
     mockAggregate: vi.fn(),
-    mockGetSessionToken: vi.fn(),
-    mockVerifySessionToken: vi.fn(),
   }));
 
 vi.mock('@/lib/prisma', () => ({
   prisma: {
+    user: { findUnique: async () => sessionBoundary.fixture!.user },
     query: { count: (...args: unknown[]) => mockQueryCount(...args) },
     fetchRun: { count: (...args: unknown[]) => mockFetchRunCount(...args) },
     priceSnapshot: { count: (...args: unknown[]) => mockSnapshotCount(...args) },
@@ -29,27 +37,19 @@ vi.mock('@/lib/cron', () => ({
   }),
 }));
 
-vi.mock('@/lib/admin-auth', () => ({
-  getSessionToken: () => mockGetSessionToken(),
-  verifySessionToken: (token: string) => mockVerifySessionToken(token),
-  parseAdminTokenTimestamp: () => 1000,
-}));
-
 import { GET } from './route';
 
 function setupCounts() {
   mockQueryCount.mockResolvedValue(7);
   mockFetchRunCount.mockResolvedValue(42);
   mockSnapshotCount.mockResolvedValue(1234);
-  mockAggregate.mockResolvedValue({ _sum: { costUsd: 1.23 } });
+  mockAggregate.mockResolvedValue({ _sum: { costUsd: 1.23 }, _count: { _all: 2, costUsd: 2 } });
 }
 
 describe('GET /api/stats -- unauthenticated caller', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     setupCounts();
-    mockGetSessionToken.mockResolvedValue(null);
-    mockVerifySessionToken.mockReturnValue(false);
   });
 
   it('returns public counts', async () => {
@@ -70,11 +70,10 @@ describe('GET /api/stats -- unauthenticated caller', () => {
 });
 
 describe('GET /api/stats -- authenticated admin', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
     setupCounts();
-    mockGetSessionToken.mockResolvedValue('admin:12345.validsig');
-    mockVerifySessionToken.mockReturnValue(true);
+    await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
   });
 
   it('includes llmCost30d for authenticated admins', async () => {
@@ -93,16 +92,24 @@ describe('GET /api/stats -- authenticated admin', () => {
   });
 
   it('rounds cost to two decimal places', async () => {
-    mockAggregate.mockResolvedValue({ _sum: { costUsd: 1.999999 } });
+    mockAggregate.mockResolvedValue({ _sum: { costUsd: 1.999999 }, _count: { _all: 2, costUsd: 2 } });
     const res = await GET();
     const body = await res.json();
     expect(body.data.llmCost30d).toBe(2);
   });
 
   it('returns 0 when no cost rows exist', async () => {
-    mockAggregate.mockResolvedValue({ _sum: { costUsd: null } });
+    mockAggregate.mockResolvedValue({ _sum: { costUsd: null }, _count: { _all: 0, costUsd: 0 } });
     const res = await GET();
     const body = await res.json();
     expect(body.data.llmCost30d).toBe(0);
+  });
+
+  it('distinguishes a known subtotal from incomplete monthly cost', async () => {
+    mockAggregate.mockResolvedValue({ _sum: { costUsd: 1.23 }, _count: { _all: 3, costUsd: 2 } });
+    const body = await (await GET()).json();
+    expect(body.data.llmCost30d).toBeNull();
+    expect(body.data.llmKnownCost30d).toBe(1.23);
+    expect(body.data.llmUnknownCostRows30d).toBe(1);
   });
 });

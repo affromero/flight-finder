@@ -7,9 +7,11 @@ import { App } from './app.js';
 import { launchTmuxView } from './lib/tmux-view.js';
 import { registerHotelCommands } from './lib/hotel-cli.js';
 import { registerCarCommands } from './lib/car-cli.js';
+import { registerAccessCommands } from './lib/access-cli.js';
 
 const hotelCommandHandled = registerHotelCommands(program);
 const carCommandHandled = registerCarCommands(program);
+registerAccessCommands(program);
 
 program
   .name('flightfinder')

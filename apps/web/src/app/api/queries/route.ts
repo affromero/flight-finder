@@ -3,7 +3,7 @@ import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { getClientIp } from '@/lib/trusted-ip';
 import { redis } from '@/lib/redis';
@@ -104,7 +104,7 @@ export async function POST(request: NextRequest) {
   }
 
   const multiUser = await isMultiUserEnabled();
-  const currentUser = multiUser ? await getCurrentUser() : null;
+  const currentUser = multiUser ? await getCurrentProfile() : null;
   if (multiUser && !currentUser) {
     return apiError('Sign in to create a tracker', 401);
   }

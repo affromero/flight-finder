@@ -1,16 +1,19 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { ProviderCredentialFields } from '@/components/ProviderCredentialFields/ProviderCredentialFields';
+import { InstanceVerification } from '@/components/ProviderCredentialFields/InstanceVerification';
+import type { ProviderFieldsPatch, ProviderFieldStatus } from 'thesidedoor/react';
 import { useRouter } from 'next/navigation';
 import { useTranslations, useLocale } from 'next-intl';
 import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, isLocale } from '@/i18n/locales';
 import styles from './page.module.css';
 import { PROVIDER_METADATA, LOCAL_PROVIDERS } from '@/lib/scraper/provider-metadata';
-import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { CliModelPicker } from '@/components/CliModelPicker/CliModelPicker';
 import { orderedProviders, type ReasoningSelection } from '@/lib/scraper/cli-model-types';
 
 interface SetupStatus {
+  providerCredentials?: Array<{ provider: string; error?: string; fields: ProviderFieldStatus[] }>;
   setupComplete: boolean;
   needsSetup?: boolean;
   // The fields below are returned only while setup is incomplete (first-run).
@@ -34,22 +37,17 @@ export default function SetupPage() {
     router.refresh();
   };
   const [status, setStatus] = useState<SetupStatus | null>(null);
-  const [step, setStep] = useState(0);
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [step, setStep] = useState(1);
   const [provider, setProvider] = useState('');
   const [model, setModel] = useState('');
   const [customModel, setCustomModel] = useState('');
   const [reasoning, setReasoning] = useState<ReasoningSelection>(null);
-  const [customBaseUrl, setCustomBaseUrl] = useState('');
+  const [credentialFields, setCredentialFields] = useState<ProviderFieldsPatch>({});
+  const [resetCredentials, setResetCredentials] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   // Provider API key entered during first-run setup (#149); stored encrypted.
-  const [apiKey, setApiKey] = useState('');
   const [communitySharing, setCommunitySharing] = useState(false);
   const [enableMultiUser, setEnableMultiUser] = useState(false);
-  const [multiUserUsername, setMultiUserUsername] = useState('');
-  const [multiUserPassword, setMultiUserPassword] = useState('');
-  const [multiUserDisplayName, setMultiUserDisplayName] = useState('');
-  const [multiUserAvatar, setMultiUserAvatar] = useState<string | null>(null);
   const [publicBaseUrl, setPublicBaseUrl] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -119,19 +117,6 @@ export default function SetupPage() {
   const handleSubmit = async () => {
     setError('');
 
-    if (step === 0) {
-      if (password.length < 8) {
-        setError(t('passwordTooShort'));
-        return;
-      }
-      if (password !== confirmPassword) {
-        setError(t('passwordMismatch'));
-        return;
-      }
-      setStep(1);
-      return;
-    }
-
     if (step === 1) {
       const effective = customModel.trim() || model;
       if (!provider || !effective) {
@@ -152,12 +137,6 @@ export default function SetupPage() {
     }
 
     if (step === 3 && status?.isSelfHosted) {
-      // Validate the account fields here before moving to the reach step, so
-      // bad credentials are caught before the final submit.
-      if (enableMultiUser && multiUserPassword && multiUserPassword.length < 8) {
-        setError(t('passwordTooShortOptional'));
-        return;
-      }
       setStep(4);
       return;
     }
@@ -168,7 +147,7 @@ export default function SetupPage() {
     const res = await fetch('/api/setup', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ adminPassword: password, provider, model: effectiveModel, reasoningEffort: reasoning, communitySharing, customBaseUrl: customBaseUrl.trim() || null, publicBaseUrl: publicBaseUrl.trim() || null, apiKey: apiKey.trim() || null }),
+      body: JSON.stringify({ provider, model: effectiveModel, reasoningEffort: reasoning, communitySharing, publicBaseUrl: publicBaseUrl.trim() || null, credentials: credentialFields, resetCredentials }),
     });
 
     if (!res.ok) {
@@ -179,21 +158,10 @@ export default function SetupPage() {
     }
 
     if (status?.isSelfHosted && enableMultiUser) {
-      const username = multiUserUsername.trim();
-      if (multiUserPassword && multiUserPassword.length < 8) {
-        setError(t('passwordTooShortOptional'));
-        setLoading(false);
-        return;
-      }
       const muRes = await fetch('/api/admin/multi-user', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          adminUsername: username,
-          adminPassword: multiUserPassword,
-          displayName: multiUserDisplayName.trim() || null,
-          avatar: multiUserAvatar,
-        }),
+        body: JSON.stringify({}),
       });
       const muData = await muRes.json();
       if (!muRes.ok) {
@@ -248,15 +216,9 @@ export default function SetupPage() {
         <p className={styles.subtitle}>{subtitles[step]}</p>
 
         <div className={styles.steps}>
-          {!isSelfHosted && (
-            <>
-              <span className={`${styles.step} ${step >= 0 ? styles.active : ''}`}>1. {t('stepPassword')}</span>
-              <span className={styles.stepDivider}>/</span>
-            </>
-          )}
-          <span className={`${styles.step} ${step >= 1 ? styles.active : ''}`}>{isSelfHosted ? '1' : '2'}. {t('stepProvider')}</span>
+          <span className={`${styles.step} ${step >= 1 ? styles.active : ''}`}>1. {t('stepProvider')}</span>
           <span className={styles.stepDivider}>/</span>
-          <span className={`${styles.step} ${step >= 2 ? styles.active : ''}`}>{isSelfHosted ? '2' : '3'}. {t('stepCommunity')}</span>
+          <span className={`${styles.step} ${step >= 2 ? styles.active : ''}`}>2. {t('stepCommunity')}</span>
           {isSelfHosted && (
             <>
               <span className={styles.stepDivider}>/</span>
@@ -267,7 +229,7 @@ export default function SetupPage() {
           )}
         </div>
 
-        {step === (isSelfHosted ? 1 : 0) && (
+        {step === 1 && (
           <div className={styles.languageRow}>
             <label className={styles.languageLabel} htmlFor="setup-language">{t('language')}</label>
             <select
@@ -280,26 +242,6 @@ export default function SetupPage() {
                 <option key={l} value={l}>{LOCALE_LABELS[l]}</option>
               ))}
             </select>
-          </div>
-        )}
-
-        {step === 0 && (
-          <div className={styles.fields}>
-            <input
-              type="password"
-              className={styles.input}
-              placeholder={t('adminPasswordPlaceholder')}
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              autoFocus
-            />
-            <input
-              type="password"
-              className={styles.input}
-              placeholder={t('confirmPasswordPlaceholder')}
-              value={confirmPassword}
-              onChange={(e) => setConfirmPassword(e.target.value)}
-            />
           </div>
         )}
 
@@ -323,11 +265,11 @@ export default function SetupPage() {
                       setCustomModel('');
                       // Clear the key field when switching providers so a key
                       // typed for one is never submitted for another.
-                      setApiKey('');
+                      setCredentialFields({});
+                      setResetCredentials(false);
                       // Empty so the default is a placeholder, not a saved value.
                       // A persisted localhost would override the OLLAMA_HOST env
                       // (host.docker.internal) and break Ollama in Docker. #139.
-                      setCustomBaseUrl('');
                       if (config.models[0]) setModel(config.models[0].id);
                       else setModel('');
                       fetchLocalModels(key);
@@ -400,32 +342,7 @@ export default function SetupPage() {
                     onChange={(e) => setCustomModel(e.target.value)}
                   />
                 )}
-                {PROVIDER_METADATA[provider]!.envKey && (
-                  <>
-                    <input
-                      type="password"
-                      className={styles.input}
-                      autoComplete="off"
-                      placeholder={detectedProviders.includes(provider)
-                        ? t('apiKeyOptionalPlaceholder', { envKey: PROVIDER_METADATA[provider]!.envKey })
-                        : t('apiKeyPastePlaceholder', { provider: PROVIDER_METADATA[provider]!.displayName })}
-                      value={apiKey}
-                      onChange={(e) => setApiKey(e.target.value)}
-                    />
-                    <span className={styles.hint}>
-                      {t('apiKeyHint', { envKey: PROVIDER_METADATA[provider]!.envKey })}
-                    </span>
-                  </>
-                )}
-                {PROVIDER_METADATA[provider]!.allowCustomBaseUrl && (
-                  <input
-                    type="url"
-                    className={styles.input}
-                    placeholder={PROVIDER_METADATA[provider]!.defaultBaseUrl || 'https://...'}
-                    value={customBaseUrl}
-                    onChange={(e) => setCustomBaseUrl(e.target.value)}
-                  />
-                )}
+                <ProviderCredentialFields provider={provider} fields={status?.providerCredentials?.find(item => item.provider === provider)?.fields} error={Boolean(status?.providerCredentials?.find(item => item.provider === provider)?.error)} patch={credentialFields} onChange={setCredentialFields} disabled={loading} reset={resetCredentials} onResetChange={setResetCredentials} />
               </>
             )}
           </div>
@@ -477,42 +394,6 @@ export default function SetupPage() {
                 {enableMultiUser ? t('householdText') : t('justMeText')}
               </p>
             </div>
-            {enableMultiUser && (
-              <>
-                <input
-                  type="text"
-                  className={styles.input}
-                  placeholder={t('adminUsernamePlaceholder')}
-                  value={multiUserUsername}
-                  onChange={(e) => setMultiUserUsername(e.target.value)}
-                  autoComplete="username"
-                />
-                <input
-                  type="text"
-                  className={styles.input}
-                  placeholder={t('displayNamePlaceholder')}
-                  value={multiUserDisplayName}
-                  onChange={(e) => setMultiUserDisplayName(e.target.value)}
-                />
-                <input
-                  type="password"
-                  className={styles.input}
-                  placeholder={t('adminPasswordOptionalPlaceholder')}
-                  value={multiUserPassword}
-                  onChange={(e) => setMultiUserPassword(e.target.value)}
-                  autoComplete="new-password"
-                />
-                <p className={styles.communityHint}>
-                  {t('passwordBlankHint')}
-                </p>
-                <label className={styles.avatarLabel}>{t('profileAvatar')}</label>
-                <AvatarPicker
-                  value={multiUserAvatar}
-                  onChange={setMultiUserAvatar}
-                  name={multiUserDisplayName || multiUserUsername}
-                />
-              </>
-            )}
           </div>
         )}
 
@@ -543,8 +424,9 @@ export default function SetupPage() {
 
         {error && <p className={styles.error}>{error}</p>}
 
+        <InstanceVerification disabled={loading} onBusyChange={setVerifying} />
         <div className={styles.actions}>
-          {step > (isSelfHosted ? 1 : 0) && (
+          {step > 1 && (
             <button
               className={styles.backButton}
               onClick={() => setStep(step - 1)}
@@ -555,7 +437,7 @@ export default function SetupPage() {
           <button
             className={styles.button}
             onClick={handleSubmit}
-            disabled={loading}
+            disabled={loading || verifying}
           >
             {submitLabel}
           </button>

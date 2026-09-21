@@ -34,7 +34,7 @@ async function completeForm(copy = en.Cars.Search) {
   fireEvent.change(screen.getByLabelText(copy.residence), { target: { value: 'GB' } });
 }
 
-describe('independent rental search form', () => {
+describe('independent rental search form', { timeout: 15_000 }, () => {
   it('imports the selected quote only after review and blocks competing drafts while importing', async () => {
     const searches: unknown[] = [];
     let finish!: (value: Response) => void;

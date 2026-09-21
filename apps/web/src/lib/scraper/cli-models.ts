@@ -8,9 +8,14 @@ const CACHE_MS = 60_000;
 export class CliModelError extends Error {}
 interface CommandResult { code: number | null; output: string }
 
-function command(provider: string, args: string[]): Promise<CommandResult> {
+function command(provider: string, args: string[], signal?: AbortSignal): Promise<CommandResult> {
+  signal?.throwIfAborted();
+  const env = cliEnvironment(provider);
   return new Promise((resolve, reject) => {
-    const child = spawn(CLI_PROVIDERS[provider]!, args, { env: cliEnvironment(provider), stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' });
+    const child = (() => {
+      try { return spawn(CLI_PROVIDERS[provider]!, args, { env, stdio: ['ignore', 'pipe', 'pipe'], detached: process.platform !== 'win32' }); }
+      catch { throw new CliModelError('CLI is not installed or could not start'); }
+    })();
     let output = '', size = 0, failure: Error | undefined;
     const stop = () => {
       try {
@@ -19,28 +24,32 @@ function command(provider: string, args: string[]): Promise<CommandResult> {
       } catch { child.kill('SIGKILL'); }
     };
     const timer = setTimeout(() => { stop(); reject(new CliModelError('CLI readiness check timed out')); }, 8000);
+    const abort = () => { clearTimeout(timer); stop(); reject(signal?.reason); };
+    signal?.addEventListener('abort', abort, { once: true });
+    if (signal?.aborted) abort();
     const read = (chunk: Buffer) => {
       size += chunk.length;
       if (size > MAX_OUTPUT) { failure = new CliModelError('CLI response exceeded its size limit'); stop(); clearTimeout(timer); reject(failure); return; }
       output += chunk.toString();
     };
     child.stdout.on('data', read); child.stderr.on('data', read);
-    child.on('error', () => { clearTimeout(timer); reject(new CliModelError('CLI is not installed or could not start')); });
-    child.on('close', (code, signal) => {
+    child.on('error', () => { signal?.removeEventListener('abort', abort); clearTimeout(timer); reject(new CliModelError('CLI is not installed or could not start')); });
+    child.on('close', (code, exitSignal) => {
       clearTimeout(timer);
+      signal?.removeEventListener('abort', abort);
       if (failure) reject(failure);
-      else if (signal) reject(new CliModelError('CLI readiness check timed out'));
+      else if (exitSignal) reject(new CliModelError('CLI readiness check timed out'));
       else resolve({ code, output });
     });
   });
 }
 
-export async function probeCli(provider: string): Promise<{ version: string; authenticated: boolean }> {
+export async function probeCli(provider: string, signal?: AbortSignal): Promise<{ version: string; authenticated: boolean }> {
   if (!CLI_PROVIDERS[provider]) throw new CliModelError('Choose a supported CLI provider');
-  const version = await command(provider, ['--version']);
+  const version = await command(provider, ['--version'], signal);
   const number = version.output.match(/\b\d+\.\d+\.\d+(?:[-.][a-zA-Z0-9]+)*\b/)?.[0];
   if (version.code !== 0 || !number) throw new CliModelError('CLI version could not be verified');
-  const auth = await command(provider, provider === 'codex' ? ['login', 'status'] : ['auth', 'status']);
+  const auth = await command(provider, provider === 'codex' ? ['login', 'status'] : ['auth', 'status'], signal);
   return { version: number, authenticated: auth.code === 0 };
 }
 

@@ -189,6 +189,24 @@ impl Compose {
     }
 }
 
+/// Prepare shared access state before the serving container starts.
+pub fn prepare_access(compose: &Compose, dir: &Path) -> Result<(), String> {
+    compose.run(dir, &["stop", "web"])?;
+    compose.run(dir, &["up", "-d", "--no-recreate", "db", "redis"])?;
+    compose.run(
+        dir,
+        &[
+            "run",
+            "--rm",
+            "--no-deps",
+            "-e",
+            "SIDEDOOR_PREPARE_ONLY=true",
+            "web",
+        ],
+    )?;
+    Ok(())
+}
+
 pub fn bootstrap() -> Result<String, String> {
     let bash = if cfg!(windows) {
         std::env::split_paths(&augmented_path()).filter(|path| path.to_string_lossy().replace('\\', "/").to_ascii_lowercase().contains("/git/"))

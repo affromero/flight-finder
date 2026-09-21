@@ -17,6 +17,7 @@ export default async function AdminDashboard() {
     }),
     prisma.apiUsageLog.aggregate({
       _sum: { costUsd: true },
+      _count: { _all: true, costUsd: true },
       where: { createdAt: { gte: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000) } },
     }),
     prisma.apiUsageLog.findMany({
@@ -27,6 +28,7 @@ export default async function AdminDashboard() {
   ]);
 
   const monthlyCost = costData._sum.costUsd ?? 0;
+  const unknownCostRows = costData._count._all - costData._count.costUsd;
 
   return (
     <div className={styles.root}>
@@ -42,8 +44,9 @@ export default async function AdminDashboard() {
           <span className={styles.statLabel}>{t('stats.totalScrapes')}</span>
         </div>
         <div className={styles.stat}>
-          <span className={styles.statValue}>${monthlyCost.toFixed(2)}</span>
+          <span className={styles.statValue}>{unknownCostRows > 0 ? t('unknownCost') : `$${monthlyCost.toFixed(2)}`}</span>
           <span className={styles.statLabel}>{t('stats.llmCost')}</span>
+          {unknownCostRows > 0 && <span className={styles.statLabel}>{t('knownCostSubtotal', { amount: monthlyCost.toFixed(2), count: unknownCostRows })}</span>}
         </div>
       </div>
 
@@ -115,7 +118,7 @@ export default async function AdminDashboard() {
                     </span>
                   </td>
                   <td className={styles.mono}>{run.snapshotsCount}</td>
-                  <td className={styles.mono}>${(run.extractionCost ?? 0).toFixed(4)}</td>
+                  <td className={styles.mono}>{run.extractionCost === null ? t('unknownCost') : `$${run.extractionCost.toFixed(4)}`}</td>
                 </tr>
               ))}
             </tbody>

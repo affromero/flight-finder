@@ -54,6 +54,8 @@
     "logout": "Logout"
   },
   "AdminDashboard": {
+    "unknownCost": "Unknown",
+    "knownCostSubtotal": "Known subtotal: ${amount}. Unpriced records: {count}.",
     "title": "Dashboard",
     "stats": {
       "activeQueries": "Active Queries",
@@ -97,6 +99,9 @@
     "provider": "Provider",
     "status": "Status: {status}",
     "providerStatus": {
+      "configured": "Configured; authentication not tested",
+      "invalidCredentials": "Saved credentials need repair",
+      "notAuthenticated": "Sign in to the CLI",
       "ready": "Ready",
       "noKey": "No key configured",
       "unreachable": "Not reachable",
@@ -108,8 +113,8 @@
     "apiKey": "API Key",
     "apiKeySavedPlaceholder": "Saved — paste a new key to replace",
     "apiKeyPlaceholder": "Paste your {provider} API key",
-    "apiKeySavedHint": "A key is saved. Leave blank to keep it, or paste a new one to replace it. Stored encrypted; falls back to the {envKey} environment variable.",
-    "apiKeyNewHint": "Paste a key to store it (encrypted) here, or set the {envKey} environment variable. No restart needed.",
+    "apiKeySavedHint": "A key is saved. Leave blank to keep it, or paste a new one to replace it. It is stored encrypted.",
+    "apiKeyNewHint": "Paste a key to store it encrypted. No restart needed.",
     "model": "Model",
     "modelCostFree": "Free (Max)",
     "modelCost": "${cost}/1k in",
@@ -179,7 +184,7 @@
     "hubHint": "Lets other Flight Finder instances register with this one and send their anonymized data here. Only relevant for the central hub. New registrations are rate limited and globally capped.",
     "providerDetails": "Provider Details",
     "apiKeyDetail": "API key:",
-    "apiKeyFromEnv": "entered above (stored encrypted), or read from <code>{envKey}</code> if none is set",
+    "apiKeySaved": "saved encrypted in this instance",
     "apiKeyNotRequired": "not required — this provider signs in through its local CLI, no API key needed",
     "modelsAvailable": "Models available:"
   },
@@ -268,7 +273,7 @@
     "demote": "Demote",
     "delete": "Delete",
     "deleteConfirm": "Delete user {username}? Their trackers will become unowned.",
-    "resetPrompt": "New password for {username} (8+ chars):",
+    "resetPrompt": "New password for {username} (12+ chars):",
     "passwordReset": "Password reset.",
     "disableConfirm": "Disable multi user mode? This turns off all logins and clears the admin password, reverting to a single user self hosted instance. Accounts stay in the database but become inaccessible until you re-enable multi user mode. Continue?",
     "dangerZone": "Danger zone",
@@ -286,7 +291,7 @@
       "title": "Add user",
       "username": "Username",
       "displayName": "Display name (optional)",
-      "passwordAdmin": "Password (8+ chars)",
+      "passwordAdmin": "Password (12+ chars)",
       "passwordOptional": "Password (optional)",
       "admin": "Admin",
       "note": "Leave the password blank for a tap-to-sign-in member. Anyone who can reach this instance can sign in as a passwordless member, so add a password if it's public. Admins always need a password.",

@@ -1,15 +1,21 @@
+import { cookies } from 'next/headers';
+import { readAccessJson } from 'thesidedoor-core/access/http';
+import { providerDescriptors } from 'thesidedoor-core/ai/catalog';
+import type { Prisma } from '@/generated/prisma/client';
+import { SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
+import { readProviderConfiguration, saveProviderConfiguration, configurationRequestOwner, providerConfigurationError, parseCredentialPatch, type ProviderCredentialDescription } from '@/lib/sidedoor/providers/provider-config';
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
-import { EXTRACTION_PROVIDERS, LOCAL_PROVIDERS, isLocalProviderReachable } from '@/lib/scraper/ai-registry';
-import { hashPassword } from '@/lib/password';
+import { LOCAL_PROVIDERS, isLocalProviderReachable } from '@/lib/scraper/ai-registry';
 import { registerForCommunity } from '@/lib/community-sync';
-import { encryptSecret, decryptSecret } from '@/lib/secret-crypto';
+import { encryptSecret } from '@/lib/secret-crypto';
 import { isThemeId } from '@/lib/theme';
 import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { validateInferenceSelection } from '@/lib/scraper/inference-selection';
+import { accessRouteResponse } from '@/lib/sidedoor/access/access-http';
 
 /**
  * Masks the middle of a secret so the full value never crosses the wire.
@@ -22,24 +28,16 @@ function maskSecret(value: string): string {
   return `${value.slice(0, 8)}...${value.slice(-4)}`;
 }
 
-function stripHashes(config: Record<string, unknown>) {
-  const {
-    adminPasswordHash, vpnActivationCode, communityApiKey,
-    anthropicApiKey, openaiApiKey, googleApiKey,
-    ...rest
-  } = config;
+function stripHashes(config: Record<string, unknown>, credentials: ProviderCredentialDescription[]) {
+  const rest = { ...config };
+  delete rest.vpnActivationCode;
+  const hasStoredKey = (provider: string) => credentials.find(item => item.provider === provider)?.fields.some(field => ['apiKey', 'compatibleApiKey'].includes(field.id) && field.source === 'stored' && field.configured) ?? false;
   return {
     ...rest,
-    // Never return the community API key in plaintext. The GET response is
-    // redacted to a masked fingerprint; the key stays writable via PATCH.
-    communityApiKey: typeof communityApiKey === 'string' ? maskSecret(communityApiKey) : null,
-    hasAdminPassword: !!adminPasswordHash,
-    hasVpnActivationCode: !!vpnActivationCode,
-    // Provider API keys (#149): never cross the wire, even masked. The UI only
-    // needs to know whether one is stored so it can show a "saved" state.
-    hasAnthropicKey: !!anthropicApiKey,
-    hasOpenaiKey: !!openaiApiKey,
-    hasGoogleKey: !!googleApiKey,
+    communityApiKey: typeof config.communityApiKey === 'string' ? maskSecret(config.communityApiKey) : null,
+    hasVpnActivationCode: Boolean(config.vpnActivationCode),
+    hasAnthropicKey: hasStoredKey('anthropic'), hasOpenaiKey: hasStoredKey('openai'), hasGoogleKey: hasStoredKey('google'),
+    providerCredentials: credentials, providerDescriptors: providerDescriptors(),
     isSelfHosted: process.env.SELF_HOSTED === 'true',
   };
 }
@@ -47,22 +45,35 @@ function stripHashes(config: Record<string, unknown>) {
 export async function GET() {
   const denial = await requireAdminApi();
   if (denial) return denial;
-  const config = await prisma.extractionConfig.upsert({
-    where: { id: 'singleton' },
-    update: {},
-    create: { id: 'singleton' },
-  });
-
-  return apiSuccess(stripHashes(config as unknown as Record<string, unknown>));
+  const token = (await cookies()).get(SHARED_SESSION_COOKIE)?.value;
+  if (!token) return apiError('Unauthorized', 401);
+  try {
+    const { config, credentials } = await readProviderConfiguration(token);
+    return apiSuccess(stripHashes(config as unknown as Record<string, unknown>, credentials));
+  } catch (error) { return providerConfigurationError(error); }
 }
 
 export async function PATCH(request: NextRequest) {
+  try {
   const denial = await requireAdminApi();
   if (denial) return denial;
 
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return apiError('Invalid JSON body', 400);
+  const payload = await readAccessJson(request).catch(() => null);
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return apiError('Invalid JSON body', 400);
+  const body = payload as Record<string, unknown>;
+  if ('adminPassword' in body) {
+    if (Object.keys(body).some(key => key !== 'adminPassword' && key !== 'currentPassword'))
+      return apiError('Save account credentials separately from instance settings', 400);
+    return accessRouteResponse(request, 'change-password', { password: body.adminPassword, ...(body.currentPassword === undefined ? {} : { currentPassword: body.currentPassword }) });
+  }
 
+  const owner = await configurationRequestOwner(request);
+  if (owner.response) return owner.response;
+  const credentialFields = parseCredentialPatch(body.credentials) ?? {};
+  if (Object.hasOwn(credentialFields, 'baseUrl')) {
+    if (body.customBaseUrl !== undefined && body.customBaseUrl !== credentialFields.baseUrl) return apiError('Conflicting provider endpoints', 400);
+    body.customBaseUrl = credentialFields.baseUrl;
+  }
   const { provider, model } = body;
   if ((provider !== undefined && typeof provider !== 'string') || (model !== undefined && typeof model !== 'string')) return apiError('Provider and model must be strings', 400);
 
@@ -85,50 +96,21 @@ export async function PATCH(request: NextRequest) {
     } catch (error) { return apiError(error instanceof Error ? error.message : 'Invalid inference selection', 400); }
   }
 
-  // Provider API key (#149): admins enter the key in the GUI instead of editing
-  // .env. Store it encrypted in the per-provider column (a non-empty string
-  // sets it, null/'' clears it, absent leaves it unchanged), keyed to the
-  // provider in this same request. Only env-backed providers have a column;
-  // CLI/local providers need no key. Then reject selecting an env-backed
-  // provider with no usable key (stored, env, or an openai local endpoint) so
-  // the save fails loudly here instead of silently at the next scrape.
-  if (provider) {
-    const KEY_COLUMN: Record<string, 'anthropicApiKey' | 'openaiApiKey' | 'googleApiKey'> = {
-      anthropic: 'anthropicApiKey',
-      openai: 'openaiApiKey',
-      google: 'googleApiKey',
-    };
-    const envKey = EXTRACTION_PROVIDERS[provider]?.envKey;
-    const column = KEY_COLUMN[provider];
-    if (envKey) {
-      const incomingKey = typeof body.apiKey === 'string' && body.apiKey.length > 0;
-      const clearing = body.apiKey === '' || body.apiKey === null;
-      if (column && typeof body.apiKey === 'string') {
-        data[column] = incomingKey ? encryptSecret(body.apiKey) : null;
-      } else if (column && body.apiKey === null) {
-        data[column] = null;
-      }
-      // A stored key only counts if it actually decrypts: runtime resolution
-      // (resolveApiKey) falls through to env on a decrypt failure, so the guard
-      // must too, otherwise an undecryptable key (eg. after ADMIN_SESSION_SECRET
-      // rotation) would pass here and then fail at scrape time. Codex audit #2.
-      const storedEnc = !clearing && column ? existingConfig?.[column] : null;
-      const storedKey = !!(storedEnc && decryptSecret(storedEnc));
-      const envPresent = !!process.env[envKey];
-      const baseUrl =
-        (typeof body.customBaseUrl === 'string' && body.customBaseUrl) ||
-        existingConfig?.customBaseUrl ||
-        process.env.OPENAI_BASE_URL;
-      const openaiLocal = provider === 'openai' && !!baseUrl;
-      if (!incomingKey && !storedKey && !envPresent && !openaiLocal) {
-        return apiError(
-          `Provider "${provider}" needs an API key. Enter one here or set the ${envKey} environment variable.`,
-          400,
-        );
-      }
-    }
+  const selectedProvider = provider ?? existingConfig?.provider ?? 'anthropic';
+  const descriptor = providerDescriptors().find(item => item.id === selectedProvider);
+  if (!descriptor) return apiError('Unknown provider', 400);
+  if (body.apiKey !== undefined) {
+    if (body.apiKey !== null && typeof body.apiKey !== 'string') return apiError('API key must be a string or null', 400);
+    const endpoint = body.customBaseUrl !== undefined ? body.customBaseUrl : existingConfig?.customBaseUrl;
+    const field = endpoint && descriptor.fields.some(item => item.id === 'compatibleApiKey') ? 'compatibleApiKey' : 'apiKey';
+    credentialFields[field] = body.apiKey || null;
   }
-
+  if (body.customBaseUrl !== undefined && body.customBaseUrl !== null && typeof body.customBaseUrl !== 'string') return apiError('Invalid provider endpoint', 400);
+  if (body.customBaseUrl !== undefined && descriptor.fields.some(field => field.id === 'baseUrl')) credentialFields.baseUrl = body.customBaseUrl || null;
+  for (const [id, value] of Object.entries(credentialFields)) {
+    const field = descriptor.fields.find(item => item.id === id);
+    if (!field || (value !== null && typeof value !== field.kind)) return apiError('Invalid provider configuration field', 400);
+  }
   if (body.theme !== undefined) {
     if (typeof body.theme !== 'string' || !isThemeId(body.theme)) {
       return apiError('theme must be a valid theme id', 400);
@@ -185,15 +167,6 @@ export async function PATCH(request: NextRequest) {
     }
     data.defaultSearchMethod = body.defaultSearchMethod;
   }
-  if (typeof body.adminPassword === 'string' && body.adminPassword.length > 0) {
-    if (body.adminPassword.length < 8) {
-      return apiError('adminPassword must be at least 8 characters', 400);
-    }
-    data.adminPasswordHash = await hashPassword(body.adminPassword);
-    // Revoke every existing admin session: any token issued before now is
-    // rejected by the Node guard's adminSessionsValidFrom check.
-    data.adminSessionsValidFrom = new Date();
-  }
   if (typeof body.communityRegistrationOpen === 'boolean') {
     data.communityRegistrationOpen = body.communityRegistrationOpen;
   }
@@ -226,7 +199,7 @@ export async function PATCH(request: NextRequest) {
   }
   if (body.vpnProvider !== undefined) {
     const validProviders = ['none', 'expressvpn'];
-    if (body.vpnProvider !== null && !validProviders.includes(body.vpnProvider)) {
+    if (body.vpnProvider !== null && (typeof body.vpnProvider !== 'string' || !validProviders.includes(body.vpnProvider))) {
       return apiError(`vpnProvider must be one of: ${validProviders.join(', ')}`, 400);
     }
     data.vpnProvider = body.vpnProvider;
@@ -301,10 +274,17 @@ export async function PATCH(request: NextRequest) {
     data.aggregatorsEnabled = body.aggregatorsEnabled;
   }
 
-  const config = await prisma.extractionConfig.upsert({
-    where: { id: 'singleton' },
-    update: data,
-    create: { id: 'singleton', ...data },
+  const expectedUpdatedAt = body.expectedUpdatedAt === undefined ? existingConfig?.updatedAt ?? null : typeof body.expectedUpdatedAt === 'string' ? new Date(body.expectedUpdatedAt) : null;
+  if (body.resetCredentials !== undefined && typeof body.resetCredentials !== 'boolean') return apiError('Invalid credential reset', 400);
+  if ((body.credentials !== undefined || body.resetCredentials !== undefined) && body.expectedRevision === undefined) return apiError('Configuration revision is required. Reload before saving.', 400);
+  if (body.expectedRevision !== undefined && (typeof body.expectedRevision !== 'number' || !Number.isSafeInteger(body.expectedRevision) || body.expectedRevision < 0)) return apiError('Invalid configuration revision', 400);
+  if (body.expectedUpdatedAt !== undefined && (!expectedUpdatedAt || !Number.isFinite(expectedUpdatedAt.getTime()))) return apiError('Invalid configuration revision', 400);
+  const { config, credentials } = await saveProviderConfiguration(owner.token!, {
+    resetCredentials: body.resetCredentials === true,
+    expectedRevision: typeof body.expectedRevision === 'number' ? body.expectedRevision : existingConfig?.providerRevision ?? 0,
+    data: data as Prisma.ExtractionConfigUncheckedCreateInput,
+    fields: Object.keys(credentialFields).length ? credentialFields : undefined,
+    expectedUpdatedAt,
   });
 
   // Immediately reschedule cron if the scrape interval changed
@@ -312,5 +292,6 @@ export async function PATCH(request: NextRequest) {
     updateCronInterval(data.scrapeInterval);
   }
 
-  return apiSuccess(stripHashes(config as unknown as Record<string, unknown>));
+  return apiSuccess(stripHashes(config as unknown as Record<string, unknown>, credentials));
+  } catch (error) { return providerConfigurationError(error); }
 }

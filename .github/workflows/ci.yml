@@ -28,6 +28,7 @@ jobs:
       - run: npm run build --workspace=@flight-finder/cli
       - run: node --test scripts/docker-publication.test.cjs scripts/desktop-publication.test.cjs
       - run: bash scripts/install-flow-test.sh
+      - run: python3 scripts/test_access_preparation.py
       - run: bash scripts/cli-runtime-test.sh
       - run: python3 -m unittest discover -s scripts -p 'test_deploy*.py' -v
 
@@ -71,6 +72,36 @@ jobs:
       - run: docker build -f scripts/Dockerfile.install-test -t flight-finder-install-test .
       - run: docker run --rm flight-finder-install-test
 
+  shared-access:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_PASSWORD: sidedoor-test-only
+          POSTGRES_DB: sidedoor_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d sidedoor_test"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://postgres:sidedoor-test-only@127.0.0.1:5432/sidedoor_test
+      SIDEDOOR_TEST_DATABASE_URL: postgresql://postgres:sidedoor-test-only@127.0.0.1:5432/sidedoor_test
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:push
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/sidedoor/access/access-store.test.ts
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/sidedoor/migration/platform-cutover.test.ts
+      - run: node scripts/usage-migration-test.mjs
+
   integration:
     runs-on: ubuntu-latest
     timeout-minutes: 20
@@ -83,6 +114,9 @@ jobs:
           image=$(docker image inspect --format '{{.Id}}' flight-finder-test:latest)
           bash scripts/staging-test.sh "$image" "$sha" --keep-alive
       - name: Browser smoke tests
+        env:
+          BROWSER_SMOKE_OWNER: integration-owner
+          BROWSER_SMOKE_PASSWORD: integration-owner-test-password
         run: |
           npm ci
           npx playwright install chromium --with-deps

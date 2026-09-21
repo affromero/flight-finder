@@ -12,9 +12,7 @@ export async function validateInferenceSelection(provider: unknown, model: unkno
   const reasoningEffort = reasoning as ReasoningSelection | undefined ?? null;
   const metadata = PROVIDER_METADATA[provider]!;
   if (provider !== 'codex' && reasoningEffort !== null) throw new InferenceSelectionError('Reasoning selection is not supported by this provider');
-  if (provider === 'codex' && model === 'codex' && reasoningEffort !== null) throw new InferenceSelectionError('Choose a concrete model before overriding its reasoning effort');
-  // The legacy CLI-default sentinel preserves existing deployments and remains explicit in the picker.
-  if (provider === 'codex' && (model !== 'codex' || reasoningEffort !== null)) {
+  if (provider === 'codex') {
     const catalog = await discoverCliModels(provider);
     const selected = catalog.models.find(entry => entry.id === model);
     if (!selected) throw new InferenceSelectionError('Selected model is not available from this CLI; recheck its version and model catalog');

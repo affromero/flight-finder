@@ -1,21 +1,53 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
+import type { createRequestAccessFixture } from '@/test/access-fixture';
+import type { createStateBoundary } from '@/test/state-fixture';
+const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
+vi.mock('@/lib/sidedoor/access/store', async () => {
+  const { createStateBoundary } = await import('@/test/state-fixture');
+  persistence.state = createStateBoundary();
+  return { sharedStateStore: <State>(id: string, parse: (value: unknown) => State, initial: () => State) => id === 'access' ? sessionBoundary.fixture!.access.store : persistence.state!.store(id, parse, initial) };
+});
+const sessionBoundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createRequestAccessFixture> | null }));
+vi.mock('@/lib/sidedoor/access/service', async () => {
+  const { createRequestAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createRequestAccessFixture(); sessionBoundary.fixture = fixture;
+  const { FlightFinderAccessStore } = await import('@/lib/sidedoor/access/access-store');
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, sharedAccessStore: new FlightFinderAccessStore(), SHARED_SESSION_COOKIE: 'ft-session' };
+});
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
+beforeEach(async () => {
+  sessionBoundary.fixture!.resetRequest();
+  await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
+  persistence.state!.reset();
+  persistence.config = null;
+  await initializeProviderCredentials();
+  await sessionBoundary.fixture!.access.store.transact(state => {
+    state.initializations.push('flight-finder-platform-v1');
+    state.principals[0]!.sourceVersion = '';
+  });
+});
 
 const mockUpsert = vi.fn();
 const mockFindFirst = vi.fn().mockResolvedValue(null);
 const mockReachable = vi.fn().mockResolvedValue(true);
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    extractionConfig: {
-      upsert: (...args: unknown[]) => mockUpsert(...args),
-      findFirst: (...args: unknown[]) => mockFindFirst(...args),
+vi.mock('@/lib/prisma', () => {
+  const database = {
+    sidedoorState: { findUnique: async () => ({ state: await sessionBoundary.fixture!.access.store.read() }) },
+    user: {
+      findUnique: async () => sessionBoundary.fixture!.user,
+      findMany: async () => [{ id: 'owner', username: 'owner', isAdmin: true, createdAt: new Date() }],
     },
-  },
-}));
-
-vi.mock('@/lib/admin-guard', () => ({
-  requireAdminApi: vi.fn().mockResolvedValue(null),
-}));
+    extractionConfig: {
+      async upsert(...args: unknown[]) { const result = await mockUpsert(...args); persistence.config = { ...persistence.config, ...result, updatedAt: new Date(), providerRevision: 1 }; return persistence.config; },
+      async findFirst(...args: unknown[]) { const result = await mockFindFirst(...args); persistence.config = result ? { updatedAt: new Date(0), providerRevision: 0, ...result } : null; return persistence.config; },
+      findUnique: async () => persistence.config,
+      findUniqueOrThrow: async () => persistence.config,
+      async update({ data }: { data: Record<string, unknown> }) { persistence.config = { ...persistence.config, ...data }; return persistence.config; },
+    },
+  };
+  return { prisma: { ...database, $transaction: async (operation: (value: typeof database) => Promise<unknown>) => operation(database) } };
+});
 
 vi.mock('@/lib/cron', () => ({
   updateCronInterval: vi.fn(),
@@ -23,9 +55,9 @@ vi.mock('@/lib/cron', () => ({
 
 vi.mock('@/lib/scraper/ai-registry', () => ({
   EXTRACTION_PROVIDERS: {
-    anthropic: { displayName: 'Anthropic', envKey: 'ANTHROPIC_API_KEY', allowCustomModel: true, models: [] },
-    openai: { displayName: 'OpenAI', envKey: 'OPENAI_API_KEY', allowCustomModel: true, allowCustomBaseUrl: true, models: [] },
-    google: { displayName: 'Google', envKey: 'GOOGLE_AI_API_KEY', allowCustomModel: true, models: [] },
+    anthropic: { displayName: 'Anthropic', allowCustomModel: true, models: [] },
+    openai: { displayName: 'OpenAI', allowCustomModel: true, allowCustomBaseUrl: true, models: [] },
+    google: { displayName: 'Google', allowCustomModel: true, models: [] },
     ollama: { displayName: 'Ollama', allowCustomModel: true, models: [] },
   },
   LOCAL_PROVIDERS: new Set(['ollama', 'llamacpp', 'vllm']),
@@ -34,12 +66,14 @@ vi.mock('@/lib/scraper/ai-registry', () => ({
 
 import { GET, PATCH } from './route';
 import { NextRequest } from 'next/server';
+import { prisma } from '@/lib/prisma';
+import { initializeProviderCredentials, providerVault } from '@/lib/sidedoor/providers/provider-credentials';
 
 function patchRequest(body: Record<string, unknown>): NextRequest {
   return new NextRequest('http://localhost:3003/api/admin/config', {
     method: 'PATCH',
     body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', host: 'localhost:3003', origin: 'http://localhost:3003', cookie: `ft-session=${sessionBoundary.fixture!.token}` },
   });
 }
 
@@ -242,32 +276,23 @@ describe('PATCH /api/admin/config: admin password (AUTH-3, AUTH-4)', () => {
     mockUpsert.mockResolvedValue({ id: 'singleton' });
   });
 
-  it('rejects a password shorter than 8 characters with 400', async () => {
+  it('rejects a password shorter than the shared policy with 400', async () => {
     const res = await PATCH(patchRequest({ adminPassword: 'short' }));
     expect(res.status).toBe(400);
     // Nothing must be written when the password is rejected.
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 
-  it('accepts an 8+ character password and revokes existing sessions', async () => {
-    const before = Date.now();
+  it('changes the shared owner password and revokes existing sessions', async () => {
+    const previous = sessionBoundary.fixture!.token;
     const res = await PATCH(patchRequest({ adminPassword: 'longenough123' }));
     expect(res.status).toBe(200);
-    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
-    // The password is stored hashed, never in plaintext.
-    expect(data.update.adminPasswordHash).toEqual(expect.any(String));
-    expect(data.update.adminPasswordHash).not.toBe('longenough123');
-    // A revocation cutoff is stamped so older admin tokens are invalidated.
-    const validFrom = data.update.adminSessionsValidFrom as Date;
-    expect(validFrom).toBeInstanceOf(Date);
-    expect(validFrom.getTime()).toBeGreaterThanOrEqual(before);
+    await expect(sessionBoundary.fixture!.access.authenticate(previous)).rejects.toMatchObject({ code: 'unauthorized' });
+    const token = await sessionBoundary.fixture!.access.login('owner', 'longenough123');
+    expect((await sessionBoundary.fixture!.access.authenticate(token)).principal?.role).toBe('owner');
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
-  it('does not stamp adminSessionsValidFrom when no password is set', async () => {
-    await PATCH(patchRequest({ extractTimeoutSeconds: 120 }));
-    const data = mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> };
-    expect(data.update).not.toHaveProperty('adminSessionsValidFrom');
-  });
 });
 
 describe('GET /api/admin/config: secret redaction (CRYPTO-5/COMM-8)', () => {
@@ -278,7 +303,7 @@ describe('GET /api/admin/config: secret redaction (CRYPTO-5/COMM-8)', () => {
     mockUpsert.mockResolvedValue({
       id: 'singleton',
       communityApiKey: realKey,
-      adminPasswordHash: 'hash',
+      setupComplete: true,
     });
 
     const res = await GET();
@@ -291,28 +316,10 @@ describe('GET /api/admin/config: secret redaction (CRYPTO-5/COMM-8)', () => {
     expect(json.data.communityApiKey).toContain('...');
   });
 
-  it('does not leak the admin password hash', async () => {
+  it('exposes credential status without returning stored provider secrets', async () => {
+    await providerVault(prisma).vault.configure('openai', { apiKey: 'saved-openai-key' });
     mockUpsert.mockResolvedValue({
       id: 'singleton',
-      adminPasswordHash: 'super-secret-hash',
-      communityApiKey: null,
-    });
-
-    const res = await GET();
-    const json = (await res.json()) as {
-      data: { adminPasswordHash?: string; hasAdminPassword: boolean; communityApiKey: string | null };
-    };
-    expect(json.data.adminPasswordHash).toBeUndefined();
-    expect(json.data.hasAdminPassword).toBe(true);
-    expect(json.data.communityApiKey).toBeNull();
-  });
-
-  it('exposes hasXKey booleans but never the stored provider key (#149)', async () => {
-    mockUpsert.mockResolvedValue({
-      id: 'singleton',
-      openaiApiKey: 'iv:tag:ciphertext',
-      anthropicApiKey: null,
-      googleApiKey: null,
       communityApiKey: null,
     });
 
@@ -322,8 +329,7 @@ describe('GET /api/admin/config: secret redaction (CRYPTO-5/COMM-8)', () => {
     expect(json.data.hasAnthropicKey).toBe(false);
     expect(json.data.hasGoogleKey).toBe(false);
     // The ciphertext (masked or not) must never cross the wire.
-    expect(json.data).not.toHaveProperty('openaiApiKey');
-    expect(JSON.stringify(json.data)).not.toContain('iv:tag:ciphertext');
+    expect(JSON.stringify(json.data)).not.toContain('saved-openai-key');
   });
 });
 
@@ -336,72 +342,42 @@ describe('PATCH /api/admin/config — provider API keys (#149)', () => {
     );
   });
 
-  it('rejects selecting an env-backed provider with no usable key, without writing', async () => {
-    const orig = process.env.GOOGLE_AI_API_KEY;
-    delete process.env.GOOGLE_AI_API_KEY; // no env key, no stored key, no local endpoint
-    try {
-      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
-      expect(res.status).toBe(400);
-      expect(mockUpsert).not.toHaveBeenCalled();
-    } finally {
-      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
-      else process.env.GOOGLE_AI_API_KEY = orig;
-    }
+  it('rejects selecting a provider with no saved key, without writing', async () => {
+    const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
+    expect(res.status).toBe(400);
+    expect(mockUpsert).not.toHaveBeenCalled();
   });
 
   it('accepts the same provider when an API key is entered, and stores it encrypted', async () => {
-    const { decryptSecret } = await import('@/lib/secret-crypto');
-    const orig = process.env.GOOGLE_AI_API_KEY;
-    delete process.env.GOOGLE_AI_API_KEY;
-    try {
-      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash', apiKey: 'g-secret-123' }));
-      expect(res.status).toBe(200);
-      const update = (mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> }).update;
-      expect(update.googleApiKey).toEqual(expect.any(String));
-      expect(update.googleApiKey).not.toBe('g-secret-123');
-      expect(decryptSecret(update.googleApiKey as string)).toBe('g-secret-123');
-    } finally {
-      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
-      else process.env.GOOGLE_AI_API_KEY = orig;
-    }
+    const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash', apiKey: 'g-secret-123' }));
+    expect(res.status).toBe(200);
+    const { vault, store } = providerVault(prisma);
+    expect(await vault.resolve('google')).toMatchObject({ apiKey: 'g-secret-123' });
+    expect(JSON.stringify(await store.read())).not.toContain('g-secret-123');
   });
 
   it('accepts switching to a provider that already has a decryptable stored key (no re-entry)', async () => {
-    const { encryptSecret } = await import('@/lib/secret-crypto');
-    const orig = process.env.GOOGLE_AI_API_KEY;
-    delete process.env.GOOGLE_AI_API_KEY;
-    mockFindFirst.mockResolvedValue({ googleApiKey: encryptSecret('already-stored-key') });
-    try {
-      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
-      expect(res.status).toBe(200);
-    } finally {
-      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
-      else process.env.GOOGLE_AI_API_KEY = orig;
-    }
-  });
-
-  it('rejects a provider whose stored key cannot be decrypted and has no env key (Codex audit #2)', async () => {
-    const orig = process.env.GOOGLE_AI_API_KEY;
-    delete process.env.GOOGLE_AI_API_KEY;
-    // Column present but not valid ciphertext (eg. ADMIN_SESSION_SECRET rotated):
-    // runtime would fall through to the absent env key, so the guard must reject.
-    mockFindFirst.mockResolvedValue({ googleApiKey: 'not-decryptable-garbage' });
-    try {
-      const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
-      expect(res.status).toBe(400);
-      expect(mockUpsert).not.toHaveBeenCalled();
-    } finally {
-      if (orig === undefined) delete process.env.GOOGLE_AI_API_KEY;
-      else process.env.GOOGLE_AI_API_KEY = orig;
-    }
-  });
-
-  it('clears a stored key when apiKey is null', async () => {
-    // env key present so clearing the stored key does not trip the keyless guard
-    const res = await PATCH(patchRequest({ provider: 'anthropic', model: 'claude-haiku-4-5-20251001', apiKey: null }));
+    await providerVault(prisma).vault.configure('google', { apiKey: 'already-stored-key' });
+    const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
     expect(res.status).toBe(200);
-    const update = (mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> }).update;
-    expect(update.anthropicApiKey).toBeNull();
+  });
+
+  it('rejects a provider whose saved key cannot be decrypted', async () => {
+    const { vault, store } = providerVault(prisma);
+    await store.transact(state => vault.quarantineState(state, 'google', { sourceFormat: 'test', sourceVersion: 1, payload: 'not-decryptable-garbage', failure: 'decryption_failed' }));
+    const res = await PATCH(patchRequest({ provider: 'google', model: 'gemini-2.5-flash' }));
+    expect(res.status).toBe(409);
+    expect(mockUpsert).not.toHaveBeenCalled();
+  });
+
+  it('clears stored credentials through an explicit reset', async () => {
+    mockFindFirst.mockResolvedValue({ provider: 'anthropic', providerRevision: 0 });
+    await providerVault(prisma).vault.configure('anthropic', { apiKey: 'key-to-remove' });
+    const res = await PATCH(patchRequest({ provider: 'anthropic', resetCredentials: true, expectedRevision: 0 }));
+    expect(res.status).toBe(200);
+    const { vault, store } = providerVault(prisma);
+    expect((await vault.describe('anthropic')).fields.find(field => field.id === 'apiKey')?.source).toBe('unset');
+    expect(JSON.stringify(await store.read())).not.toContain('key-to-remove');
   });
 
   it('lets a local provider save without any API key', async () => {
@@ -411,24 +387,21 @@ describe('PATCH /api/admin/config — provider API keys (#149)', () => {
     expect(update.provider).toBe('ollama');
   });
 
-  // Recurrence net: every env-backed provider must round-trip a GUI-entered key
-  // (writable -> encrypted at rest -> exposed only as a boolean). A new provider
-  // wired up incompletely fails here.
   describe.each([
-    { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', column: 'anthropicApiKey', has: 'hasAnthropicKey' },
-    { provider: 'openai', model: 'gpt-4.1-mini', column: 'openaiApiKey', has: 'hasOpenaiKey' },
-    { provider: 'google', model: 'gemini-2.5-flash', column: 'googleApiKey', has: 'hasGoogleKey' },
-  ])('contract: $provider', ({ provider, model, column, has }) => {
+    { provider: 'anthropic', model: 'claude-haiku-4-5-20251001', has: 'hasAnthropicKey' },
+    { provider: 'openai', model: 'gpt-4.1-mini', has: 'hasOpenaiKey' },
+    { provider: 'google', model: 'gemini-2.5-flash', has: 'hasGoogleKey' },
+  ])('contract: $provider', ({ provider, model, has }) => {
     it('persists an entered key encrypted and exposes only a boolean', async () => {
-      const { decryptSecret } = await import('@/lib/secret-crypto');
       const secret = `secret-for-${provider}`;
       const res = await PATCH(patchRequest({ provider, model, apiKey: secret }));
       expect(res.status).toBe(200);
-      const update = (mockUpsert.mock.calls[0]![0] as { update: Record<string, unknown> }).update;
-      expect(decryptSecret(update[column] as string)).toBe(secret);
+      const { vault, store } = providerVault(prisma);
+      expect(await vault.resolve(provider)).toMatchObject({ apiKey: secret });
+      expect(JSON.stringify(await store.read())).not.toContain(secret);
       const json = (await res.json()) as { data: Record<string, unknown> };
       expect(json.data[has]).toBe(true);
-      expect(json.data).not.toHaveProperty(column);
+      expect(JSON.stringify(json.data)).not.toContain(secret);
     });
   });
 });
@@ -455,7 +428,7 @@ describe('PATCH /api/admin/config — local provider reachability (#153)', () =>
     expect(mockReachable).toHaveBeenCalledWith('ollama', 'http://localhost:11434/v1');
   });
 
-  it('does not probe reachability for an env-backed provider', async () => {
+  it('does not use the local reachability probe for a remote API provider', async () => {
     const res = await PATCH(patchRequest({ provider: 'openai', model: 'gpt-4.1-mini', customBaseUrl: 'http://localhost:1234/v1', apiKey: 'sk-x' }));
     expect(res.status).toBe(200);
     expect(mockReachable).not.toHaveBeenCalled();

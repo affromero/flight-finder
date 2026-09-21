@@ -117,9 +117,6 @@ env \
   FLIGHT_FINDER_YES=1 \
   FLIGHT_FINDER_REPO="$REPO_ROOT" \
   FLIGHT_FINDER_CLI_SOURCE="$REPO_ROOT/apps/web/public/flight-finder-cli" \
-  FLIGHT_FINDER_API_KEY="test-smoke-key" \
-  FLIGHT_FINDER_API_PROVIDER="ANTHROPIC_API_KEY" \
-  FLIGHT_FINDER_EXTRA_ENV="ANTHROPIC_BASE_URL=http://host.docker.internal:${LLMOCK_PORT}" \
   FLIGHT_FINDER_SKIP_BUILD=1 \
   HOST_PORT="$HOST_PORT" \
   bash "$REPO_ROOT/apps/web/public/install.sh" 2>&1 | while IFS= read -r line; do
@@ -166,14 +163,11 @@ if [ ! -f "$TEST_HOME/.flight-finder/.env" ]; then
 fi
 pass ".env generated"
 
-# Verify .env contains the API key and mock URL
-if ! grep -q "ANTHROPIC_API_KEY=test-smoke-key" "$TEST_HOME/.flight-finder/.env"; then
-  fatal ".env missing ANTHROPIC_API_KEY"
+# Provider credentials belong to Sidedoor and must never be written by the installer.
+if grep -Eq '^(ANTHROPIC_API_KEY|OPENAI_API_KEY|GOOGLE_AI_API_KEY|ANTHROPIC_BASE_URL|OPENAI_BASE_URL)=' "$TEST_HOME/.flight-finder/.env"; then
+  fatal ".env contains provider configuration"
 fi
-if ! grep -q "ANTHROPIC_BASE_URL=http://host.docker.internal:${LLMOCK_PORT}" "$TEST_HOME/.flight-finder/.env"; then
-  fatal ".env missing ANTHROPIC_BASE_URL"
-fi
-pass ".env contains correct config"
+pass ".env contains deployment config only"
 
 # Check image in compose matches our test image
 if ! grep -q "$TEST_IMAGE" "$TEST_HOME/.flight-finder/docker-compose.yml"; then

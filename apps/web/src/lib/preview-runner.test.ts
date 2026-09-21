@@ -10,6 +10,14 @@ import type { PreviewRequestPayload } from '@/lib/preview-run';
 import type { ExtractionConfig, TravelJob } from '@/generated/prisma/client';
 import { withTravelContext } from './travel/context';
 import { TravelVpnSession } from './travel/vpn';
+import type { createStateBoundary } from '@/test/state-fixture';
+
+const persistence = vi.hoisted(() => ({ state: null as ReturnType<typeof createStateBoundary> | null, config: null as Record<string, unknown> | null }));
+vi.mock('@/lib/sidedoor/access/store', async () => {
+  const { createStateBoundary } = await import('@/test/state-fixture');
+  persistence.state = createStateBoundary();
+  return { sharedStateStore: persistence.state.store };
+});
 
 const {
   mockExtractionConfigFindFirst,
@@ -46,12 +54,17 @@ vi.mock('fs/promises', () => ({
   mkdir: mockMkdir,
 }));
 
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    extractionConfig: { findFirst: mockExtractionConfigFindFirst },
+vi.mock('@/lib/prisma', () => {
+  const database = {
+    extractionConfig: {
+      findFirst: mockExtractionConfigFindFirst,
+      async findUnique() { return persistence.config; },
+      async update({ data }: { data: Record<string, unknown> }) { persistence.config = { ...persistence.config, ...data }; return persistence.config; },
+    },
     apiUsageLog: { create: mockApiUsageLogCreate },
-  },
-}));
+  };
+  return { prisma: { ...database, $transaction: async (operation: (value: typeof database) => Promise<unknown>) => operation(database) } };
+});
 
 // Model the Redis boundary with an in-memory cache. Failed factories are never
 // cached, allowing the retry tests to distinguish fares from failed searches.
@@ -104,6 +117,7 @@ async function runPreview(...args: Parameters<typeof runAdmittedPreview>) {
   const lease = { id: 'browser', owner: 'preview-test', generation: 1, topologyVersion: 1 };
   const job = { id: 'preview-test', kind: 'flight_preview', userId: null, status: 'running' } as TravelJob;
   const config = await mockExtractionConfigFindFirst() as ExtractionConfig | null;
+  persistence.config = config;
   return withTravelContext({ job, lease, config, vpn: new TravelVpnSession(lease, 'none') }, () => runAdmittedPreview(...args));
 }
 
@@ -140,7 +154,10 @@ function priceData(airline: string, price: number) {
   };
 }
 
-beforeEach(() => {
+beforeEach(async () => {
+  persistence.state!.reset();
+  persistence.config = null;
+  await (await import('@/lib/sidedoor/providers/provider-credentials')).initializeProviderCredentials();
   cachedPrices.clear();
   mockExtractionConfigFindFirst.mockReset();
   mockApiUsageLogCreate.mockClear();
@@ -178,13 +195,14 @@ beforeEach(() => {
 
 describe('runPreview API key resolution (#149)', () => {
   it('threads the DB-stored key (decrypted) into the extractPrices override', async () => {
-    const { encryptSecret } = await import('@/lib/secret-crypto');
+    const { prisma } = await import('@/lib/prisma');
+    const { providerVault } = await import('@/lib/sidedoor/providers/provider-credentials');
+    await providerVault(prisma).vault.configure('anthropic', { apiKey: 'stored-preview-key', compatibleApiKey: 'stored-preview-key', baseUrl: process.env.ANTHROPIC_BASE_URL! });
     mockExtractionConfigFindFirst.mockResolvedValue({
       id: 'singleton',
       provider: 'anthropic',
       model: 'claude-haiku-4-5-20251001',
       defaultCurrency: 'USD',
-      anthropicApiKey: encryptSecret('stored-preview-key'),
     });
 
     await runPreview(makePayload(), { concurrency: 1 });

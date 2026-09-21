@@ -7,9 +7,10 @@ import { GET as searchStatus, DELETE as cancelSearch } from '@/app/api/hotels/se
 import { GET as recoveryStatus, POST as recover } from '@/app/api/admin/travel/route';
 import { createHotelSearch } from '../hotels/store';
 import { pumpTravelJobs } from './coordinator';
+import { createDatabaseSession } from '@/test/database-session';
 
-const boundary = vi.hoisted(() => ({ origin: '' }));
-vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => undefined }) }));
+const boundary = vi.hoisted(() => ({ origin: '', token: '' }));
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.token ? { value: boundary.token } : undefined }) }));
 vi.mock('next/server', async original => ({ ...await original<typeof import('next/server')>(), after: vi.fn() }));
 vi.mock('playwright', async original => {
   const actual = await original<typeof import('playwright')>();
@@ -18,6 +19,7 @@ vi.mock('playwright', async original => {
 
 describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('reported quarantine through HTTP, PostgreSQL and Chromium hotel search', () => {
   let server: Server;
+  let ownerId = '';
   let previous: { multiUserMode: boolean; vpnProvider: string | null; enabled: boolean } | null;
   const arrival = new Date(); arrival.setUTCMonth(arrival.getUTCMonth() + 2, 15);
   const departure = new Date(arrival); departure.setUTCDate(departure.getUTCDate() + 3);
@@ -28,6 +30,8 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('repor
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? 'http://invalid');
     if (url.hostname !== '127.0.0.1' || url.port !== '55440' || url.pathname !== '/car_test') throw new Error('Recovery search tests require disposable localhost:55440/car_test');
+    ownerId = (await prisma.user.create({ data: { username: `recovery-search-owner-${crypto.randomUUID()}`, isAdmin: true } })).id;
+    boundary.token = await createDatabaseSession(ownerId);
     previous = await prisma.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { multiUserMode: true, vpnProvider: true, enabled: true } });
     server = createServer((request, response) => {
       const url = new URL(request.url!, 'http://fixture');
@@ -44,6 +48,7 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('repor
   });
   beforeEach(async () => {
     vi.stubEnv('SELF_HOSTED', 'true'); vi.stubEnv('REDIS_URL', '');
+    boundary.token = await createDatabaseSession(ownerId);
     await prisma.travelJob.deleteMany(); await prisma.hotelSearchRun.deleteMany(); await prisma.travelLease.deleteMany(); await prisma.travelAdmission.deleteMany();
     await prisma.extractionConfig.upsert({ where: { id: 'singleton' }, create: { enabled: true, multiUserMode: false, vpnProvider: 'none' }, update: { enabled: true, multiUserMode: false, vpnProvider: 'none' } });
     // This is an existing incident, including the exact reason reported in #207.

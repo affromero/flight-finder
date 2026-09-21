@@ -2,7 +2,7 @@ import Link from 'next/link';
 import { redirect, notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { prisma } from '@/lib/prisma';
 import { SettingsForm } from './SettingsForm';
 import { HotelMapPreferences } from '@/components/hotels/HotelMapPreferences';
@@ -15,7 +15,7 @@ export default async function AccountSettingsPage() {
 
   const t = await getTranslations('AccountSettings');
 
-  const user = await getCurrentUser();
+  const user = await getCurrentProfile();
   if (!user) redirect('/login?next=/account/settings');
 
   // Read admin's aggregator allowlist server-side. This page is a Server

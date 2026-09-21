@@ -7,7 +7,8 @@ import { POST as createFlight } from '@/app/api/queries/route';
 import { GET as setupStatus } from '@/app/api/setup/status/route';
 import { GET as setupModels } from '@/app/api/setup/cli-models/route';
 import { disableMultiUserMode } from './admin-recovery';
-import { createUserSessionToken } from './user-auth';
+import { createDatabaseSession } from '@/test/database-session';
+import { sharedAccess, sharedAccessStore } from '@/lib/sidedoor/access/service';
 import { acquireTravelLease, claimTravelJob, enqueueTravelJob, guardTravelJob, releaseTravelLease } from './travel/jobs';
 import { carJson, createCarSearch, createCarTracker, editCarTracker, refreshCarTracker, deleteCarTracker } from './cars/store';
 import { createHotelSearch, editHotelTracker, refreshHotelTracker } from './hotels/store';
@@ -20,7 +21,7 @@ vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.tok
 const solo = { userId: null, isAdmin: true };
 const hotelSearch = { destination: 'London', checkIn: '2027-04-15', checkOut: '2027-04-18', sources: ['booking'], rooms: [{ adults: 2, children: [] }], currency: 'USD' };
 const request = (path: string, body: unknown) => new NextRequest(`http://localhost${path}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-const enable = (username = 'owner') => enableAccounts(request('/api/admin/multi-user', { adminUsername: username, adminPassword: 'account-test-password' }));
+const enable = () => enableAccounts(request('/api/admin/multi-user', {}));
 
 describe.skipIf(process.env.ACCOUNT_INTEGRATION_TESTS !== '1')('account transitions against disposable PostgreSQL', () => {
   beforeAll(() => {
@@ -33,8 +34,11 @@ describe.skipIf(process.env.ACCOUNT_INTEGRATION_TESTS !== '1')('account transiti
     await prisma.travelJob.deleteMany(); await prisma.travelLease.deleteMany(); await prisma.travelAdmission.deleteMany();
     await prisma.query.deleteMany(); await prisma.hotelTracker.deleteMany(); await prisma.hotelSearchRun.deleteMany();
     await prisma.carTracker.deleteMany(); await prisma.carSearchRun.deleteMany(); await prisma.user.deleteMany();
+    await prisma.sidedoorState.deleteMany();
     await prisma.extractionConfig.deleteMany();
     await prisma.extractionConfig.create({ data: { id: 'singleton', enabled: false, vpnProvider: 'none' } });
+    await sharedAccessStore.initialize();
+    boundary.token = await sharedAccess.claimOwner(await sharedAccess.issueOperatorToken(), 'owner', 'account-test-password', 'household');
   });
   afterAll(async () => { vi.unstubAllEnvs(); await prisma.$disconnect(); });
 
@@ -138,22 +142,22 @@ describe.skipIf(process.env.ACCOUNT_INTEGRATION_TESTS !== '1')('account transiti
   });
 
   it('keeps setup and CLI bootstrap closed after disabling and re-enabling accounts', async () => {
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { setupComplete: true } });
     expect((await enable()).status).toBe(201);
     await disableMultiUserMode();
     const owner = await prisma.user.findUniqueOrThrow({ where: { username: 'owner' } });
-    boundary.token = createUserSessionToken(owner.id);
-    expect((await enable('second-owner')).status).toBe(201);
+    boundary.token = await createDatabaseSession(owner.id);
+    expect((await enable()).status).toBe(201);
     boundary.token = '';
-    expect((await setup(request('/api/setup', { provider: 'openai', model: 'gpt-4.1-mini', customBaseUrl: 'https://attacker.example' }))).status).toBe(403);
+    expect((await setup(request('/api/setup', { provider: 'openai', model: 'gpt-4.1-mini', customBaseUrl: 'https://attacker.example' }))).status).toBe(401);
     expect(await (await setupStatus()).json()).toEqual({ setupComplete: true, needsSetup: false });
-    expect((await setupModels(new Request('http://localhost/api/setup/cli-models?provider=codex'))).status).toBe(403);
+    expect((await setupModels(new Request('http://localhost/api/setup/cli-models?provider=codex'))).status).toBe(401);
     expect(await prisma.extractionConfig.findUnique({ where: { id: 'singleton' } })).toMatchObject({ customBaseUrl: null });
   });
 
-  it('accepts exactly one simultaneous first-run setup submission', async () => {
+  it('keeps first-run setup closed after an owner has been claimed', async () => {
     const responses = await Promise.all(['https://one.example', 'https://two.example'].map(customBaseUrl => setup(request('/api/setup', { provider: 'openai', model: 'gpt-4.1-mini', customBaseUrl }))));
-    expect(responses.map(response => response.status).sort()).toEqual([200, 403]);
-    const accepted = responses[0]!.status === 200 ? 'https://one.example' : 'https://two.example';
-    expect(await prisma.extractionConfig.findUnique({ where: { id: 'singleton' } })).toMatchObject({ customBaseUrl: accepted, adminPasswordHash: 'self-hosted' });
+    expect(responses.map(response => response.status)).toEqual([403, 403]);
+    expect(await prisma.extractionConfig.findUnique({ where: { id: 'singleton' } })).toMatchObject({ customBaseUrl: null });
   });
 });

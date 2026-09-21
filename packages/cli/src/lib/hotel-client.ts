@@ -16,7 +16,7 @@ export class HotelClient {
     if (!path.startsWith('/api/hotels')) throw new Error('Invalid hotel API path');
     const response = await fetch(new URL(path, this.origin), {
       method, redirect: 'error', signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(30_000)]) : AbortSignal.timeout(30_000),
-      headers: { 'Content-Type': 'application/json', ...(this.session ? { Cookie: `ft-session=${this.session}` } : {}), ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}) },
+      headers: { 'Content-Type': 'application/json', Origin: this.origin.origin, ...(this.session ? { Cookie: `ft-session=${this.session}` } : {}), ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}) },
       ...(body === undefined ? {} : { body: JSON.stringify(body) }),
     });
     const payload: unknown = await response.json().catch(() => null);

@@ -264,7 +264,7 @@
       "badge": "https · público",
       "blurb": "Uma URL https pública. Um túnel rápido leva segundos e não exige conta; um túnel nomeado dá uma URL permanente no seu domínio.",
       "install": "Instale o cloudflared:",
-      "quick": "URL rápida e temporária (sem conta): inicie um túnel, depois copie o endereço https://<name>.trycloudflare.com que ele imprime e cole abaixo.",
+      "quick": "URL rápida e temporária (sem conta): inicie um túnel, depois copie o endereço {tunnelUrl} que ele imprime e cole abaixo.",
       "permanent": "URL permanente no seu próprio domínio (requer uma conta gratuita da Cloudflare com o seu domínio adicionado): faça login, crie um túnel nomeado, aponte um registro DNS para ele e execute-o.",
       "paste": "Cole sua URL https em URL pública abaixo."
     },

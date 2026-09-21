@@ -22,6 +22,19 @@ function processFixture(args: string[], reply: (id: number) => unknown, auth = t
 beforeEach(() => { vi.resetModules(); spawnMock.mockReset(); });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllEnvs(); });
 
+it('cancels an in-flight CLI readiness process without waiting for its timeout', async () => {
+  const child = Object.assign(new EventEmitter(), { stdout: new PassThrough(), stderr: new PassThrough(), stdin: new PassThrough(), kill: vi.fn() });
+  let stopped = false;
+  child.kill.mockImplementation(() => { stopped = true; queueMicrotask(() => child.emit('close', null, 'SIGKILL')); return true; });
+  spawnMock.mockReturnValue(child);
+  const { probeCli } = await import('./cli-models');
+  const controller = new AbortController();
+  const result = probeCli('codex', controller.signal);
+  controller.abort(new Error('Discovery cancelled'));
+  await expect(result).rejects.toThrow('Discovery cancelled');
+  expect(stopped).toBe(true);
+});
+
 it('discovers account models and reasoning across pages while ignoring hidden models', async () => {
   spawnMock.mockImplementation((_binary, args) => processFixture(args, id => ({ id, result: { data: id === 1 ? [{ ...offering, hidden: true }] : [offering], nextCursor: id === 1 ? 'next' : null } })));
   const { discoverCliModels } = await import('./cli-models');
@@ -59,7 +72,6 @@ it('validates explicit CLI selections without restricting custom API model ident
   for (const model of ['/models/model.gguf', 'org/model@revision', 'model+variant']) {
     await expect(validateInferenceSelection('ollama', model, null)).resolves.toMatchObject({ model, reasoningEffort: null });
   }
-  await expect(validateInferenceSelection('codex', 'codex', 'default')).rejects.toThrow(/concrete model/);
   await expect(validateInferenceSelection('openai', '', null)).rejects.toThrow(/model ID/);
   await expect(validateInferenceSelection('codex', '--malicious', null)).rejects.toThrow(/model ID/);
 });

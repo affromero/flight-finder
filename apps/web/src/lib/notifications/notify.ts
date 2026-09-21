@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { ChannelMessage, ChannelType } from './channels/types';
-import { sendToChannel } from './channels';
+import { sendToChannel } from './channels/index';
 import { notificationTransaction } from './database';
 import type { Prisma } from '@/generated/prisma/client';
 

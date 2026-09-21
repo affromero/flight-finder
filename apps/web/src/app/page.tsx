@@ -18,7 +18,7 @@ import { InstallCommand } from '@/components/InstallCommand';
 import { ProfileMenu } from '@/components/ProfileMenu/ProfileMenu';
 import { verifyAdminSessionRevocable } from '@/lib/admin-guard';
 import { isMultiUserEnabled } from '@/lib/multi-user';
-import { getCurrentUser } from '@/lib/user-auth';
+import { getCurrentProfile } from '@/lib/user-auth';
 import { safeJsonLd } from '@/app/q/[id]/safe-json-ld';
 
 // Force dynamic — isMultiUserEnabled + getCurrentUser run per request to
@@ -31,7 +31,7 @@ const isSelfHosted = process.env.SELF_HOSTED === 'true';
 export default async function HomePage() {
   const t = await getTranslations('Landing');
   const multiUserEnabled = await isMultiUserEnabled();
-  const user = multiUserEnabled ? await getCurrentUser() : null;
+  const user = multiUserEnabled ? await getCurrentProfile() : null;
 
   // Self-hosted multi user mode requires a logged in user even for the landing page.
   // The household setting means there's no public surface to share with strangers.

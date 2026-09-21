@@ -60,7 +60,8 @@ export async function GET(request: NextRequest) {
     partial: results.filter((r) => r.status === 'partial').length,
     failed: results.filter((r) => r.status === 'failed').length,
     totalSnapshots: results.reduce((sum, r) => sum + r.snapshotsCount, 0),
-    totalCost: results.reduce((sum, r) => sum + r.extractionCost, 0),
+    totalCost: results.reduce<number | null>((sum, r) =>
+      sum === null || r.extractionCost === null ? null : sum + r.extractionCost, 0),
     results,
   };
 

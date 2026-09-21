@@ -1,4 +1,7 @@
-import type Anthropic from '@anthropic-ai/sdk';
+import { extractWithSharedProvider } from './shared-provider';
+import { sharedProviderReadiness } from './shared-provider';
+import { extractCodex } from './codex-extraction';
+import { extractClaude } from './claude-extraction';
 
 import {
   PROVIDER_METADATA,
@@ -8,10 +11,13 @@ import {
   type ProviderMeta,
 } from './provider-metadata';
 import { prisma } from '@/lib/prisma';
-import { decryptSecret } from '@/lib/secret-crypto';
-import { cliOutputControl, linkCliCancellation } from './cli-cancellation';
-import { cliEnvironment } from './cli-environment';
-import { cliReasoningArgs, probeCli } from './cli-models';
+import { resolveProviderCredentials } from '@/lib/sidedoor/providers/provider-credentials';
+import { apiProviders, providerConnection } from 'thesidedoor-core/ai/providers';
+import { CredentialDecryptionError } from 'thesidedoor-core/configuration';
+import type { CredentialValues, TokenUsage } from 'thesidedoor-core/ai';
+import { estimateTokenCost } from 'thesidedoor-core/observability/pricing';
+export { resolveProviderCredentials };
+import { CliModelError, probeCli } from './cli-models';
 import type { ReasoningSelection } from './cli-model-types';
 
 // Client-safe metadata lives in provider-metadata.ts so the settings/setup/admin
@@ -32,49 +38,21 @@ const PARSED_TIMEOUT = parseInt(process.env.EXTRACT_TIMEOUT_MS ?? '90000', 10);
 export const EXTRACT_TIMEOUT_MS =
   Number.isFinite(PARSED_TIMEOUT) && PARSED_TIMEOUT > 0 ? PARSED_TIMEOUT : 90_000;
 
-/** Structural subset of ExtractionConfig carrying the encrypted per-provider
- *  key columns. Typed as a subset (not the generated Prisma type) so this
- *  module stays decoupled from the generated client path. */
-export type StoredKeyConfig = {
-  anthropicApiKey?: string | null;
-  openaiApiKey?: string | null;
-  googleApiKey?: string | null;
-};
-
-/** Env-backed provider -> the ExtractionConfig column that stores its
- *  admin-entered key (encrypted). Only the three providers with an `envKey`
- *  appear here; CLI/local providers need no key. */
-export const STORED_KEY_FIELD: Record<string, keyof StoredKeyConfig> = {
-  anthropic: 'anthropicApiKey',
-  openai: 'openaiApiKey',
-  google: 'googleApiKey',
-};
-
-/**
- * Resolve a provider's API key. An admin-entered key stored in the DB
- * (decrypted) takes precedence over the environment variable, so a self-hosted
- * user can configure a key in the GUI without editing .env or restarting the
- * stack (#149). A stored value that fails to decrypt (eg. ADMIN_SESSION_SECRET
- * was rotated) is treated as absent and falls through to the env var. Returns
- * '' when neither source has a key (CLI/local providers, which need none).
- */
-export function resolveApiKey(provider: string, config: StoredKeyConfig | null | undefined): string {
-  const field = STORED_KEY_FIELD[provider];
-  if (field && config) {
-    const encrypted = config[field];
-    if (encrypted) {
-      const decrypted = decryptSecret(encrypted);
-      if (decrypted) return decrypted;
-    }
-  }
-  const envKey = PROVIDER_METADATA[provider]?.envKey;
-  return (envKey ? process.env[envKey] : '') ?? '';
+/** Resolve the credential for the selected endpoint from one shared configuration snapshot. */
+export async function resolveApiKey(provider: string, snapshot?: CredentialValues): Promise<string> {
+  if (CLI_PROVIDERS[provider]) return '';
+  const values = snapshot ?? await resolveProviderCredentials(provider);
+  const metadata = PROVIDER_METADATA[provider];
+  if (!metadata) throw new Error('Unknown provider');
+  if (metadata.defaultBaseUrl) return providerConnection(values, {
+    defaultBaseUrl: metadata.defaultBaseUrl,
+    normalizeV1: LOCAL_PROVIDERS.has(provider),
+    requiresKey: false,
+  }).apiKey;
+  return typeof values.apiKey === 'string' ? values.apiKey : '';
 }
 
-export interface ExtractionUsage {
-  inputTokens: number;
-  outputTokens: number;
-}
+export type ExtractionUsage = TokenUsage;
 
 export interface ExtractionResult {
   content: string;
@@ -82,6 +60,7 @@ export interface ExtractionResult {
 }
 
 export interface ExtractOptions {
+  credentials?: CredentialValues;
   reasoningEffort?: ReasoningSelection;
   baseUrl?: string;
   signal?: AbortSignal;
@@ -101,11 +80,6 @@ export interface ExtractOptions {
    * (claude-code, codex) keep their own spawn timeout.
    */
   timeoutMs?: number;
-}
-
-function extractionSignal(options?: ExtractOptions): AbortSignal {
-  const timeout = AbortSignal.timeout(options?.timeoutMs ?? EXTRACT_TIMEOUT_MS);
-  return options?.signal ? AbortSignal.any([options.signal, timeout]) : timeout;
 }
 
 interface ProviderConfig extends ProviderMeta {
@@ -139,449 +113,131 @@ export function ensureV1Suffix(url: string): string {
 }
 
 export const EXTRACTION_PROVIDERS: Record<string, ProviderConfig> = {
-  anthropic: {
-    ...PROVIDER_METADATA.anthropic!,
-    extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
-      // Dynamic import like the other providers (openai, google): a static
-      // import makes Turbopack resolve the externalized SDK at build time, which
-      // fails in the monorepo Docker install where npm hoists it to the
-      // workspace, not the root. The type-only import above keeps Anthropic.* types.
-      const { default: AnthropicSdk } = await import('@anthropic-ai/sdk');
-      const client = new AnthropicSdk({ apiKey });
-      const response = await client.messages.create(
-        {
-          model,
-          max_tokens: 8192,
-          system: systemPrompt,
-          messages: [{ role: 'user', content: userPrompt }],
-        },
-        { signal: extractionSignal(options) },
-      );
-
-      const text = response.content
-        .filter((block): block is Anthropic.TextBlock => block.type === 'text')
-        .map((block) => block.text)
-        .join('');
-
-      return {
-        content: text,
-        usage: {
-          inputTokens: response.usage.input_tokens,
-          outputTokens: response.usage.output_tokens,
-        },
-      };
-    },
-  },
-  openai: {
-    ...PROVIDER_METADATA.openai!,
-    extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
-      const { default: OpenAI } = await import('openai');
-      const client = new OpenAI({
-        apiKey: apiKey || 'unused',
-        baseURL: options?.baseUrl || process.env.OPENAI_BASE_URL || undefined,
-      });
-      const response = await client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 8192,
-          ...(options?.responseFormat === 'json_object'
-            ? { response_format: { type: 'json_object' as const } }
-            : {}),
-        },
-        { signal: extractionSignal(options) },
-      );
-
-      return {
-        content: response.choices[0]?.message.content ?? '',
-        usage: {
-          inputTokens: response.usage?.prompt_tokens ?? 0,
-          outputTokens: response.usage?.completion_tokens ?? 0,
-        },
-      };
-    },
-  },
-  ollama: {
-    ...PROVIDER_METADATA.ollama!,
-    extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
-      const { default: OpenAI } = await import('openai');
-      const rawBaseURL = options?.baseUrl
-        || process.env.OLLAMA_HOST
-        || 'http://localhost:11434';
-      const baseURL = ensureV1Suffix(rawBaseURL);
-      const client = new OpenAI({ apiKey: 'unused', baseURL });
-      const response = await client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 8192,
-          ...(options?.responseFormat === 'json_object'
-            ? { response_format: { type: 'json_object' as const } }
-            : {}),
-        },
-        { signal: extractionSignal(options) },
-      );
-
-      return {
-        content: response.choices[0]?.message.content ?? '',
-        usage: {
-          inputTokens: response.usage?.prompt_tokens ?? 0,
-          outputTokens: response.usage?.completion_tokens ?? 0,
-        },
-      };
-    },
-  },
-  llamacpp: {
-    ...PROVIDER_METADATA.llamacpp!,
-    extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
-      const { default: OpenAI } = await import('openai');
-      const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8080');
-      const client = new OpenAI({ apiKey: 'unused', baseURL });
-      const response = await client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 8192,
-          ...(options?.responseFormat === 'json_object'
-            ? { response_format: { type: 'json_object' as const } }
-            : {}),
-        },
-        { signal: extractionSignal(options) },
-      );
-
-      return {
-        content: response.choices[0]?.message.content ?? '',
-        usage: {
-          inputTokens: response.usage?.prompt_tokens ?? 0,
-          outputTokens: response.usage?.completion_tokens ?? 0,
-        },
-      };
-    },
-  },
-  vllm: {
-    ...PROVIDER_METADATA.vllm!,
-    extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
-      const { default: OpenAI } = await import('openai');
-      const baseURL = ensureV1Suffix(options?.baseUrl || 'http://localhost:8000');
-      const client = new OpenAI({ apiKey: 'unused', baseURL });
-      const response = await client.chat.completions.create(
-        {
-          model,
-          messages: [
-            { role: 'system', content: systemPrompt },
-            { role: 'user', content: userPrompt },
-          ],
-          max_tokens: 8192,
-          ...(options?.responseFormat === 'json_object'
-            ? { response_format: { type: 'json_object' as const } }
-            : {}),
-        },
-        { signal: extractionSignal(options) },
-      );
-
-      return {
-        content: response.choices[0]?.message.content ?? '',
-        usage: {
-          inputTokens: response.usage?.prompt_tokens ?? 0,
-          outputTokens: response.usage?.completion_tokens ?? 0,
-        },
-      };
-    },
-  },
-  google: {
-    ...PROVIDER_METADATA.google!,
-    extract: async (apiKey, model, systemPrompt, userPrompt, options) => {
-      const { GoogleGenerativeAI } = await import('@google/generative-ai');
-      const genAI = new GoogleGenerativeAI(apiKey);
-      const genModel = genAI.getGenerativeModel({
-        model,
-        systemInstruction: systemPrompt,
-      });
-
-      // @google/generative-ai 0.24+ accepts SingleRequestOptions as the second
-      // arg with native `signal` and `timeout` fields. Native signal aborts
-      // the underlying fetch (better than Promise.race which would leak).
-      const timeoutMs = options?.timeoutMs ?? EXTRACT_TIMEOUT_MS;
-      const result = await genModel.generateContent(userPrompt, {
-        signal: extractionSignal(options),
-        timeout: timeoutMs,
-      });
-      const response = result.response;
-
-      return {
-        content: response.text(),
-        usage: {
-          inputTokens: response.usageMetadata?.promptTokenCount ?? 0,
-          outputTokens: response.usageMetadata?.candidatesTokenCount ?? 0,
-        },
-      };
-    },
-  },
+  ...Object.fromEntries(
+    Object.entries(PROVIDER_METADATA)
+      .filter(([id]) => !CLI_PROVIDERS[id])
+      .map(([id, metadata]) => [id, {
+        ...metadata,
+        extract: (apiKey: string, model: string, systemPrompt: string, userPrompt: string, options?: ExtractOptions) =>
+          extractWithSharedProvider(id, apiKey, model, systemPrompt, userPrompt, options),
+      }]),
+  ),
   'claude-code': {
     ...PROVIDER_METADATA['claude-code']!,
-    extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
-      const { spawn } = await import(/* webpackIgnore: true */ 'child_process');
-
-      const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-
-      const result = await new Promise<string>((resolve, reject) => {
-        options?.signal?.throwIfAborted();
-        const env = cliEnvironment('claude-code');
-        // Force the CLI onto its own Max-subscription auth. Drop the API key AND
-        // any inherited base-URL / auth-token override that would otherwise
-        // redirect the spawned `claude` at a different endpoint (a host proxy,
-        // or a test harness's mock server). A stray ANTHROPIC_BASE_URL silently
-        // breaks extraction with an llm_error. Issue #139 follow-up.
-        delete env.ANTHROPIC_API_KEY;
-        delete env.ANTHROPIC_AUTH_TOKEN;
-        delete env.ANTHROPIC_BASE_URL;
-        // Extraction is pure text-in / JSON-out and needs no agentic capability.
-        // The input is adversarial scraped HTML, so run the agent locked down:
-        // deny every tool (overrides any pre-approval in the host's
-        // ~/.claude config) and force the default permission mode, which in
-        // non-interactive --print mode denies anything not explicitly allowed.
-        // Together a prompt injection in the page cannot make the agent run a
-        // shell command, write a file, or read and exfiltrate host credentials.
-        const proc = spawn('claude', [
-          '--print',
-          '--model', model,
-          '--permission-mode', 'default',
-          '--disallowedTools', 'Bash,Edit,MultiEdit,Write,Read,Glob,Grep,WebFetch,WebSearch,Task,NotebookEdit,TodoWrite',
-        ], {
-          timeout: 240_000,
-          ...(options?.signal ? { detached: process.platform !== 'win32' } : {}),
-          env,
-        });
-        const outputControl = cliOutputControl(options?.signal);
-        const unlink = linkCliCancellation(proc, outputControl.signal);
-
-        let stdout = '';
-        let stderr = '';
-        proc.stdout.on('data', (d: Buffer) => {
-          stdout = outputControl.append(stdout, d);
-        });
-        proc.stderr.on('data', (d: Buffer) => {
-          stderr = outputControl.append(stderr, d);
-        });
-        proc.on('close', (code) => {
-          unlink();
-          if (outputControl.signal?.aborted) { reject(outputControl.signal.reason); return; }
-          if (code !== 0) {
-            // The CLI prints authentication failures ("Not logged in", "OAuth
-            // session expired and could not be refreshed") on stdout in print
-            // mode, leaving stderr empty — so stderr alone yields a blank
-            // message and the real cause never reaches the operator.
-            const filtered = filterCliStderr(stderr) || filterCliStderr(stdout) || '(no output)';
-            reject(new Error(`claude CLI exited ${code}: ${filtered}`));
-          } else {
-            resolve(stdout.trim());
-          }
-        });
-        proc.on('error', (err: NodeJS.ErrnoException) => {
-          unlink();
-          if (err.code === 'ENOENT') {
-            reject(new Error('claude CLI not found. Restart the container to trigger install.'));
-          } else {
-            reject(err);
-          }
-        });
-        proc.stdin.write(fullPrompt);
-        proc.stdin.end();
-      });
-
-      return {
-        content: result,
-        usage: { inputTokens: 0, outputTokens: 0 },
-      };
-    },
+    extract: (_apiKey, model, systemPrompt, userPrompt, options) =>
+      extractClaude(model, systemPrompt, userPrompt, options),
   },
   codex: {
     ...PROVIDER_METADATA.codex!,
-    extract: async (_apiKey, model, systemPrompt, userPrompt, options) => {
-      const { spawn } = await import(/* webpackIgnore: true */ 'child_process');
-
-      const fullPrompt = `${systemPrompt}\n\n${userPrompt}`;
-
-      const { mkdtempSync, readFileSync, rmSync, statSync } = await import(/* webpackIgnore: true */ 'fs');
-      const { join } = await import(/* webpackIgnore: true */ 'path');
-      const os = await import(/* webpackIgnore: true */ 'os');
-
-      options?.signal?.throwIfAborted();
-      const tmpDirectory = mkdtempSync(join(os.tmpdir(), 'codex-'));
-      const tmpFile = join(tmpDirectory, 'output.txt');
-      const reasoningArgs = await cliReasoningArgs('codex', model, options?.reasoningEffort).catch(error => {
-        rmSync(tmpDirectory, { recursive: true, force: true });
-        throw error;
-      });
-      if (options?.signal?.aborted) {
-        rmSync(tmpDirectory, { recursive: true, force: true });
-        options.signal.throwIfAborted();
-      }
-
-      const result = await new Promise<string>((resolve, reject) => {
-        options?.signal?.throwIfAborted();
-        // Pin the read-only sandbox: model-generated shell commands cannot write
-        // files, execute side effects, or reach the network. codex exec is
-        // inherently agentic and cannot be reduced to pure inference, so a
-        // residual read-only exfil risk remains (the agent could still read a
-        // file and emit it); the admin UI warns about this and the scraped HTML
-        // is sanitized and fenced as untrusted data before it reaches here.
-        const proc = spawn('codex', [
-          'exec', '-',
-          '--skip-git-repo-check',
-          '--ephemeral',
-          ...(model && model !== 'codex' ? ['--model', model] : []),
-          ...reasoningArgs,
-          '-s', 'read-only',
-          '-o', tmpFile,
-        ], {
-          timeout: 240_000,
-          ...(options?.signal ? { detached: process.platform !== 'win32' } : {}),
-          env: cliEnvironment('codex'),
-          cwd: tmpDirectory,
-        });
-        const outputControl = cliOutputControl(options?.signal);
-        const unlink = linkCliCancellation(proc, outputControl.signal);
-
-        let stderr = '';
-        let stdout = '';
-        proc.stderr.on('data', (d: Buffer) => {
-          stderr = outputControl.append(stderr, d);
-        });
-        // Same blind spot as the claude path: an auth failure lands on stdout
-        // with nothing on stderr, so the error would read "codex CLI exited 1:".
-        proc.stdout.on('data', (d: Buffer) => {
-          stdout = outputControl.append(stdout, d);
-        });
-        proc.on('close', (code) => {
-          unlink();
-          if (outputControl.signal?.aborted) { reject(outputControl.signal.reason); return; }
-          const filtered = filterCliStderr(stderr) || filterCliStderr(stdout) || '(no output)';
-          const hint = filtered.includes('401') || filtered.includes('Unauthorized')
-            ? ' (ensure codex is authenticated on the host via `codex auth` and ~/.codex is readable)'
-            : '';
-          try {
-            if (options?.signal && statSync(tmpFile).size > 64_000) {
-              reject(new Error('Inference output exceeded the allowed size'));
-              return;
-            }
-            const output = readFileSync(tmpFile, 'utf-8').trim();
-            if (code !== 0) reject(new Error(`codex CLI exited ${code}: ${filtered}${hint}`));
-            else resolve(output);
-          } catch {
-            reject(new Error(`codex CLI exited ${code}: ${filtered}${hint}`));
-          }
-        });
-        proc.on('error', (err: NodeJS.ErrnoException) => {
-          unlink();
-          if (err.code === 'ENOENT') {
-            reject(new Error('codex CLI not found. Restart the container to trigger install.'));
-          } else {
-            reject(err);
-          }
-        });
-        proc.stdin.write(fullPrompt);
-        proc.stdin.end();
-      }).finally(() => rmSync(tmpDirectory, { recursive: true, force: true }));
-
-      return {
-        content: result,
-        usage: { inputTokens: 0, outputTokens: 0 },
-      };
-    },
+    extract: (_apiKey, model, systemPrompt, userPrompt, options) =>
+      extractCodex(model, systemPrompt, userPrompt, options),
   },
 };
 
 /**
  * Ping a local provider to check if it's actually reachable.
- * With no `overrideBaseUrl`, sources the base URL the way extraction does
- * (env/default) so the status probe agrees with what a real extract call hits;
- * for Ollama that means honouring OLLAMA_HOST (install.sh sets it to
- * host.docker.internal in Docker), since probing the localhost default would
- * falsely report "unreachable" inside a container (issue #139 follow-up).
+ * With no `overrideBaseUrl`, sources the canonical stored URL and then the
+ * provider default so the status probe agrees with extraction.
  * Pass `overrideBaseUrl` to probe a specific URL instead, e.g. validating a
  * customBaseUrl at config-save time (#153); that path uses a longer timeout
  * since it is an interactive save, not a background status sweep.
  */
-export async function isLocalProviderReachable(provider: string, overrideBaseUrl?: string | null): Promise<boolean> {
+export type ProviderAvailability = 'configured' | 'ready' | 'no_key' | 'invalid_credentials' | 'not_installed' | 'not_authenticated' | 'unreachable';
+
+/** Probe the exact OpenAI-compatible endpoint used by shared extraction. */
+export async function isLocalProviderReachable(
+  provider: string,
+  overrideBaseUrl?: string | null,
+  signal?: AbortSignal,
+): Promise<boolean> {
   const config = EXTRACTION_PROVIDERS[provider];
-  if (!config) return false;
-
-  const envBase = provider === 'ollama' ? process.env.OLLAMA_HOST : undefined;
-  const source = overrideBaseUrl || envBase || config.defaultBaseUrl || '';
-  const baseUrl = source.replace(/\/v1\/?$/, '');
-  const endpoint = provider === 'ollama'
-    ? `${baseUrl || 'http://localhost:11434'}/api/tags`
-    : `${baseUrl || 'http://localhost:8000'}/v1/models`;
-
+  if (!config || !LOCAL_PROVIDERS.has(provider)) return false;
+  const credentials = await resolveProviderCredentials(provider);
+  const source = overrideBaseUrl
+    || (typeof credentials.baseUrl === 'string' ? credentials.baseUrl : undefined)
+    || config.defaultBaseUrl
+    || '';
+  if (!source) return false;
   try {
-    const res = await fetch(endpoint, { signal: AbortSignal.timeout(overrideBaseUrl ? 5000 : 3000) });
-    return res.ok;
+    const readiness = await sharedProviderReadiness(provider, {
+      baseUrl: ensureV1Suffix(source),
+      allowAnonymous: true,
+    }, signal);
+    return readiness.code === 'ready';
   } catch {
+    signal?.throwIfAborted();
     return false;
   }
 }
 
-export async function detectAvailableProviders(
-  storedConfig?: (StoredKeyConfig & { customBaseUrl?: string | null }) | null,
-): Promise<string[]> {
-  const available: string[] = [];
-
-  const isSelfHosted = process.env.SELF_HOSTED === 'true';
-
-  // A stored key/customBaseUrl can make a provider available even when the env
-  // var is unset (#149). Callers that pass nothing get a fresh DB read so the
-  // status reflects keys saved after first-run setup; `null` skips the read.
-  const cfg =
-    storedConfig !== undefined
-      ? storedConfig
-      : await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
-
-  for (const [key] of Object.entries(EXTRACTION_PROVIDERS)) {
-    // Local providers: only on self-hosted, and only if reachable
-    if (LOCAL_PROVIDERS.has(key)) {
-      if (isSelfHosted && await isLocalProviderReachable(key)) {
-        available.push(key);
-      }
-      continue;
-    }
-    const cliBinary = CLI_PROVIDERS[key];
-    if (cliBinary) {
+/** API configuration checks do not claim that a remote server has authenticated the key. */
+export async function detectProviderReadiness(signal?: AbortSignal): Promise<Record<string, ProviderAvailability>> {
+  signal?.throwIfAborted();
+  await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
+  const statuses: Record<string, ProviderAvailability> = {};
+  for (const key of Object.keys(EXTRACTION_PROVIDERS)) {
+    signal?.throwIfAborted();
+    if (CLI_PROVIDERS[key]) {
       try {
-        if ((await probeCli(key)).authenticated) {
-          available.push(key);
-        }
-      } catch {
-        // CLI not found
+        statuses[key] = (await probeCli(key, signal)).authenticated ? 'ready' : 'not_authenticated';
+      } catch (error) {
+        signal?.throwIfAborted();
+        if (!(error instanceof CliModelError)) throw error;
+        statuses[key] = 'not_installed';
       }
       continue;
     }
-    // Env-backed (anthropic/openai/google): a stored key OR an env key makes it
-    // available; openai is also usable via a custom local endpoint.
-    const hasKey = !!resolveApiKey(key, cfg);
-    const hasLocalEndpoint = key === 'openai' && (cfg?.customBaseUrl || process.env.OPENAI_BASE_URL);
-    if (hasKey || hasLocalEndpoint) {
-      available.push(key);
+    if (LOCAL_PROVIDERS.has(key) && process.env.SELF_HOSTED !== 'true') {
+      statuses[key] = 'not_installed';
+      continue;
+    }
+    try {
+      const values = await resolveProviderCredentials(key);
+      signal?.throwIfAborted();
+      const adapter = apiProviders().find(item => item.descriptor.id === key);
+      if (!adapter?.validateConfiguration) throw new Error('Provider configuration validation is unavailable');
+      adapter.validateConfiguration({ credentials: values, signal: signal ?? new AbortController().signal });
+      if (!LOCAL_PROVIDERS.has(key)) {
+        statuses[key] = 'configured';
+        continue;
+      }
+      const readiness = await sharedProviderReadiness(key, values, signal);
+      statuses[key] = readiness.code === 'ready'
+        ? 'ready'
+        : readiness.code === 'missing_credentials'
+          ? 'no_key'
+          : 'unreachable';
+    } catch (error) {
+      signal?.throwIfAborted();
+      if (error instanceof CredentialDecryptionError) statuses[key] = 'invalid_credentials';
+      else if (error instanceof Error && 'code' in error && error.code === 'invalid_request') statuses[key] = 'no_key';
+      else throw error;
     }
   }
+  return statuses;
+}
 
-  return available;
+export async function detectAvailableProviders(signal?: AbortSignal): Promise<string[]> {
+  const readiness = await detectProviderReadiness(signal);
+  return Object.keys(EXTRACTION_PROVIDERS).filter(key => readiness[key] === 'configured' || readiness[key] === 'ready');
 }
 
 export function getModelCosts(
   provider: string,
   model: string
-): { costPer1kInput: number; costPer1kOutput: number } {
+): { costPer1kInput: number; costPer1kOutput: number } | null {
   const p = EXTRACTION_PROVIDERS[provider];
   const m = p?.models.find((m) => m.id === model);
-  return m ?? { costPer1kInput: 0, costPer1kOutput: 0 };
+  return m ?? null;
+}
+
+export function estimateModelCost(usage: TokenUsage, costs: ReturnType<typeof getModelCosts>): number | null {
+  if (!costs) return null;
+  const free = costs.costPer1kInput === 0 && costs.costPer1kOutput === 0;
+  return estimateTokenCost(usage, {
+    inputPerMillion: costs.costPer1kInput * 1000,
+    outputPerMillion: costs.costPer1kOutput * 1000,
+    cachedInputPerMillion: free ? 0 : null,
+    cacheWritePerMillion: free ? 0 : null,
+  });
 }

@@ -24,17 +24,23 @@ const nextConfig = {
   env: { NEXT_PUBLIC_MAPLIBRE_VERSION: mapVersion },
   output: 'standalone',
   outputFileTracingRoot: repoRoot,
-  outputFileTracingIncludes: { '/*': ['./data/car-locations/**/*'] },
+  outputFileTracingIncludes: {
+    '/*': [
+      './data/car-locations/**/*',
+      '../../node_modules/@ip-location-db/geolite2-country-mmdb/*.mmdb',
+    ],
+  },
   serverExternalPackages: [
     'playwright',
     'better-sqlite3',
-    'geoip-lite',
+    'mmdb-lib',
     'cron',
     'ioredis',
     'ua-parser-js',
     '@anthropic-ai/sdk',
     'openai',
     '@google/generative-ai',
+    'thesidedoor-flock',
   ],
 };
 

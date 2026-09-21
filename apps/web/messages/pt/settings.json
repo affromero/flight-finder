@@ -55,7 +55,6 @@
       "addTokenEnvHint": "Adicione CLAUDE_CODE_OAUTH_TOKEN a ~/.flight-finder/.env e reinicie",
       "codexHint": "A CLI do Codex precisa estar instalada no host. Execute <code>npm i -g @openai/codex</code>.",
       "pasteApiKey": "Cole sua chave de API da {name}:",
-      "addKeyEnvHint": "Adicione {envKey}={keyPrefix}... a ~/.flight-finder/.env e reinicie",
       "model": "Modelo",
       "freeCli": "Grátis (CLI)",
       "costPer1kIn": "US$ {cost}/1k entrada",

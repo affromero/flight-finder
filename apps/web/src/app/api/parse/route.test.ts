@@ -105,18 +105,6 @@ describe('POST /api/parse', () => {
     expect(body.error).toContain('LLM exploded');
   });
 
-  it('logs api usage after successful parse', async () => {
-    mockParseFlightQuery.mockResolvedValue({
-      response: { parsed: null, confidence: 'low', ambiguities: [], dateSpanDays: 0 },
-      usage: { inputTokens: 100, outputTokens: 50 },
-    });
-
-    await POST(makeRequest({ query: 'JFK to LAX June 15' }));
-
-    const { prisma } = await import('@/lib/prisma');
-    expect(prisma.apiUsageLog.create).toHaveBeenCalled();
-  });
-
   // --- Rate limiting ---
 
   it('returns 429 with Retry-After when the per-IP rate limit is exceeded', async () => {

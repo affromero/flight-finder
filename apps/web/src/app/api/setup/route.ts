@@ -1,29 +1,31 @@
 import { prisma } from '@/lib/prisma';
 import { apiSuccess, apiError } from '@/lib/api-response';
-import { hashPassword } from '@/lib/password';
 import { registerForCommunity } from '@/lib/community-sync';
-import { encryptSecret } from '@/lib/secret-crypto';
+import { readAccessJson } from 'thesidedoor-core/access/http';
+import { providerDescriptors } from 'thesidedoor-core/ai/catalog';
+import { configurationRequestOwner, saveProviderConfiguration, parseCredentialPatch, providerConfigurationError } from '@/lib/sidedoor/providers/provider-config';
 import { validateInferenceSelection } from '@/lib/scraper/inference-selection';
-import { setupComplete } from '@/lib/setup-state';
-import { lockTravelAdmission } from '@/lib/travel/admission';
-
-// Env-backed provider -> the ExtractionConfig column that stores its key,
-// encrypted at rest (#149). Keep in sync with STORED_KEY_FIELD in ai-registry.
-const PROVIDER_KEY_COLUMN: Record<string, 'anthropicApiKey' | 'openaiApiKey' | 'googleApiKey'> = {
-  anthropic: 'anthropicApiKey',
-  openai: 'openaiApiKey',
-  google: 'googleApiKey',
-};
+import { requireAdminApi } from '@/lib/admin-guard';
 
 export async function POST(request: Request) {
-  if (await setupComplete()) {
+  try {
+  const denied = await requireAdminApi();
+  if (denied) return denied;
+  const owner = await configurationRequestOwner(request);
+  if (owner.response) return owner.response;
+  // Only allow setup if no config exists yet
+  const existing = await prisma.extractionConfig.findFirst({
+    where: { id: 'singleton' },
+  });
+
+  if (existing?.setupComplete) {
     return apiError('Setup already completed. Use admin panel to change settings.', 403);
   }
 
-  const body = await request.json().catch(() => null);
-  if (!body || typeof body !== 'object' || Array.isArray(body)) return apiError('Invalid JSON body', 400);
-  const { adminPassword, provider, model, communitySharing, customBaseUrl, publicBaseUrl, apiKey } = body as {
-    adminPassword: string;
+  const payload = await readAccessJson(request).catch(() => null);
+  if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return apiError('Invalid JSON body', 400);
+  const body = payload as Record<string, unknown>;
+  const { provider, model, communitySharing, customBaseUrl, publicBaseUrl, apiKey } = body as {
     provider: string;
     model: string;
     communitySharing?: boolean;
@@ -35,6 +37,8 @@ export async function POST(request: Request) {
   // Optional public URL the user plans to reach the instance at (for /connect's
   // QR and notification deep links). Validate it's a real http(s) URL or null.
   let normalizedPublicBaseUrl: string | null = null;
+  if (publicBaseUrl !== undefined && publicBaseUrl !== null && typeof publicBaseUrl !== 'string') return apiError('Invalid public URL', 400);
+  if (communitySharing !== undefined && typeof communitySharing !== 'boolean') return apiError('Invalid community sharing choice', 400);
   if (typeof publicBaseUrl === 'string' && publicBaseUrl.trim()) {
     try {
       const u = new URL(publicBaseUrl.trim());
@@ -47,11 +51,7 @@ export async function POST(request: Request) {
     }
   }
 
-  const isSelfHosted = process.env.SELF_HOSTED === 'true';
-
-  if (!isSelfHosted && (!adminPassword || adminPassword.length < 8)) {
-    return apiError('Password must be at least 8 characters', 400);
-  }
+  if ('adminPassword' in body) return apiError('Manage the claimed owner password at /access/security', 400);
 
   if (!provider || !model) {
     return apiError('Provider and model are required', 400);
@@ -60,16 +60,19 @@ export async function POST(request: Request) {
   try { selection = await validateInferenceSelection(provider, model, body.reasoningEffort); }
   catch (error) { return apiError(error instanceof Error ? error.message : 'Invalid inference selection', 400); }
 
-  const passwordHash = isSelfHosted
-    ? 'self-hosted'
-    : await hashPassword(adminPassword);
-
-  // Store the entered provider key encrypted at rest (#149), so a self-hosted
-  // user can configure a keyed provider in the wizard without editing .env.
-  const providerKeyData: Record<string, string> = {};
-  if (typeof apiKey === 'string' && apiKey.length > 0) {
-    const column = PROVIDER_KEY_COLUMN[provider];
-    if (column) providerKeyData[column] = encryptSecret(apiKey);
+  const fields = parseCredentialPatch(body.credentials) ?? {};
+  if (body.resetCredentials !== undefined && typeof body.resetCredentials !== 'boolean') return apiError('Invalid credential reset', 400);
+  const descriptor = providerDescriptors().find(item => item.id === provider);
+  if (!descriptor) return apiError('Unknown provider', 400);
+  if (apiKey !== undefined) {
+    if (apiKey !== null && typeof apiKey !== 'string') return apiError('Invalid API key', 400);
+    const target = customBaseUrl && descriptor.fields.some(field => field.id === 'compatibleApiKey') ? 'compatibleApiKey' : 'apiKey';
+    fields[target] = apiKey || null;
+  }
+  if (customBaseUrl !== undefined && descriptor.fields.some(field => field.id === 'baseUrl')) fields.baseUrl = customBaseUrl || null;
+  for (const [id, value] of Object.entries(fields)) {
+    const field = descriptor.fields.find(item => item.id === id);
+    if (!field || (value !== null && typeof value !== field.kind)) return apiError('Invalid provider configuration field', 400);
   }
 
   // Register for community API key if opted in
@@ -83,25 +86,21 @@ export async function POST(request: Request) {
     }
   }
 
-  const data = {
-    provider,
-    model,
-    reasoningEffort: selection.reasoningEffort,
-    adminPasswordHash: passwordHash,
-    communitySharing: communitySharing && communityApiKey !== null,
-    communityApiKey,
-    customBaseUrl: customBaseUrl || null,
-    publicBaseUrl: normalizedPublicBaseUrl,
-    ...providerKeyData,
-  };
-  const saved = await prisma.$transaction(async tx => {
-    await lockTravelAdmission(tx);
-    if (await setupComplete(tx)) return false;
-    await tx.extractionConfig.upsert({ where: { id: 'singleton' }, create: { id: 'singleton', ...data }, update: data });
-    return true;
+  await saveProviderConfiguration(owner.token!, {
+    resetCredentials: body.resetCredentials === true,
+    expectedRevision: existing?.providerRevision ?? 0,
+    expectedUpdatedAt: existing?.updatedAt ?? null,
+    setup: true,
+    admissionLock: true,
+    fields,
+    data: {
+      provider, model, reasoningEffort: selection.reasoningEffort,
+      setupComplete: true,
+      communitySharing: Boolean(communitySharing && communityApiKey !== null),
+      communityApiKey, publicBaseUrl: normalizedPublicBaseUrl,
+    },
   });
 
-  if (!saved) return apiError('Setup already completed. Use admin panel to change settings.', 403);
-
   return apiSuccess({ message: 'Setup complete' });
+  } catch (error) { return providerConfigurationError(error); }
 }

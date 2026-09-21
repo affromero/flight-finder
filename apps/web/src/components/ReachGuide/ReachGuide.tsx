@@ -79,7 +79,7 @@ const METHODS: Method[] = [
               : 'sudo apt install cloudflared',
       },
       {
-        text: t('cloudflare.quick'),
+        text: t('cloudflare.quick', { tunnelUrl: 'https://<name>.trycloudflare.com' }),
         code: `cloudflared tunnel --url http://localhost:${port}`,
       },
       {

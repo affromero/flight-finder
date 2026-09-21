@@ -54,6 +54,8 @@
     "logout": "Salir"
   },
   "AdminDashboard": {
+    "unknownCost": "Desconocido",
+    "knownCostSubtotal": "Subtotal conocido: ${amount}. Registros sin precio: {count}.",
     "title": "Panel",
     "stats": {
       "activeQueries": "Consultas activas",
@@ -97,6 +99,9 @@
     "provider": "Proveedor",
     "status": "Estado: {status}",
     "providerStatus": {
+      "configured": "Configurado; autenticación sin comprobar",
+      "invalidCredentials": "Las credenciales guardadas necesitan reparación",
+      "notAuthenticated": "Inicia sesión en la CLI",
       "ready": "Listo",
       "noKey": "Sin clave configurada",
       "unreachable": "No accesible",
@@ -108,8 +113,8 @@
     "apiKey": "Clave de API",
     "apiKeySavedPlaceholder": "Guardada — pega una clave nueva para reemplazarla",
     "apiKeyPlaceholder": "Pega tu clave de API de {provider}",
-    "apiKeySavedHint": "Hay una clave guardada. Déjalo en blanco para conservarla, o pega una nueva para reemplazarla. Se guarda cifrada; si falla, se usa la variable de entorno {envKey}.",
-    "apiKeyNewHint": "Pega una clave para guardarla (cifrada) aquí, o define la variable de entorno {envKey}. No requiere reinicio.",
+    "apiKeySavedHint": "Hay una clave guardada. Déjalo en blanco para conservarla, o pega una nueva para reemplazarla. Se guarda cifrada.",
+    "apiKeyNewHint": "Pega una clave para guardarla cifrada. No requiere reinicio.",
     "model": "Modelo",
     "modelCostFree": "Gratis (Max)",
     "modelCost": "${cost}/1k entrada",
@@ -179,7 +184,7 @@
     "hubHint": "Permite que otras instancias de Flight Finder se registren con esta y envíen aquí sus datos anonimizados. Solo relevante para el hub central. Los registros nuevos tienen límite de tasa y un tope global.",
     "providerDetails": "Detalles del proveedor",
     "apiKeyDetail": "Clave de API:",
-    "apiKeyFromEnv": "ingresada arriba (guardada cifrada), o leída de <code>{envKey}</code> si no hay ninguna definida",
+    "apiKeySaved": "guardada cifrada en esta instancia",
     "apiKeyNotRequired": "no requerida — este proveedor inicia sesión con su CLI local, sin clave de API",
     "modelsAvailable": "Modelos disponibles:"
   },
@@ -268,7 +273,7 @@
     "demote": "Quitar administrador",
     "delete": "Eliminar",
     "deleteConfirm": "¿Eliminar al usuario {username}? Sus rastreadores quedarán sin dueño.",
-    "resetPrompt": "Nueva contraseña para {username} (8+ caracteres):",
+    "resetPrompt": "Nueva contraseña para {username} (12+ caracteres):",
     "passwordReset": "Contraseña restablecida.",
     "disableConfirm": "¿Deshabilitar el modo multiusuario? Esto desactiva todos los inicios de sesión y borra la contraseña de administrador, volviendo a una instancia autoalojada de un solo usuario. Las cuentas permanecen en la base de datos pero quedan inaccesibles hasta que vuelvas a habilitar el modo multiusuario. ¿Continuar?",
     "dangerZone": "Zona de peligro",
@@ -286,7 +291,7 @@
       "title": "Agregar usuario",
       "username": "Nombre de usuario",
       "displayName": "Nombre para mostrar (opcional)",
-      "passwordAdmin": "Contraseña (8+ caracteres)",
+      "passwordAdmin": "Contraseña (12+ caracteres)",
       "passwordOptional": "Contraseña (opcional)",
       "admin": "Administrador",
       "note": "Deja la contraseña en blanco para un miembro que inicia sesión con un toque. Cualquiera que pueda acceder a esta instancia puede entrar como un miembro sin contraseña, así que agrega una si es pública. Los administradores siempre necesitan contraseña.",

@@ -5,7 +5,8 @@ import { withPreviewTravelAdmission } from '../../../../apps/web/src/lib/travel/
 import { currentTravelExecution } from '../../../../apps/web/src/lib/travel/execution.js';
 import { navigateGoogleFlights, navigateAirlineDirect } from '../../../../apps/web/src/lib/scraper/navigate.js';
 import { extractPrices, type PriceData, type ExtractionFailureReason } from '../../../../apps/web/src/lib/scraper/extract-prices.js';
-import { getModelCosts } from '../../../../apps/web/src/lib/scraper/ai-registry.js';
+import { getModelCosts, estimateModelCost } from '../../../../apps/web/src/lib/scraper/ai-registry.js';
+import { sumTokenUsage } from 'thesidedoor-core/ai/usage';
 import { isKnownAirline } from '../../../../apps/web/src/lib/scraper/airline-urls.js';
 import type { Airport, ParsedFlightQuery } from '../../../../apps/web/src/lib/scraper/parse-query.js';
 
@@ -62,8 +63,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
   const model = config?.model ?? 'claude-haiku-4-5-20251001';
   const costs = getModelCosts(provider, model);
 
-  let totalInputTokens = 0;
-  let totalOutputTokens = 0;
+  let totalUsage = sumTokenUsage();
   let lastFailureReason: ExtractionFailureReason | undefined;
   let lastSource: string = 'google_flights';
 
@@ -90,19 +90,15 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
       params.currency
     );
 
-    totalInputTokens += usage.inputTokens;
-    totalOutputTokens += usage.outputTokens;
+    totalUsage = sumTokenUsage(totalUsage, usage);
 
     if (!failureReason) {
-      const cost =
-        (totalInputTokens / 1000) * costs.costPer1kInput +
-        (totalOutputTokens / 1000) * costs.costPer1kOutput;
+      const cost = estimateModelCost(totalUsage, costs);
 
       await prisma.apiUsageLog.create({
         data: {
           provider, model,
-          inputTokens: totalInputTokens,
-          outputTokens: totalOutputTokens,
+          ...totalUsage,
           costUsd: cost,
           operation: 'preview-flights',
           durationMs: 0,
@@ -130,16 +126,13 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     }
   }
 
-  const totalCost =
-    (totalInputTokens / 1000) * costs.costPer1kInput +
-    (totalOutputTokens / 1000) * costs.costPer1kOutput;
+  const totalCost = estimateModelCost(totalUsage, costs);
 
   await prisma.apiUsageLog.create({
     data: {
-      provider: (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.provider ?? 'anthropic',
-      model: (await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } }))?.model ?? 'claude-haiku-4-5-20251001',
-      inputTokens: totalInputTokens,
-      outputTokens: totalOutputTokens,
+      provider,
+      model,
+      ...totalUsage,
       costUsd: totalCost,
       operation: 'preview-flights',
       durationMs: 0,

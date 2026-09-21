@@ -1,157 +1,68 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { NextRequest } from 'next/server';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { createAccessFixture } from '@/test/access-fixture';
 
-const mockFindUnique = vi.fn();
-const mockVerifyHashed = vi.fn();
-const mockSetSessionCookie = vi.fn();
-const mockCreateUserSessionToken = vi.fn();
-const mockIsMultiUserEnabled = vi.fn();
-
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    user: { findUnique: (...args: unknown[]) => mockFindUnique(...args) },
-  },
+const boundary = vi.hoisted(() => ({
+  fixture: null as ReturnType<typeof createAccessFixture> | null,
+  token: '', multiUser: true, lookups: 0,
+  users: [] as { id: string; username: string; displayName: string | null }[],
 }));
-
-vi.mock('@/lib/password', () => ({
-  verifyHashedPassword: (...args: unknown[]) => mockVerifyHashed(...args),
-}));
-
-vi.mock('@/lib/admin-auth', () => ({
-  setSessionCookie: (...args: unknown[]) => mockSetSessionCookie(...args),
-}));
-
-vi.mock('@/lib/user-auth', () => ({
-  createUserSessionToken: (...args: unknown[]) => mockCreateUserSessionToken(...args),
-}));
-
-vi.mock('@/lib/multi-user', () => ({
-  isMultiUserEnabled: () => mockIsMultiUserEnabled(),
-}));
-
-const rateLimitState = { failures: 0, retryAfter: 0, keys: [] as string[] };
-vi.mock('@/lib/rate-limit', () => ({
-  incrementAuthFailure: vi.fn(async (key: string) => {
-    rateLimitState.keys.push(key);
-    rateLimitState.failures++;
-    return rateLimitState.failures;
-  }),
-  getAuthFailureCount: vi.fn(async (key: string) => {
-    rateLimitState.keys.push(key);
-    return rateLimitState.failures;
-  }),
-  getRetryAfterSeconds: vi.fn(async () => rateLimitState.retryAfter),
-  clearAuthFailures: vi.fn(async () => {
-    rateLimitState.failures = 0;
-  }),
-}));
-
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.token ? { value: boundary.token } : undefined }) }));
+vi.mock('@/lib/prisma', () => ({ prisma: {
+  extractionConfig: { findUnique: async () => ({ publicBaseUrl: 'http://localhost:3003', multiUserMode: boundary.multiUser }) },
+  user: { findUnique: async ({ where }: { where: { username: string } }) => {
+    boundary.lookups++;
+    return boundary.users.find(user => user.username === where.username) ?? null;
+  } },
+} }));
+vi.mock('@/lib/sidedoor/access/service', async () => {
+  const { createAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createAccessFixture(); boundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
+});
 import { POST } from './route';
 
-function makeRequest(body: unknown, forwardedFor = '10.0.0.1'): NextRequest {
-  return new NextRequest('http://localhost/api/auth/login', {
-    method: 'POST',
-    body: JSON.stringify(body),
-    headers: { 'Content-Type': 'application/json', 'x-forwarded-for': forwardedFor },
+const request = (body: unknown, origin = 'http://localhost:3003') => new Request('http://localhost:3003/api/auth/login', {
+  method: 'POST', headers: { origin, host: 'localhost:3003', 'content-type': 'application/json', cookie: boundary.token ? `ft-session=${boundary.token}` : '' },
+  body: JSON.stringify(body),
+});
+
+beforeEach(async () => {
+  vi.stubEnv('SELF_HOSTED', 'true'); vi.stubEnv('REDIS_URL', '');
+  boundary.fixture!.reset(); boundary.token = ''; boundary.multiUser = true; boundary.lookups = 0;
+  const access = boundary.fixture!.access;
+  await access.claimOwner(await access.issueOperatorToken(), 'Owner', 'owner password for testing', 'household');
+  await access.store.transact(state => { state.principals.push({ id: 'member', name: 'Member', role: 'member', passwordHash: null, epoch: 0, createdAt: Date.now() }); });
+  boundary.users = (await access.store.read()).principals.map(principal => ({ id: principal.id, username: principal.name, displayName: null }));
+});
+afterEach(() => vi.unstubAllEnvs());
+
+describe('profile login through shared access', () => {
+  it('rejects untrusted origins before looking up accounts or allocating access state', async () => {
+    const before = await boundary.fixture!.access.store.read();
+    for (const username of ['Member', 'missing']) expect((await POST(request({ username }, 'https://attacker.example'))).status).toBe(403);
+    expect(boundary.lookups).toBe(0);
+    expect(await boundary.fixture!.access.store.read()).toEqual(before);
   });
-}
-
-describe('POST /api/auth/login', () => {
-  beforeEach(() => {
-    mockFindUnique.mockReset();
-    mockVerifyHashed.mockReset();
-    mockSetSessionCookie.mockReset();
-    mockCreateUserSessionToken.mockReset();
-    mockIsMultiUserEnabled.mockResolvedValue(true);
-    rateLimitState.failures = 0;
-    rateLimitState.retryAfter = 0;
-    rateLimitState.keys = [];
-    delete process.env.TRUSTED_FORWARDED_FOR;
+  it('admits a household profile without granting an authenticated identity', async () => {
+    const response = await POST(request({ username: 'Member' }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.user).toMatchObject({ id: 'member', isAdmin: false });
+    const token = response.headers.get('set-cookie')!.split(';')[0]!.slice('ft-session='.length);
+    expect((await boundary.fixture!.access.authenticate(token)).principal).toBeNull();
+    expect(await boundary.fixture!.profiles.selected(token)).toMatchObject({ id: 'member' });
   });
-
-  afterEach(() => {
-    delete process.env.TRUSTED_FORWARDED_FOR;
+  it('preserves password login and effective owner authority', async () => {
+    const response = await POST(request({ username: 'Owner', password: 'owner password for testing' }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.user).toMatchObject({ username: 'Owner', isAdmin: true });
   });
-
-  it('returns 404 when multi user mode is disabled', async () => {
-    mockIsMultiUserEnabled.mockResolvedValue(false);
-    const res = await POST(makeRequest({ username: 'alice', password: 'p' }));
-    expect(res.status).toBe(404);
+  it('bounds unknown-account attempts', async () => {
+    for (let index = 0; index < 10; index++) expect((await POST(request({ username: 'missing', password: 'wrong' }))).status).toBe(401);
+    expect((await POST(request({ username: 'missing', password: 'wrong' }))).status).toBe(429);
   });
-
-  it('rejects a missing username with 400 (password is optional)', async () => {
-    const res = await POST(makeRequest({ password: 'x' }));
-    expect(res.status).toBe(400);
-  });
-
-  it('signs in a passwordless member without checking a password', async () => {
-    mockFindUnique.mockResolvedValue({ id: 'u9', username: 'guest1', passwordHash: null, isAdmin: false, displayName: 'Guest 1' });
-    mockCreateUserSessionToken.mockReturnValue('tok');
-    const res = await POST(makeRequest({ username: 'guest1', password: '' }));
-    expect(res.status).toBe(200);
-    expect(mockVerifyHashed).not.toHaveBeenCalled();
-    expect(mockSetSessionCookie).toHaveBeenCalledWith('tok');
-  });
-
-  it('rejects unknown user with 401 and bumps failure counter', async () => {
-    mockFindUnique.mockResolvedValue(null);
-    const res = await POST(makeRequest({ username: 'ghost', password: 'x' }));
-    expect(res.status).toBe(401);
-    expect(rateLimitState.failures).toBe(1);
-  });
-
-  it('rejects wrong password with 401 and bumps failure counter', async () => {
-    mockFindUnique.mockResolvedValue({ id: 'u1', username: 'alice', passwordHash: 'h', isAdmin: false, displayName: null });
-    mockVerifyHashed.mockResolvedValue(false);
-    const res = await POST(makeRequest({ username: 'alice', password: 'wrong' }));
-    expect(res.status).toBe(401);
-    expect(rateLimitState.failures).toBe(1);
-  });
-
-  it('returns user payload and sets cookie on success', async () => {
-    mockFindUnique.mockResolvedValue({ id: 'u1', username: 'alice', passwordHash: 'h', isAdmin: true, displayName: 'Alice' });
-    mockVerifyHashed.mockResolvedValue(true);
-    mockCreateUserSessionToken.mockReturnValue('user-token-abc');
-    rateLimitState.failures = 3;
-
-    const res = await POST(makeRequest({ username: 'alice', password: 'correct' }));
-    expect(res.status).toBe(200);
-    const body = await res.json();
-    expect(body.data.user).toEqual({
-      id: 'u1',
-      username: 'alice',
-      displayName: 'Alice',
-      isAdmin: true,
-    });
-    expect(mockSetSessionCookie).toHaveBeenCalledWith('user-token-abc');
-    expect(rateLimitState.failures).toBe(0);
-  });
-
-  it('returns 429 with Retry-After header when over limit', async () => {
-    rateLimitState.failures = 5;
-    rateLimitState.retryAfter = 300;
-    const res = await POST(makeRequest({ username: 'alice', password: 'wrong' }));
-    expect(res.status).toBe(429);
-    expect(res.headers.get('Retry-After')).toBe('300');
-  });
-
-  it('derives distinct rate-limit buckets per forwarded IP when a proxy is trusted', async () => {
-    mockFindUnique.mockResolvedValue(null);
-    await POST(makeRequest({ username: 'alice', password: 'x' }, '1.1.1.1'));
-    await POST(makeRequest({ username: 'alice', password: 'x' }, '2.2.2.2'));
-    const distinct = new Set(rateLimitState.keys);
-    expect(distinct.has('1.1.1.1:alice')).toBe(true);
-    expect(distinct.has('2.2.2.2:alice')).toBe(true);
-  });
-
-  it('collapses spoofed x-forwarded-for into one bucket when no proxy is trusted', async () => {
-    process.env.TRUSTED_FORWARDED_FOR = 'false';
-    mockFindUnique.mockResolvedValue(null);
-    await POST(makeRequest({ username: 'alice', password: 'x' }, '1.1.1.1'));
-    await POST(makeRequest({ username: 'alice', password: 'x' }, '2.2.2.2'));
-    const distinct = new Set(rateLimitState.keys);
-    expect(distinct.size).toBe(1);
-    expect(distinct.has('1.1.1.1:alice')).toBe(false);
-    expect(distinct.has('2.2.2.2:alice')).toBe(false);
+  it('requires explicit sign-out before switching an account to a household profile', async () => {
+    boundary.token = await boundary.fixture!.access.login('Owner', 'owner password for testing');
+    expect((await POST(request({ username: 'Member' }))).status).toBe(403);
+    expect((await boundary.fixture!.access.authenticate(boundary.token)).principal?.role).toBe('owner');
   });
 });

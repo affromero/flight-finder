@@ -1,6 +1,9 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import type { ProviderFieldsPatch, ProviderFieldStatus } from 'thesidedoor/react';
+import { ProviderCredentialFields } from '@/components/ProviderCredentialFields/ProviderCredentialFields';
+import { InstanceVerification } from '@/components/ProviderCredentialFields/InstanceVerification';
 import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
@@ -16,6 +19,9 @@ import { CliModelPicker } from '@/components/CliModelPicker/CliModelPicker';
 import { orderedProviders, type ReasoningSelection } from '@/lib/scraper/cli-model-types';
 
 interface Config {
+  updatedAt: string;
+  providerRevision: number;
+  providerCredentials: Array<{ provider: string; fields: ProviderFieldStatus[]; error?: string }>;
   provider: string;
   model: string;
   enabled: boolean;
@@ -44,7 +50,9 @@ export default function SettingsPage() {
   const [customModel, setCustomModel] = useState('');
   const [reasoning, setReasoning] = useState<ReasoningSelection>(null);
   const [scrapeInterval, setScrapeInterval] = useState(3);
-  const [customBaseUrl, setCustomBaseUrl] = useState('');
+  const [credentialFields, setCredentialFields] = useState<ProviderFieldsPatch>({});
+  const [resetCredentials, setResetCredentials] = useState(false);
+  const [verifying, setVerifying] = useState(false);
   const [publicBaseUrl, setPublicBaseUrl] = useState('');
   const [reachSaving, setReachSaving] = useState(false);
   const [reachMessage, setReachMessage] = useState('');
@@ -60,8 +68,6 @@ export default function SettingsPage() {
   const [vpnLive, setVpnLive] = useState<{ configured: boolean; sidecarRunning: boolean; ready: boolean } | null>(null);
   const [detectedProviders, setDetectedProviders] = useState<string[]>([]);
   const [configuringProvider, setConfiguringProvider] = useState<string | null>(null);
-  const [providerKeyInput, setProviderKeyInput] = useState('');
-  const [providerKeySaving, setProviderKeySaving] = useState(false);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState('');
   const [theme, setTheme] = useState<ThemeId>(DEFAULT_THEME);
@@ -108,7 +114,7 @@ export default function SettingsPage() {
   useEffect(() => {
     fetch('/api/admin/providers')
       .then((r) => r.json())
-      .then((d) => { if (d.ok) setDetectedProviders(Object.entries(d.data as Record<string, { status: string }>).filter(([, value]) => value.status === 'ready').map(([key]) => key)); })
+      .then((d) => { if (d.ok) setDetectedProviders(Object.entries(d.data as Record<string, { status: string }>).filter(([, value]) => ['ready', 'configured'].includes(value.status)).map(([key]) => key)); })
       .catch(() => {});
 
     fetch('/api/vpn/status')
@@ -124,7 +130,6 @@ export default function SettingsPage() {
           setProvider(d.data.provider);
           setReasoning(d.data.reasoningEffort ?? null);
           setScrapeInterval(d.data.scrapeInterval);
-          setCustomBaseUrl(d.data.customBaseUrl || '');
           setPublicBaseUrl(d.data.publicBaseUrl || '');
           setTheme(isThemeId(d.data.theme) ? d.data.theme : DEFAULT_THEME);
           setDefaultCurrency(d.data.defaultCurrency || '');
@@ -163,7 +168,8 @@ export default function SettingsPage() {
     setProvider(newProvider);
     setReasoning(null);
     setCustomModel('');
-    setCustomBaseUrl(PROVIDER_METADATA[newProvider]?.defaultBaseUrl ?? '');
+    setCredentialFields({});
+    setResetCredentials(false);
     const newModels = PROVIDER_METADATA[newProvider]?.models ?? [];
     if (newModels.length > 0) {
       setModel(newModels[0]!.id);
@@ -191,7 +197,10 @@ export default function SettingsPage() {
         model: effectiveModel,
         reasoningEffort: reasoning,
         scrapeIntervalHours: scrapeInterval,
-        customBaseUrl: customBaseUrl.trim() || null,
+        credentials: credentialFields,
+        resetCredentials,
+        expectedUpdatedAt: config?.updatedAt,
+        expectedRevision: config?.providerRevision,
         theme,
         defaultCurrency: defaultCurrency.trim().toUpperCase() || null,
         defaultCountry: defaultCountry.trim().toUpperCase() || null,
@@ -204,6 +213,8 @@ export default function SettingsPage() {
     const data = await res.json();
     if (data.ok) {
       setConfig(data.data);
+      setCredentialFields({});
+      setResetCredentials(false);
       setMessage(t('extraction.saved'));
       if (LOCAL_PROVIDERS.has(provider)) {
         fetchLocalModels(provider);
@@ -340,12 +351,11 @@ export default function SettingsPage() {
                       type="button"
                       className={`${styles.providerCard} ${provider === key ? styles.providerCardSelected : ''} ${!detected && !isLocal ? styles.providerCardUnavailable : ''}`}
                       onClick={() => {
-                        if (detected || isLocal) {
-                          handleProviderChange(key);
+                        handleProviderChange(key);
+                        if (detected || !isCli) {
                           setConfiguringProvider(null);
                         } else {
                           setConfiguringProvider(configuringProvider === key ? null : key);
-                          setProviderKeyInput('');
                         }
                       }}
                     >
@@ -358,72 +368,11 @@ export default function SettingsPage() {
                     </button>
                     {configuringProvider === key && !detected && (
                       <div className={styles.providerConfigure}>
-                        {isCli && key === 'claude-code' ? (
-                          <>
-                            <p className={styles.providerConfigHint}>
-                              {t.rich('extraction.claudeCodeHint', { code: (chunks) => <code>{chunks}</code> })}
-                            </p>
-                            <div className={styles.providerConfigRow}>
-                              <input
-                                type="password"
-                                className={styles.input}
-                                placeholder={t('extraction.pasteSetupToken')}
-                                value={providerKeyInput}
-                                onChange={(e) => setProviderKeyInput(e.target.value)}
-                                autoFocus
-                              />
-                              <button
-                                className={styles.saveButton}
-                                disabled={providerKeySaving || !providerKeyInput}
-                                onClick={async () => {
-                                  setProviderKeySaving(true);
-                                  // TODO: save Claude Code setup token to container
-                                  // For now, show instructions
-                                  setProviderKeySaving(false);
-                                  setMessage(t('extraction.addTokenEnvHint'));
-                                  setConfiguringProvider(null);
-                                }}
-                              >
-                                {t('extraction.save')}
-                              </button>
-                            </div>
-                          </>
-                        ) : isCli && key === 'codex' ? (
-                          <>
-                            <p className={styles.providerConfigHint}>
-                              {t.rich('extraction.codexHint', { code: (chunks) => <code>{chunks}</code> })}
-                            </p>
-                          </>
-                        ) : (
-                          <>
-                            <p className={styles.providerConfigHint}>
-                              {t('extraction.pasteApiKey', { name: p.displayName })}
-                            </p>
-                            <div className={styles.providerConfigRow}>
-                              <input
-                                type="password"
-                                className={styles.input}
-                                placeholder={`${p.envKey}`}
-                                value={providerKeyInput}
-                                onChange={(e) => setProviderKeyInput(e.target.value)}
-                                autoFocus
-                              />
-                              <button
-                                className={styles.saveButton}
-                                disabled={providerKeySaving || !providerKeyInput}
-                                onClick={async () => {
-                                  setProviderKeySaving(true);
-                                  setMessage(t('extraction.addKeyEnvHint', { envKey: p.envKey ?? '', keyPrefix: providerKeyInput.slice(0, 8) }));
-                                  setProviderKeySaving(false);
-                                  setConfiguringProvider(null);
-                                  setProviderKeyInput('');
-                                }}
-                              >
-                                {t('extraction.save')}
-                              </button>
-                            </div>
-                          </>
-                        )}
+                        <p className={styles.providerConfigHint}>
+                          {key === 'claude-code'
+                            ? t.rich('extraction.claudeCodeHint', { code: chunks => <code>{chunks}</code> })
+                            : t.rich('extraction.codexHint', { code: chunks => <code>{chunks}</code> })}
+                        </p>
                       </div>
                     )}
                   </div>
@@ -480,23 +429,11 @@ export default function SettingsPage() {
             )}
           </div>}
 
-          {providerConfig?.allowCustomBaseUrl && (
-            <div className={styles.field}>
-              <label className={styles.label}>{t('extraction.apiBaseUrl')}</label>
-              <input
-                type="url"
-                className={styles.input}
-                placeholder={providerConfig.defaultBaseUrl || 'https://...'}
-                value={customBaseUrl}
-                onChange={(e) => setCustomBaseUrl(e.target.value)}
-              />
-              <span className={styles.toggleHint}>
-                {providerConfig.defaultBaseUrl
-                  ? t('extraction.defaultBaseUrl', { url: providerConfig.defaultBaseUrl })
-                  : t('extraction.leaveEmptyForDefault')}
-              </span>
-            </div>
-          )}
+          <ProviderCredentialFields provider={provider} fields={config?.providerCredentials?.find(item => item.provider === provider)?.fields}
+            error={Boolean(config?.providerCredentials?.find(item => item.provider === provider)?.error)}
+            patch={credentialFields} onChange={setCredentialFields} disabled={saving}
+            reset={resetCredentials} onResetChange={setResetCredentials} />
+          <InstanceVerification disabled={saving} onBusyChange={setVerifying} />
 
           <div className={styles.field}>
             <label className={styles.label}>{t('extraction.scrapeInterval')}</label>
@@ -570,7 +507,7 @@ export default function SettingsPage() {
           </div>
 
           <div className={styles.actions}>
-            <button className={styles.saveButton} onClick={handleSave} disabled={saving}>
+            <button className={styles.saveButton} onClick={handleSave} disabled={saving || verifying}>
               {saving ? t('extraction.saving') : t('extraction.save')}
             </button>
             {message && <span className={styles.message}>{message}</span>}

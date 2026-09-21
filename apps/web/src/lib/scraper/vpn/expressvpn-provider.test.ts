@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ExpressVpnProvider } from './expressvpn-provider';
 
-const geo = vi.hoisted(() => ({ lookup: vi.fn() }));
-vi.mock('geoip-lite', () => ({ default: geo }));
+const lookupCountry = vi.hoisted(() => vi.fn());
+vi.mock('../../country-lookup', () => ({ lookupCountry }));
 let provider: ExpressVpnProvider;
 const http = vi.fn<typeof fetch>();
 const modernStatus = (connected: boolean) => JSON.stringify({ connected, server: connected ? 'uk-london' : '', status: connected ? 'Connected' : 'Disconnected', ip: '' });
@@ -13,7 +13,7 @@ beforeEach(() => {
   vi.stubEnv('EXPRESSVPN_API_URL', 'http://vpn.test');
   provider = new ExpressVpnProvider();
   http.mockReset();
-  geo.lookup.mockReset().mockReturnValue({ country: 'GB' });
+  lookupCountry.mockReset().mockReturnValue('GB');
 });
 afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.unstubAllEnvs(); });
 
@@ -89,7 +89,7 @@ describe('verified VPN mutations', () => {
     responses('Not connected', 'Connected', 'Connected to UK - London', '203.0.113.8');
     await expect(provider.connect('gb')).resolves.toBe(true);
     expect(http.mock.calls).toContainEqual(['http://vpn.test/v1/connect/uklo', expect.objectContaining({ method: 'POST', redirect: 'error' })]);
-    expect(geo.lookup.mock.calls).toContainEqual(['203.0.113.8']);
+    expect(lookupCountry.mock.calls).toContainEqual(['203.0.113.8']);
   });
   it('uses the current sidecar JSON API without retrying a different mutation endpoint', async () => {
     responses(modernStatus(false), '["us-new-york","uk-london"]', '{"success":true}', modernStatus(true), '{"public_ip":"203.0.113.8"}');
@@ -115,7 +115,7 @@ describe('verified VPN mutations', () => {
     expect(http.mock.calls.filter(([, init]) => init?.method === 'POST')).toHaveLength(1);
   });
   it.each(['US', null])('rejects a wrong or unknown exit country: %s', async country => {
-    geo.lookup.mockReturnValue(country ? { country } : null);
+    lookupCountry.mockReturnValue(country);
     responses('Not connected', 'Connected', 'Connected to UK - London', '203.0.113.8');
     await expect(provider.connect('GB')).rejects.toThrow(/exit country/);
   });
@@ -124,7 +124,7 @@ describe('verified VPN mutations', () => {
     await expect(provider.connect('GB')).rejects.toThrow(/IP/);
   });
   it('surfaces unavailable geographic data', async () => {
-    geo.lookup.mockImplementation(() => { throw new Error('Geo database unavailable'); });
+    lookupCountry.mockImplementation(() => { throw new Error('Geo database unavailable'); });
     responses('Not connected', 'Connected', 'Connected to UK - London', '203.0.113.8');
     await expect(provider.connect('GB')).rejects.toThrow(/database/);
   });

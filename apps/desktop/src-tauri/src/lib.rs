@@ -1,7 +1,7 @@
 //! Native launcher for the canonical installer and Compose stack.
 mod runtime;
 
-use runtime::{command, install_dir, which, Compose, Tunnel};
+use runtime::{command, install_dir, prepare_access, which, Compose, Tunnel};
 use std::fs;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
@@ -41,7 +41,12 @@ fn stack_action(args: &[&str]) -> Result<String, String> {
 
 #[tauri::command]
 async fn start_stack() -> Result<String, String> {
-    tauri::async_runtime::spawn_blocking(|| stack_action(&["up", "-d"]))
+    tauri::async_runtime::spawn_blocking(|| {
+        let dir = install_dir()?;
+        let compose = Compose::detect()?;
+        prepare_access(&compose, &dir)?;
+        compose.run(&dir, &["up", "-d"])
+    })
         .await
         .map_err(|error| error.to_string())?
 }
@@ -57,7 +62,12 @@ async fn stop_stack(state: tauri::State<'_, Mutex<Tunnel>>) -> Result<String, St
 #[tauri::command]
 async fn restart_stack(state: tauri::State<'_, Mutex<Tunnel>>) -> Result<String, String> {
     state.lock().map_err(|error| error.to_string())?.stop()?;
-    tauri::async_runtime::spawn_blocking(|| stack_action(&["up", "-d", "--force-recreate"]))
+    tauri::async_runtime::spawn_blocking(|| {
+        let dir = install_dir()?;
+        let compose = Compose::detect()?;
+        prepare_access(&compose, &dir)?;
+        compose.run(&dir, &["up", "-d", "--force-recreate"])
+    })
         .await
         .map_err(|error| error.to_string())?
 }
@@ -72,6 +82,7 @@ async fn set_reach(
         let dir = install_dir()?;
         let compose = Compose::detect()?;
         runtime::set_binding(&dir, local_only)?;
+        prepare_access(&compose, &dir)?;
         compose.run(&dir, &["up", "-d", "--force-recreate", "--no-deps", "web"])?;
         runtime::verify_binding(&compose, &dir, local_only)?;
         runtime::connection(&dir)

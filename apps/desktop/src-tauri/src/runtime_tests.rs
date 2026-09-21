@@ -232,6 +232,44 @@ fn compose_passes_overrides_and_reports_container_failure() {
 
 #[cfg(unix)]
 #[test]
+fn access_preparation_stops_web_and_finishes_before_serving() {
+    let fixture = Fixture::new();
+    fs::write(fixture.0.join(".env"), "").unwrap();
+    let log = fixture.0.join("compose.log");
+    let program = shell_fixture(
+        &fixture.0,
+        "compose",
+        &format!(
+            "printf '%s ' \"$@\" >> '{}'; printf '\\n' >> '{}'",
+            log.display(),
+            log.display()
+        ),
+    );
+    let compose = Compose {
+        runtime: program.clone(),
+        program,
+        prefix: vec![],
+    };
+
+    prepare_access(&compose, &fixture.0).unwrap();
+    compose
+        .run(&fixture.0, &["up", "-d", "--force-recreate"])
+        .unwrap();
+
+    let calls = fs::read_to_string(log).unwrap();
+    assert_eq!(
+        calls.lines().collect::<Vec<_>>(),
+        [
+            "-f docker-compose.yml stop web ",
+            "-f docker-compose.yml up -d --no-recreate db redis ",
+            "-f docker-compose.yml run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web ",
+            "-f docker-compose.yml up -d --force-recreate ",
+        ]
+    );
+}
+
+#[cfg(unix)]
+#[test]
 fn native_and_standalone_compose_runtimes_both_start_the_installed_stack() {
     for runtime in ["docker", "podman"] {
         for standalone in [false, true] {

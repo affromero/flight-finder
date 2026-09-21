@@ -1,12 +1,18 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
-import { createUserSessionToken } from '@/lib/user-auth';
+import type { createAccessFixture } from '@/test/access-fixture';
 import { GET, PATCH } from './route';
 
 const boundary = vi.hoisted(() => {
   // Redis is initialized during imports, before per-test environment setup.
   vi.stubEnv('REDIS_URL', '');
-  return { multiUser: true, token: '', row: {} as Record<string, unknown> };
+  return { fixture: null as ReturnType<typeof createAccessFixture> | null, multiUser: true, token: '', row: {} as Record<string, unknown> };
+});
+vi.mock('@/lib/sidedoor/access/service', async () => {
+  const { createAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createAccessFixture();
+  boundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
 });
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.token ? { value: boundary.token } : undefined }) }));
 vi.mock('@/lib/prisma', () => ({ prisma: {
@@ -22,10 +28,11 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
 const patch = (body: unknown) => PATCH(new NextRequest('http://localhost/api/account/settings', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) }));
 
 describe('authenticated car preferences without changing flight settings', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    boundary.fixture!.reset();
     vi.stubEnv('SELF_HOSTED', 'true'); boundary.multiUser = true;
-    boundary.row = { id: 'owner', username: 'owner', sessionsValidFrom: null, preferredCarProviders: [], preferredAggregators: ['google_flights'], preferredAirlines: ['Example Air'], cabinClass: 'business' };
-    boundary.token = createUserSessionToken('owner');
+    boundary.row = { id: 'owner', username: 'owner', preferredCarProviders: [], preferredAggregators: ['google_flights'], preferredAirlines: ['Example Air'], cabinClass: 'business' };
+    boundary.token = await boundary.fixture!.issue('owner', true);
   });
   afterEach(() => vi.unstubAllEnvs());
   it('round-trips inheritance and reversed provider order without materializing defaults', async () => {
@@ -47,8 +54,8 @@ describe('authenticated car preferences without changing flight settings', () =>
   });
   it.each(['missing', 'foreign', 'revoked', 'public', 'single-user'])('rejects a %s session or unsupported access mode', async mode => {
     if (mode === 'missing') boundary.token = '';
-    if (mode === 'foreign') boundary.token = createUserSessionToken('other');
-    if (mode === 'revoked') boundary.row.sessionsValidFrom = new Date(Date.now() + 1000);
+    if (mode === 'foreign') boundary.token = await boundary.fixture!.issue('other');
+    if (mode === 'revoked') await boundary.fixture!.access.store.transact(state => { state.principals[0]!.epoch++; });
     if (mode === 'public') vi.stubEnv('SELF_HOSTED', 'false');
     if (mode === 'single-user') boundary.multiUser = false;
     const previous = structuredClone(boundary.row);

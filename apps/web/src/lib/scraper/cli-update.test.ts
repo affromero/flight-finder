@@ -66,12 +66,12 @@ it('reports a failed installer and makes a subsequent attempt possible', async (
 
 it('does not pass application secrets into the installer', async () => {
   vi.stubEnv('DATABASE_URL', 'private-database');
-  vi.stubEnv('FF_ACCESS_PASSWORD', 'private-password');
+  vi.stubEnv('CRON_SECRET', 'private-cron-secret');
   receipt({ provider: 'codex', version: '0.153.4', changed: false });
   await updateManagedCli('codex');
   const options = boundary.spawn.mock.calls[0]?.[2];
   expect(options.env).not.toHaveProperty('DATABASE_URL');
-  expect(options.env).not.toHaveProperty('FF_ACCESS_PASSWORD');
+  expect(options.env).not.toHaveProperty('CRON_SECRET');
   expect(options.env).toMatchObject({ NPM_CONFIG_PREFIX: '/managed-cli', CODEX_VERSION: '0.153.4' });
 });
 

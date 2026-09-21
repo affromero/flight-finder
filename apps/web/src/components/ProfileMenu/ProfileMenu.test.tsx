@@ -61,7 +61,7 @@ describe('ProfileMenu', () => {
     openMenu();
     fireEvent.click(screen.getByRole('menuitem', { name: 'Switch user' }));
     await waitFor(() => {
-      expect(globalThis.fetch).toHaveBeenCalledWith('/api/auth/logout', expect.objectContaining({ method: 'POST' }));
+      expect(globalThis.fetch).toHaveBeenCalledWith('/api/access/logout', expect.objectContaining({ method: 'POST' }));
     });
   });
 });

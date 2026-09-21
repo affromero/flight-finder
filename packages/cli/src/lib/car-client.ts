@@ -23,7 +23,7 @@ export class CarClient {
       throw new Error('Car server must be an HTTP(S) origin without a path or embedded credentials');
     }
     if (session && /[\r\n;]/.test(session)) throw new Error('FLIGHT_FINDER_SESSION must contain only the ft-session cookie value');
-    if (accessToken && /[\r\n]/.test(accessToken)) throw new Error('Invalid machine access token');
+    if (accessToken && /[\r\n]/.test(accessToken)) throw new Error('Invalid device access token');
     this.origin = url.origin;
   }
 
@@ -54,6 +54,7 @@ export class CarClient {
       method: options.method ?? 'GET', redirect: 'error', cache: 'no-store',
       signal: options.signal ? AbortSignal.any([options.signal, timeout]) : timeout,
       headers: {
+        Origin: this.origin,
         ...(this.session ? { Cookie: `ft-session=${this.session}` } : {}),
         ...(this.accessToken ? { Authorization: `Bearer ${this.accessToken}` } : {}),
         ...(options.idempotencyKey ? { 'Idempotency-Key': options.idempotencyKey } : {}),

@@ -16,6 +16,7 @@ export async function GET() {
       const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
       return prisma.apiUsageLog.aggregate({
         _sum: { costUsd: true },
+        _count: { _all: true, costUsd: true },
         where: { createdAt: { gte: thirtyDaysAgo } },
       });
     })(),
@@ -38,6 +39,9 @@ export async function GET() {
 
   return apiSuccess({
     ...publicData,
-    llmCost30d: Math.round((costResult._sum.costUsd ?? 0) * 100) / 100,
+    llmCost30d: costResult._count.costUsd === costResult._count._all
+      ? Math.round((costResult._sum.costUsd ?? 0) * 100) / 100 : null,
+    llmKnownCost30d: Math.round((costResult._sum.costUsd ?? 0) * 100) / 100,
+    llmUnknownCostRows30d: costResult._count._all - costResult._count.costUsd,
   });
 }

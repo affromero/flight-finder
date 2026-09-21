@@ -10,6 +10,7 @@ import { GET as detailRoute, DELETE as deleteRoute } from '@/app/api/hotels/[id]
 import { invalidateMultiUserCache } from '@/lib/multi-user';
 import type { HotelOffer } from './types';
 import { acquireTravelLease, releaseTravelLease, enqueueTravelJob, claimTravelJob } from '../travel/jobs';
+import { sharedAccess } from '@/lib/sidedoor/access/service';
 
 const boundary = vi.hoisted(() => ({ search: vi.fn(), cookie: vi.fn() }));
 // Provider adapters and request cookies are external I/O boundaries; domain,
@@ -24,6 +25,7 @@ const criteria = { destination: 'London', ...dates, sources: ['booking'], rooms:
 const sample: HotelOffer = { id: 'offer-1', source: 'booking', propertyId: 'hotel-1', hotelName: 'Park Hotel', address: 'London', imageUrl: null, propertyUrl: 'https://www.booking.com/hotel/gb/park.html', bookingUrl: 'https://www.booking.com/hotel/gb/park.html', seller: 'Booking.com', roomName: 'Double room', rateName: 'r1', providerRateId: 'rate1', totalPrice: 650, currency: 'USD', taxesIncluded: true, occupancyVerified: true, ...dates, rooms: criteria.rooms, refundable: true, breakfast: true, stars: 4, rating: 9, amenities: {}, match: 'exact' };
 const solo = { userId: null, isAdmin: true };
 let flightId = '';
+let ownerToken = '';
 
 describe.skipIf(!enabled)('hotel workflows against isolated PostgreSQL', () => {
   beforeAll(async () => {
@@ -31,13 +33,14 @@ describe.skipIf(!enabled)('hotel workflows against isolated PostgreSQL', () => {
     if (db.hostname !== '127.0.0.1' || !['/hotel_test', '/hotel_map_test'].includes(db.pathname)) throw new Error('Integration tests require a disposable localhost hotel_test or hotel_map_test database');
     const flight = await prisma.query.create({ data: { rawInput: 'Flight preservation sentinel', origin: 'LHR', originName: 'London', destination: 'JFK', destinationName: 'New York', dateFrom: new Date('2027-05-01'), dateTo: new Date('2027-05-10'), expiresAt: new Date('2027-05-01'), currency: 'GBP', cabinClass: 'business', vpnCountries: ['DE'], scrapeInterval: 6 } });
     flightId = flight.id;
+    ownerToken = await sharedAccess.claimOwner(await sharedAccess.issueOperatorToken(), 'hotel-owner', 'hotel-integration-owner-password', 'household');
   });
   beforeEach(async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Unexpected external request in integration test')));
     vi.stubEnv('ADMIN_SESSION_SECRET', 'hotel-integration-test-secret');
     process.env.SELF_HOSTED = 'true';
     boundary.search.mockReset().mockResolvedValue([sample]);
-    boundary.cookie.mockReturnValue(undefined);
+    boundary.cookie.mockReturnValue({ value: ownerToken });
     await prisma.hotelTracker.deleteMany();
     await prisma.hotelSearchRun.deleteMany();
     await prisma.hotelLease.deleteMany();
@@ -214,6 +217,7 @@ describe.skipIf(!enabled)('hotel workflows against isolated PostgreSQL', () => {
     const tracker = await tracked();
     await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { multiUserMode: true } });
     await invalidateMultiUserCache();
+    boundary.cookie.mockReturnValue(undefined);
     const response = await detailRoute(new Request(`http://localhost/api/hotels/${tracker.id}`), { params: Promise.resolve({ id: tracker.id }) });
     expect(response.status).toBe(401);
   });

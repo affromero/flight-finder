@@ -1,7 +1,6 @@
 import { NextRequest } from 'next/server';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { parseFlightQuery } from '@/lib/scraper/parse-query';
-import { prisma } from '@/lib/prisma';
 import { redis } from '@/lib/redis';
 import { getClientIp } from '@/lib/trusted-ip';
 
@@ -74,21 +73,7 @@ export async function POST(request: NextRequest) {
   }
 
   try {
-    const { response, usage } = await parseFlightQuery(rawInput, conversationHistory);
-
-    // Log API usage for the parse call
-    const config = await prisma.extractionConfig.findFirst({ where: { id: 'singleton' } });
-    await prisma.apiUsageLog.create({
-      data: {
-        provider: config?.provider ?? 'anthropic',
-        model: config?.model ?? 'claude-haiku-4-5-20251001',
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        costUsd: 0,
-        operation: 'parse-query',
-        durationMs: 0,
-      },
-    });
+    const { response } = await parseFlightQuery(rawInput, conversationHistory);
 
     return apiSuccess(response);
   } catch (err) {

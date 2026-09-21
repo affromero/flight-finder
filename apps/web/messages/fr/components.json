@@ -264,7 +264,7 @@
       "badge": "https · public",
       "blurb": "Une URL https publique. Un tunnel rapide se met en place en quelques secondes sans compte ; un tunnel nommé donne une URL permanente sur ton domaine.",
       "install": "Installe cloudflared :",
-      "quick": "URL rapide et temporaire (sans compte) : démarre un tunnel, puis copie l’adresse https://<name>.trycloudflare.com affichée et colle-la ci-dessous.",
+      "quick": "URL rapide et temporaire (sans compte) : démarre un tunnel, puis copie l’adresse {tunnelUrl} affichée et colle-la ci-dessous.",
       "permanent": "URL permanente sur ton propre domaine (nécessite un compte Cloudflare gratuit avec ton domaine ajouté) : connecte-toi, crée un tunnel nommé, pointe un enregistrement DNS dessus, puis lance-le.",
       "paste": "Colle ton URL https dans URL publique ci-dessous."
     },

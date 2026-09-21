@@ -1,173 +1,35 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-
-const mockIsMultiUserEnabled = vi.fn();
-const mockGetCurrentUser = vi.fn();
-const mockGetSessionToken = vi.fn();
-const mockVerifySessionToken = vi.fn();
-const mockParseAdminTokenTimestamp = vi.fn();
-const mockConfigFindUnique = vi.fn();
-
-vi.mock('@/lib/multi-user', () => ({
-  isMultiUserEnabled: () => mockIsMultiUserEnabled(),
-}));
-
-vi.mock('@/lib/user-auth', () => ({
-  getCurrentUser: () => mockGetCurrentUser(),
-}));
-
-vi.mock('@/lib/admin-auth', () => ({
-  getSessionToken: () => mockGetSessionToken(),
-  verifySessionToken: (t: string) => mockVerifySessionToken(t),
-  parseAdminTokenTimestamp: (t: string) => mockParseAdminTokenTimestamp(t),
-}));
-
-vi.mock('@/lib/prisma', () => ({
-  prisma: {
-    extractionConfig: {
-      findUnique: (...args: unknown[]) => mockConfigFindUnique(...args),
-    },
-  },
-}));
-
-import { requireAdminApi, verifyAdminSessionRevocable } from './admin-guard';
-
-describe('requireAdminApi', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    // Default: no admin session cookie present, so the revocation check is a
-    // no-op and flow falls through to the multi-user checks.
-    mockGetSessionToken.mockResolvedValue(undefined);
-    mockVerifySessionToken.mockReturnValue(false);
-    mockParseAdminTokenTimestamp.mockReturnValue(null);
-    mockConfigFindUnique.mockResolvedValue(null);
-  });
-
-  it('returns null in solo / hosted mode (multi-user off)', async () => {
-    mockIsMultiUserEnabled.mockResolvedValue(false);
-    expect(await requireAdminApi()).toBeNull();
-    expect(mockGetCurrentUser).not.toHaveBeenCalled();
-  });
-
-  it('returns 401 in multi-user mode when no session', async () => {
-    mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockGetCurrentUser.mockResolvedValue(null);
-    const res = await requireAdminApi();
-    expect(res?.status).toBe(401);
-  });
-
-  it('returns 403 in multi-user mode when user is not admin', async () => {
-    mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockGetCurrentUser.mockResolvedValue({ id: 'u1', isAdmin: false });
-    const res = await requireAdminApi();
-    expect(res?.status).toBe(403);
-  });
-
-  it('returns null in multi-user mode when caller is admin', async () => {
-    mockIsMultiUserEnabled.mockResolvedValue(true);
-    mockGetCurrentUser.mockResolvedValue({ id: 'a1', isAdmin: true });
-    expect(await requireAdminApi()).toBeNull();
-  });
-
-  it('rejects an admin token issued before adminSessionsValidFrom', async () => {
-    // Valid HMAC, but the token predates the last admin password change.
-    const issuedAt = 1_000;
-    mockGetSessionToken.mockResolvedValue('admin:1000.sig');
-    mockVerifySessionToken.mockReturnValue(true);
-    mockParseAdminTokenTimestamp.mockReturnValue(issuedAt);
-    mockConfigFindUnique.mockResolvedValue({
-      adminSessionsValidFrom: new Date(issuedAt + 5_000),
-    });
-
-    const res = await requireAdminApi();
-    expect(res?.status).toBe(401);
-    // The revocation check short-circuits before the multi-user branch.
-    expect(mockIsMultiUserEnabled).not.toHaveBeenCalled();
-  });
-
-  it('allows an admin token issued after adminSessionsValidFrom', async () => {
-    const issuedAt = 10_000;
-    mockGetSessionToken.mockResolvedValue('admin:10000.sig');
-    mockVerifySessionToken.mockReturnValue(true);
-    mockParseAdminTokenTimestamp.mockReturnValue(issuedAt);
-    mockConfigFindUnique.mockResolvedValue({
-      adminSessionsValidFrom: new Date(issuedAt - 5_000),
-    });
-    mockIsMultiUserEnabled.mockResolvedValue(false);
-
-    expect(await requireAdminApi()).toBeNull();
-  });
-
-  it('allows an admin token when adminSessionsValidFrom is unset', async () => {
-    mockGetSessionToken.mockResolvedValue('admin:10000.sig');
-    mockVerifySessionToken.mockReturnValue(true);
-    mockParseAdminTokenTimestamp.mockReturnValue(10_000);
-    mockConfigFindUnique.mockResolvedValue({ adminSessionsValidFrom: null });
-    mockIsMultiUserEnabled.mockResolvedValue(false);
-
-    expect(await requireAdminApi()).toBeNull();
-  });
-
-  it('ignores a forged admin cookie that fails HMAC verification', async () => {
-    // verifySessionToken returns false, so the revocation branch never queries
-    // the DB and flow continues to the normal checks.
-    mockGetSessionToken.mockResolvedValue('admin:1.forged');
-    mockVerifySessionToken.mockReturnValue(false);
-    mockIsMultiUserEnabled.mockResolvedValue(false);
-
-    expect(await requireAdminApi()).toBeNull();
-    expect(mockConfigFindUnique).not.toHaveBeenCalled();
-  });
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { createAccessFixture } from '@/test/access-fixture';
+const boundary = vi.hoisted(() => ({ fixture: null as ReturnType<typeof createAccessFixture> | null, token: '', user: null as { id: string; isAdmin: boolean } | null }));
+vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.token ? { value: boundary.token } : undefined }) }));
+vi.mock('@/lib/prisma', () => ({ prisma: { user: { findUnique: async () => boundary.user } } }));
+vi.mock('@/lib/sidedoor/access/service', async () => {
+  const { createAccessFixture } = await import('@/test/access-fixture');
+  const fixture = createAccessFixture(); boundary.fixture = fixture;
+  return { sharedAccess: fixture.access, sharedProfiles: fixture.profiles, SHARED_SESSION_COOKIE: 'ft-session' };
 });
-
-describe('verifyAdminSessionRevocable', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockGetSessionToken.mockResolvedValue(undefined);
-    mockVerifySessionToken.mockReturnValue(false);
-    mockParseAdminTokenTimestamp.mockReturnValue(null);
-    mockConfigFindUnique.mockResolvedValue(null);
-  });
-
-  it('returns false when no admin cookie is present', async () => {
-    mockGetSessionToken.mockResolvedValue(undefined);
+import { requireAdminApi, verifyAdminSessionRevocable } from './admin-guard';
+beforeEach(() => { boundary.fixture!.reset(); boundary.token = ''; boundary.user = null; });
+afterEach(() => vi.unstubAllEnvs());
+describe('shared owner guards', () => {
+  it.each(['true', 'false'])('requires persisted owner authority with SELF_HOSTED=%s', async selfHosted => {
+    vi.stubEnv('SELF_HOSTED', selfHosted);
+    expect((await requireAdminApi())?.status).toBe(401);
+    boundary.user = { id: 'member', isAdmin: true };
+    boundary.token = await boundary.fixture!.issue('member');
+    expect((await requireAdminApi())?.status).toBe(403);
     expect(await verifyAdminSessionRevocable()).toBe(false);
-    expect(mockConfigFindUnique).not.toHaveBeenCalled();
-  });
-
-  it('returns false for a forged cookie that fails HMAC verification', async () => {
-    mockGetSessionToken.mockResolvedValue('admin:1.forged');
-    mockVerifySessionToken.mockReturnValue(false);
-    expect(await verifyAdminSessionRevocable()).toBe(false);
-    expect(mockConfigFindUnique).not.toHaveBeenCalled();
-  });
-
-  it('returns false for a token issued before adminSessionsValidFrom', async () => {
-    const issuedAt = 1_000;
-    mockGetSessionToken.mockResolvedValue('admin:1000.sig');
-    mockVerifySessionToken.mockReturnValue(true);
-    mockParseAdminTokenTimestamp.mockReturnValue(issuedAt);
-    mockConfigFindUnique.mockResolvedValue({
-      adminSessionsValidFrom: new Date(issuedAt + 5_000),
-    });
-    expect(await verifyAdminSessionRevocable()).toBe(false);
-  });
-
-  it('returns true for a token issued after adminSessionsValidFrom', async () => {
-    const issuedAt = 10_000;
-    mockGetSessionToken.mockResolvedValue('admin:10000.sig');
-    mockVerifySessionToken.mockReturnValue(true);
-    mockParseAdminTokenTimestamp.mockReturnValue(issuedAt);
-    mockConfigFindUnique.mockResolvedValue({
-      adminSessionsValidFrom: new Date(issuedAt - 5_000),
-    });
+    boundary.user = { id: 'owner', isAdmin: true };
+    boundary.token = await boundary.fixture!.issue('owner', true);
+    expect(await requireAdminApi()).toBeNull();
     expect(await verifyAdminSessionRevocable()).toBe(true);
+    await boundary.fixture!.access.logout(boundary.token);
+    expect((await requireAdminApi())?.status).toBe(401);
   });
-
-  it('returns true when adminSessionsValidFrom is unset', async () => {
-    mockGetSessionToken.mockResolvedValue('admin:10000.sig');
-    mockVerifySessionToken.mockReturnValue(true);
-    mockParseAdminTokenTimestamp.mockReturnValue(10_000);
-    mockConfigFindUnique.mockResolvedValue({ adminSessionsValidFrom: null });
-    expect(await verifyAdminSessionRevocable()).toBe(true);
+  it('rejects non-Sidedoor signatures and deleted owners', async () => {
+    boundary.token = 'admin:1700000000000.signature';
+    expect(await verifyAdminSessionRevocable()).toBe(false);
+    boundary.token = await boundary.fixture!.issue('owner', true);
+    expect((await requireAdminApi())?.status).toBe(401);
   });
 });

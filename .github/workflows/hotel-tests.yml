@@ -110,6 +110,7 @@ jobs:
       ADMIN_PASSWORD: hotel-browser-ci-only
       ADMIN_SESSION_SECRET: hotel-browser-ci-session-not-a-production-secret
       HOTEL_BROWSER_URL: http://127.0.0.1:3014
+      APP_URL: http://127.0.0.1:3014
       HOTEL_BROWSER_OUTPUT: /tmp/flight-finder-hotel-browser
     steps:
       - uses: actions/checkout@v7.0.1

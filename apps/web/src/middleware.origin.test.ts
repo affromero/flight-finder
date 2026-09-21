@@ -1,12 +1,24 @@
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { NextRequest } from 'next/server';
 
+vi.mock('@/lib/sidedoor/access/service', () => ({
+  sharedAccess: { authenticate: vi.fn() },
+  sharedAccessStore: {
+    admissionPolicy: vi.fn().mockResolvedValue({
+      mode: 'household',
+      hasOwner: true,
+      passwordRequired: false,
+    }),
+  },
+  SHARED_SESSION_COOKIE: 'ft-session',
+}));
+
 beforeEach(() => { vi.resetModules(); vi.stubEnv('SELF_HOSTED', 'true'); vi.stubEnv('FF_ACCESS_PASSWORD', ''); });
 afterEach(() => vi.unstubAllEnvs());
 
 async function submit(headers: Record<string, string>, method = 'POST') {
   const { middleware } = await import('./middleware');
-  return middleware(new NextRequest('https://finder.example/api/admin/multi-user', { method, headers }));
+  return middleware(new NextRequest('https://finder.example/api/queries', { method, headers }));
 }
 
 it.each(['POST', 'PUT', 'PATCH', 'DELETE'])('rejects cross-origin %s before solo administrator access', async method => {
@@ -27,7 +39,7 @@ it('keeps read-only cross-origin requests available', async () => {
 });
 it('allows HTTPS requests through a trusted proxy with an internal listening URL', async () => {
   const { middleware } = await import('./middleware');
-  const response = await middleware(new NextRequest('http://0.0.0.0:3003/api/admin/config', { method: 'PATCH', headers: {
+  const response = await middleware(new NextRequest('http://0.0.0.0:3003/api/queries', { method: 'PATCH', headers: {
     host: 'finder.example', origin: 'https://finder.example', 'x-forwarded-proto': 'https', 'sec-fetch-site': 'same-origin',
   } }));
   expect(response.status).toBe(200);

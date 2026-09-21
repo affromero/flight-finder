@@ -20,6 +20,7 @@ with open(os.environ['BOUNDARY_LOG'], 'a') as stream:
 if name == 'docker':
     if args[:2] == ['context', 'inspect']: print(os.environ.get('TEST_CONTEXT', 'unix:///var/run/docker.sock'))
     elif args[:2] == ['image', 'inspect']: print(os.environ['TEST_REVISION'])
+    elif 'exec' in args and args[-2:] == ['access', 'claim']: print(json.dumps({'code':'test-owner-claim'}))
 elif name == 'curl':
     url = next((v for v in args if v.startswith('http')), '')
     if '%{http_code}' in args: print('200')

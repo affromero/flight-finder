@@ -4,7 +4,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { CliModelPicker } from './CliModelPicker';
 
 const fetchMock = vi.fn();
-const props = { provider: 'codex', model: 'codex', reasoning: null, onModelChange: vi.fn(), onReasoningChange: vi.fn() };
+const props = { provider: 'codex', model: 'gpt-5.6-luna', reasoning: null, onModelChange: vi.fn(), onReasoningChange: vi.fn() };
 const catalog = { version: '0.137.0', source: 'live', models: [{ id: 'gpt-5.6-luna', name: 'GPT-5.6 Luna', isDefault: true, defaultReasoningEffort: 'medium', reasoningEfforts: ['low', 'medium'] }] };
 const reply = (data: unknown, ok = true) => Promise.resolve({ ok, json: async () => ok ? { ok, data } : { ok, error: data } });
 beforeEach(() => {
@@ -14,10 +14,10 @@ beforeEach(() => {
 });
 afterEach(() => { cleanup(); vi.unstubAllGlobals(); });
 
-it('preserves the configured model while discovering available choices', async () => {
+it('preserves the selected model while discovering available choices', async () => {
   render(<CliModelPicker {...props} />);
   await screen.findByRole('option', { name: 'GPT-5.6 Luna' });
-  expect(screen.getByLabelText('Model')).toHaveValue('codex');
+  expect(screen.getByLabelText('Model')).toHaveValue('gpt-5.6-luna');
   expect(screen.getByLabelText('Thinking effort')).toHaveValue('');
 });
 
