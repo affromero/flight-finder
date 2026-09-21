@@ -143,11 +143,7 @@ impl Compose {
             let Some(program) = find(runtime) else {
                 continue;
             };
-            if command(&program)
-                .args(["compose", "version"])
-                .output()
-                .is_ok_and(|output| output.status.success())
-            {
+            if command_succeeds(&program, &["compose", "version"]) {
                 return Ok(Self {
                     runtime: program.clone(),
                     program,
@@ -155,11 +151,7 @@ impl Compose {
                 });
             }
             if let Some(standalone) = find(&format!("{runtime}-compose")) {
-                if command(&standalone)
-                    .arg("version")
-                    .output()
-                    .is_ok_and(|output| output.status.success())
-                {
+                if command_succeeds(&standalone, &["version"]) {
                     return Ok(Self {
                         runtime: program,
                         program: standalone,
@@ -187,6 +179,23 @@ impl Compose {
         }
         checked(cmd.args(args).output().map_err(|error| error.to_string())?)
     }
+}
+
+fn command_succeeds(program: &Path, args: &[&str]) -> bool {
+    const MAX_ATTEMPTS: usize = 3;
+
+    for attempt in 0..MAX_ATTEMPTS {
+        match command(program).args(args).output() {
+            Ok(output) => return output.status.success(),
+            Err(error)
+                if cfg!(unix) && error.raw_os_error() == Some(26) && attempt + 1 < MAX_ATTEMPTS =>
+            {
+                std::thread::sleep(Duration::from_millis(10));
+            }
+            Err(_) => return false,
+        }
+    }
+    false
 }
 
 /// Prepare shared access state before the serving container starts.
