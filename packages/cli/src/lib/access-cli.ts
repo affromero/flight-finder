@@ -1,8 +1,4 @@
 import type { Command } from "commander";
-import {
-  executeAccessCommand,
-  parseAccessCommand,
-} from "thesidedoor-core/access";
 
 export function registerAccessCommands(program: Command): void {
   program
@@ -38,11 +34,15 @@ export function registerAccessCommands(program: Command): void {
             );
             return;
           }
+          const {
+            AccessService,
+            DeviceService,
+            executeAccessCommand,
+            parseAccessCommand,
+          } = await import("thesidedoor-core/access");
           parseAccessCommand(args);
           const { prisma } = await import("@/lib/prisma");
           database = prisma;
-          const { AccessService, DeviceService } =
-            await import("thesidedoor-core/access");
           const { FlightFinderAccessStore } =
             await import("../../../../apps/web/src/lib/sidedoor/access/access-store");
           const store = new FlightFinderAccessStore();
