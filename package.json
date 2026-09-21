@@ -45,6 +45,8 @@
     "tsup": "8.5.1",
     "@copilotkit/aimock": "^1.29.0",
     "csv-parse": "7.0.2",
-    "geo-tz": "8.1.8"
+    "geo-tz": "8.1.8",
+    "react": "19.3.0",
+    "react-dom": "19.3.0"
   }
 }
