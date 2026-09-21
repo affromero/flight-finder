@@ -92,6 +92,9 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     process.env.SIDEDOOR_IMPORT_ADMIN_PASSWORD = 'environment admin password';
     process.env.SIDEDOOR_IMPORT_PASSWORD = 'private instance password';
     process.env.SIDEDOOR_IMPORT_MACHINE_TOKEN = 'machine-token-that-stays-valid';
+    process.env.SIDEDOOR_IMPORT_ANTHROPIC_API_KEY = 'environment-anthropic-key';
+    process.env.SIDEDOOR_IMPORT_OPENAI_API_KEY = 'environment-openai-key';
+    process.env.SIDEDOOR_IMPORT_GOOGLE_API_KEY = 'environment-google-key';
 
     temporary = await mkdtemp(join(tmpdir(), 'flight-finder-platform-cutover-'));
     const baseline = join(temporary, 'baseline.prisma');
@@ -123,12 +126,15 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     await admin.query(`DROP DATABASE "${databaseName}" WITH (FORCE)`);
     await admin.end();
     await rm(temporary, { recursive: true, force: true });
+    delete process.env.SIDEDOOR_IMPORT_ANTHROPIC_API_KEY;
+    delete process.env.SIDEDOOR_IMPORT_OPENAI_API_KEY;
+    delete process.env.SIDEDOOR_IMPORT_GOOGLE_API_KEY;
   });
 
   it('preserves access, provider, machine and setup behavior before removing source columns', async () => {
     const { preparePlatformCutover, finalizePlatformCutover } = await import('./platform-cutover');
     const prepared = await preparePlatformCutover();
-    expect(prepared).toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic'] });
+    expect(prepared).toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic', 'google', 'openai'] });
 
     const { sharedAccess, sharedAccessStore } = await import('../access/service');
     expect((await sharedAccess.authenticate(await sharedAccess.login('Owner', 'owner imported password'))).principal?.id).toBe('owner-id');
@@ -147,6 +153,8 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
       baseUrl: 'https://models.example.test/v1',
       compatibleApiKey: 'stored-provider-key',
     });
+    expect(await resolveProviderCredentials('openai')).toEqual({ apiKey: 'environment-openai-key' });
+    expect(await resolveProviderCredentials('google')).toEqual({ apiKey: 'environment-google-key' });
 
     const before = new pg.Client({ connectionString: connection });
     await before.connect();
@@ -154,15 +162,15 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     await before.end();
 
     await push(resolve('prisma/schema.prisma'));
-    await expect(preparePlatformCutover()).resolves.toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic'] });
+    await expect(preparePlatformCutover()).resolves.toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic', 'google', 'openai'] });
     const finalized = await finalizePlatformCutover();
-    expect(finalized).toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic'] });
+    expect(finalized).toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic', 'google', 'openai'] });
 
     const { prisma } = await import('@/lib/prisma');
     expect(await prisma.user.findMany({ orderBy: { username: 'asc' }, select: { id: true, username: true } })).toEqual([
+      { id: configuredAdmin!.id, username: 'admin' },
       { id: 'guest-id', username: 'Guest' },
       { id: 'owner-id', username: 'Owner' },
-      { id: configuredAdmin!.id, username: 'admin' },
     ]);
     expect((await prisma.extractionConfig.findUniqueOrThrow({ where: { id: 'singleton' } })).setupComplete).toBe(true);
     expect(await prisma.sidedoorState.findUnique({ where: { id: 'flight-finder-platform-cutover' } })).toBeNull();

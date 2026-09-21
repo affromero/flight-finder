@@ -16,15 +16,21 @@ class AccessPreparationTests(unittest.TestCase):
         prepare = entrypoint.index("access prepare")
         schema = entrypoint.index("db push")
         finalize = entrypoint.index("access finalize")
+        clear_imports = entrypoint.index("unset SIDEDOOR_IMPORT_ADMIN_PASSWORD")
         serve = entrypoint.index("exec node apps/web/server.js")
         self.assertLess(prepare, schema)
         self.assertLess(schema, finalize)
+        self.assertLess(finalize, clear_imports)
+        self.assertLess(clear_imports, serve)
         self.assertLess(finalize, serve)
 
         compose = (ROOT / "docker-compose.prod.yml").read_text()
         self.assertIn("SIDEDOOR_IMPORT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}", compose)
         self.assertIn("SIDEDOOR_IMPORT_PASSWORD: ${FF_ACCESS_PASSWORD:-}", compose)
         self.assertIn("SIDEDOOR_IMPORT_MACHINE_TOKEN: ${FF_MACHINE_TOKEN:-}", compose)
+        self.assertIn("SIDEDOOR_IMPORT_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}", compose)
+        self.assertIn("SIDEDOOR_IMPORT_OPENAI_API_KEY: ${OPENAI_API_KEY:-}", compose)
+        self.assertIn("SIDEDOOR_IMPORT_GOOGLE_API_KEY: ${GOOGLE_AI_API_KEY:-}", compose)
 
     def run_launcher(self, arguments: list[str], fails: bool):
         with tempfile.TemporaryDirectory(prefix="flight-finder-prepare-") as temporary:

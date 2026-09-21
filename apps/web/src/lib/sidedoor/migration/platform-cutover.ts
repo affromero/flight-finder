@@ -127,25 +127,33 @@ async function initialPrincipals(
   return principals;
 }
 
-function credentialValues(config: SourceConfig): Array<{ provider: string; values: Record<string, string> }> {
+function credentialValues(config: SourceConfig | null): Array<{ provider: string; values: Record<string, string> }> {
   const encrypted = {
-    anthropic: config.anthropicApiKey,
-    openai: config.openaiApiKey,
-    google: config.googleApiKey,
+    anthropic: config?.anthropicApiKey,
+    openai: config?.openaiApiKey,
+    google: config?.googleApiKey,
+  };
+  const environment = {
+    anthropic: process.env.SIDEDOOR_IMPORT_ANTHROPIC_API_KEY,
+    openai: process.env.SIDEDOOR_IMPORT_OPENAI_API_KEY,
+    google: process.env.SIDEDOOR_IMPORT_GOOGLE_API_KEY,
   };
   const imported = new Map<string, Record<string, string>>();
   for (const [provider, value] of Object.entries(encrypted)) {
     const values = imported.get(provider) ?? {};
+    const environmentValue = environment[provider as keyof typeof environment];
     if (value) {
       const plaintext = decryptSecret(value);
       if (!plaintext) throw new Error(`Stored ${provider} credentials could not be decrypted`);
       values.apiKey = plaintext;
-      if (provider === config.provider && config.customBaseUrl) values.compatibleApiKey = plaintext;
+      if (provider === config?.provider && config.customBaseUrl) values.compatibleApiKey = plaintext;
+    } else if (environmentValue) {
+      values.apiKey = environmentValue;
     }
     if (Object.keys(values).length) imported.set(provider, values);
   }
-  const descriptor = providerDescriptors().find(provider => provider.id === config.provider);
-  if (config.customBaseUrl && descriptor?.fields.some(field => field.id === 'baseUrl')) {
+  const descriptor = providerDescriptors().find(provider => provider.id === config?.provider);
+  if (config?.customBaseUrl && descriptor?.fields.some(field => field.id === 'baseUrl')) {
     const selected = imported.get(config.provider) ?? {};
     selected.baseUrl = config.customBaseUrl;
     imported.set(config.provider, selected);
@@ -241,7 +249,7 @@ async function prepareInTransaction(database: Database): Promise<CutoverRecord> 
   await store.transact(state => {
     if (state.imports.includes(PROVIDER_IMPORT)) return;
     if (state.providers.length) throw new Error('Provider credentials were initialized by another source');
-    if (config) for (const item of credentialValues(config)) vault.configureState(state, item.provider, item.values);
+    for (const item of credentialValues(config)) vault.configureState(state, item.provider, item.values);
     state.imports.push(PROVIDER_IMPORT);
   });
 
