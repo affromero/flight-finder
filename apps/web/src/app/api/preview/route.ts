@@ -100,6 +100,7 @@ function toPreviewRequestPayload(body: Record<string, unknown>): PreviewRequestP
     : body.destination ? [{ code: String(body.destination), name: String(body.destinationName || body.destination) }] : [];
 
   return {
+    sourceUrl: typeof body.sourceUrl === 'string' ? body.sourceUrl : undefined,
     dateFrom: String(body.dateFrom || ''),
     dateTo: String(body.dateTo || ''),
     maxPrice: body.maxPrice === undefined || body.maxPrice === null ? null : Number(body.maxPrice),
@@ -219,6 +220,7 @@ async function runPreviewInBackground(
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return apiError('Invalid JSON body', 400);
+  if (body.sourceUrl !== undefined && typeof body.sourceUrl !== 'string') return apiError('Invalid flight link', 400);
 
   const payload = toPreviewRequestPayload(body as Record<string, unknown>);
 

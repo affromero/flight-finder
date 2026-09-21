@@ -91,6 +91,7 @@ export async function POST(request: Request) {
     expectedRevision: existing?.providerRevision ?? 0,
     expectedUpdatedAt: existing?.updatedAt ?? null,
     setup: true,
+    admissionLock: true,
     fields,
     data: {
       provider, model, reasoningEffort: selection.reasoningEffort,

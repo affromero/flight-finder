@@ -12,6 +12,10 @@ import { isValidPriceAmount } from '@/lib/limits';
 import { CABIN_CLASSES, isCabinClass } from '@/lib/cabin-class';
 import { coerceLayovers } from '@/lib/scraper/duration';
 import { isLegacySplitFare, LEGACY_SPLIT_PREVIEW_ERROR } from '@/lib/flight-pricing';
+import { assertFlightLinkSearch, readFlightLink } from '@/lib/scraper/flight-link';
+import { assertAccountActor } from '@/lib/account-actor';
+import { lockTravelAdmission } from '@/lib/travel/admission';
+import { TravelJobError } from '@/lib/travel/errors';
 
 const MAX_ROUTES = 20;
 const MAX_FLIGHTS_PER_ROUTE = 50;
@@ -201,6 +205,19 @@ export async function POST(request: NextRequest) {
     return apiError(`Too many routes: maximum is ${MAX_ROUTES}`, 400);
   }
 
+  let sourceUrl: string | undefined;
+  if (body.sourceUrl !== undefined && body.sourceUrl !== null) {
+    try {
+      sourceUrl = readFlightLink(body.sourceUrl).url;
+      if (routeInputs.length !== 1) throw new Error('An imported itinerary must create exactly one tracker');
+      const route = routeInputs[0]!;
+      assertFlightLinkSearch(sourceUrl, { origin: route.origin, destination: route.destination, dateFrom: route.date ?? dateFrom, dateTo: route.returnDate ?? dateTo, cabinClass: cabinClass ?? 'economy', tripType: tripType ?? 'round_trip', flexibility: Number(flexibility ?? 0) });
+      // Imported prices are recorded only by the server's immediate scrape.
+      // The browser's preview selection is not an authoritative observation.
+      routeInputs = [{ ...route, selectedFlights: [] }];
+    } catch (error) { return apiError(error instanceof Error ? error.message : 'Invalid selected flight link', 400); }
+  }
+
   // Validate all route fields: airport codes, name lengths, per-route flight counts, and flight fields
   for (const route of routeInputs) {
     if (!/^[A-Z]{3}$/.test(route.origin) || !/^[A-Z]{3}$/.test(route.destination)) {
@@ -334,85 +351,94 @@ export async function POST(request: NextRequest) {
     label: string | null;
   }> = [];
 
-  for (const route of routeInputs) {
-    const flights = route.selectedFlights || [];
+  const denial = await prisma.$transaction(async tx => {
+    await lockTravelAdmission(tx);
+    await assertAccountActor(tx, { userId: currentUser?.id ?? null });
+    for (const route of routeInputs) {
+      const flights = route.selectedFlights || [];
 
-    const deleteToken = crypto.randomUUID();
+      const deleteToken = crypto.randomUUID();
 
-    // Per-date pinning: when route has a specific date, pin dateFrom to outbound and dateTo to return
-    const routeFrom = route.date ? new Date(route.date + 'T00:00:00Z') : from;
-    const routeTo = route.returnDate ? new Date(route.returnDate + 'T00:00:00Z') : (route.date ? new Date(route.date + 'T00:00:00Z') : to);
-    const routeFlex = route.date ? 0 : flex;
-    const routeExpiry = new Date(routeTo);
-    routeExpiry.setDate(routeExpiry.getDate() + routeFlex);
+      // Per-date pinning: when route has a specific date, pin dateFrom to outbound and dateTo to return
+      const routeFrom = route.date ? new Date(route.date + 'T00:00:00Z') : from;
+      const routeTo = route.returnDate ? new Date(route.returnDate + 'T00:00:00Z') : (route.date ? new Date(route.date + 'T00:00:00Z') : to);
+      const routeFlex = route.date ? 0 : flex;
+      const routeExpiry = new Date(routeTo);
+      routeExpiry.setDate(routeExpiry.getDate() + routeFlex);
 
-    const query = await prisma.query.create({
-      data: {
-        rawInput,
+      const query = await tx.query.create({
+        data: {
+          rawInput,
+          ...(sourceUrl ? { sourceUrl } : {}),
+          origin: route.origin,
+          originName: route.originName,
+          destination: route.destination,
+          destinationName: route.destinationName,
+          dateFrom: routeFrom,
+          dateTo: routeTo,
+          flexibility: routeFlex,
+          maxPrice: maxPriceValidated,
+          maxStops: maxStopsValidated,
+          maxDurationHours: maxDurationHoursValidated,
+          preferredAirlines: airlines,
+          preferredAggregators: aggregators,
+          label,
+          timePreference: timePreference || 'any',
+          cabinClass: cabinClass || 'economy',
+          tripType: tripType === 'one_way' ? 'one_way' : 'round_trip',
+          currency,
+          vpnCountries,
+          expiresAt: routeExpiry,
+          firstViewedAt: new Date(),
+          deleteToken,
+          groupId,
+          userId: currentUser?.id ?? null,
+        },
+      });
+
+      if (flights.length > 0) {
+        await tx.priceSnapshot.createMany({
+          data: flights.map((f) => {
+            // coerceLayovers bounds the client-supplied value (entry count, field
+            // types, string lengths) before it reaches the Json column. Prisma
+            // treats an explicit null on Json as ambiguous, so omit it instead.
+            const layovers = coerceLayovers(f.layovers);
+            return {
+              queryId: query.id,
+              travelDate: new Date(f.travelDate + 'T00:00:00Z'),
+              // Store the coerced numeric values (validated above), not the raw
+              // input, so a numeric string like "300" cannot reach Prisma as a string.
+              price: Number(f.price),
+              currency: f.currency || 'USD',
+              airline: f.airline,
+              // safeHttpUrl drops non-http(s) URLs to prevent javascript:/data:/file: injection
+              bookingUrl: safeHttpUrl(f.bookingUrl) || '',
+              stops: f.stops != null ? Number(f.stops) : 0,
+              duration: f.duration ?? null,
+              ...(layovers ? { layovers } : {}),
+              flightNumber: f.flightNumber ?? null,
+            };
+          }),
+        });
+      }
+
+      results.push({
+        id: query.id,
         origin: route.origin,
         originName: route.originName,
         destination: route.destination,
         destinationName: route.destinationName,
-        dateFrom: routeFrom,
-        dateTo: routeTo,
-        flexibility: routeFlex,
-        maxPrice: maxPriceValidated,
-        maxStops: maxStopsValidated,
-        maxDurationHours: maxDurationHoursValidated,
-        preferredAirlines: airlines,
-        preferredAggregators: aggregators,
-        label,
-        timePreference: timePreference || 'any',
-        cabinClass: cabinClass || 'economy',
-        tripType: tripType === 'one_way' ? 'one_way' : 'round_trip',
-        currency,
-        vpnCountries,
-        expiresAt: routeExpiry,
-        firstViewedAt: new Date(),
+        date: route.date,
+        returnDate: route.returnDate,
         deleteToken,
-        groupId,
-        userId: currentUser?.id ?? null,
-      },
-    });
-
-    if (flights.length > 0) {
-      await prisma.priceSnapshot.createMany({
-        data: flights.map((f) => {
-          // coerceLayovers bounds the client-supplied value (entry count, field
-          // types, string lengths) before it reaches the Json column. Prisma
-          // treats an explicit null on Json as ambiguous, so omit it instead.
-          const layovers = coerceLayovers(f.layovers);
-          return {
-            queryId: query.id,
-            travelDate: new Date(f.travelDate + 'T00:00:00Z'),
-            // Store the coerced numeric values (validated above), not the raw
-            // input, so a numeric string like "300" cannot reach Prisma as a string.
-            price: Number(f.price),
-            currency: f.currency || 'USD',
-            airline: f.airline,
-            // safeHttpUrl drops non-http(s) URLs to prevent javascript:/data:/file: injection
-            bookingUrl: safeHttpUrl(f.bookingUrl) || '',
-            stops: f.stops != null ? Number(f.stops) : 0,
-            duration: f.duration ?? null,
-            ...(layovers ? { layovers } : {}),
-            flightNumber: f.flightNumber ?? null,
-          };
-        }),
+        label,
       });
     }
-
-    results.push({
-      id: query.id,
-      origin: route.origin,
-      originName: route.originName,
-      destination: route.destination,
-      destinationName: route.destinationName,
-      date: route.date,
-      returnDate: route.returnDate,
-      deleteToken,
-      label,
-    });
-  }
+  }).then(() => null, error => {
+    if (error instanceof TravelJobError) return apiError(error.message, error.status);
+    throw error;
+  });
+  if (denial) return denial;
 
   // Fire immediate scrape for all created queries including VPN passes (background, non-blocking)
   const { runFullScrapeForQuery } = await import('@/lib/scraper/run-scrape');

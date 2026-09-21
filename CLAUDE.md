@@ -18,7 +18,7 @@
 ## Monorepo
 
 npm workspaces: `@flight-finder/web` (`apps/web/`), `@flight-finder/cli` (`packages/cli/`).
-Root `package.json` proxies common scripts to `@flight-finder/web`. `apps/desktop/` is a Tauri (Rust) launcher: deliberately NOT an npm workspace member and excluded from `npm run ci`; it is built only by `.github/workflows/desktop-release.yml`.
+Root `package.json` proxies common scripts to `@flight-finder/web`. `apps/desktop/` is a Tauri (Rust) launcher: deliberately NOT an npm workspace member and excluded from `npm run ci`. `.github/workflows/desktop-ci.yml` tests it on macOS, Linux, and Windows; `.github/workflows/desktop-release.yml` builds the installers after the required checks pass.
 
 The CLI bundles the shared scraper (`apps/web/src/lib/scraper/*`) via relative imports but maps `@/*` to its own `packages/cli/src/`, so any new `@/lib/<x>` import added to a shared scraper file needs a matching shim in `packages/cli/src/lib/` (re-export the real module like `secret-crypto.ts`/`prisma.ts`, or a stub like `admin-recovery.ts`). Web-only checks pass without it; only the full `npm run ci` (web + cli) catches a missing shim.
 
@@ -126,7 +126,7 @@ npm run ci                     # lint + typecheck + test + build (both web and c
 | `api-response.ts` | `apiSuccess()`/`apiError()` response helpers |
 | `sidedoor/` | Shared password, passkey, invitation, session, provider, job, and telemetry integration |
 | `user-auth.ts` | User session tokens, parseSession discriminated union, getCurrentUser (DB-backed) |
-| `multi-user.ts` | `isMultiUserEnabled()` (hard gated on SELF_HOSTED, cached 60s) |
+| `multi-user.ts` | `isMultiUserEnabled()` (hard gated on SELF_HOSTED, authoritative DB read for authorization) |
 | `rate-limit.ts` | Redis backed login throttling (5 per 15 min per IP+username) |
 | `password.ts` | scrypt hashing and verification |
 | `secret-crypto.ts` | AES-256-GCM encrypt/decrypt for secrets at rest (keyed on ADMIN_SESSION_SECRET) |

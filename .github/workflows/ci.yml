@@ -25,10 +25,44 @@ jobs:
       - run: npx vitest run --reporter=verbose
         working-directory: packages/cli
       - run: npm run build
+      - run: npm run build --workspace=@flight-finder/cli
+      - run: node --test scripts/docker-publication.test.cjs scripts/desktop-publication.test.cjs
       - run: bash scripts/install-flow-test.sh
       - run: python3 scripts/test_access_preparation.py
       - run: bash scripts/cli-runtime-test.sh
       - run: python3 -m unittest discover -s scripts -p 'test_deploy*.py' -v
+
+  account-lifecycle:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: security_test
+          POSTGRES_PASSWORD: security-local-test
+          POSTGRES_DB: security_test
+        ports:
+          - 55442:5432
+        options: >-
+          --health-cmd "pg_isready -U security_test -d security_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://security_test:security-local-test@127.0.0.1:55442/security_test
+      ACCOUNT_INTEGRATION_TESTS: '1'
+      REDIS_URL: ''
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:push
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/account-migration.integration.test.ts
 
   install-smoke:
     runs-on: ubuntu-latest

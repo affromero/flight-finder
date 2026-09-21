@@ -21,12 +21,12 @@ async function admissionRow(tx: Prisma.TransactionClient): Promise<TravelAdmissi
   return tx.travelAdmission.upsert({ where: { id: 'singleton' }, create: { id: 'singleton' }, update: {} });
 }
 
-async function quarantine(tx: Prisma.TransactionClient, reason: string): Promise<TravelAdmission> {
+async function quarantine(tx: Prisma.TransactionClient, reason: string, cleanupRecoveryAllowed = false): Promise<TravelAdmission> {
   const current = await admissionRow(tx);
-  if (current.quarantinedAt) return current;
+  if (current.quarantinedAt && (!current.cleanupRecoveryAllowed || cleanupRecoveryAllowed)) return current;
   await tx.travelLease.updateMany({ where: { OR: [{ state: 'held' }, { expiresAt: { gt: EPOCH } }] }, data: { state: 'quarantined' } });
   return tx.travelAdmission.update({ where: { id: current.id }, data: {
-    quarantinedAt: new Date(), quarantineReason: reason.slice(0, 1000), recoveryGeneration: { increment: 1 },
+    quarantinedAt: new Date(), quarantineReason: reason.slice(0, 1000), cleanupRecoveryAllowed, recoveryGeneration: { increment: 1 },
   } });
 }
 
@@ -37,7 +37,10 @@ async function checkAdmission(tx: Prisma.TransactionClient): Promise<TravelAdmis
     SELECT id FROM "TravelLease" WHERE
       (state = 'held' AND "expiresAt" <= clock_timestamp()) OR state = 'quarantined' OR
       (state = 'idle' AND "expiresAt" > ${EPOCH}) LIMIT 1`;
-  if (expired.length) return quarantine(tx, 'A travel worker stopped without verified cleanup. Stop old workers and verify the network before recovery.');
+  if (expired.length) {
+    const legacyState = await tx.travelLease.count({ where: { OR: [{ state: 'idle', expiresAt: { gt: EPOCH } }, { state: 'quarantined' }] } });
+    return quarantine(tx, 'A travel worker stopped without verified cleanup. Open /admin for recovery after stopping old workers and verifying the network.', legacyState === 0);
+  }
   const legacy = await tx.hotelLease.findUnique({ where: { id: 'worker' } });
   if (legacy && legacy.expiresAt.getTime() > 0) return quarantine(tx, 'A previous hotel worker requires upgrade recovery. Stop old workers and verify the network before continuing.');
   return current;
@@ -119,12 +122,51 @@ export async function renewTravelLease(lease: TravelLeaseToken, milliseconds = D
 
 /** Call only after all owned browser and network cleanup has completed. */
 export async function releaseTravelLease(lease: TravelLeaseToken): Promise<void> {
+  if (await acknowledgeTravelCleanup(lease)) return;
   await prisma.$transaction(async tx => {
     const admission = await checkAdmission(tx);
     if (admission.quarantinedAt || admission.topologyVersion !== lease.topologyVersion) return;
     await tx.travelLease.updateMany({ where: {
       id: lease.id, owner: lease.owner, generation: lease.generation, topologyVersion: lease.topologyVersion, state: 'held',
     }, data: { state: 'idle', expiresAt: EPOCH } });
+  });
+}
+
+/** The original owner may acknowledge settled work and cleanup, never resume expired work.
+ * No VPN state is inferred. Incidents from older runtimes remain administrator-only.
+ */
+export async function acknowledgeTravelCleanup(lease: TravelLeaseToken): Promise<boolean> {
+  return prisma.$transaction(async tx => {
+    const admission = await checkAdmission(tx);
+    if (admission.vpnEnabled || admission.topologyVersion !== lease.topologyVersion
+      || (admission.quarantinedAt && !admission.cleanupRecoveryAllowed)) return false;
+    if ((await localTopology(tx)).topologyHash !== admission.topologyHash) return false;
+    const held = await tx.travelLease.findFirst({ where: {
+      id: lease.id, owner: lease.owner, generation: lease.generation, topologyVersion: lease.topologyVersion,
+      state: { in: ['held', 'quarantined'] },
+    } });
+    if (!held) return false;
+    const legacy = await tx.hotelLease.findUnique({ where: { id: 'worker' } });
+    if (legacy && legacy.expiresAt.getTime() > 0) return false;
+    const jobs = await tx.travelJob.findMany({ where: {
+      status: 'running', leaseResource: lease.id, leaseOwner: lease.owner, leaseGeneration: lease.generation,
+    } });
+    const message = 'Travel worker interrupted; previous verified observations were retained. Retry the search.';
+    for (const job of jobs) {
+      await interruptTravelRun(tx, job, message);
+      await tx.travelJob.update({ where: { id: job.id }, data: {
+        status: 'failed', error: message, completedAt: new Date(), activeKey: null,
+        leaseResource: null, leaseOwner: null, leaseGeneration: null,
+      } });
+    }
+    await tx.travelLease.update({ where: { id: lease.id }, data: { state: 'idle', expiresAt: EPOCH } });
+    if (admission.quarantinedAt && await tx.travelLease.count({ where: { OR: [{ state: { not: 'idle' } }, { expiresAt: { gt: EPOCH } }] } }) === 0) {
+      await tx.travelAdmission.update({ where: { id: admission.id }, data: {
+        quarantinedAt: null, quarantineReason: null, cleanupRecoveryAllowed: false,
+        recoveredAt: new Date(), recoveredBy: 'verified-worker-cleanup', recoveryGeneration: { increment: 1 },
+      } });
+    }
+    return true;
   });
 }
 
@@ -158,6 +200,14 @@ export async function getTravelAdmission() {
   });
 }
 
+/** Surface global pauses only after the caller has authorized the requested search. */
+export async function assertTravelAvailable(isAdmin: boolean): Promise<void> {
+  if (!(await getTravelAdmission()).quarantinedAt) return;
+  throw new TravelJobError(isAdmin
+    ? 'Travel searches are paused after a worker interruption. Open /admin and review Travel worker recovery, then retry the search or its status.'
+    : 'Travel searches are paused after a worker interruption. Ask your administrator to recover the worker, then retry the search or its status.', 503);
+}
+
 /** Recovery is an explicit operator assertion, not a status-read inference. */
 export async function recoverTravelAdmission(actor: { userId: string | null; isAdmin: boolean }, raw: unknown): Promise<void> {
   if (!actor.isAdmin) throw new TravelJobError('Administrator access required', 403);
@@ -178,7 +228,7 @@ export async function recoverTravelAdmission(actor: { userId: string | null; isA
     await tx.hotelLease.updateMany({ data: { owner: randomUUID(), expiresAt: EPOCH } });
     await tx.hotelSearchRun.updateMany({ where: { status: 'running', travelJob: null }, data: { status: 'failed', error: message, completedAt: now } });
     await tx.travelAdmission.update({ where: { id: admission.id }, data: {
-      quarantinedAt: null, quarantineReason: null, recoveredAt: now, recoveredBy: actor.userId ?? 'instance-administrator', recoveryGeneration: { increment: 1 },
+      quarantinedAt: null, quarantineReason: null, cleanupRecoveryAllowed: false, recoveredAt: now, recoveredBy: actor.userId ?? 'instance-administrator', recoveryGeneration: { increment: 1 },
     } });
   });
 }

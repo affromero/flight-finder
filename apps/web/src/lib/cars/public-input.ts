@@ -1,4 +1,5 @@
 import { CarError } from './types';
+import { carImportUrl } from './import-url';
 import { currencyPrecision } from './money';
 import { validateCarProviders } from './preferences';
 import { carRecord, carText, validateCarDriver, validateCarExtras, validateCarFilters, validateCarLocalDateTime } from './validation';
@@ -29,12 +30,14 @@ function extras(raw: unknown) {
 
 /** Syntax and stable intent only. Catalog geography and date eligibility belong to the server. */
 export function normalizeCarSearchInput(raw: unknown) {
-  const value = carInputFields(raw, ['pickup', 'dropoff', 'pickupAt', 'dropoffAt', 'driver', 'currency', 'sources', 'extras', 'filters'], 'Unsupported rental search field');
+  const value = carInputFields(raw, ['pickup', 'dropoff', 'pickupAt', 'dropoffAt', 'driver', 'currency', 'sources', 'extras', 'filters', 'sourceUrl'], 'Unsupported rental search field');
   const currency = carText(value.currency, 3, 'currency').toUpperCase();
   currencyPrecision(currency);
   const filters = carInputFields(value.filters ?? {}, ['transmission', 'minSeats', 'unlimitedMileage', 'freeCancellation', 'maxTotal']);
   if (filters.maxTotal != null) carInputFields(filters.maxTotal, ['currency', 'minor']);
+  const sourceUrl = carImportUrl(value.sourceUrl, validateCarProviders(value.sources));
   return {
+    ...(sourceUrl ? { sourceUrl } : {}),
     pickup: catalogLocation(value.pickup), dropoff: catalogLocation(value.dropoff),
     pickupAt: validateCarLocalDateTime(carInputFields(value.pickupAt, ['date', 'time'], 'Enter date and local time; the station timezone is server-managed')),
     dropoffAt: validateCarLocalDateTime(carInputFields(value.dropoffAt, ['date', 'time'], 'Enter date and local time; the station timezone is server-managed')),

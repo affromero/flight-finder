@@ -1,4 +1,19 @@
 {
+  "LinkImport": {
+    "examples": "Exemples de formats de liens",
+    "examplesHelp": "Ces exemples sont abrégés. Copiez l’adresse complète après avoir sélectionné votre vol, hôtel ou voiture de location.",
+    "confirmHotel": "J’ai vérifié les dates, les voyageurs et la répartition des chambres. Ces informations peuvent manquer dans le lien.",
+    "label": "Vous avez déjà choisi ? Collez le lien",
+    "flights": "Liens de réservation sélectionnée Google Flights. Un adulte, aller simple ou aller-retour.",
+    "hotels": "Liens d’établissement Google Hotels ou Booking.com. Vérifiez les dates, les voyageurs et les chambres.",
+    "cars": "Liens d’offres DiscoverCars ou d’options Auto Europe. Vérifiez les lieux, les dates et le conducteur. Les liens expirés ne peuvent pas être importés.",
+    "import": "Importer le lien",
+    "loading": "Lecture du lien…",
+    "failed": "Impossible d’importer ce lien",
+    "review": "Vérifiez la sélection importée et complétez les informations manquantes avant la recherche. Le suivi commence après la sélection d’un résultat vérifié.",
+    "selection": "Ouvrir la sélection importée",
+    "remove": "Retirer le lien"
+  },
   "common": {
     "appName": "Flight Finder",
     "tagline": "La piste des prix que les compagnies aériennes te cachent"

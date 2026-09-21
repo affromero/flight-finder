@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { assertAccountActor } from '../account-actor';
 import type { Prisma, HotelTracker, HotelSearchRun } from '@/generated/prisma/client';
 import { HotelError, validateHotelSearch, validateHotelOptions } from './domain';
 import { assertHotelOwner, type HotelActor } from './access';
@@ -25,6 +26,7 @@ export async function createHotelSearch(raw: unknown, actor: HotelActor) {
   const search = validateHotelSearch(raw);
   return prisma.$transaction(async tx => {
     await lockTravelAdmission(tx);
+    await assertAccountActor(tx, actor);
     const count = await tx.hotelSearchRun.count({ where: { status: { in: ['queued', 'running'] }, userId: actor.userId } });
     if (count >= 3) throw new HotelError('Three hotel searches are already active; wait or cancel one', 429);
     const run = await tx.hotelSearchRun.create({ data: { userId: actor.userId, request: json(search) } });
@@ -52,13 +54,20 @@ export async function createHotelTracker(raw: unknown, actor: HotelActor) {
   search.filters.maxTotal = null;
   const selection: HotelSelection = { propertyId: offer.propertyId, source: offer.source, hotelName: offer.hotelName, propertyUrl: offer.propertyUrl, roomName: offer.roomName, rateName: offer.rateName, seller: offer.seller, refundable: offer.refundable, breakfast: offer.breakfast };
   if (offer.providerRateId) selection.providerRateId = offer.providerRateId;
-  return prisma.hotelTracker.create({ data: { userId: actor.userId, hotelName: offer.hotelName, search: json(search), selection: json(selection), options: json(options) } });
+  return prisma.$transaction(async tx => {
+    await lockTravelAdmission(tx);
+    await assertAccountActor(tx, actor);
+    const current = await tx.hotelSearchRun.findUnique({ where: { id: run.id } });
+    assertHotelOwner(actor, current);
+    return tx.hotelTracker.create({ data: { userId: actor.userId, hotelName: offer.hotelName, search: json(search), selection: json(selection), options: json(options) } });
+  });
 }
 export function refreshHotelTracker(id: string, actor: HotelActor): Promise<HotelSearchRun>;
 export function refreshHotelTracker(id: string, actor: HotelActor, dueOnly: true): Promise<HotelSearchRun | null>;
 export async function refreshHotelTracker(id: string, actor: HotelActor, dueOnly = false) {
   return prisma.$transaction(async tx => {
     const tracker = await lockHotelTracker(tx, id);
+    await assertAccountActor(tx, actor);
     assertHotelOwner(actor, tracker);
     if (!tracker) throw new HotelError('Hotel tracker not found', 404);
     if (dueOnly && (!tracker.active || tracker.nextCheckAt > new Date())) return null;
@@ -81,6 +90,7 @@ export async function editHotelTracker(id: string, raw: unknown, actor: HotelAct
   }
   return prisma.$transaction(async tx => {
     const tracker = await lockHotelTracker(tx, id);
+    await assertAccountActor(tx, actor);
     assertHotelOwner(actor, tracker);
     if (!tracker) throw new HotelError('Hotel tracker not found', 404);
     const previous = tracker.options as unknown as HotelTrackingOptions;

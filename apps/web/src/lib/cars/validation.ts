@@ -1,4 +1,5 @@
 import { Temporal } from '@js-temporal/polyfill';
+import { carImportUrl } from './import-url';
 import { isCarCountry } from './countries';
 import { CAR_SOURCES, CHILD_SEAT_CATEGORIES, CarError, type CarDriver, type CarExtras, type CarLocalTime, type CarLocation, type CarSearch, type CarTrackingOptions } from './types';
 import { validateCarProviders } from './preferences';
@@ -109,6 +110,7 @@ export function validateCarSearch(raw: unknown, now = new Date(), options: { all
   const currency = carText(r.currency, 3, 'currency').toUpperCase();
   currencyPrecision(currency);
   const sources = validateCarProviders(r.sources);
+  const sourceUrl = carImportUrl(r.sourceUrl, sources);
   for (const source of sources) {
     for (const place of [pickup, dropoff]) {
       if (!place.providerIds[source] && !(options.allowUnresolvedProviders && place.catalog)) throw new CarError(`Select pickup and return locations for ${source}`);
@@ -129,6 +131,7 @@ export function validateCarSearch(raw: unknown, now = new Date(), options: { all
   }
   return {
     pickup, dropoff, pickupAt, dropoffAt, driver: validateCarDriver(r.driver), currency, sources, extras,
+    ...(sourceUrl ? { sourceUrl } : {}),
     ...(protectionRecheck ? { protectionRecheck } : {}),
     filters: validateCarFilters(r.filters, currency),
   };

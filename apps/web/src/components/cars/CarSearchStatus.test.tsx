@@ -22,6 +22,24 @@ afterEach(() => { vi.useRealTimers(); vi.unstubAllGlobals(); vi.restoreAllMocks(
 const settle = async () => { await act(async () => { await vi.advanceTimersByTimeAsync(0); }); };
 
 describe('private rental result lifecycle', () => {
+  it('shows worker recovery guidance and completes the same search after an explicit retry', async () => {
+    const value = initial(); let paused = true;
+    const message = 'Travel searches are paused. Open /admin for recovery, then retry status.';
+    vi.stubGlobal('fetch', vi.fn(async () => paused
+      ? new Response(JSON.stringify({ ok: false, error: message }), { status: 503 })
+      : response({ ...value, status: 'success', completedAt: value.createdAt, result: carReportFixture() })));
+    render(surface(value)); await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+    expect(screen.getByRole('alert')).toHaveTextContent(message);
+    expect(screen.getByRole('button', { name: 'Cancel search' })).toBeEnabled();
+    paused = false; fireEvent.click(screen.getByRole('button', { name: 'Retry status updates' })); await settle();
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Track this rental' })).toBeEnabled();
+  });
+  it('does not treat a malformed 503 page as confirmed recovery guidance', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response('<html>Proxy unavailable</html>', { status: 503 })));
+    render(surface(initial())); await act(async () => { await vi.advanceTimersByTimeAsync(1500); });
+    expect(screen.getByRole('alert')).toHaveTextContent(en.Cars.statusInterrupted);
+  });
   it('does not reopen tracking when a stale status response omits an acknowledged permanent closure', async () => {
     const value = { ...initial('success'), trackingClosed: true };
     vi.stubGlobal('fetch', vi.fn(async () => response({ ...value, trackingClosed: false })));

@@ -19,8 +19,8 @@
         <button class="card" id="choose-host">
           <span class="card-title">Run it on this computer</span>
           <span class="card-desc">
-            Start a self-hosted Flight Finder here with Docker. Others on your
-            network can connect to it.
+            Start Flight Finder here with Docker. Choose whether to allow
+            other devices to connect.
           </span>
         </button>
         <button class="card" id="choose-client">
@@ -38,6 +38,8 @@
           <span id="status-text">Checking…</span>
         </div>
 
+        <p id="host-error" class="error" role="alert"></p>
+
         <div id="host-actions" class="actions" hidden>
           <button id="install" class="btn btn-primary" hidden>Install &amp; start</button>
           <button id="start" class="btn btn-primary" hidden>Start</button>
@@ -54,6 +56,7 @@
         <div id="needs-docker" class="notice" hidden>
           Docker isn't available. Install Docker Desktop (or Podman) and start it,
           then reopen this app.
+          Windows also needs Git for Windows, including Git Bash, to install the stack.
           <a href="https://docs.docker.com/desktop/" target="_blank" rel="noreferrer">Get Docker</a>
         </div>
 
@@ -64,7 +67,7 @@
             <button class="reach-opt" data-reach="lan">Local network</button>
             <button class="reach-opt" data-reach="public">Public link</button>
           </div>
-          <p id="reach-info" class="reach-info">Only this computer can reach it.</p>
+          <p id="reach-info" class="reach-info">Checking network access.</p>
           <button id="reach-confirm" class="btn btn-primary" hidden>Open public link</button>
           <button id="reach-stop" class="link" hidden>Stop public link</button>
         </div>

@@ -18,6 +18,7 @@ vi.mock('@/lib/prisma', () => {
     return { count: rows.length };
   } });
   const database = {
+    $executeRaw: async () => 0,
     user: { findUnique: async () => boundary.fixture!.user },
     extractionConfig: {
       findUnique: async () => ({ multiUserMode: boundary.enabled }),
@@ -26,6 +27,11 @@ vi.mock('@/lib/prisma', () => {
     },
     query: table('query'), hotelTracker: table('hotelTracker'), hotelSearchRun: table('hotelSearchRun'),
     carTracker: table('carTracker'), carSearchRun: table('carSearchRun'),
+    carTrackerCreation: table('carTrackerCreation'), carSearchCreation: table('carSearchCreation'),
+    carRefreshRequest: table('carRefreshRequest'),
+    travelAlertDelivery: { updateMany: async () => ({ count: 0 }) },
+    hotelAlert: { updateMany: async () => ({ count: 0 }) },
+    travelJob: { findMany: async () => [], updateMany: async () => ({ count: 0 }) },
   };
   return { prisma: { ...database, $transaction: async (operation: (tx: typeof database) => Promise<unknown>) => operation(database) } };
 });
@@ -35,7 +41,7 @@ beforeEach(async () => {
   vi.stubEnv('SELF_HOSTED', 'true'); vi.stubEnv('REDIS_URL', '');
   boundary.fixture!.resetRequest(); boundary.enabled = false;
   await boundary.fixture!.signIn({ id: 'owner', username: 'Owner', isAdmin: true });
-  boundary.rows = Object.fromEntries(['query', 'hotelTracker', 'hotelSearchRun', 'carTracker', 'carSearchRun'].map(name => [name, [{ userId: null, isSeed: false }, { userId: 'another-member', isSeed: false }]]));
+  boundary.rows = Object.fromEntries(['query', 'hotelTracker', 'hotelSearchRun', 'carTracker', 'carSearchRun', 'carTrackerCreation', 'carSearchCreation', 'carRefreshRequest'].map(name => [name, [{ userId: null, isSeed: false }, { userId: 'another-member', isSeed: false }]]));
   boundary.rows.query!.push({ userId: null, isSeed: true });
 });
 afterEach(() => vi.unstubAllEnvs());

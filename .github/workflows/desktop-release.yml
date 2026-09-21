@@ -18,9 +18,34 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
     permissions:
-      contents: write
+      contents: read
+      actions: read
+    outputs:
+      sha: ${{ steps.release.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/github-script@v9
+        id: release
+        env:
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        with:
+          script: |
+            const { owner, repo } = context.repo;
+            const { requireChecks, requireRelease } = require('./scripts/docker-publication.cjs');
+            const sha = await requireRelease({ github, owner, repo, tag: process.env.RELEASE_TAG });
+            await requireChecks({ github, owner, repo, sha });
+            core.setOutput('sha', sha);
+
+  build:
+    needs: verify
+    permissions:
+      contents: read
     strategy:
       fail-fast: false
       matrix:
@@ -34,6 +59,8 @@ jobs:
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ needs.verify.outputs.sha }}
 
       - name: Install Linux build dependencies
         if: matrix.platform == 'ubuntu-22.04'
@@ -63,44 +90,59 @@ jobs:
           npm install
           npm run icon
 
-      # tauri-action rewrites the release name and body when it attaches
-      # installers to an already published release (issue #173), so feed it the
-      # CHANGELOG section for this version instead of boilerplate that would
-      # clobber the notes set at release-creation time.
-      - name: Extract release notes from CHANGELOG
-        id: notes
-        shell: bash
-        run: |
-          VERSION="${GITHUB_REF_NAME#desktop-}"
-          VERSION="${VERSION#v}"
-          if ! grep -q "^## \[${VERSION}\]" CHANGELOG.md; then
-            VERSION=$(node -p "require('./apps/web/package.json').version")
-          fi
-          {
-            echo "body<<NOTES_EOF"
-            awk -v ver="$VERSION" '
-              $0 ~ "^## \\[" ver "\\]" { flag=1; print; next }
-              flag && /^## \[/ { exit }
-              flag { print }
-            ' CHANGELOG.md
-            printf '\n### Desktop installers\n\nDownload the installer for your OS from the assets below, open it, and choose "Run it on this computer" or "Connect to an instance".\n'
-            echo "NOTES_EOF"
-          } >> "$GITHUB_OUTPUT"
+      - name: Remove installers from previous cached builds
+        working-directory: apps/desktop
+        run: >-
+          node -e "const fs = require('node:fs'), path = require('node:path');
+          function clean(dir) { if (!fs.existsSync(dir)) return;
+          for (const entry of fs.readdirSync(dir, {withFileTypes:true})) {
+          if (!entry.isDirectory()) continue; const child = path.join(dir, entry.name);
+          if (entry.name === 'bundle') fs.rmSync(child, {recursive:true}); else clean(child); } }
+          clean('src-tauri/target');"
 
-      - uses: tauri-apps/tauri-action@v1.0.0
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # Add these secrets to produce SIGNED / NOTARIZED builds (see
-          # apps/desktop/README.md and https://tauri.app/distribute/):
-          #   macOS:   APPLE_CERTIFICATE, APPLE_CERTIFICATE_PASSWORD,
-          #            APPLE_SIGNING_IDENTITY, APPLE_ID, APPLE_PASSWORD, APPLE_TEAM_ID
-          #   Windows: handled by your Authenticode setup
-          #   Updater: TAURI_SIGNING_PRIVATE_KEY, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
+      - name: Build native installers without publishing
+        uses: tauri-apps/tauri-action@v1.0.0
         with:
           projectPath: apps/desktop
-          tagName: ${{ github.ref_name }}
-          releaseName: ${{ github.ref_name }}
-          releaseBody: ${{ steps.notes.outputs.body }}
-          releaseDraft: false
-          prerelease: false
           args: ${{ matrix.args }}
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: desktop-${{ matrix.platform }}
+          if-no-files-found: error
+          path: |
+            apps/desktop/src-tauri/target/**/bundle/**/*.dmg
+            apps/desktop/src-tauri/target/**/bundle/**/*.msi
+            apps/desktop/src-tauri/target/**/bundle/**/*.exe
+            apps/desktop/src-tauri/target/**/bundle/**/*.deb
+            apps/desktop/src-tauri/target/**/bundle/**/*.rpm
+            apps/desktop/src-tauri/target/**/bundle/**/*.AppImage
+            apps/desktop/src-tauri/target/**/bundle/**/*.tar.gz
+            apps/desktop/src-tauri/target/**/bundle/**/*.sig
+
+  publish:
+    needs: [verify, build]
+    runs-on: ubuntu-latest
+    concurrency:
+      group: desktop-release-publication
+      cancel-in-progress: false
+    permissions:
+      contents: write
+      actions: read
+    steps:
+      - uses: actions/checkout@v7.0.1
+        with:
+          ref: ${{ github.workflow_sha }}
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: desktop-*
+          path: /tmp/desktop-installers
+      - name: Verify commit and publish installers
+        uses: actions/github-script@v9
+        env:
+          HEAD_SHA: ${{ needs.verify.outputs.sha }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || github.ref_name }}
+        with:
+          script: |
+            await require('./scripts/desktop-publication.cjs').publishDesktop({ github, ...context.repo,
+              sha: process.env.HEAD_SHA, tag: process.env.RELEASE_TAG, directory: '/tmp/desktop-installers' });

@@ -7,6 +7,8 @@ import { expireQueuedPreviews, withPreviewTravelAdmission } from './preview';
 import { acquireTravelLease, getTravelAdmission, recoverTravelAdmission, releaseTravelLease } from './admission';
 import { cancelTravelJob, enqueueTravelJob } from './jobs';
 import { travelDelay } from './execution';
+import { fork } from 'node:child_process';
+import { fileURLToPath } from 'node:url';
 
 describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('shared coordinator over PostgreSQL and headless Chromium', () => {
   let previous: { vpnProvider: string | null } | null;
@@ -132,7 +134,7 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('share
     const next = await acquireTravelLease('vpn'); expect(next).not.toBeNull(); await releaseTravelLease(next!);
   }, 15_000);
 
-  it('closes browsers and persists quarantine after lease expiry instead of taking over automatically', async () => {
+  it('closes browsers and fails interrupted work after expiry, then permits a fresh search', async () => {
     const job = await batch();
     let started!: () => void;
     const ready = new Promise<void>(resolve => { started = resolve; });
@@ -142,11 +144,110 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('share
     await prisma.travelLease.update({ where: { id: 'vpn' }, data: { expiresAt: new Date(0) } });
     await rejected;
     expect(browsers.every(browser => !browser.isConnected())).toBe(true);
-    const incident = await getTravelAdmission(); expect(incident.quarantinedAt).toBeInstanceOf(Date);
-    await expect(acquireTravelLease('browser')).rejects.toMatchObject({ status: 503 });
-    await recoverTravelAdmission({ userId: null, isAdmin: true }, { generation: incident.recoveryGeneration, oldWorkersStopped: true, networkVerified: true });
+    expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+    expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'failed', result: null });
+    const next = await batch();
+    expect(await executeTravelJob(next.id, async () => ({ fresh: true }))).toBe(true);
+    expect(await prisma.travelJob.findUnique({ where: { id: next.id } })).toMatchObject({ status: 'succeeded', result: { fresh: true } });
+  }, 15_000);
+
+  it('keeps admission blocked until a delayed browser close acknowledges completion', async () => {
+    let started!: () => void, finishClose!: () => void;
+    const ready = new Promise<void>(resolve => { started = resolve; });
+    const closing = new Promise<void>(resolve => { finishClose = resolve; });
+    const job = await batch();
+    const work = executeTravelJob(job.id, async () => {
+      const opened = await browser(), close = opened.close.bind(opened);
+      vi.spyOn(opened, 'close').mockImplementation(async () => { started(); await closing; await close(); });
+      await prisma.travelLease.update({ where: { id: 'vpn' }, data: { expiresAt: new Date(0) } });
+      await travelDelay(30_000);
+      return { stale: true };
+    });
+    const rejected = expect(work).rejects.toThrow();
+    await ready;
+    try {
+      await expect(acquireTravelLease('browser')).rejects.toMatchObject({ status: 503 });
+      expect(browsers.some(browser => browser.isConnected())).toBe(true);
+    } finally { finishClose(); }
+    await rejected;
+    expect(browsers.every(browser => !browser.isConnected())).toBe(true);
+    expect((await getTravelAdmission()).quarantinedAt).toBeNull();
     expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'failed', result: null });
   }, 15_000);
+
+  it('retains quarantine when browser cleanup fails after a heartbeat detects expiry', async () => {
+    const job = await batch();
+    await expect(executeTravelJob(job.id, async () => {
+      const opened = await browser(), close = opened.close.bind(opened);
+      vi.spyOn(opened, 'close').mockImplementation(async () => { await close(); throw new Error('Cleanup acknowledgement lost after interruption'); });
+      await prisma.travelLease.update({ where: { id: 'vpn' }, data: { expiresAt: new Date(0) } });
+      await travelDelay(30_000);
+    })).rejects.toMatchObject({ name: 'TravelCleanupError' });
+    expect(await prisma.travelAdmission.findUnique({ where: { id: 'singleton' } })).toMatchObject({ quarantinedAt: expect.any(Date), cleanupRecoveryAllowed: false });
+    expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'running', result: null });
+    await expect(acquireTravelLease('browser')).rejects.toMatchObject({ status: 503 });
+  }, 15_000);
+
+  it('rejects results produced after expiry even before the next heartbeat runs', async () => {
+    const job = await batch();
+    await expect(executeTravelJob(job.id, async () => {
+      await prisma.travelLease.update({ where: { id: 'vpn' }, data: { expiresAt: new Date(0) } });
+      return { stale: true };
+    })).rejects.toThrow();
+    expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'failed', result: null });
+    expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+  });
+
+  it.skipIf(process.platform === 'win32')('recovers after a real worker process is suspended past its lease and resumed', async () => {
+    const job = await batch();
+    const worker = fork(fileURLToPath(new URL('../../test/travel-interruption-worker.ts', import.meta.url)), [job.id], {
+      execArgv: ['--import', 'tsx'], silent: true,
+      env: { ...process.env, TSX_TSCONFIG_PATH: fileURLToPath(new URL('../../../tsconfig.json', import.meta.url)) },
+    });
+    let output = '';
+    worker.stderr?.on('data', chunk => { output += String(chunk); });
+    const finished = new Promise<number | null>(resolve => { worker.once('exit', resolve); });
+    const ready = new Promise<void>((resolve, reject) => {
+      worker.once('error', reject);
+      worker.once('message', () => resolve());
+    });
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timeout = new Promise<void>(resolve => { timer = setTimeout(resolve, 10_000); })
+      .then(() => { throw new Error(`Interrupted worker did not settle: ${output}`); });
+    try {
+      await Promise.race([ready, timeout, finished.then(code => { throw new Error(`Worker exited before starting (${code}): ${output}`); })]);
+      worker.kill('SIGSTOP');
+      // Advance the persisted deadline instead of keeping CI asleep for two minutes.
+      await prisma.travelLease.update({ where: { id: 'vpn' }, data: { expiresAt: new Date(0) } });
+      await expect(acquireTravelLease('browser')).rejects.toMatchObject({ status: 503 });
+      worker.kill('SIGCONT');
+      expect(await Promise.race([finished, timeout]), output).toBe(0);
+      expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+      expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'failed', result: null });
+      const next = await batch();
+      expect(await executeTravelJob(next.id, async () => ({ resumed: true }))).toBe(true);
+    } finally {
+      clearTimeout(timer);
+      if (worker.exitCode === null && worker.signalCode === null) {
+        worker.kill('SIGCONT'); worker.kill('SIGTERM');
+        const force = setTimeout(() => worker.kill('SIGKILL'), 1000);
+        try { await finished; } finally { clearTimeout(force); }
+      }
+    }
+  }, 15_000);
+
+  it('leaves queued work available during quarantine and resumes after administrator recovery', async () => {
+    const held = await acquireTravelLease('browser');
+    await prisma.travelLease.update({ where: { id: held!.id }, data: { expiresAt: new Date(0) } });
+    const job = await batch();
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    await pumpTravelJobs(); await pumpTravelJobs();
+    expect(errors.mock.calls).toEqual([]);
+    expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'queued', attempts: 0 });
+    const incident = await getTravelAdmission();
+    await recoverTravelAdmission({ userId: null, isAdmin: true }, { generation: incident.recoveryGeneration, oldWorkersStopped: true, networkVerified: true });
+    expect(await executeTravelJob(job.id, async () => ({ resumed: true }))).toBe(true);
+  });
 
   it('quarantines cleanup failure and retains the failed cleanup evidence', async () => {
     const job = await batch();
@@ -178,5 +279,28 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('share
     expect(requests.every(url => url === 'http://vpn.test/v1/status')).toBe(true);
     expect(browsers.every(browser => !browser.isConnected())).toBe(true);
     const next = await acquireTravelLease('browser'); expect(next?.id).toBe('network'); await releaseTravelLease(next!);
+  }, 15_000);
+
+  it('requires manual recovery after VPN lease expiry without sending a late network mutation', async () => {
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { vpnProvider: 'expressvpn' } });
+    vi.stubEnv('EXPRESSVPN_API_URL', 'http://vpn.test'); vi.stubEnv('EXPRESSVPN_SOCKS_URL', '');
+    const requests: string[] = [];
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      requests.push(`${init.method} ${url}`);
+      if (init.method !== 'GET' || !url.endsWith('/v1/status')) throw new Error('Unexpected VPN mutation');
+      return new Response('Not connected');
+    });
+    const job = await batch();
+    await expect(executeTravelJob(job.id, async () => {
+      await browser();
+      await prisma.travelLease.update({ where: { id: 'network' }, data: { expiresAt: new Date(0) } });
+      await travelDelay(30_000);
+    })).rejects.toThrow();
+    expect(requests.length).toBeGreaterThan(0);
+    expect(requests.every(request => request === 'GET http://vpn.test/v1/status')).toBe(true);
+    expect(browsers.every(browser => !browser.isConnected())).toBe(true);
+    expect((await getTravelAdmission()).quarantinedAt).toBeInstanceOf(Date);
+    expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'running', result: null });
+    await expect(acquireTravelLease('browser')).rejects.toMatchObject({ status: 503 });
   }, 15_000);
 });

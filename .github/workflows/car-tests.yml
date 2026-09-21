@@ -21,6 +21,10 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npx playwright install chromium --with-deps
+      - name: Verify selected flight and hotel imports
+        run: npm run test --workspace=@flight-finder/web -- src/lib/scraper/imported-flight.browser.test.ts src/lib/hotels/imported-hotel.browser.test.ts
+        env:
+          TRAVEL_BROWSER_TESTS: '1'
       - run: npm run test --workspace=@flight-finder/web -- src/lib/travel/execution.test.ts src/lib/travel/execution.browser.test.ts src/lib/travel/navigation.browser.test.ts src/lib/scraper/browser.test.ts src/lib/cars/browser-context.browser.test.ts src/lib/cars/autoeurope-navigation.browser.test.ts src/lib/cars/discovercars-frame.browser.test.ts src/lib/cars/discovercars-price-lines.browser.test.ts src/lib/cars/discovercars-navigation.browser.test.ts src/lib/cars/discovercars-extras.browser.test.ts src/lib/cars/protection-discovery.browser.test.ts src/lib/cars/controls.browser.test.ts src/lib/cars/search.browser.test.ts
         env:
           TRAVEL_BROWSER_TESTS: '1'
@@ -54,24 +58,73 @@ jobs:
       - run: npm ci
       - run: npm run db:generate
       - run: npm run db:push
-      - run: npm run test --workspace=@flight-finder/web -- src/lib/travel/jobs.integration.test.ts
+      - run: npx playwright install chromium --with-deps
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/travel/jobs.integration.test.ts src/lib/travel/admission.integration.test.ts src/lib/travel/admission-http.integration.test.ts src/lib/travel/coordinator.integration.test.ts src/lib/travel/recovery-search.integration.test.ts --no-file-parallelism
+        env:
+          TRAVEL_COORDINATOR_INTEGRATION_TESTS: '1'
+      - run: psql "$DATABASE_URL" -c 'CREATE DATABASE travel_flight_test'
+      - run: npm run db:push
+        env:
+          DATABASE_URL: postgresql://car_test:car-local-test@127.0.0.1:55440/travel_flight_test
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/travel/flights.integration.test.ts
+        env:
+          DATABASE_URL: postgresql://car_test:car-local-test@127.0.0.1:55440/travel_flight_test
+          TRAVEL_FLIGHT_INTEGRATION_TESTS: '1'
       - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/store.integration.test.ts
         env:
           CAR_STORE_INTEGRATION_TESTS: '1'
       - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/creation.integration.test.ts
         env:
           CAR_STORE_INTEGRATION_TESTS: '1'
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/list.integration.test.ts src/lib/cars/delivery.integration.test.ts src/lib/cars/parse-gate.integration.test.ts --no-file-parallelism
+        env:
+          CAR_STORE_INTEGRATION_TESTS: '1'
+          CAR_DELIVERY_INTEGRATION_TESTS: '1'
+          CAR_PARSE_INTEGRATION_TESTS: '1'
       - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/persistence.integration.test.ts
         env:
           CAR_PERSISTENCE_INTEGRATION_TESTS: '1'
       - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/http.integration.test.ts
         env:
           CAR_HTTP_INTEGRATION_TESTS: '1'
-      - run: npx playwright install chromium --with-deps
       - run: npm run test --workspace=@flight-finder/web -- src/lib/cars/search.browser.test.ts
         env:
           TRAVEL_BROWSER_TESTS: '1'
           CAR_RUN_INTEGRATION_TESTS: '1'
+
+  flight-pricing:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: flight_test
+          POSTGRES_PASSWORD: flight-local-test
+          POSTGRES_DB: flight_test
+        ports:
+          - 55416:5432
+        options: >-
+          --health-cmd "pg_isready -U flight_test -d flight_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://flight_test:flight-local-test@127.0.0.1:55416/flight_test
+      FLIGHT_PRICING_INTEGRATION_TESTS: '1'
+      NOTIFICATION_INTEGRATION_TESTS: '1'
+      REDIS_URL: ''
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npm run db:push
+      - run: npm run build --workspace=@flight-finder/cli
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/flight-pricing.integration.test.ts src/lib/notifications/delivery.integration.test.ts --no-file-parallelism
 
   migration-rollback:
     runs-on: ubuntu-latest

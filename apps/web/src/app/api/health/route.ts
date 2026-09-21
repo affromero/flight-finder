@@ -39,7 +39,7 @@ export async function GET() {
   const cron = getCronInfo();
 
   return Response.json(
-    { status: healthy ? 'ok' : 'degraded', ...checks, activeQueries, cron },
+    { application: 'flight-finder', status: healthy ? 'ok' : 'degraded', ...checks, activeQueries, cron },
     { status: healthy ? 200 : 503 }
   );
 }

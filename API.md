@@ -23,6 +23,26 @@ Auth requirements depend on mode and endpoint family:
 
 ## Endpoints
 
+### Import a selected booking link
+
+`POST /api/travel/import` accepts JSON `{ "kind": "flights", "url": "https://..." }`.
+`kind` also accepts `hotels` and `cars`. It returns an editable `flight`, `hotel`,
+or `car` draft plus the normalized `url`. It does not start a search or create a
+tracker. Hotel and car imports require the same self-hosted access as their
+search endpoints.
+
+Supported links are Google Flights selected booking pages, Google Hotels
+properties, Booking.com hotel pages, DiscoverCars offers, and Auto Europe
+options pages. Short links and reservation confirmations are rejected.
+
+Submit the imported `sourceUrl` with the existing preview/search request after
+reviewing the details. Flight imports support one adult and preserve all selected
+segments, dates and cabin; pass `sourceUrl` again when creating the query. Initial
+flight snapshots come from the server scrape. Hotel imports preserve the property
+and require guest and room review. Car imports require catalog locations and
+driver details; tracking uses `mode: "contract"` and fresh contract matching on
+later checks. Expired or changed selections never become broader searches.
+
 ### Parse a flight query
 
 Converts natural language into structured flight data using your configured LLM.
@@ -288,8 +308,22 @@ Public deployments require a valid, non-revoked administrator session; multi-use
 deployments require an administrator account. Solo self-hosted deployments follow
 the existing administrator access model.
 
-An expired lease or unverified cleanup keeps shared execution stopped. After
-stopping old workers and independently verifying the network, an administrator
+An expired lease stops shared execution until cleanup is verified. With VPN
+disabled, the original worker can reopen admission after its work and browser
+cleanup finish. Every affected worker must acknowledge cleanup, and interrupted
+jobs are marked failed so their searches can be retried. Expiry never authorizes
+another worker to take over an abandoned browser.
+
+A crashed worker, uncertain cleanup, VPN incident, configuration conflict, or
+incident recorded by an older runtime requires administrator recovery. Restarting
+the app preserves that incident. Open `/admin` and use the travel recovery panel.
+For Docker installations, stop all app and CLI worker instances, ensure their
+browser processes have stopped, and verify the configured VPN/network state.
+Start the app again to access the panel; queued work remains paused until recovery.
+New hotel searches and active hotel/car status requests return 503 with recovery
+guidance during a pause. Completed results and cancellation remain available.
+After recovery, retry status updates to continue the same queued search.
+After stopping old workers and independently verifying the network, an administrator
 can submit the actor scope and generation obtained from GET:
 
 ```http

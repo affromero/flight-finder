@@ -1,0 +1,13 @@
+.root { padding: 1rem; border: 1px solid var(--border); border-radius: 12px; margin-bottom: 1.5rem; }
+.field { display: grid; gap: .5rem; font-weight: 600; }
+.field input { width: 100%; padding: .75rem; border: 1px solid var(--border); border-radius: 6px; background: var(--bg); color: var(--text); font: inherit; }
+.root button { padding: .5rem .9rem; border: 1px solid var(--border); border-radius: 6px; background: var(--surface); color: var(--text); font: inherit; cursor: pointer; }
+.root button:disabled { opacity: .5; cursor: default; }
+.help { color: var(--text-secondary); font-size: .875rem; }
+.error { color: var(--price-up); }
+.examples { margin-block: .75rem; font-size: .875rem; }
+.examples > p { margin-block: .5rem; }
+.examples ul { display: grid; gap: .75rem; margin: .5rem 0; padding: 0; list-style: none; }
+.examples li { display: grid; gap: .25rem; min-width: 0; }
+.examples li span { font-weight: 600; }
+.examples code { color: var(--text-secondary); overflow-wrap: anywhere; }

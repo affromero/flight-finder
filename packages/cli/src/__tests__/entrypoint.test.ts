@@ -49,6 +49,7 @@ describe('flight CLI entrypoint alongside hotel and car commands', () => {
     expect(result.stdout).toContain('--headless');
     expect(result.stdout).toContain('hotels');
     expect(result.stdout).toContain('cars');
+    expect(result.stderr).toBe('');
   });
 
   it('validates flight options before attempting a backend change', async () => {

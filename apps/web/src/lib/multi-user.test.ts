@@ -8,7 +8,6 @@ const redisMock = {
 
 vi.mock('@/lib/redis', () => ({
   redis: redisMock,
-  cached: async <T>(_key: string, fn: () => Promise<T>) => fn(),
 }));
 
 vi.mock('@/lib/prisma', () => ({
@@ -22,6 +21,25 @@ vi.mock('@/lib/prisma', () => ({
 describe('isMultiUserEnabled', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+  });
+
+  it('enforces newly enabled accounts despite a stale solo-mode Redis entry', async () => {
+    process.env.SELF_HOSTED = 'true';
+    redisMock.get.mockResolvedValue('false');
+    const { prisma } = await import('@/lib/prisma');
+    vi.mocked(prisma.extractionConfig.findUnique).mockResolvedValueOnce({ multiUserMode: false } as never)
+      .mockResolvedValueOnce({ multiUserMode: true } as never);
+    const { isMultiUserEnabled } = await import('./multi-user');
+    expect(await isMultiUserEnabled()).toBe(false);
+    expect(await isMultiUserEnabled()).toBe(true);
+  });
+
+  it('surfaces database failures instead of granting solo access', async () => {
+    process.env.SELF_HOSTED = 'true';
+    const { prisma } = await import('@/lib/prisma');
+    vi.mocked(prisma.extractionConfig.findUnique).mockRejectedValueOnce(new Error('database unavailable'));
+    const { isMultiUserEnabled } = await import('./multi-user');
+    await expect(isMultiUserEnabled()).rejects.toThrow('database unavailable');
   });
 
   it('returns false when SELF_HOSTED is unset', async () => {

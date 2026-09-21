@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { bookingPropertyId } from './booking';
 import { verifyHotelContext, type HotelPageCapture } from './extraction';
 import type { HotelOffer, HotelRoom, HotelSearch, HotelSelection, HotelStay } from './types';
 import { hotelAmenities } from './property-metadata';
@@ -65,7 +66,7 @@ export function extractBookingOffers(capture: HotelPageCapture, search: HotelSea
   }
   const url = new URL(capture.url);
   for (const key of ['sid', 'label', 'aid', 'chal_t', 'force_referer']) url.searchParams.delete(key);
-  const propertyId = `booking:${url.pathname.replace(/\.en-gb\.html$/, '.html')}`;
+  const propertyId = bookingPropertyId(url.href);
   return combinations.map(combination => {
     const providerRateId = combination.map(room => room.rate.id).join('+');
     const refundable = combination.every(room => room.refundable === true) ? true : combination.some(room => room.refundable === false) ? false : null;

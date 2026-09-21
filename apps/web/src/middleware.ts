@@ -46,6 +46,31 @@ function isGateExempt(pathname: string): boolean {
 
 export async function middleware(request: NextRequest) {
   const { pathname } = request.nextUrl;
+
+  if (
+    pathname.startsWith("/api/") &&
+    !["GET", "HEAD", "OPTIONS"].includes(request.method)
+  ) {
+    const origin = request.headers.get("origin");
+    const forwardedProtocol =
+      process.env.TRUSTED_FORWARDED_FOR !== "false"
+        ? request.headers.get("x-forwarded-proto")
+        : null;
+    const protocol =
+      forwardedProtocol === "https" || forwardedProtocol === "http"
+        ? `${forwardedProtocol}:`
+        : request.nextUrl.protocol;
+    const expectedOrigin = `${protocol}//${request.headers.get("host") ?? request.nextUrl.host}`;
+    if (
+      request.headers.get("sec-fetch-site") === "cross-site" ||
+      (origin !== null && origin !== expectedOrigin)
+    )
+      return NextResponse.json(
+        { ok: false, error: "Cross-origin changes are not allowed" },
+        { status: 403 },
+      );
+  }
+
   if (pathname.endsWith(".php") || isMaliciousPath(pathname))
     return new NextResponse(null, {
       status: 404,

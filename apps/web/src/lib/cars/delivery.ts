@@ -1,15 +1,13 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma, TravelAlertDelivery } from '@/generated/prisma/client';
-import { dispatchNotifications } from '../notifications/notify';
+import { deliverClaimedAlert, DELIVERY_CLAIM_MS } from '../notifications/delivery';
 import type { ChannelMessage } from '../notifications/channels/types';
-import { lockCarTracker } from './store';
+import { lockCarTrackerRow } from './store';
 import { carInteger, carRecord, carText } from './validation';
 import { carProviderUrl } from './offer-validation';
 import { validateCarMoney } from './money';
 import { notificationTransaction } from '../notifications/database';
 
-const RETRY_MS = 300_000;
-const CLAIM_MS = 120_000;
 type Claimed = TravelAlertDelivery & { carTrackerId: string; claimToken: string; owner: string | null; revision: number; payload: ChannelMessage };
 
 function payload(raw: unknown, trackerId: string, owner: string | null, revision: number): ChannelMessage {
@@ -28,7 +26,7 @@ function payload(raw: unknown, trackerId: string, owner: string | null, revision
 
 async function claim(id: string, trackerId: string): Promise<Claimed | null> {
   return notificationTransaction(async tx => {
-    const tracker = await lockCarTracker(tx, trackerId, { userId: null, isAdmin: true });
+    const tracker = await lockCarTrackerRow(tx, trackerId);
     const row = await tx.travelAlertDelivery.findUnique({ where: { id } });
     if (!row?.pending || row.carTrackerId !== trackerId || row.nextAttemptAt > new Date() || (row.claimExpiresAt && row.claimExpiresAt > new Date())) return null;
     let message: ChannelMessage;
@@ -39,7 +37,7 @@ async function claim(id: string, trackerId: string): Promise<Claimed | null> {
       await tx.travelAlertDelivery.update({ where: { id }, data: { pending: false, claimToken: null, claimExpiresAt: null, lastError: 'Notification cancelled: its tracker or stored event is no longer valid.' } });
       return null;
     }
-    const token = randomUUID(), expires = new Date(Date.now() + CLAIM_MS);
+    const token = randomUUID(), expires = new Date(Date.now() + DELIVERY_CLAIM_MS);
     const updated = await tx.travelAlertDelivery.update({ where: { id }, data: { claimToken: token, claimExpiresAt: expires, nextAttemptAt: expires } });
     return { ...updated, carTrackerId: trackerId, claimToken: token, owner: tracker.userId, revision: tracker.revision, payload: message };
   });
@@ -47,7 +45,7 @@ async function claim(id: string, trackerId: string): Promise<Claimed | null> {
 
 async function guarded<T>(entry: Claimed, write: (tx: Prisma.TransactionClient, row: TravelAlertDelivery) => Promise<T>): Promise<T> {
   return notificationTransaction(async tx => {
-    const tracker = await lockCarTracker(tx, entry.carTrackerId, { userId: null, isAdmin: true });
+    const tracker = await lockCarTrackerRow(tx, entry.carTrackerId);
     const row = await tx.travelAlertDelivery.findUnique({ where: { id: entry.id } });
     if (!tracker.active || tracker.userId !== entry.owner || tracker.revision !== entry.revision || !row?.pending || row.claimToken !== entry.claimToken || !row.claimExpiresAt || row.claimExpiresAt <= new Date()) throw new Error('Car notification delivery authority was lost');
     return write(tx, row);
@@ -55,28 +53,7 @@ async function guarded<T>(entry: Claimed, write: (tx: Prisma.TransactionClient, 
 }
 
 async function deliver(entry: Claimed, parent?: AbortSignal): Promise<void> {
-  const deadline = new AbortController();
-  const timer = setTimeout(() => deadline.abort(new Error('Car notification batch deadline exceeded')), 60_000);
-  const signal = parent ? AbortSignal.any([parent, deadline.signal]) : deadline.signal;
-  try {
-    const outcomes = await dispatchNotifications(entry.owner, { ...entry.payload, data: { ...entry.payload.data, eventId: entry.eventKey } }, entry.deliveredIds, {
-      signal,
-      beforeSend: () => guarded(entry, async () => { signal.throwIfAborted(); }),
-      onDelivered: id => guarded(entry, async (tx, row) => {
-        await tx.travelAlertDelivery.update({ where: { id: entry.id }, data: { deliveredIds: [...new Set([...row.deliveredIds, id])] } });
-      }),
-    });
-    await guarded(entry, async (tx, row) => {
-      const failed = outcomes.filter(outcome => !outcome.ok);
-      const pending = failed.length > 0 || row.deliveredIds.length === 0;
-      await tx.travelAlertDelivery.update({ where: { id: entry.id }, data: { pending, claimToken: null, claimExpiresAt: null, nextAttemptAt: new Date(Date.now() + RETRY_MS), lastError: failed.length ? 'One or more channels rejected this notification; delivery will retry.' : pending ? 'No enabled notification channel is available; delivery will retry.' : null } });
-    });
-  } catch (error) {
-    await guarded(entry, async tx => {
-      await tx.travelAlertDelivery.update({ where: { id: entry.id }, data: { claimToken: null, claimExpiresAt: null, nextAttemptAt: new Date(Date.now() + RETRY_MS), lastError: 'Notification delivery was interrupted; acknowledged channels will not be resent.' } });
-    }).catch(() => undefined); // Revoked or expired authority must not overwrite a newer owner/claim.
-    throw error;
-  } finally { clearTimeout(timer); }
+  await deliverClaimedAlert(entry, work => guarded(entry, work), parent);
 }
 
 /** External delivery is at least once: acceptance followed by a lost receipt may repeat. */

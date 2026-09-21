@@ -35,6 +35,7 @@ async function simulateHumanBehavior(page: Page): Promise<void> {
 }
 
 export interface FlightSearchParams {
+  sourceUrl?: string | null;
   origin: string;
   destination: string;
   dateFrom: Date;

@@ -9,6 +9,7 @@ datasource db {
 
 model Query {
   id              String   @id @default(cuid())
+  sourceUrl       String?
   rawInput        String
   origin          String
   originName      String
@@ -495,6 +496,7 @@ model TravelAdmission {
   systemWide         Boolean @default(false)
   quarantinedAt      DateTime?
   quarantineReason   String?
+  cleanupRecoveryAllowed Boolean @default(false)
   recoveryGeneration Int @default(0)
   recoveredAt        DateTime?
   recoveredBy        String?

@@ -10,6 +10,7 @@ import { providerVault, resetProviderCredentials } from './provider-credentials'
 import { accessHandler } from '../access/access';
 import { withAccessBody } from '../access/access-http';
 import { apiError } from '@/lib/api-response';
+import { lockTravelAdmission } from '@/lib/travel/admission';
 
 export function providerConfigurationError(error: unknown): Response {
   if (isAccessError(error)) return apiError(error.code, { unauthorized: 401, forbidden: 403, invalid: 400, conflict: 409, rate_limited: 429 }[error.code]);
@@ -81,8 +82,10 @@ export async function saveProviderConfiguration(ownerToken: string, options: {
   expectedRevision?: number;
   resetCredentials?: boolean;
   setup?: boolean;
+  admissionLock?: boolean;
 }) {
   return sharedAccessStore.ownerTransaction(ownerToken, async database => {
+    if (options.admissionLock) await lockTravelAdmission(database);
     const current = await database.extractionConfig.findUnique({ where: { id: 'singleton' } });
     if (options.expectedRevision !== undefined && options.expectedRevision !== (current?.providerRevision ?? 0)) throw new ProviderConfigurationConflict('Configuration changed. Reload before saving.');
     if ((current?.updatedAt.getTime() ?? null) !== (options.expectedUpdatedAt?.getTime() ?? null)) throw new ProviderConfigurationConflict('Configuration changed. Reload before saving.');

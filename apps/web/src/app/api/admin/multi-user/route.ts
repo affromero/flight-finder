@@ -8,6 +8,7 @@ import { readAccessJson } from 'thesidedoor-core/access/http';
 import { cookies } from 'next/headers';
 import { SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
 import { isAccessError } from 'thesidedoor-core/access';
+import { migrateSoloOwnership } from '@/lib/account-migration';
 
 class AlreadyEnabledError extends Error {}
 
@@ -25,12 +26,7 @@ export async function POST(request: Request) {
       await tx.extractionConfig.upsert({ where: { id: 'singleton' }, create: { id: 'singleton' }, update: {} });
       const flip = await tx.extractionConfig.updateMany({ where: { id: 'singleton', multiUserMode: false }, data: { multiUserMode: true } });
       if (!flip.count) throw new AlreadyEnabledError();
-      const backfill = await tx.query.updateMany({ where: { userId: null, isSeed: false }, data: { userId: owner.id } });
-      await tx.hotelTracker.updateMany({ where: { userId: null }, data: { userId: owner.id } });
-      await tx.hotelSearchRun.updateMany({ where: { userId: null }, data: { userId: owner.id } });
-      await tx.carTracker.updateMany({ where: { userId: null }, data: { userId: owner.id } });
-      await tx.carSearchRun.updateMany({ where: { userId: null }, data: { userId: owner.id } });
-      return backfill.count;
+      return migrateSoloOwnership(tx, owner.id);
     });
     await invalidateMultiUserCache();
     return apiSuccess({ user: { id: owner.id, username: owner.username, displayName: owner.displayName, avatar: owner.avatar, isAdmin: true }, backfillCount }, 201);

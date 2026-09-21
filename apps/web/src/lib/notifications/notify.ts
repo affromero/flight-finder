@@ -70,10 +70,10 @@ export async function dispatchNotifications(
   const outcomes: NotifyOutcome[] = [];
   for (const entry of channels) {
     control.signal.throwIfAborted();
-    await control.beforeSend(entry.id);
     // A channel can be disabled, removed or reassigned after batch enumeration.
     const channel = await read(tx => tx.notificationChannel.findUnique({ where: { id: entry.id } }));
     if (!channel?.enabled || (channel.userId !== null && channel.userId !== ownerUserId)) continue;
+    await control.beforeSend(entry.id);
     control.signal.throwIfAborted();
     const outcome = await send(channel);
     // Persistence/authority failures stop the batch, not just this channel.

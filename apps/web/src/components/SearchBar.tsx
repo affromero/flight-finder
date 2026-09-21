@@ -12,6 +12,7 @@ import styles from './SearchBar.module.css';
 import { ClarificationCard } from './ClarificationCard';
 import { ConfirmationCard, type ParsedQuery } from './ConfirmationCard';
 import { FlightPicker, type RouteFlights } from './FlightPicker';
+import { LinkImport } from './travel/LinkImport';
 import { LinkBanner, type CreatedTracker } from './LinkBanner';
 import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
 
@@ -392,6 +393,7 @@ export function SearchBar({
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           rawInput: manualRawInput || query.trim(),
+          sourceUrl: parsed.sourceUrl,
           dateFrom: parsed.dateFrom,
           dateTo: parsed.dateTo,
           flexibility: parsed.flexibility,
@@ -526,6 +528,12 @@ export function SearchBar({
 
   return (
     <div className={styles.root}>
+      <LinkImport onBusy={setLoading} kind="flights" disabled={loading || previewLoading} value={parsed?.sourceUrl} onClear={() => { setParsed(null); setPreviewRoutes(null); setPreviewRunId(null); clearSavedPreview(storageKey); }} onImport={draft => {
+        if (!draft.flight) return;
+        setParsed(draft.flight); setManualMode(false); setPreviewRoutes(null); setPreviewRunId(null); setCreatedTrackers(null); setAmbiguities([]); setError(null);
+        setQuery(`${draft.flight.origin} to ${draft.flight.destination} ${draft.flight.dateFrom}${draft.flight.tripType === 'round_trip' ? ` returning ${draft.flight.dateTo}` : ''}`);
+        setManualRawInput(''); clearSavedPreview(storageKey);
+      }} />
       {manualMode ? (
         <ManualEntryForm
           onSubmit={(nextParsed, rawInput, formValues) => {

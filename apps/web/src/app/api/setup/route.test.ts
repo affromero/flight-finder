@@ -12,6 +12,7 @@ vi.mock('@/lib/sidedoor/access/store', async () => {
 
 vi.mock('@/lib/prisma', () => {
   const database = {
+    $executeRaw: async () => 0,
     sidedoorState: { findUnique: async () => ({ state: await sessionBoundary.fixture!.access.store.read() }) },
     user: {
       findUnique: async () => ({ id: 'owner', isAdmin: true }),

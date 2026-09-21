@@ -4,6 +4,7 @@
   "private": true,
   "description": "Flight Finder desktop launcher — run a self-hosted instance or connect to one, no terminal",
   "scripts": {
+    "test": "node --test tests/*.test.mjs",
     "tauri": "tauri",
     "dev": "tauri dev",
     "build": "tauri build",

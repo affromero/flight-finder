@@ -186,7 +186,23 @@ describe.skipIf(process.env.TRAVEL_BROWSER_TESTS !== '1')('bounded rental provid
     }
   });
   afterAll(async () => { if (server) { server.closeAllConnections(); await new Promise<void>(resolve => server.close(() => resolve())); } await prisma.$disconnect(); });
-  const run = (options: Parameters<typeof searchCars>[1] = {}, sources = criteria().sources) => withTravelExecution(new TravelExecution({ jobId: 'browser-fixture', generation: 1, resource: 'browser' }), () => searchCars({ ...criteria(), sources }, options));
+  const run = (options: Parameters<typeof searchCars>[1] = {}, sources = criteria().sources, sourceUrl?: string) => withTravelExecution(new TravelExecution({ jobId: 'browser-fixture', generation: 1, resource: 'browser' }), () => searchCars({ ...criteria(), sources, ...(sourceUrl ? { sourceUrl } : {}) }, options));
+
+  it('checks only the imported offer even when fresh discovery lists another quote', async () => {
+    const sourceUrl = `https://book.autoeurope.com${routeUrl('options', 'selected')}`;
+    const result = await run({}, ['autoeurope'], sourceUrl);
+    expect(result).toMatchObject({ offers: [{ total: { value: { minor: 4965 } } }], providers: [{ checked: 1, limit: 1, truncated: false }] });
+    expect(result.offers[0]?.bookingUrl).toContain('rate_reference=selected');
+    expect(validateCarReport(result, ['autoeurope'])).toEqual(result);
+    expect(requested.some(path => path.includes('/options?rate_reference=good'))).toBe(false);
+  }, 30000);
+
+  it('surfaces an expired imported quote without substituting an available discovery result', async () => {
+    const result = await run({}, ['autoeurope'], `https://book.autoeurope.com${routeUrl('options', 'broken')}`);
+    expect(result.offers).toEqual([]);
+    expect(result.errors.length).toBeGreaterThan(0);
+    expect(requested.some(path => path.includes('/options?rate_reference=good'))).toBe(false);
+  }, 30000);
 
   it('publishes base quotes before protection and preserves observed choice identities through final validation', async () => {
     protectionMode = 'available'; let sawBaseFirst = false;
