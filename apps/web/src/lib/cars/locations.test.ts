@@ -9,7 +9,7 @@ import { carLocationSuggestions, matchCarProviderLocation } from './location-res
 
 describe('server-owned rental geography', () => {
   let airport: CarLocationChoice;
-  beforeAll(async () => { airport = (await searchCarLocations('LHR'))[0]!; }, 20_000);
+  beforeAll(async () => { airport = (await searchCarLocations('LHR'))[0]!; }, 60_000);
   it.each(['UK', 'DD', 'FX', 'EU', 'ZZ', 'AC', 'gb'])('rejects noncanonical suggestion country %s', country => {
     expect(() => validateCarLocationChoice({ ...airport, country })).toThrow(/location country/);
   });

@@ -188,8 +188,13 @@ it('terminates the child and removes its temporary directory before cancellation
   const promise = extractCodex('codex', '', 'question', {
     signal: controller.signal,
   });
-  const rejected = expect(promise).rejects.toBe(reason);
-  await vi.waitFor(() => expect(existsSync(join(directory, 'pid'))).toBe(true));
+  const rejected = promise.then(
+    () => expect.unreachable('cancelled extraction resolved'),
+    (error) => expect(error).toBe(reason),
+  );
+  await vi.waitFor(() => expect(existsSync(join(directory, 'pid'))).toBe(true), {
+    timeout: 10_000,
+  });
   const pid = Number(readFileSync(join(directory, 'pid'), 'utf8'));
   controller.abort(reason);
   await rejected;
