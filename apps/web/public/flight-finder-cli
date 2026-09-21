@@ -167,6 +167,12 @@ show_tracking_info() {
   fi
 }
 
+prepare_access() {
+  dc stop web
+  dc up -d --no-recreate db redis
+  dc run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
+}
+
 cmd_start_foreground() {
   if [ "$CONTAINER_CMD" = "docker" ] && ! docker info &>/dev/null 2>&1; then
     printf "${RED}${BOLD}✗${RESET} Docker is not running. Start Docker Desktop and try again.\n"
@@ -179,6 +185,7 @@ cmd_start_foreground() {
   printf "  ${DIM}The price trail airlines don't show you${RESET}\n"
   echo ""
 
+  prepare_access
   dc up -d 2>&1 | while IFS= read -r line; do
     printf "  ${DIM}%s${RESET}\n" "$line"
   done
@@ -218,6 +225,7 @@ cmd_start_background() {
   fi
 
 
+  prepare_access
   dc up -d 2>&1 | while IFS= read -r line; do
     printf "  ${DIM}%s${RESET}\n" "$line"
   done
@@ -336,6 +344,8 @@ cmd_update() {
   # podman-compose does not always detect that :latest now points to a
   # different digest and skips the recreate, leaving the user on the old
   # image even though the pull succeeded (issue #72).
+  dc stop web
+  dc run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
   dc up -d --force-recreate --no-deps --remove-orphans web 2>&1 | while IFS= read -r line; do
     printf "  ${DIM}%s${RESET}\n" "$line"
   done
@@ -538,6 +548,9 @@ cmd_help() {
   echo "    help         Show this help"
   echo ""
   echo "  Account recovery (self hosted multi user mode):"
+  echo "    access list                            List Sidedoor principals"
+  echo "    access recover <principal-id>          Create a one-use recovery code"
+  echo "    access device <principal-id> [name]    Create an API device token"
   echo "    reset-password <username> <password>   Set a new password for a user"
   echo "    disable-accounts                       Turn multi user mode off (no login required)"
   echo ""
@@ -553,6 +566,11 @@ cmd_help() {
 }
 
 # Dispatch terminal UI flags to flight-finder-tui inside the running container.
+cmd_access() {
+  # Recovery must remain usable when the web server cannot become healthy.
+  dc run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js "$@"
+}
+
 cmd_tui() {
   local health
   health=$(fetch_health)
@@ -669,6 +687,7 @@ cmd_migrate() {
 }
 
 case "${1:-}" in
+  access)    cmd_access "$@" ;;
   hotels|cars) cmd_travel "$@" ;;
   --headless|--list|--view|--backend|--model)
     cmd_tui "$@" ;;

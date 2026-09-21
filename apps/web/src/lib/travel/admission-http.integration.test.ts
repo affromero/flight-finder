@@ -103,7 +103,6 @@ describe.skipIf(process.env.TRAVEL_INTEGRATION_TESTS !== '1')('administrator tra
     expect((await getTravelAdmission()).quarantinedAt).toBeInstanceOf(Date);
   });
   it.each(['hotel', 'car'] as const)('keeps %s search ownership private and gives members appropriate recovery guidance', async kind => {
-    await prisma.user.update({ where: { id: memberId }, data: { sessionsValidFrom: null } });
     const row = kind === 'hotel'
       ? await prisma.hotelSearchRun.create({ data: { userId: adminId, request: {} } })
       : await prisma.carSearchRun.create({ data: { userId: adminId, request: json(carSearchFixture()) } });

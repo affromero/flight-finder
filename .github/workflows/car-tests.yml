@@ -126,7 +126,7 @@ jobs:
       - run: npm run build --workspace=@flight-finder/cli
       - run: npm run test --workspace=@flight-finder/web -- src/lib/flight-pricing.integration.test.ts src/lib/notifications/delivery.integration.test.ts --no-file-parallelism
 
-  migration-rollback:
+  migration:
     runs-on: ubuntu-latest
     timeout-minutes: 30
     services:
@@ -148,7 +148,7 @@ jobs:
         ports:
           - 56389:6379
     env:
-      TRAVEL_ROLLBACK_IMAGE: flight-finder-travel-rollback:test
+      TRAVEL_MIGRATION_IMAGE: flight-finder-travel-migration:test
     steps:
       - uses: actions/checkout@v7.0.1
         with:
@@ -158,11 +158,8 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
-      - name: Build the pre-car runtime
-        run: |
-          rollback_context=$(mktemp -d)
-          git archive b15f4c4 | tar -x -C "$rollback_context"
-          docker build -t "$TRAVEL_ROLLBACK_IMAGE" "$rollback_context"
+      - name: Build the migration target
+        run: docker build -t "$TRAVEL_MIGRATION_IMAGE" .
       - run: node scripts/travel-migration-test.mjs
       - uses: actions/upload-artifact@v7
         if: always()
