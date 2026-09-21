@@ -27,9 +27,9 @@ export async function sendEmail(
       secure: config.secure,
       auth: config.user ? { user: config.user, pass: config.pass } : undefined,
       connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 15_000,
-      getSocket(options: { host?: string; port?: number }, callback: (error: Error | null, connection: { connection?: Socket }) => void) {
+      getSocket(options, callback) {
         if (signal.aborted) { callback(new Error('Notification transport was cancelled'), {}); return; }
-        socket = connect({ host: options.host ?? config.host, port: options.port ?? config.port });
+        socket = connect({ host: options.host ?? config.host, port: Number(options.port ?? config.port) });
         const failure = (error: Error) => callback(error, {});
         socket.once('error', failure);
         socket.once('connect', () => {
