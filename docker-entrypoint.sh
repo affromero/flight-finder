@@ -89,6 +89,11 @@ node /app/scripts/apply-travel-constraints.mjs
 echo "[setup] Verifying shared platform state..."
 node /app/packages/cli/dist/index.js access finalize
 
+# Import-only values must not reach the long-running application process. The
+# shared credential vault is the runtime source after finalization.
+unset SIDEDOOR_IMPORT_ADMIN_PASSWORD SIDEDOOR_IMPORT_PASSWORD SIDEDOOR_IMPORT_MACHINE_TOKEN
+unset SIDEDOOR_IMPORT_ANTHROPIC_API_KEY SIDEDOOR_IMPORT_OPENAI_API_KEY SIDEDOOR_IMPORT_GOOGLE_API_KEY
+
 if [ "${SIDEDOOR_PREPARE_ONLY:-false}" = "true" ]; then
   access_listing="$(node /app/packages/cli/dist/index.js access list)"
   printf '%s\n' "$access_listing"

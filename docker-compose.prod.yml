@@ -75,6 +75,9 @@ services:
       SIDEDOOR_IMPORT_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
       SIDEDOOR_IMPORT_PASSWORD: ${FF_ACCESS_PASSWORD:-}
       SIDEDOOR_IMPORT_MACHINE_TOKEN: ${FF_MACHINE_TOKEN:-}
+      SIDEDOOR_IMPORT_ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
+      SIDEDOOR_IMPORT_OPENAI_API_KEY: ${OPENAI_API_KEY:-}
+      SIDEDOOR_IMPORT_GOOGLE_API_KEY: ${GOOGLE_AI_API_KEY:-}
       # Private instances only. Empty on the public stack, where the gate is
       # inert and the site stays open to everyone.
       CHROME_PATH: /usr/bin/chromium-browser

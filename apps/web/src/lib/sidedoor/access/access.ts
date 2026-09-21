@@ -24,15 +24,16 @@ export async function accessHandler() {
     throw new Error(
       "SIDEDOOR_PASSWORD_ORIGINS must be a JSON array of explicit origins",
     );
+  const origin =
+    config?.publicBaseUrl || process.env.APP_URL || "http://localhost:3003";
   return createAccessHandler({
     access: sharedAccess,
     devices,
     profiles: sharedProfiles,
     name: "Flight Finder",
-    origin:
-      config?.publicBaseUrl || process.env.APP_URL || "http://localhost:3003",
+    origin,
     passwordOrigins: configured,
-    trustedProxy: process.env.SIDEDOOR_TRUSTED_PROXY === "true",
+    trustedProxy: new URL(origin).protocol === "https:",
     useHostHeader: true,
     cookieName: SHARED_SESSION_COOKIE,
   });
