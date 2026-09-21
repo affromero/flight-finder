@@ -177,25 +177,32 @@ impl Compose {
         {
             cmd.args(["-f", "docker-compose.vpn.yml"]);
         }
-        checked(cmd.args(args).output().map_err(|error| error.to_string())?)
+        cmd.args(args);
+        checked(output_with_busy_retry(&mut cmd).map_err(|error| error.to_string())?)
     }
 }
 
 fn command_succeeds(program: &Path, args: &[&str]) -> bool {
+    let mut cmd = command(program);
+    cmd.args(args);
+    output_with_busy_retry(&mut cmd).is_ok_and(|output| output.status.success())
+}
+
+fn output_with_busy_retry(command: &mut Command) -> std::io::Result<Output> {
     const MAX_ATTEMPTS: usize = 3;
 
     for attempt in 0..MAX_ATTEMPTS {
-        match command(program).args(args).output() {
-            Ok(output) => return output.status.success(),
+        match command.output() {
+            Ok(output) => return Ok(output),
             Err(error)
                 if cfg!(unix) && error.raw_os_error() == Some(26) && attempt + 1 < MAX_ATTEMPTS =>
             {
                 std::thread::sleep(Duration::from_millis(10));
             }
-            Err(_) => return false,
+            Err(error) => return Err(error),
         }
     }
-    false
+    unreachable!("the retry loop always returns on its final attempt")
 }
 
 /// Prepare shared access state before the serving container starts.
