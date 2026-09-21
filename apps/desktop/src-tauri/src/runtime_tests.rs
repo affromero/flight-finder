@@ -180,7 +180,11 @@ fn tunnel_url_ignores_documentation_links_before_the_assigned_address() {
 fn shell_fixture(dir: &Path, name: &str, script: &str) -> PathBuf {
     use std::os::unix::fs::PermissionsExt;
     let path = dir.join(name);
-    fs::write(&path, format!("#!/bin/sh\n{script}\n")).unwrap();
+    let mut file = fs::File::create(&path).unwrap();
+    file.write_all(format!("#!/bin/sh\n{script}\n").as_bytes())
+        .unwrap();
+    file.sync_all().unwrap();
+    drop(file);
     fs::set_permissions(&path, fs::Permissions::from_mode(0o755)).unwrap();
     path
 }
