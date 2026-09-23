@@ -1,24 +1,21 @@
-import { resetUserPassword, disableMultiUserMode } from '@/lib/admin-recovery';
+import { resetSharedPassword, disableMultiUserMode } from '@/lib/admin-recovery';
 import { prisma } from '@/lib/prisma';
 
 // Headless recovery entry points invoked from index.tsx for the self-hosted
-// `flight-finder reset-password` / `flight-finder disable-accounts` commands.
+// `flight-finder reset-password` / `flight-finder disable-multi-user` commands.
 // They run inside the `web` container, talk straight to the DB, and exit.
 // Never render ink or open a browser. Mirrors lib/json-output.ts.
 
 /**
- * Set a known password for a user and exit. Recovers a locked out multi user
- * mode admin who forgot their password.
+ * Rotate the shared gate password and exit after a local operator recovery.
  */
-export async function runResetPassword(username: string, newPassword: string): Promise<void> {
+export async function runResetPassword(newPassword: string): Promise<void> {
   let exitCode = 0;
   try {
-    const result = await resetUserPassword(username, newPassword);
+    const result = await resetSharedPassword(newPassword);
     if (result.ok) {
-      console.log(`Password updated for "${username}".`);
-      if (result.isAdmin) {
-        console.log('Log in with it, then manage other accounts from the admin Users page.');
-      }
+      console.log('Shared password updated. Previous sessions and household passkeys were revoked.');
+      console.log('Enter the new password, then choose the Admin profile.');
     } else {
       console.error(`Error: ${result.error}`);
       exitCode = 1;
@@ -30,16 +27,15 @@ export async function runResetPassword(username: string, newPassword: string): P
 }
 
 /**
- * Turn multi user mode off and exit. Restores solo self hosted operation where
- * no login is required, and clears the stored admin credential.
+ * Turn off per-profile tracker separation while retaining the shared gate.
  */
-export async function runDisableAccounts(): Promise<void> {
+export async function runDisableMultiUser(): Promise<void> {
   let exitCode = 0;
   try {
     await disableMultiUserMode();
     console.log('Multi user mode disabled. Your trackers are preserved.');
-    console.log('This self hosted instance no longer requires any login or password.');
-    console.log('Turn accounts back on any time from Settings.');
+    console.log('The shared password, passkeys, and profiles remain available.');
+    console.log('Turn multi user mode back on from Settings.');
   } catch (err) {
     console.error(`Error: ${err instanceof Error ? err.message : String(err)}`);
     exitCode = 1;

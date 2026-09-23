@@ -123,7 +123,7 @@
     "carsTitle": "Vérifie le coût de la location",
     "carsText": "Recherche sur DiscoverCars et Auto Europe. Compare les totaux vérifiés parmi les offres examinées, consulte les conditions du conducteur et distingue cautions et franchises. Les frais non vérifiés et les suppléments non confirmés restent visibles.",
     "hotelsText": "Recherche sur Google Hotels et Booking.com par dates, chambres et voyageurs. Suis un hôtel ou un tarif de chambre et définis une alerte de prix cible.",
-    "travelHousehold": "En mode multiutilisateur, chacun dispose de son compte et de ses suivis. Combine vols, hôtels et voitures de location selon tes besoins.",
+    "travelHousehold": "En mode multiutilisateur, le mot de passe partagé ou une clé d’accès ouvre le choix du profil. Chaque profil a ses propres suivis. Combine vols, hôtels et voitures de location selon tes besoins.",
     "travelAvailability": "Les recherches s’exécutent sur ta propre installation. Chaque suivi fonctionne indépendamment. Réserve auprès du fournisseur ; Flight Finder ne regroupe pas les réservations en forfaits."
   },
   "QueryPage": {

@@ -547,12 +547,12 @@ cmd_help() {
   echo "    uninstall    Remove Flight Finder and all data"
   echo "    help         Show this help"
   echo ""
-  echo "  Account recovery (self hosted multi user mode):"
+  echo "  Shared access recovery (self hosted):"
   echo "    access list                            List Sidedoor principals"
   echo "    access recover <principal-id>          Create a one-use recovery code"
   echo "    access device <principal-id> [name]    Create an API device token"
-  echo "    reset-password <username> <password>   Set a new password for a user"
-  echo "    disable-accounts                       Turn multi user mode off (no login required)"
+  echo "    reset-password <password>              Set a new shared app password"
+  echo "    disable-multi-user                     Stop separating trackers by profile"
   echo ""
   echo "  Terminal UI flags (forwarded to flight-finder-tui inside the container):"
   echo "    hotels <command>        Search, track, and manage hotels (hotels --help)"
@@ -631,12 +631,12 @@ cmd_travel() {
   fi
 }
 
-# Recover a locked out multi user mode account by setting a new password.
+# Recover a locked out household by setting a new shared password.
 # Runs the recovery path inside the container against the same DB.
 cmd_reset_password() {
-  local username="$1" newpass="$2"
-  if [ -z "$username" ] || [ -z "$newpass" ]; then
-    printf "${RED}${BOLD}✗${RESET} Usage: flight-finder reset-password <username> <new-password>\n"
+  local newpass="${1:-}"
+  if [ "$#" -ne 1 ] || [ -z "$newpass" ]; then
+    printf "${RED}${BOLD}✗${RESET} Usage: flight-finder reset-password <new-password>\n"
     printf "  ${DIM}The password is visible in your shell history; clear it afterward.${RESET}\n"
     exit 1
   fi
@@ -654,12 +654,11 @@ cmd_reset_password() {
   [ -t 1 ] && stdout_tty=1 || stdout_tty=0
   exec_flags=$(_compose_exec_flags "$_DC" "$stdin_tty" "$stdout_tty")
 
-  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --reset-password "$username" --new-password "$newpass"
+  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --reset-password "$newpass"
 }
 
-# Turn multi user mode off entirely. Drops the self hosted instance back to solo
-# mode where no login is required, and clears the stored admin credential.
-cmd_disable_accounts() {
+# Stop separating trackers by profile while retaining the shared gate.
+cmd_disable_multi_user() {
   local health
   health=$(fetch_health)
   if [ -z "$health" ]; then
@@ -672,7 +671,7 @@ cmd_disable_accounts() {
   [ -t 1 ] && stdout_tty=1 || stdout_tty=0
   exec_flags=$(_compose_exec_flags "$_DC" "$stdin_tty" "$stdout_tty")
 
-  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --disable-accounts
+  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --disable-multi-user
 }
 
 cmd_migrate() {
@@ -696,7 +695,7 @@ case "${1:-}" in
     exit 1 ;;
   search)    shift; cmd_search "$@" ;;
   reset-password)   shift; cmd_reset_password "$@" ;;
-  disable-accounts) cmd_disable_accounts ;;
+  disable-multi-user) cmd_disable_multi_user ;;
   start)     cmd_start_background ;;
   stop)      cmd_stop ;;
   logs)      cmd_logs ;;

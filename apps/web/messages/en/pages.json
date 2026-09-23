@@ -123,7 +123,7 @@
     "carsTitle": "Check the whole rental",
     "carsText": "Search DiscoverCars and Auto Europe. Compare verified totals among checked offers, review driver requirements and see deposits and excess separately. Missing fees and unconfirmed extras stay visible.",
     "hotelsText": "Search Google Hotels and Booking.com by dates, rooms, and guests. Track a hotel or room rate and set a target-price alert.",
-    "travelHousehold": "In multi-user mode, each person has their own login and trackers. Use flights, hotels and rental cars in any combination.",
+    "travelHousehold": "In multi-user mode, everyone enters with the shared password or a passkey, then chooses a profile with personal trackers. Use flights, hotels and rental cars in any combination.",
     "travelAvailability": "Searches run on your own installation. Each tracker works independently. Complete bookings with the provider; Flight Finder does not bundle reservations."
   },
   "QueryPage": {

@@ -187,28 +187,28 @@ test_cli_has_cmd_tui() {
 test_cli_has_recovery_commands() {
   local cli="apps/web/public/flight-finder-cli"
 
-  if grep -q 'cmd_reset_password()' "$cli" && grep -q 'cmd_disable_accounts()' "$cli"; then
-    pass "flight-finder-cli defines cmd_reset_password and cmd_disable_accounts (#102)"
+  if grep -q 'cmd_reset_password()' "$cli" && grep -q 'cmd_disable_multi_user()' "$cli"; then
+    pass "flight-finder-cli defines shared password and multi user recovery"
   else
-    fail "flight-finder-cli should define cmd_reset_password and cmd_disable_accounts (#102)"
+    fail "flight-finder-cli should define shared password and multi user recovery"
   fi
 
-  if grep -qE 'reset-password\)' "$cli" && grep -qE 'disable-accounts\)' "$cli"; then
-    pass "flight-finder-cli dispatches reset-password and disable-accounts (#102)"
+  if grep -qE 'reset-password\)' "$cli" && grep -qE 'disable-multi-user\)' "$cli"; then
+    pass "flight-finder-cli dispatches reset-password and disable-multi-user"
   else
-    fail "flight-finder-cli should dispatch reset-password and disable-accounts (#102)"
+    fail "flight-finder-cli should dispatch reset-password and disable-multi-user"
   fi
 
-  if grep -q 'flight-finder-tui --reset-password' "$cli" && grep -q 'flight-finder-tui --disable-accounts' "$cli"; then
-    pass "recovery commands exec flight-finder-tui with the recovery flags (#102)"
+  if grep -q 'flight-finder-tui --reset-password' "$cli" && grep -q 'flight-finder-tui --disable-multi-user' "$cli"; then
+    pass "recovery commands exec flight-finder-tui with the shared access flags"
   else
-    fail "recovery commands should exec flight-finder-tui --reset-password / --disable-accounts (#102)"
+    fail "recovery commands should exec flight-finder-tui with shared access flags"
   fi
 
-  if grep -q 'Account recovery' "$cli"; then
-    pass "cmd_help documents the account recovery commands (#102)"
+  if grep -q 'Shared access recovery' "$cli"; then
+    pass "cmd_help documents shared access recovery"
   else
-    fail "cmd_help should document reset-password and disable-accounts (#102)"
+    fail "cmd_help should document shared access recovery"
   fi
 }
 

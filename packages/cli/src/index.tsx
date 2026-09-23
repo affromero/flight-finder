@@ -23,26 +23,24 @@ program
   .option('--json', 'Output JSON: with --view <id> one tracker, otherwise the full list')
   .option('--backend <provider>', 'AI backend: claude-code, codex, anthropic, openai, google')
   .option('--model <model>', 'Model override (e.g. sonnet, opus, gpt-4.1-mini, codex)')
-  .option('--reset-password <username>', "Reset a user's password (multi user mode); pair with --new-password")
-  .option('--new-password <password>', 'New password to set (use with --reset-password)')
-  .option('--disable-accounts', 'Disable multi user mode and clear stored credentials (self hosted)')
+  .option('--reset-password <password>', 'Reset the one shared app password (self hosted)')
+  .option('--disable-multi-user', 'Stop separating trackers by profile (self hosted)')
   .action(runFlightCommand);
 
 
 async function runFlightCommand(): Promise<void> {
-  const opts = program.opts<{ headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string; resetPassword?: string; newPassword?: string; disableAccounts?: boolean }>();
+  const opts = program.opts<{ headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string; resetPassword?: string; disableMultiUser?: boolean }>();
   try {
     if (opts.tmux && !opts.headless) throw new Error('--tmux requires --headless mode');
     if (opts.tmux && !opts.view) throw new Error('--tmux requires --view <id>');
-    if (opts.resetPassword && !opts.disableAccounts && !opts.newPassword) {
-      throw new Error('--reset-password <username> requires --new-password <password>');
-    }
+    if (opts.resetPassword && opts.disableMultiUser)
+      throw new Error('Choose either --reset-password or --disable-multi-user');
 
     // Recovery must never change model configuration as a side effect.
-    if (opts.resetPassword || opts.disableAccounts) {
-      const { runResetPassword, runDisableAccounts } = await import('./lib/recovery-cli.js');
-      if (opts.disableAccounts) await runDisableAccounts();
-      else await runResetPassword(opts.resetPassword!, opts.newPassword!);
+    if (opts.resetPassword || opts.disableMultiUser) {
+      const { runResetPassword, runDisableMultiUser } = await import('./lib/recovery-cli.js');
+      if (opts.disableMultiUser) await runDisableMultiUser();
+      else await runResetPassword(opts.resetPassword!);
       return;
     }
 

@@ -7,7 +7,7 @@ const { mockReset, mockDisable, mockDisconnect } = vi.hoisted(() => ({
 }));
 
 vi.mock('@/lib/admin-recovery', () => ({
-  resetUserPassword: mockReset,
+  resetSharedPassword: mockReset,
   disableMultiUserMode: mockDisable,
 }));
 
@@ -15,7 +15,7 @@ vi.mock('@/lib/prisma', () => ({
   prisma: { $disconnect: mockDisconnect },
 }));
 
-import { runResetPassword, runDisableAccounts } from '../lib/recovery-cli.js';
+import { runResetPassword, runDisableMultiUser } from '../lib/recovery-cli.js';
 
 function spies() {
   return {
@@ -31,29 +31,29 @@ describe('runResetPassword', () => {
 
   it('forwards the credentials, confirms success, disconnects, and exits 0', async () => {
     const s = spies();
-    mockReset.mockResolvedValue({ ok: true, isAdmin: true });
+    mockReset.mockResolvedValue({ ok: true });
 
-    await runResetPassword('garry', 'correcthorse');
+    await runResetPassword('correcthorse');
 
-    expect(mockReset).toHaveBeenCalledWith('garry', 'correcthorse');
-    expect(s.log).toHaveBeenCalledWith(expect.stringContaining('garry'));
+    expect(mockReset).toHaveBeenCalledWith('correcthorse');
+    expect(s.log).toHaveBeenCalledWith(expect.stringContaining('Shared password updated'));
     expect(mockDisconnect).toHaveBeenCalledTimes(1);
     expect(s.exit).toHaveBeenCalledWith(0);
   });
 
   it('prints the error and exits 1 when the reset fails', async () => {
     const s = spies();
-    mockReset.mockResolvedValue({ ok: false, error: 'User "ghost" not found' });
+    mockReset.mockResolvedValue({ ok: false, error: 'Admin profile not claimed' });
 
-    await runResetPassword('ghost', 'correcthorse');
+    await runResetPassword('correcthorse');
 
-    expect(s.error).toHaveBeenCalledWith(expect.stringContaining('not found'));
+    expect(s.error).toHaveBeenCalledWith(expect.stringContaining('not claimed'));
     expect(s.exit).toHaveBeenCalledWith(1);
     expect(mockDisconnect).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('runDisableAccounts', () => {
+describe('runDisableMultiUser', () => {
   beforeEach(() => vi.clearAllMocks());
   afterEach(() => vi.restoreAllMocks());
 
@@ -61,10 +61,11 @@ describe('runDisableAccounts', () => {
     const s = spies();
     mockDisable.mockResolvedValue(undefined);
 
-    await runDisableAccounts();
+    await runDisableMultiUser();
 
     expect(mockDisable).toHaveBeenCalledTimes(1);
     expect(s.log).toHaveBeenCalledWith(expect.stringContaining('disabled'));
+    expect(s.log).toHaveBeenCalledWith(expect.stringContaining('shared password'));
     expect(mockDisconnect).toHaveBeenCalledTimes(1);
     expect(s.exit).toHaveBeenCalledWith(0);
   });
@@ -73,7 +74,7 @@ describe('runDisableAccounts', () => {
     const s = spies();
     mockDisable.mockRejectedValue(new Error('DB down'));
 
-    await runDisableAccounts();
+    await runDisableMultiUser();
 
     expect(s.error).toHaveBeenCalledWith(expect.stringContaining('DB down'));
     expect(s.exit).toHaveBeenCalledWith(1);

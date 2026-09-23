@@ -275,9 +275,9 @@
     "deleteConfirm": "Supprimer l’utilisateur {username} ? Ses suivis deviendront sans propriétaire.",
     "resetPrompt": "Nouveau mot de passe pour {username} (12 caractères min) :",
     "passwordReset": "Mot de passe réinitialisé.",
-    "disableConfirm": "Désactiver le mode multi-utilisateur ? Cela désactive toutes les connexions et efface le mot de passe admin, pour revenir à une instance auto-hébergée mono-utilisateur. Les comptes restent en base de données mais deviennent inaccessibles jusqu’à la réactivation du mode multi-utilisateur. Continuer ?",
+    "disableConfirm": "Désactiver le mode multiutilisateur ? Les suivis ne seront plus séparés par profil. Le mot de passe partagé, les clés d’accès et les profils resteront disponibles. Continuer ?",
     "dangerZone": "Zone de danger",
-    "dangerText": "Désactive le mode multi-utilisateur et reviens à une instance auto-hébergée mono-utilisateur. Les comptes sont conservés en base de données mais deviennent inaccessibles, et le mot de passe admin est effacé.",
+    "dangerText": "Arrête de séparer les suivis par profil. Le mot de passe partagé, les clés d’accès et les profils restent disponibles. L’attribution des suivis est conservée si tu réactives le mode multiutilisateur.",
     "disableMultiUser": "Désactiver le mode multi-utilisateur",
     "errors": {
       "addGuest": "Échec de l’ajout de l’invité",

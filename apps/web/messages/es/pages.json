@@ -123,7 +123,7 @@
     "carsTitle": "Revisa el alquiler completo",
     "carsText": "Busca en DiscoverCars y Auto Europe. Compara totales verificados entre las ofertas revisadas, consulta los requisitos del conductor y distingue depósitos y franquicias. Los cargos sin verificar y los extras sin confirmar quedan visibles.",
     "hotelsText": "Busca en Google Hotels y Booking.com por fechas, habitaciones y huéspedes. Sigue un hotel o una tarifa de habitación y configura una alerta de precio objetivo.",
-    "travelHousehold": "En el modo multiusuario, cada persona tiene su propia cuenta y seguimientos. Combina vuelos, hoteles y coches de alquiler como prefieras.",
+    "travelHousehold": "En el modo multiusuario, la contraseña compartida o una clave de acceso abre la selección de perfiles. Cada perfil tiene sus propios seguimientos. Combina vuelos, hoteles y coches de alquiler como prefieras.",
     "travelAvailability": "Las búsquedas se ejecutan en tu propia instalación. Cada seguimiento funciona de forma independiente. Completa las reservas con el proveedor; Flight Finder no las agrupa en paquetes."
   },
   "QueryPage": {

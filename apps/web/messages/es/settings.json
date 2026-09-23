@@ -134,11 +134,11 @@
     },
     "multiUser": {
       "title": "Modo multiusuario",
-      "enabledHint": "Cada miembro del hogar tiene su propia cuenta, rastreadores y preferencias.",
+      "enabledHint": "Cada perfil del hogar tiene sus propios rastreadores y preferencias.",
       "manageUsers": "Administrar usuarios",
       "enabling": "Habilitando",
       "disabled": "Deshabilitado",
-      "toggleHint": "Actívalo para alojar varias cuentas en esta instancia (familia, hogar). Tú sigues siendo administrador; los nuevos usuarios tienen sus propios rastreadores y preferencias.",
+      "toggleHint": "Actívalo para dar a cada perfil del hogar sus propios rastreadores y preferencias. El primer perfil sigue siendo Admin.",
       "adminUsernamePlaceholder": "Usuario administrador (por defecto: admin)",
       "displayNamePlaceholder": "Nombre para mostrar (opcional)",
       "adminPasswordPlaceholder": "Contraseña de administrador (opcional — en blanco = sin contraseña)",

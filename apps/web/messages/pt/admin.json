@@ -275,9 +275,9 @@
     "deleteConfirm": "Excluir o usuário {username}? Os rastreadores dele ficarão sem dono.",
     "resetPrompt": "Nova senha para {username} (12+ caracteres):",
     "passwordReset": "Senha redefinida.",
-    "disableConfirm": "Desativar o modo multiusuário? Isso desliga todos os logins e limpa a senha de administrador, revertendo para uma instância auto-hospedada de usuário único. As contas permanecem no banco de dados, mas ficam inacessíveis até você reativar o modo multiusuário. Continuar?",
+    "disableConfirm": "Desativar o modo multiusuário? Os acompanhamentos deixarão de ser separados por perfil. A senha compartilhada, as chaves de acesso e os perfis continuarão disponíveis. Continuar?",
     "dangerZone": "Zona de perigo",
-    "dangerText": "Desative o modo multiusuário e reverta para uma instância auto-hospedada de usuário único. As contas são mantidas no banco de dados, mas ficam inacessíveis, e a senha de administrador é limpa.",
+    "dangerText": "Pare de separar os acompanhamentos por perfil. A senha compartilhada, as chaves de acesso e os perfis continuam disponíveis. A atribuição dos acompanhamentos é preservada se você reativar o modo multiusuário.",
     "disableMultiUser": "Desativar modo multiusuário",
     "errors": {
       "addGuest": "Falha ao adicionar convidado",
