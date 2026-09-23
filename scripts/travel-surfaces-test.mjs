@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import pg from 'pg';
-import { addBrowserSession, claimBrowserOwner } from './access-browser-test.mjs';
+import { addBrowserSession, admitBrowserHousehold, claimBrowserOwner } from './access-browser-test.mjs';
 
 // Real pages, login, ownership checks and PostgreSQL. Only stored travel data
 // is seeded; no provider requests or live bookings are made by this matrix.
@@ -100,7 +100,6 @@ try {
   await db.query(`INSERT INTO "ExtractionConfig" (id,"setupComplete",enabled,"updatedAt") VALUES ('singleton',true,false,now()) ON CONFLICT (id) DO UPDATE SET "setupComplete" = true, enabled = false, "updatedAt" = now()`);
   const publicUrl = await startServer('public', 3015, false);
   const privateUrl = await startServer('private', 3016, true);
-  const ownerSession = await claimBrowserOwner({ origin: privateUrl, name: 'surface-owner', password: 'surface-owner-test-password' });
   for (const locale of ['en', 'es', 'pt', 'de', 'fr']) {
     const t = await messages(locale);
     const ctx = await context(publicUrl, locale);
@@ -138,6 +137,8 @@ try {
     pass(`public-${locale}: product, metadata, mobile, install link and hotel access boundary`);
   }
 
+  const ownerSession = await claimBrowserOwner({ origin: privateUrl, name: 'surface-owner', password: 'surface-owner-test-password' });
+
   const solo = await context(privateUrl, 'en', ownerSession);
   const soloPage = await pageFor(solo);
   await soloPage.goto('/');
@@ -161,9 +162,9 @@ try {
   const anonymous = await context(privateUrl);
   const anonymousPage = await pageFor(anonymous);
   await anonymousPage.goto('/hotels');
-  assert.equal(new URL(anonymousPage.url()).pathname, '/login');
+  assert.equal(new URL(anonymousPage.url()).pathname, '/access');
   assert.equal((await anonymous.request.get('/api/hotels')).status(), 401);
-  const publicAfterHousehold = await context(publicUrl);
+  const publicAfterHousehold = await context(publicUrl, 'en', ownerSession);
   assert.equal((await publicAfterHousehold.request.get('/')).status(), 200);
   assert.equal((await publicAfterHousehold.request.get('/hotels')).status(), 404);
   pass('household login and public isolation');
@@ -171,7 +172,8 @@ try {
   for (const member of users) {
     for (const locale of member.kind === 'hotels' ? ['en', 'es', 'pt', 'de', 'fr'] : ['en']) {
       const t = await messages(locale);
-      const ctx = await context(privateUrl, locale);
+      const session = await admitBrowserHousehold({ origin: privateUrl, password: 'surface-owner-test-password' });
+      const ctx = await context(privateUrl, locale, session);
       await json(await ctx.request.post('/api/auth/login', { headers: { Origin: privateUrl }, data: { username: member.user.username } }));
       const page = await pageFor(ctx);
       await page.goto('/account');

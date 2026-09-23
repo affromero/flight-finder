@@ -65,10 +65,10 @@ describe('flight CLI entrypoint alongside hotel and car commands', () => {
     expect(result.stderr).toContain('--view');
   });
 
-  it('validates account recovery arguments instead of printing general help', async () => {
-    const result = await runCli(['--reset-password', 'someone']);
+  it('requires the new shared password for local recovery', async () => {
+    const result = await runCli(['--reset-password']);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('--new-password');
+    expect(result.stderr).toContain('--reset-password');
   });
 
   it('validates local access commands before opening the database', async () => {

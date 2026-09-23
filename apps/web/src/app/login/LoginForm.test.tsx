@@ -7,8 +7,8 @@ const PROFILES = {
   ok: true,
   data: {
     profiles: [
-      { id: 'a', username: 'admin', displayName: null, avatar: 'paper-plane', hasPassword: false },
-      { id: 'b', username: 'bob', displayName: 'Bob', avatar: 'globe', hasPassword: true },
+      { id: 'a', username: 'admin', displayName: null, avatar: 'paper-plane', isAdmin: true },
+      { id: 'b', username: 'bob', displayName: 'Bob', avatar: 'globe', isAdmin: false },
     ],
   },
 };
@@ -32,7 +32,7 @@ afterEach(() => {
 });
 
 describe('LoginForm profile picker', () => {
-  it('a passwordless profile signs in on tap, with no password', async () => {
+  it('selects Admin on tap without another password', async () => {
     const fetchSpy = mockFetch();
     render(<LoginForm next={null} />);
     fireEvent.click(await screen.findByRole('button', { name: /admin/i }));
@@ -41,14 +41,15 @@ describe('LoginForm profile picker', () => {
     });
     const loginCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('/api/auth/login'))!;
     const body = JSON.parse((loginCall[1] as RequestInit).body as string);
-    expect(body).toMatchObject({ username: 'admin', password: '' });
+    expect(body).toEqual({ username: 'admin' });
   });
 
-  it('a password-protected profile opens a password screen instead of submitting', async () => {
+  it('selects a member profile on tap without another password', async () => {
     const fetchSpy = mockFetch();
     render(<LoginForm next={null} />);
     fireEvent.click(await screen.findByRole('button', { name: /Bob/i }));
-    expect(await screen.findByPlaceholderText('Password')).toBeTruthy();
-    expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes('/api/auth/login'))).toBe(false);
+    await waitFor(() => expect(fetchSpy.mock.calls.some((c) => String(c[0]).includes('/api/auth/login'))).toBe(true));
+    const loginCall = fetchSpy.mock.calls.find((c) => String(c[0]).includes('/api/auth/login'))!;
+    expect(JSON.parse((loginCall[1] as RequestInit).body as string)).toEqual({ username: 'bob' });
   });
 });

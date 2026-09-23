@@ -89,6 +89,7 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     source.pathname = `/${databaseName}`;
     connection = source.href;
     process.env.DATABASE_URL = connection;
+    process.env.SELF_HOSTED = 'true';
     process.env.SIDEDOOR_IMPORT_ADMIN_PASSWORD = 'environment admin password';
     process.env.SIDEDOOR_IMPORT_PASSWORD = 'private instance password';
     process.env.SIDEDOOR_IMPORT_MACHINE_TOKEN = 'machine-token-that-stays-valid';
@@ -129,6 +130,7 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     delete process.env.SIDEDOOR_IMPORT_ANTHROPIC_API_KEY;
     delete process.env.SIDEDOOR_IMPORT_OPENAI_API_KEY;
     delete process.env.SIDEDOOR_IMPORT_GOOGLE_API_KEY;
+    delete process.env.SELF_HOSTED;
   });
 
   it('preserves access, provider, machine and setup behavior before removing source columns', async () => {
@@ -137,12 +139,13 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     expect(prepared).toMatchObject({ setupComplete: true, sourceUsers: 2, sourceProviders: ['anthropic', 'google', 'openai'] });
 
     const { sharedAccess, sharedAccessStore } = await import('../access/service');
-    expect((await sharedAccess.authenticate(await sharedAccess.login('Owner', 'owner imported password'))).principal?.id).toBe('owner-id');
+    await expect(sharedAccess.login('Owner', 'owner imported password')).rejects.toMatchObject({ code: 'unauthorized' });
     const state = await sharedAccessStore.read();
-    const configuredAdmin = state.principals.find(principal => principal.name === 'admin');
-    expect(configuredAdmin).toBeDefined();
-    expect((await sharedAccess.authenticate(await sharedAccess.login('admin', 'database admin password'))).principal?.role).toBe('owner');
-    expect((await sharedAccess.authenticate(await sharedAccess.enterHousehold('private instance password'))).principal).toBeNull();
+    expect(state.principals.filter(principal => principal.role === 'owner')).toHaveLength(1);
+    const admitted = await sharedAccess.enterHousehold('private instance password');
+    expect((await sharedAccess.authenticate(admitted)).principal).toBeNull();
+    await new (await import('thesidedoor-core/access')).HouseholdProfileService(sharedAccess).select(admitted, 'owner-id');
+    expect((await sharedAccess.authenticate(admitted, true)).principal?.id).toBe('owner-id');
 
     const { DeviceService } = await import('thesidedoor-core/access');
     const devices = new DeviceService({ access: sharedAccess, scopesFor: () => ['api'] });
@@ -168,16 +171,15 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
 
     const { prisma } = await import('@/lib/prisma');
     const migratedUsers = await prisma.user.findMany({ select: { id: true, username: true } });
-    expect(migratedUsers).toHaveLength(3);
+    expect(migratedUsers).toHaveLength(2);
     expect(migratedUsers).toEqual(expect.arrayContaining([
-      { id: configuredAdmin!.id, username: 'admin' },
       { id: 'guest-id', username: 'Guest' },
       { id: 'owner-id', username: 'Owner' },
     ]));
     expect((await prisma.extractionConfig.findUniqueOrThrow({ where: { id: 'singleton' } })).setupComplete).toBe(true);
     expect(await prisma.sidedoorState.findUnique({ where: { id: 'flight-finder-platform-cutover' } })).toBeNull();
 
-    await expect(preparePlatformCutover()).resolves.toMatchObject({ setupComplete: true, sourceUsers: 3 });
-    await expect(finalizePlatformCutover()).resolves.toMatchObject({ setupComplete: true, sourceUsers: 3 });
+    await expect(preparePlatformCutover()).resolves.toMatchObject({ setupComplete: true, sourceUsers: 2 });
+    await expect(finalizePlatformCutover()).resolves.toMatchObject({ setupComplete: true, sourceUsers: 2 });
   }, 60_000);
 });

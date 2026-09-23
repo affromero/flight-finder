@@ -4,15 +4,13 @@
 // dev loader can resolve the import; tests mock it. Same shim pattern as
 // ./prisma.ts. If this ever runs, the build wiring is wrong.
 export type ResetPasswordResult =
-  | { ok: true; isAdmin: boolean }
+  | { ok: true }
   | { ok: false; error: string };
 
 const STUB_MESSAGE = 'admin-recovery stub: only valid in the bundled build';
 
-export async function resetUserPassword(
-  _username: string,
-  _newPassword: string,
-): Promise<ResetPasswordResult> {
+export async function resetSharedPassword(newPassword: string): Promise<ResetPasswordResult> {
+  void newPassword;
   throw new Error(STUB_MESSAGE);
 }
 

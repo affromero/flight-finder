@@ -1,6 +1,6 @@
-import { notFound, redirect } from 'next/navigation';
-import { isMultiUserEnabled } from '@/lib/multi-user';
+import { redirect } from 'next/navigation';
 import { getCurrentUser } from '@/lib/user-auth';
+import { currentAccessSession } from '@/lib/sidedoor/access/session';
 import { sanitizeNext } from '@/lib/safe-next';
 import { LoginForm } from './LoginForm';
 
@@ -15,12 +15,9 @@ interface PageProps {
 }
 
 export default async function LoginPage({ searchParams }: PageProps) {
-  // Multi user mode is the only context where this page makes sense. In any
-  // other deployment, pretend it doesn't exist to avoid leaking the feature.
-  if (!(await isMultiUserEnabled())) notFound();
-
   const { next } = await searchParams;
   const safeNext = sanitizeNext(next);
+  if (!(await currentAccessSession())) redirect(`/access?next=${encodeURIComponent('/login')}`);
 
   const user = await getCurrentUser();
   if (user) redirect(safeNext ?? (user.isAdmin ? '/admin' : '/account'));

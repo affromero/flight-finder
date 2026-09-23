@@ -275,9 +275,9 @@
     "deleteConfirm": "Benutzer {username} löschen? Die zugehörigen Tracker werden besitzerlos.",
     "resetPrompt": "Neues Passwort für {username} (mind. 12 Zeichen):",
     "passwordReset": "Passwort zurückgesetzt.",
-    "disableConfirm": "Mehrbenutzermodus deaktivieren? Das schaltet alle Logins ab und löscht das Admin-Passwort — zurück zur selbst gehosteten Einzelbenutzer-Instanz. Konten bleiben in der Datenbank, sind aber unzugänglich, bis du den Mehrbenutzermodus wieder aktivierst. Fortfahren?",
+    "disableConfirm": "Mehrbenutzermodus deaktivieren? Tracker werden dann nicht mehr nach Profil getrennt. Das gemeinsame Passwort, Passkeys und Profile bleiben verfügbar. Fortfahren?",
     "dangerZone": "Gefahrenzone",
-    "dangerText": "Schalte den Mehrbenutzermodus ab und kehre zur selbst gehosteten Einzelbenutzer-Instanz zurück. Konten bleiben in der Datenbank, werden aber unzugänglich, und das Admin-Passwort wird gelöscht.",
+    "dangerText": "Tracker werden nicht mehr nach Profil getrennt. Das gemeinsame Passwort, Passkeys und Profile bleiben verfügbar. Die bisherige Tracker-Zuordnung bleibt für eine spätere Aktivierung erhalten.",
     "disableMultiUser": "Mehrbenutzermodus deaktivieren",
     "errors": {
       "addGuest": "Gast konnte nicht hinzugefügt werden",

@@ -85,6 +85,8 @@ claim_body=$(CLAIM_CODE="$claim_code" python3 -c 'import json,os; print(json.dum
 curl -fsS -c "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" -H 'Content-Type: application/json' \
   --data "$claim_body" "http://localhost:${PORT}/api/access/claim" >/dev/null
 app_curl() { curl -b "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" "$@"; }
+app_curl -fsS -H 'Content-Type: application/json' \
+  --data '{"username":"integration-owner"}' "http://localhost:${PORT}/api/auth/login" >/dev/null
 
 # ── Test 1: Health endpoint ──────────────────────────────────────
 test_health() {

@@ -8,7 +8,7 @@ import { GET as setupStatus } from '@/app/api/setup/status/route';
 import { GET as setupModels } from '@/app/api/setup/cli-models/route';
 import { disableMultiUserMode } from './admin-recovery';
 import { createDatabaseSession } from '@/test/database-session';
-import { sharedAccess, sharedAccessStore } from '@/lib/sidedoor/access/service';
+import { sharedAccess, sharedAccessStore, sharedProfiles } from '@/lib/sidedoor/access/service';
 import { acquireTravelLease, claimTravelJob, enqueueTravelJob, guardTravelJob, releaseTravelLease } from './travel/jobs';
 import { carJson, createCarSearch, createCarTracker, editCarTracker, refreshCarTracker, deleteCarTracker } from './cars/store';
 import { createHotelSearch, editHotelTracker, refreshHotelTracker } from './hotels/store';
@@ -39,6 +39,8 @@ describe.skipIf(process.env.ACCOUNT_INTEGRATION_TESTS !== '1')('account transiti
     await prisma.extractionConfig.create({ data: { id: 'singleton', enabled: false, vpnProvider: 'none' } });
     await sharedAccessStore.initialize();
     boundary.token = await sharedAccess.claimOwner(await sharedAccess.issueOperatorToken(), 'owner', 'account-test-password', 'household');
+    const ownerId = (await sharedAccessStore.read()).principals.find((principal) => principal.role === 'owner')!.id;
+    await sharedProfiles.select(boundary.token, ownerId);
   });
   afterAll(async () => { vi.unstubAllEnvs(); await prisma.$disconnect(); });
 

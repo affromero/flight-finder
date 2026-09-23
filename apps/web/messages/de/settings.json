@@ -134,11 +134,11 @@
     },
     "multiUser": {
       "title": "Mehrbenutzermodus",
-      "enabledHint": "Jedes Haushaltsmitglied hat ein eigenes Konto, eigene Tracker und Einstellungen.",
+      "enabledHint": "Jedes Haushaltsprofil hat eigene Tracker und Einstellungen.",
       "manageUsers": "Benutzer verwalten",
       "enabling": "Wird aktiviert",
       "disabled": "Deaktiviert",
-      "toggleHint": "Aktiviere dies, um mehrere Konten auf dieser Instanz zu hosten (Familie, Haushalt). Du bleibst Admin; neue Benutzer bekommen eigene Tracker und Einstellungen.",
+      "toggleHint": "Aktiviere eigene Tracker und Einstellungen für jedes Haushaltsprofil. Das erste Profil bleibt Admin.",
       "adminUsernamePlaceholder": "Admin-Benutzername (Standard: admin)",
       "displayNamePlaceholder": "Anzeigename (optional)",
       "adminPasswordPlaceholder": "Admin-Passwort (optional — leer = kein Passwort)",

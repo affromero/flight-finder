@@ -10,7 +10,7 @@ import { GET as detailRoute, DELETE as deleteRoute } from '@/app/api/hotels/[id]
 import { invalidateMultiUserCache } from '@/lib/multi-user';
 import type { HotelOffer } from './types';
 import { acquireTravelLease, releaseTravelLease, enqueueTravelJob, claimTravelJob } from '../travel/jobs';
-import { sharedAccess } from '@/lib/sidedoor/access/service';
+import { sharedAccess, sharedProfiles } from '@/lib/sidedoor/access/service';
 
 const boundary = vi.hoisted(() => ({ search: vi.fn(), cookie: vi.fn() }));
 // Provider adapters and request cookies are external I/O boundaries; domain,
@@ -34,6 +34,8 @@ describe.skipIf(!enabled)('hotel workflows against isolated PostgreSQL', () => {
     const flight = await prisma.query.create({ data: { rawInput: 'Flight preservation sentinel', origin: 'LHR', originName: 'London', destination: 'JFK', destinationName: 'New York', dateFrom: new Date('2027-05-01'), dateTo: new Date('2027-05-10'), expiresAt: new Date('2027-05-01'), currency: 'GBP', cabinClass: 'business', vpnCountries: ['DE'], scrapeInterval: 6 } });
     flightId = flight.id;
     ownerToken = await sharedAccess.claimOwner(await sharedAccess.issueOperatorToken(), 'hotel-owner', 'hotel-integration-owner-password', 'household');
+    const ownerId = (await sharedAccess.store.read()).principals.find(principal => principal.role === 'owner')!.id;
+    await sharedProfiles.select(ownerToken, ownerId);
   });
   beforeEach(async () => {
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Unexpected external request in integration test')));

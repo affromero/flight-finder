@@ -15,10 +15,10 @@
   "dependencies": {
     "@anthropic-ai/sdk": "^0.125.0",
     "@google/generative-ai": "^0.24.1",
+    "@ip-location-db/geolite2-country-mmdb": "2.3.2026061719",
     "@js-temporal/polyfill": "^0.5.1",
     "@prisma/adapter-pg": "^7.10.0",
     "@prisma/client": "^7.10.0",
-    "@ip-location-db/geolite2-country-mmdb": "2.3.2026061719",
     "better-sqlite3": "^13.0.3",
     "ioredis": "^6.0.0",
     "maplibre-gl": "^6.9.0",
@@ -34,8 +34,8 @@
     "react-dom": "^19.3.0",
     "react-plotly.js": "^4.1.0",
     "recharts": "^3.10.1",
-    "thesidedoor": "0.2.0",
-    "thesidedoor-core": "0.2.0",
+    "thesidedoor": "0.3.1",
+    "thesidedoor-core": "0.3.1",
     "ua-parser-js": "^2.0.10",
     "undici": "^8.10.2"
   },

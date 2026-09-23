@@ -8,6 +8,7 @@
     "verifyPassword": "Vérifier avec le mot de passe",
     "verifyPasskey": "Vérifier avec une clé d’accès",
     "passkeys": "Clés d’accès",
+    "householdPasskeys": "Clés d’accès du foyer",
     "passkeyName": "Nom de la clé d’accès",
     "addPasskey": "Ajouter une clé d’accès",
     "remove": "Supprimer",
@@ -35,6 +36,9 @@
     "password": "Mot de passe",
     "code": "Code de récupération ou de propriétaire",
     "passkey": "Se connecter avec une clé d’accès",
+    "savePasskey": "Utiliser une clé d’accès la prochaine fois",
+    "savePasskeyHint": "Enregistrez une clé d’accès avec votre appareil ou gestionnaire de mots de passe pour accéder au foyer sans saisir le mot de passe la prochaine fois.",
+    "continueWithoutPasskey": "Continuer sans clé d’accès",
     "working": "Veuillez patienter…",
     "newPasswordHint": "Utilisez au moins 12 caractères.",
     "mode": "Mode d’accès",
@@ -45,7 +49,8 @@
     "forbidden": "Cette action n’est pas autorisée.",
     "conflict": "La configuration du compte ou de l’instance a changé. Vérifiez son état avant de continuer.",
     "rate_limited": "Trop de tentatives. Réessayez plus tard.",
-    "cancelled": "La connexion par clé d’accès a été annulée.",
+    "cancelled": "La demande de clé d’accès a été annulée.",
+    "passkey_failed": "Impossible d’utiliser la clé d’accès. Réessayez ou continuez avec le mot de passe.",
     "ceremony_busy": "Une demande de clé d’accès est déjà ouverte.",
     "outcome_unknown": "La demande a peut-être abouti. Vérifiez si vous pouvez vous connecter avant de réessayer.",
     "network_error": "Impossible de joindre l’instance. Vérifiez votre connexion.",
@@ -118,7 +123,7 @@
     "carsTitle": "Vérifie le coût de la location",
     "carsText": "Recherche sur DiscoverCars et Auto Europe. Compare les totaux vérifiés parmi les offres examinées, consulte les conditions du conducteur et distingue cautions et franchises. Les frais non vérifiés et les suppléments non confirmés restent visibles.",
     "hotelsText": "Recherche sur Google Hotels et Booking.com par dates, chambres et voyageurs. Suis un hôtel ou un tarif de chambre et définis une alerte de prix cible.",
-    "travelHousehold": "En mode multiutilisateur, chacun dispose de son compte et de ses suivis. Combine vols, hôtels et voitures de location selon tes besoins.",
+    "travelHousehold": "En mode multiutilisateur, le mot de passe partagé ou une clé d’accès ouvre le choix du profil. Chaque profil a ses propres suivis. Combine vols, hôtels et voitures de location selon tes besoins.",
     "travelAvailability": "Les recherches s’exécutent sur ta propre installation. Chaque suivi fonctionne indépendamment. Réserve auprès du fournisseur ; Flight Finder ne regroupe pas les réservations en forfaits."
   },
   "QueryPage": {
@@ -141,15 +146,10 @@
   },
   "Login": {
     "loading": "Chargement…",
-    "usernamePlaceholder": "Nom d’utilisateur",
-    "passwordPlaceholder": "Mot de passe",
     "signingIn": "Connexion…",
-    "signIn": "Se connecter",
-    "backToProfiles": "Retour aux profils",
-    "back": "Retour",
     "pickerTitle": "Qui utilise Flight Finder ?",
-    "manualSignIn": "Se connecter avec un nom d’utilisateur",
-    "invalidCredentials": "Nom d’utilisateur ou mot de passe invalide"
+    "noProfiles": "Aucun profil pour le moment.",
+    "invalidCredentials": "Impossible d’ouvrir ce profil."
   },
   "AccessInvitation": {
     "invitation": "Accepter l’invitation",

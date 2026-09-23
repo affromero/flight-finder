@@ -275,9 +275,9 @@
     "deleteConfirm": "Delete user {username}? Their trackers will become unowned.",
     "resetPrompt": "New password for {username} (12+ chars):",
     "passwordReset": "Password reset.",
-    "disableConfirm": "Disable multi user mode? This turns off all logins and clears the admin password, reverting to a single user self hosted instance. Accounts stay in the database but become inaccessible until you re-enable multi user mode. Continue?",
+    "disableConfirm": "Disable multi user mode? Trackers will stop being separated by profile. The shared password, passkeys, and profiles will stay available. Continue?",
     "dangerZone": "Danger zone",
-    "dangerText": "Turn off multi user mode and revert to a single user self hosted instance. Accounts are kept in the database but become inaccessible, and the admin password is cleared.",
+    "dangerText": "Stop separating trackers by profile. The shared password, passkeys, and profiles remain available. Existing tracker ownership is kept if you enable multi user mode again.",
     "disableMultiUser": "Disable multi user mode",
     "errors": {
       "addGuest": "Failed to add guest",

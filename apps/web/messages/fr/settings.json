@@ -134,11 +134,11 @@
     },
     "multiUser": {
       "title": "Mode multi-utilisateur",
-      "enabledHint": "Chaque membre du foyer a son propre compte, ses suivis et ses préférences.",
+      "enabledHint": "Chaque profil du foyer a ses propres suivis et préférences.",
       "manageUsers": "Gérer les utilisateurs",
       "enabling": "Activation",
       "disabled": "Désactivé",
-      "toggleHint": "Active pour héberger plusieurs comptes sur cette instance (famille, foyer). Tu restes admin ; les nouveaux utilisateurs ont leurs propres suivis et préférences.",
+      "toggleHint": "Active des suivis et des préférences propres à chaque profil du foyer. Le premier profil reste Admin.",
       "adminUsernamePlaceholder": "Nom d’utilisateur admin (admin par défaut)",
       "displayNamePlaceholder": "Nom d’affichage (facultatif)",
       "adminPasswordPlaceholder": "Mot de passe admin (facultatif — vide = pas de mot de passe)",

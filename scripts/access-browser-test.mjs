@@ -41,7 +41,25 @@ export async function claimBrowserOwner({ origin, name, password }) {
   assert.ok(cookie, 'Owner claim did not issue a browser session');
   const token = cookie.slice('ft-session='.length).split(';', 1)[0];
   assert.ok(token, 'Owner claim issued an empty browser session');
+  const selected = await fetch(`${origin}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin, Cookie: `ft-session=${token}` },
+    body: JSON.stringify({ username: name }),
+  });
+  assert.equal(selected.status, 200, await selected.text());
   return token;
+}
+
+export async function admitBrowserHousehold({ origin, password }) {
+  const response = await fetch(`${origin}/api/access/household`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', Origin: origin },
+    body: JSON.stringify({ password }),
+  });
+  assert.equal(response.status, 200, await response.text());
+  const cookie = response.headers.getSetCookie().find(value => value.startsWith('ft-session='));
+  assert.ok(cookie, 'Household entry did not issue a browser session');
+  return cookie.slice('ft-session='.length).split(';', 1)[0];
 }
 
 export async function addBrowserSession(context, origin, token) {

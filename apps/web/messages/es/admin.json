@@ -275,9 +275,9 @@
     "deleteConfirm": "¿Eliminar al usuario {username}? Sus rastreadores quedarán sin dueño.",
     "resetPrompt": "Nueva contraseña para {username} (12+ caracteres):",
     "passwordReset": "Contraseña restablecida.",
-    "disableConfirm": "¿Deshabilitar el modo multiusuario? Esto desactiva todos los inicios de sesión y borra la contraseña de administrador, volviendo a una instancia autoalojada de un solo usuario. Las cuentas permanecen en la base de datos pero quedan inaccesibles hasta que vuelvas a habilitar el modo multiusuario. ¿Continuar?",
+    "disableConfirm": "¿Deshabilitar el modo multiusuario? Los seguimientos dejarán de separarse por perfil. La contraseña compartida, las claves de acceso y los perfiles seguirán disponibles. ¿Continuar?",
     "dangerZone": "Zona de peligro",
-    "dangerText": "Desactiva el modo multiusuario y vuelve a una instancia autoalojada de un solo usuario. Las cuentas se conservan en la base de datos pero quedan inaccesibles, y la contraseña de administrador se borra.",
+    "dangerText": "Deja de separar los seguimientos por perfil. La contraseña compartida, las claves de acceso y los perfiles siguen disponibles. La propiedad de los seguimientos se conserva si vuelves a activar el modo multiusuario.",
     "disableMultiUser": "Deshabilitar modo multiusuario",
     "errors": {
       "addGuest": "No se pudo agregar el invitado",

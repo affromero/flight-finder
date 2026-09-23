@@ -134,11 +134,11 @@
     },
     "multiUser": {
       "title": "Multi user mode",
-      "enabledHint": "Each household member has their own account, trackers, and preferences.",
+      "enabledHint": "Each household profile has its own trackers and preferences.",
       "manageUsers": "Manage users",
       "enabling": "Enabling",
       "disabled": "Disabled",
-      "toggleHint": "Turn on to host multiple accounts on this instance (family, household). You stay admin; new users get their own trackers and preferences.",
+      "toggleHint": "Turn on personal trackers and preferences for each household profile. The first profile remains Admin.",
       "adminUsernamePlaceholder": "Admin username (defaults to admin)",
       "displayNamePlaceholder": "Display name (optional)",
       "adminPasswordPlaceholder": "Admin password (optional — blank = no password)",

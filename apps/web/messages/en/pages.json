@@ -8,6 +8,7 @@
     "verifyPassword": "Verify with password",
     "verifyPasskey": "Verify with passkey",
     "passkeys": "Passkeys",
+    "householdPasskeys": "Household passkeys",
     "passkeyName": "Passkey name",
     "addPasskey": "Add passkey",
     "remove": "Remove",
@@ -35,6 +36,9 @@
     "password": "Password",
     "code": "Recovery or owner-claim code",
     "passkey": "Sign in with a passkey",
+    "savePasskey": "Use a passkey next time",
+    "savePasskeyHint": "Save a passkey with your device or password manager to enter your household without typing the password next time.",
+    "continueWithoutPasskey": "Continue without a passkey",
     "working": "Please wait…",
     "newPasswordHint": "Use at least 12 characters.",
     "mode": "Access mode",
@@ -45,7 +49,8 @@
     "forbidden": "This action is not allowed.",
     "conflict": "The account or instance configuration changed. Check its current state before continuing.",
     "rate_limited": "Too many attempts. Try again later.",
-    "cancelled": "Passkey sign-in was cancelled.",
+    "cancelled": "The passkey prompt was cancelled.",
+    "passkey_failed": "The passkey could not be used. Try again or continue with the password.",
     "ceremony_busy": "A passkey prompt is already open.",
     "outcome_unknown": "The request may have completed. Check whether you can sign in before trying again.",
     "network_error": "Could not reach the instance. Check your connection.",
@@ -118,7 +123,7 @@
     "carsTitle": "Check the whole rental",
     "carsText": "Search DiscoverCars and Auto Europe. Compare verified totals among checked offers, review driver requirements and see deposits and excess separately. Missing fees and unconfirmed extras stay visible.",
     "hotelsText": "Search Google Hotels and Booking.com by dates, rooms, and guests. Track a hotel or room rate and set a target-price alert.",
-    "travelHousehold": "In multi-user mode, each person has their own login and trackers. Use flights, hotels and rental cars in any combination.",
+    "travelHousehold": "In multi-user mode, everyone enters with the shared password or a passkey, then chooses a profile with personal trackers. Use flights, hotels and rental cars in any combination.",
     "travelAvailability": "Searches run on your own installation. Each tracker works independently. Complete bookings with the provider; Flight Finder does not bundle reservations."
   },
   "QueryPage": {
@@ -141,15 +146,10 @@
   },
   "Login": {
     "loading": "Loading…",
-    "usernamePlaceholder": "Username",
-    "passwordPlaceholder": "Password",
     "signingIn": "Signing in…",
-    "signIn": "Sign in",
-    "backToProfiles": "Back to profiles",
-    "back": "Back",
     "pickerTitle": "Who's using Flight Finder?",
-    "manualSignIn": "Sign in with a username instead",
-    "invalidCredentials": "Invalid username or password"
+    "noProfiles": "No profiles yet.",
+    "invalidCredentials": "Could not open this profile."
   },
   "AccessInvitation": {
     "invitation": "Accept invitation",

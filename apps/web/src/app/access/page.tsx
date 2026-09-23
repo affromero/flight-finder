@@ -8,6 +8,9 @@ export default async function AccessPage({ searchParams }: { searchParams: Promi
   const params = await searchParams;
   const next = sanitizeNext(params.next);
   if (params.mode === 'invite') return <InvitationScreen next={next ?? '/'} />;
-  const mode = params.mode === 'claim' || params.mode === 'recover' || params.mode === 'household' ? params.mode : 'login';
-  return <AccessScreen next={next} mode={mode} />;
+  const hosted = process.env.SELF_HOSTED !== 'true';
+  const mode = params.mode === 'recover' || (!hosted && params.mode === 'claim')
+    ? params.mode
+    : hosted ? 'login' : 'household';
+  return <AccessScreen next={next} mode={mode} hosted={hosted} />;
 }

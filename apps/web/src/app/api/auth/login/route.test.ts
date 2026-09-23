@@ -4,7 +4,7 @@ import type { createAccessFixture } from '@/test/access-fixture';
 const boundary = vi.hoisted(() => ({
   fixture: null as ReturnType<typeof createAccessFixture> | null,
   token: '', multiUser: true, lookups: 0,
-  users: [] as { id: string; username: string; displayName: string | null }[],
+  users: [] as { id: string; username: string; displayName: string | null; isAdmin: boolean }[],
 }));
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => boundary.token ? { value: boundary.token } : undefined }) }));
 vi.mock('@/lib/prisma', () => ({ prisma: {
@@ -32,7 +32,7 @@ beforeEach(async () => {
   const access = boundary.fixture!.access;
   await access.claimOwner(await access.issueOperatorToken(), 'Owner', 'owner password for testing', 'household');
   await access.store.transact(state => { state.principals.push({ id: 'member', name: 'Member', role: 'member', passwordHash: null, epoch: 0, createdAt: Date.now() }); });
-  boundary.users = (await access.store.read()).principals.map(principal => ({ id: principal.id, username: principal.name, displayName: null }));
+  boundary.users = (await access.store.read()).principals.map(principal => ({ id: principal.id, username: principal.name, displayName: null, isAdmin: principal.role === 'owner' }));
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -43,26 +43,29 @@ describe('profile login through shared access', () => {
     expect(boundary.lookups).toBe(0);
     expect(await boundary.fixture!.access.store.read()).toEqual(before);
   });
-  it('admits a household profile without granting an authenticated identity', async () => {
+  it('selects a member after the shared password without granting Admin authority', async () => {
+    boundary.token = await boundary.fixture!.access.enterHousehold('owner password for testing');
     const response = await POST(request({ username: 'Member' }));
     expect(response.status).toBe(200);
     expect((await response.json()).data.user).toMatchObject({ id: 'member', isAdmin: false });
-    const token = response.headers.get('set-cookie')!.split(';')[0]!.slice('ft-session='.length);
-    expect((await boundary.fixture!.access.authenticate(token)).principal).toBeNull();
-    expect(await boundary.fixture!.profiles.selected(token)).toMatchObject({ id: 'member' });
+    expect((await boundary.fixture!.access.authenticate(boundary.token)).principal).toBeNull();
+    expect(await boundary.fixture!.profiles.selected(boundary.token)).toMatchObject({ id: 'member' });
   });
-  it('preserves password login and effective owner authority', async () => {
-    const response = await POST(request({ username: 'Owner', password: 'owner password for testing' }));
+  it('grants Admin authority when an admitted visitor selects the first profile', async () => {
+    boundary.token = await boundary.fixture!.access.enterHousehold('owner password for testing');
+    const response = await POST(request({ username: 'Owner' }));
     expect(response.status).toBe(200);
     expect((await response.json()).data.user).toMatchObject({ username: 'Owner', isAdmin: true });
+    expect((await boundary.fixture!.access.authenticate(boundary.token, true)).principal?.role).toBe('owner');
   });
   it('bounds unknown-account attempts', async () => {
     for (let index = 0; index < 10; index++) expect((await POST(request({ username: 'missing', password: 'wrong' }))).status).toBe(401);
     expect((await POST(request({ username: 'missing', password: 'wrong' }))).status).toBe(429);
   });
-  it('requires explicit sign-out before switching an account to a household profile', async () => {
-    boundary.token = await boundary.fixture!.access.login('Owner', 'owner password for testing');
-    expect((await POST(request({ username: 'Member' }))).status).toBe(403);
-    expect((await boundary.fixture!.access.authenticate(boundary.token)).principal?.role).toBe('owner');
+  it('switches from Admin to a member without another password', async () => {
+    boundary.token = await boundary.fixture!.access.enterHousehold('owner password for testing');
+    expect((await POST(request({ username: 'Owner' }))).status).toBe(200);
+    expect((await POST(request({ username: 'Member' }))).status).toBe(200);
+    await expect(boundary.fixture!.access.authenticate(boundary.token, true)).rejects.toMatchObject({ code: 'forbidden' });
   });
 });

@@ -35,15 +35,20 @@ const browser = await chromium.launch({ headless: true });
 const context = await browser.newContext();
 
 if (process.env.BROWSER_SMOKE_OWNER && process.env.BROWSER_SMOKE_PASSWORD) {
-  const response = await context.request.post(BASE + '/api/access/login', {
+  const response = await context.request.post(BASE + '/api/access/household', {
     headers: { Origin: BASE },
-    data: { name: process.env.BROWSER_SMOKE_OWNER, password: process.env.BROWSER_SMOKE_PASSWORD },
+    data: { password: process.env.BROWSER_SMOKE_PASSWORD },
   });
-  if (!response.ok()) throw new Error('Browser smoke owner login failed: ' + response.status());
+  if (!response.ok()) throw new Error('Browser smoke household entry failed: ' + response.status());
   const cookie = response.headers()['set-cookie'];
   const token = cookie?.match(/(?:^|[,;]\s*)ft-session=([^;]+)/)?.[1];
-  if (!token) throw new Error('Browser smoke owner login did not issue a session');
+  if (!token) throw new Error('Browser smoke household entry did not issue a session');
   await context.addCookies([{ name: 'ft-session', value: token, url: BASE, httpOnly: true, sameSite: 'Lax' }]);
+  const selected = await context.request.post(BASE + '/api/auth/login', {
+    headers: { Origin: BASE },
+    data: { username: process.env.BROWSER_SMOKE_OWNER },
+  });
+  if (!selected.ok()) throw new Error('Browser smoke Admin selection failed: ' + selected.status());
 }
 
 try {
@@ -142,7 +147,7 @@ try {
     const page = await context.newPage();
     const response = await page.goto(BASE + '/access/security', { waitUntil: 'networkidle', timeout: 30000 });
     const heading = page.getByRole('heading', { name: 'Account security' });
-    const passkeys = page.getByText('Passkeys', { exact: true });
+    const passkeys = page.getByText('Household passkeys', { exact: true });
     if (response?.ok() && await heading.isVisible({ timeout: 5000 }).catch(() => false) &&
         await passkeys.isVisible({ timeout: 5000 }).catch(() => false)) {
       ok('Account security page exposes passkey management');

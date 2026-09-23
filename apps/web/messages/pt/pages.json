@@ -8,6 +8,7 @@
     "verifyPassword": "Verificar com senha",
     "verifyPasskey": "Verificar com chave de acesso",
     "passkeys": "Chaves de acesso",
+    "householdPasskeys": "Chaves de acesso da casa",
     "passkeyName": "Nome da chave de acesso",
     "addPasskey": "Adicionar chave de acesso",
     "remove": "Remover",
@@ -35,6 +36,9 @@
     "password": "Senha",
     "code": "Código de recuperação ou de proprietário",
     "passkey": "Entrar com uma chave de acesso",
+    "savePasskey": "Usar uma chave de acesso na próxima vez",
+    "savePasskeyHint": "Salve uma chave de acesso com seu dispositivo ou gerenciador de senhas para entrar na casa sem digitar a senha na próxima vez.",
+    "continueWithoutPasskey": "Continuar sem chave de acesso",
     "working": "Aguarde…",
     "newPasswordHint": "Use pelo menos 12 caracteres.",
     "mode": "Modo de acesso",
@@ -45,7 +49,8 @@
     "forbidden": "Esta ação não é permitida.",
     "conflict": "A configuração da conta ou da instância mudou. Confira o estado atual antes de continuar.",
     "rate_limited": "Muitas tentativas. Tente novamente mais tarde.",
-    "cancelled": "O acesso com chave de acesso foi cancelado.",
+    "cancelled": "A solicitação de chave de acesso foi cancelada.",
+    "passkey_failed": "Não foi possível usar a chave de acesso. Tente novamente ou continue com a senha.",
     "ceremony_busy": "Já existe uma solicitação de chave de acesso aberta.",
     "outcome_unknown": "A solicitação pode ter sido concluída. Confira se consegue entrar antes de tentar novamente.",
     "network_error": "Não foi possível conectar à instância. Confira sua conexão.",
@@ -118,7 +123,7 @@
     "carsTitle": "Confira o aluguel completo",
     "carsText": "Pesquise no DiscoverCars e na Auto Europe. Compare totais verificados entre as ofertas conferidas, leia os requisitos do motorista e veja cauções e franquias separadamente. Taxas não verificadas e extras não confirmados continuam visíveis.",
     "hotelsText": "Pesquise no Google Hotels e no Booking.com por datas, quartos e hóspedes. Acompanhe um hotel ou uma tarifa de quarto e defina um alerta de preço-alvo.",
-    "travelHousehold": "No modo multiusuário, cada pessoa tem seu próprio login e acompanhamentos. Combine voos, hotéis e carros de aluguel como preferir.",
+    "travelHousehold": "No modo multiusuário, a senha compartilhada ou uma chave de acesso abre a seleção de perfis. Cada perfil tem seus próprios acompanhamentos. Combine voos, hotéis e carros de aluguel como preferir.",
     "travelAvailability": "As buscas são executadas na sua própria instalação. Cada acompanhamento funciona de forma independente. Faça as reservas com o fornecedor; o Flight Finder não agrupa reservas em pacotes."
   },
   "QueryPage": {
@@ -141,15 +146,10 @@
   },
   "Login": {
     "loading": "Carregando…",
-    "usernamePlaceholder": "Nome de usuário",
-    "passwordPlaceholder": "Senha",
     "signingIn": "Entrando…",
-    "signIn": "Entrar",
-    "backToProfiles": "Voltar aos perfis",
-    "back": "Voltar",
     "pickerTitle": "Quem está usando o Flight Finder?",
-    "manualSignIn": "Entrar com nome de usuário",
-    "invalidCredentials": "Nome de usuário ou senha inválidos"
+    "noProfiles": "Ainda não há perfis.",
+    "invalidCredentials": "Não foi possível abrir este perfil."
   },
   "AccessInvitation": {
     "invitation": "Aceitar convite",
