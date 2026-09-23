@@ -114,7 +114,16 @@ export async function middleware(request: NextRequest) {
         pathname === "/api/setup" ||
         (pathname.startsWith("/api/setup/") &&
           pathname !== "/api/setup/status");
-      if (ownerRoute && auth?.principal?.role !== "owner") {
+      let ownerAccess = false;
+      if (ownerRoute && auth && token) {
+        try {
+          await sharedAccess.authenticate(token, true);
+          ownerAccess = true;
+        } catch (error) {
+          if (!isAccessError(error) || error.code !== "forbidden") throw error;
+        }
+      }
+      if (ownerRoute && !ownerAccess) {
         if (pathname.startsWith("/api/"))
           return NextResponse.json(
             { ok: false, error: auth ? "Forbidden" : "Unauthorized" },

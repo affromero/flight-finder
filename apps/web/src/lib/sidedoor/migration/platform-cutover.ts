@@ -116,6 +116,12 @@ async function initialPrincipals(
     : null;
   const passwordHash = configuredHash ?? (configuredPassword ? await hashConfiguredPassword(configuredPassword) : null);
   if (!passwordHash) return principals;
+  const firstAdmin = principals.find(principal => principal.role === 'owner') ?? principals[0];
+  if (firstAdmin) {
+    firstAdmin.role = 'owner';
+    firstAdmin.passwordHash = passwordHash;
+    return principals;
+  }
   principals.push({
     id: randomUUID(),
     name: availableName(users, principals),
@@ -216,9 +222,13 @@ async function prepareInTransaction(database: Database): Promise<CutoverRecord> 
       }
     }
     const gatePassword = process.env.SIDEDOOR_IMPORT_PASSWORD;
+    const gateHash = gatePassword ? await hashConfiguredPassword(gatePassword) : null;
+    if (gateHash)
+      for (const principal of principals)
+        if (principal.role === 'owner') principal.passwordHash = gateHash;
     await initializeAccess(accessStore, ACCESS_IMPORT, {
       mode: 'household',
-      householdPasswordHash: gatePassword ? await hashConfiguredPassword(gatePassword) : null,
+      householdPasswordHash: gateHash,
       principals,
     });
     const machineToken = process.env.SIDEDOOR_IMPORT_MACHINE_TOKEN;

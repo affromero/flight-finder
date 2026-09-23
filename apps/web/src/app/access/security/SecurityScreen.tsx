@@ -11,13 +11,14 @@ export function SecurityScreen() {
     unauthorized: access('unauthorized'), forbidden: access('forbidden'),
     conflict: access('conflict'), rate_limited: access('rate_limited'),
     cancelled: access('cancelled'), ceremony_busy: access('ceremony_busy'),
+    passkey_failed: access('passkey_failed'),
     outcome_unknown: access('outcome_unknown'), network_error: access('network_error'),
     invalid_password: access('invalid_password'),
   };
   const copy: AccessSecurityCopy = {
     title: t('title'), verify: t('verify'), currentPassword: t('currentPassword'),
     verifyPassword: t('verifyPassword'), verifyPasskey: t('verifyPasskey'),
-    passkeys: t('passkeys'), passkeyName: t('passkeyName'), addPasskey: t('addPasskey'),
+    passkeys: t('passkeys'), householdPasskeys: t('householdPasskeys'), passkeyName: t('passkeyName'), addPasskey: t('addPasskey'),
     remove: t('remove'), removeHint: t('removeHint'), recovery: t('recovery'),
     generateCodes: t('generateCodes'), recoveryHint: t('recoveryHint'), hideCodes: t('hideCodes'),
     password: t('password'), changePassword: t('changePassword'), sessions: t('sessions'),
@@ -30,7 +31,8 @@ export function SecurityScreen() {
     <div className={styles.content}>
       <p className={styles.brand}>Flight Finder</p>
       <AccessSecurity copy={copy} classes={{ root: styles.access, form: styles.form, label: styles.label, input: styles.input, button: styles.button, secondary: styles.secondary, error: styles.error, hint: styles.hint }}
-        onSignInRequired={() => window.location.assign('/access?next=%2Faccess%2Fsecurity')} />
+        onSignInRequired={() => window.location.assign('/access?next=%2Faccess%2Fsecurity')}
+        onHouseholdEntered={() => window.location.assign('/login?next=%2Faccess%2Fsecurity')} />
     </div>
   </main>;
 }

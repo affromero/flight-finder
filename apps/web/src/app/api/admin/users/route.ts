@@ -42,15 +42,12 @@ export async function POST(request: NextRequest) {
     if (context.response) return context.response;
     const body = await accountMutationBody(request);
     if (!body) return apiError('Invalid JSON body', 400);
-    if (Object.keys(body).some(key => !['username', 'password', 'displayName', 'isAdmin', 'avatar'].includes(key))) return apiError('Unsupported account field', 400);
+    if (Object.keys(body).some(key => !['username', 'displayName', 'avatar'].includes(key))) return apiError('Unsupported account field', 400);
     const username = typeof body.username === 'string' ? body.username.trim() : '';
     if (!USERNAME_PATTERN.test(username)) return apiError('Username must be 2 to 32 characters of letters, numbers, underscores, dots, or dashes', 400);
-    if (body.password !== undefined && typeof body.password !== 'string') return apiError('Invalid password', 400);
-    if (body.isAdmin !== undefined && typeof body.isAdmin !== 'boolean') return apiError('Invalid role', 400);
     const user = await manageAccount(context.token!, {
       kind: 'create', name: username,
-      password: typeof body.password === 'string' ? body.password : undefined,
-      role: body.isAdmin === true ? 'owner' : 'member',
+      role: 'member',
     }, {
       displayName: typeof body.displayName === 'string' ? body.displayName.trim() || null : null,
       avatar: isPresetSlug(body.avatar) ? body.avatar : null,

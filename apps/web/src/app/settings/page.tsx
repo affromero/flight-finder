@@ -8,7 +8,6 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import { useTranslations, useLocale } from 'next-intl';
 import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, isLocale } from '@/i18n/locales';
-import { AvatarPicker } from '@/components/AvatarPicker/AvatarPicker';
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
 import { ReachGuide } from '@/components/ReachGuide/ReachGuide';
 import { HotelMapAdmin } from '@/components/hotels/HotelMapAdmin';
@@ -773,10 +772,6 @@ interface MultiUserSectionProps {
 function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
   const t = useTranslations('Settings');
   const [showForm, setShowForm] = useState(false);
-  const [adminUsername, setAdminUsername] = useState('');
-  const [adminPassword, setAdminPassword] = useState('');
-  const [displayName, setDisplayName] = useState('');
-  const [avatar, setAvatar] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
 
@@ -802,12 +797,7 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
     const res = await fetch('/api/admin/multi-user', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        adminUsername: adminUsername.trim(),
-        adminPassword,
-        displayName: displayName.trim() || null,
-        avatar,
-      }),
+      body: '{}',
     });
 
     const data = await res.json();
@@ -820,7 +810,6 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
 
     onEnabled(data.data.backfillCount);
     setShowForm(false);
-    setAdminPassword('');
   };
 
   return (
@@ -847,34 +836,6 @@ function MultiUserSection({ enabled, onEnabled }: MultiUserSectionProps) {
 
       {showForm && (
         <form className={styles.fields} onSubmit={handleEnable}>
-          <input
-            type="text"
-            className={styles.input}
-            placeholder={t('multiUser.adminUsernamePlaceholder')}
-            value={adminUsername}
-            onChange={(e) => setAdminUsername(e.target.value)}
-            autoComplete="username"
-          />
-          <input
-            type="text"
-            className={styles.input}
-            placeholder={t('multiUser.displayNamePlaceholder')}
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-          <input
-            type="password"
-            className={styles.input}
-            placeholder={t('multiUser.adminPasswordPlaceholder')}
-            value={adminPassword}
-            onChange={(e) => setAdminPassword(e.target.value)}
-            autoComplete="new-password"
-          />
-          <p className={styles.toggleHint}>
-            {t('multiUser.passwordHint')}
-          </p>
-          <label className={styles.toggleHint}>{t('multiUser.yourAvatar')}</label>
-          <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || adminUsername} />
           {error && <p className={styles.error}>{error}</p>}
           <button
             type="submit"

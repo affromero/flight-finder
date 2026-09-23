@@ -47,16 +47,19 @@ describe('shared account identity', () => {
     await boundary.fixture!.access.store.transact(state => { state.principals[0]!.epoch++; });
     expect(await getCurrentUser()).toBeNull();
   });
-  it('keeps selected household content separate from authenticated identity', async () => {
+  it('uses the selected household profile and grants Admin only to the first profile', async () => {
     const fixture = boundary.fixture!;
     await fixture.issue('member');
     await fixture.issue('owner', true);
     boundary.token = await fixture.access.enterOpenHousehold();
     await fixture.profiles.select(boundary.token, 'member');
-    expect(await getCurrentUser()).toBeNull();
+    expect(await getCurrentUser()).toMatchObject({ id: 'member', isAdmin: false });
     expect(await getCurrentProfile()).toMatchObject({ id: 'member', isAdmin: false });
-    await expect(requireAdminUser()).rejects.toMatchObject({ name: 'UnauthorizedError' });
+    await expect(requireAdminUser()).rejects.toMatchObject({ name: 'ForbiddenError' });
     await fixture.access.store.transact(state => { state.principals.find(principal => principal.id === 'member')!.passwordHash = 'protected credential'; });
-    expect(await getCurrentProfile()).toBeNull();
+    expect(await getCurrentProfile()).toMatchObject({ id: 'member' });
+    boundary.user = { id: 'owner', username: 'owner', isAdmin: true };
+    await fixture.profiles.select(boundary.token, 'owner');
+    expect(await requireAdminUser()).toMatchObject({ id: 'owner', isAdmin: true });
   });
 });

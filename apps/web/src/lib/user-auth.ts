@@ -1,38 +1,29 @@
 import { cookies } from 'next/headers';
 import type { User } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
-import { currentAccessSession } from '@/lib/sidedoor/access/session';
-import { sharedProfiles, SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
+import { sharedAccess, sharedProfiles, SHARED_SESSION_COOKIE } from '@/lib/sidedoor/access/service';
 import { isAccessError } from 'thesidedoor-core/access';
 
-/** Authenticated identity only. Selecting a household profile never satisfies this check. */
+/** One household admission and its current profile determine application authority. */
 export async function getCurrentUser(): Promise<User | null> {
-  const auth = await currentAccessSession();
-  if (!auth?.principal) return null;
-  const user = await prisma.user.findUnique({ where: { id: auth.principal.id } });
-  return user ? { ...user, isAdmin: auth.principal.role === 'owner' } : null;
-}
-
-/** Content preferences and ownership within an admitted household. */
-export async function getCurrentProfile(): Promise<User | null> {
-  const auth = await currentAccessSession();
-  if (!auth) return null;
-  if (auth.principal) {
-    const user = await prisma.user.findUnique({ where: { id: auth.principal.id } });
-    return user ? { ...user, isAdmin: auth.principal.role === 'owner' } : null;
-  }
   const token = (await cookies()).get(SHARED_SESSION_COOKIE)?.value;
   if (!token) return null;
   try {
-    const profile = await sharedProfiles.selected(token);
-    if (!profile) return null;
-    const user = await prisma.user.findUnique({ where: { id: profile.id } });
-    if (!user || user.isAdmin) return null;
-    return { ...user, isAdmin: false };
+    const state = await sharedAccess.store.read();
+    const auth = sharedAccess.sessionFromState(state, token);
+    const id = auth.principal?.id ?? sharedProfiles.selectedFromState(state, token)?.id;
+    if (!id) return null;
+    const user = await prisma.user.findUnique({ where: { id } });
+    return user ? { ...user, isAdmin: user.isAdmin && sharedAccess.householdOwnerFromState(state, token) } : null;
   } catch (error) {
     if (isAccessError(error) && error.code === 'unauthorized') return null;
     throw error;
   }
+}
+
+/** Content preferences and ownership within an admitted household. */
+export async function getCurrentProfile(): Promise<User | null> {
+  return getCurrentUser();
 }
 
 export async function requireUser(): Promise<User> {

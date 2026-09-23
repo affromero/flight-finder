@@ -19,14 +19,13 @@ interface UserRow {
 
 interface Props {
   initialUsers: UserRow[];
-  individual: boolean;
 }
 
 // "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const BACKFILL_BANNER_KEY = 'ft-backfill-banner-dismissed';
 const BACKFILL_COUNT_KEY = 'ft-backfill-count';
 
-export function UsersClient({ initialUsers, individual }: Props) {
+export function UsersClient({ initialUsers }: Props) {
   const t = useTranslations('AdminUsers');
   const security = useTranslations('SharedSecurity');
   const [users, setUsers] = useState<UserRow[]>(initialUsers);
@@ -81,7 +80,7 @@ export function UsersClient({ initialUsers, individual }: Props) {
     const res = await fetch('/api/admin/users', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: `guest${n}`, displayName: t('guestDisplayName', { n }), password: '', avatar }),
+      body: JSON.stringify({ username: `guest${n}`, displayName: t('guestDisplayName', { n }), avatar }),
     });
     if (res.ok) await refresh();
     else alert((await res.json()).error || t('errors.addGuest'));
@@ -92,28 +91,6 @@ export function UsersClient({ initialUsers, individual }: Props) {
     const res = await fetch(`/api/admin/users/${id}`, { method: 'DELETE' });
     if (res.ok) await refresh();
     else alert((await res.json()).error || t('errors.delete'));
-  };
-
-  const handleResetPassword = async (id: string, username: string) => {
-    const pw = prompt(t('resetPrompt', { username }));
-    if (!pw) return;
-    const res = await fetch(`/api/admin/users/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ password: pw }),
-    });
-    if (res.ok) alert(t('passwordReset'));
-    else alert((await res.json()).error || t('errors.resetPassword'));
-  };
-
-  const handleToggleAdmin = async (id: string, isAdmin: boolean) => {
-    const res = await fetch(`/api/admin/users/${id}`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isAdmin: !isAdmin }),
-    });
-    if (res.ok) await refresh();
-    else alert((await res.json()).error || t('errors.update'));
   };
 
   const handleDisableMultiUser = async () => {
@@ -143,11 +120,11 @@ export function UsersClient({ initialUsers, individual }: Props) {
       )}
 
       <p className={styles.rowMeta}>{security('verify')} <a href="/access/security">{security('title')}</a></p>
-      <AddUserForm onCreated={refresh} individual={individual} />
+      <AddUserForm onCreated={refresh} />
 
-      {!individual && <button type="button" className={styles.action} onClick={handleQuickAddGuest}>
+      <button type="button" className={styles.action} onClick={handleQuickAddGuest}>
         {t('addGuest')}
-      </button>}
+      </button>
 
       <div className={styles.list}>
         {users.length === 0 ? (
@@ -168,15 +145,9 @@ export function UsersClient({ initialUsers, individual }: Props) {
                 </div>
               </div>
               <div className={styles.rowActions}>
-                <button className={styles.action} onClick={() => handleResetPassword(u.id, u.username)}>
-                  {t('resetPassword')}
-                </button>
-                <button className={styles.action} onClick={() => handleToggleAdmin(u.id, u.isAdmin)}>
-                  {u.isAdmin ? t('demote') : t('promote')}
-                </button>
-                <button className={styles.danger} onClick={() => handleDelete(u.id, u.username)}>
+                {!u.isAdmin && <button className={styles.danger} onClick={() => handleDelete(u.id, u.username)}>
                   {t('delete')}
-                </button>
+                </button>}
               </div>
             </div>
           ))
@@ -196,12 +167,10 @@ export function UsersClient({ initialUsers, individual }: Props) {
   );
 }
 
-function AddUserForm({ onCreated, individual }: { onCreated: () => Promise<void>; individual: boolean }) {
+function AddUserForm({ onCreated }: { onCreated: () => Promise<void> }) {
   const t = useTranslations('AdminUsers');
   const [username, setUsername] = useState('');
   const [displayName, setDisplayName] = useState('');
-  const [password, setPassword] = useState('');
-  const [isAdmin, setIsAdmin] = useState(false);
   const [avatar, setAvatar] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
@@ -217,8 +186,6 @@ function AddUserForm({ onCreated, individual }: { onCreated: () => Promise<void>
       body: JSON.stringify({
         username: username.trim(),
         displayName: displayName.trim() || null,
-        password,
-        isAdmin,
         avatar,
       }),
     });
@@ -233,8 +200,6 @@ function AddUserForm({ onCreated, individual }: { onCreated: () => Promise<void>
 
     setUsername('');
     setDisplayName('');
-    setPassword('');
-    setIsAdmin(false);
     setAvatar(null);
     await onCreated();
   };
@@ -258,24 +223,6 @@ function AddUserForm({ onCreated, individual }: { onCreated: () => Promise<void>
           onChange={(e) => setDisplayName(e.target.value)}
           autoComplete="off"
         />
-        <input
-          className={styles.input}
-          type="password"
-          placeholder={isAdmin || individual ? t('addUser.passwordAdmin') : t('addUser.passwordOptional')}
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-          autoComplete="new-password"
-          minLength={12}
-          required={isAdmin || individual}
-        />
-        <label className={styles.checkboxLabel}>
-          <input
-            type="checkbox"
-            checked={isAdmin}
-            onChange={(e) => setIsAdmin(e.target.checked)}
-          />
-          {t('addUser.admin')}
-        </label>
       </div>
       <AvatarPicker value={avatar} onChange={setAvatar} name={displayName || username} />
       <p className={styles.rowMeta}>

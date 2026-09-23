@@ -19,8 +19,9 @@ it('resets a local account through shared credentials and revokes previous sessi
   expect(await resetUserPassword('owner', 'replacement owner password')).toEqual({ ok: true, isAdmin: true });
   await expect(boundary.fixture!.access.authenticate(boundary.session)).rejects.toMatchObject({ code: 'unauthorized' });
   await expect(boundary.fixture!.access.recover(codes[0]!, 'another replacement password')).rejects.toMatchObject({ code: 'unauthorized' });
-  const session = await boundary.fixture!.access.login('owner', 'replacement owner password');
-  expect((await boundary.fixture!.access.authenticate(session)).principal?.role).toBe('owner');
+  const session = await boundary.fixture!.access.enterHousehold('replacement owner password');
+  await boundary.fixture!.profiles.select(session, 'owner');
+  expect((await boundary.fixture!.access.authenticate(session, true)).principal?.role).toBe('owner');
 });
 it('leaves existing access unchanged after an invalid new password or missing account', async () => {
   expect((await resetUserPassword('owner', 'short')).ok).toBe(false);

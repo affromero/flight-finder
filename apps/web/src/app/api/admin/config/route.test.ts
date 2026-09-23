@@ -270,26 +270,16 @@ describe('PATCH /api/admin/config — perf knobs (issue #106 gaps 2 & 4)', () =>
   });
 });
 
-describe('PATCH /api/admin/config: admin password (AUTH-3, AUTH-4)', () => {
+describe('PATCH /api/admin/config: shared password', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockUpsert.mockResolvedValue({ id: 'singleton' });
   });
 
-  it('rejects a password shorter than the shared policy with 400', async () => {
+  it('directs shared password changes to account security', async () => {
     const res = await PATCH(patchRequest({ adminPassword: 'short' }));
     expect(res.status).toBe(400);
     // Nothing must be written when the password is rejected.
-    expect(mockUpsert).not.toHaveBeenCalled();
-  });
-
-  it('changes the shared owner password and revokes existing sessions', async () => {
-    const previous = sessionBoundary.fixture!.token;
-    const res = await PATCH(patchRequest({ adminPassword: 'longenough123' }));
-    expect(res.status).toBe(200);
-    await expect(sessionBoundary.fixture!.access.authenticate(previous)).rejects.toMatchObject({ code: 'unauthorized' });
-    const token = await sessionBoundary.fixture!.access.login('owner', 'longenough123');
-    expect((await sessionBoundary.fixture!.access.authenticate(token)).principal?.role).toBe('owner');
     expect(mockUpsert).not.toHaveBeenCalled();
   });
 

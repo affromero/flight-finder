@@ -18,6 +18,8 @@ beforeEach(async () => {
   boundary.publicBaseUrl = 'http://localhost:3003';
   boundary.owner = await boundary.fixture!.issue('owner', true);
   await boundary.fixture!.access.configureHousehold(boundary.owner, 'original household password');
+  boundary.owner = await boundary.fixture!.access.enterHousehold('original household password');
+  await boundary.fixture!.profiles.select(boundary.owner, 'owner');
 });
 afterEach(() => vi.unstubAllEnvs());
 it('issues fragment-only invitation URLs and permits exactly one concurrent redemption', async () => {
@@ -30,15 +32,8 @@ it('issues fragment-only invitation URLs and permits exactly one concurrent rede
   expect(responses.map(response => response.status).sort()).toEqual([200, 401]);
   const token = responses.find(response => response.ok)!.headers.get('set-cookie')!.split(';')[0]!.slice('ft-session='.length);
   expect((await boundary.fixture!.access.authenticate(token)).principal).toBeNull();
-});
-it('carries the actual invitation mode into individual account enrollment', async () => {
-  await boundary.fixture!.access.setMode(boundary.owner, 'individual');
-  const result = await issue(request('/api/admin/access-invitation', {}, boundary.owner));
-  const fragment = new URLSearchParams(new URL((await result.json()).data.url).hash.slice(1));
-  expect(fragment.get('mode')).toBe('individual');
-  const accepted = await redeemCode(fragment.get('invite')!, { name: 'New member', password: 'new member password' });
-  expect(accepted.status).toBe(200);
-  expect((await accepted.json()).principal).toMatchObject({ name: 'New member', role: 'member' });
+  await boundary.fixture!.profiles.select(token, 'owner');
+  expect((await boundary.fixture!.access.authenticate(token, true)).principal?.role).toBe('owner');
 });
 it('rejects household invitation issuance and cross-origin requests without allocating invitations', async () => {
   const guest = await boundary.fixture!.access.enterHousehold('original household password');

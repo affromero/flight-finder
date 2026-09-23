@@ -1,21 +1,17 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import { Avatar } from '@/components/Avatar/Avatar';
 import { sanitizeNext } from '@/lib/safe-next';
 import styles from './page.module.css';
-
-interface Props {
-  next: string | null;
-}
 
 interface Profile {
   id: string;
   username: string;
   displayName: string | null;
   avatar: string | null;
-  hasPassword: boolean;
+  isAdmin: boolean;
 }
 
 interface LoginResponse {
@@ -24,185 +20,69 @@ interface LoginResponse {
   error?: string;
 }
 
-export function LoginForm({ next }: Props) {
+export function LoginForm({ next }: { next: string | null }) {
   const t = useTranslations('Login');
-  const [profiles, setProfiles] = useState<Profile[] | null>(null); // null = loading
-  const [selected, setSelected] = useState<Profile | null>(null);
-  const [manual, setManual] = useState(false);
-  const [username, setUsername] = useState('');
-  const [password, setPassword] = useState('');
+  const [profiles, setProfiles] = useState<Profile[] | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     fetch('/api/auth/profiles')
-      .then((r) => (r.ok ? r.json() : null))
-      .then((d) => setProfiles(d?.data?.profiles ?? []))
+      .then((response) => (response.ok ? response.json() : null))
+      .then((body) => setProfiles(body?.data?.profiles ?? []))
       .catch(() => setProfiles([]));
   }, []);
 
-  const submit = async (uname: string) => {
+  const selectProfile = async (username: string) => {
     setLoading(true);
     setError('');
-    const res = await fetch('/api/auth/login', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username: uname, password }),
-    });
-    const body = (await res.json().catch(() => null)) as LoginResponse | null;
-    if (res.ok && body?.data?.user) {
-      const dest = sanitizeNext(next) ?? (body.data.user.isAdmin ? '/admin' : '/account');
-      window.location.href = dest;
-      return;
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username }),
+      });
+      const body = (await response.json().catch(() => null)) as LoginResponse | null;
+      if (!response.ok || !body?.data?.user) {
+        setError(body?.error || t('invalidCredentials'));
+        return;
+      }
+      window.location.href = sanitizeNext(next) ?? (body.data.user.isAdmin ? '/admin' : '/account');
+    } catch {
+      setError(t('invalidCredentials'));
+    } finally {
+      setLoading(false);
     }
-    setError(body?.error || t('invalidCredentials'));
-    setLoading(false);
   };
 
-  // Manual username + password (fallback, or when there are no profiles yet).
-  const showManual = manual || (profiles !== null && profiles.length === 0);
-
   if (profiles === null) {
-    return (
-      <main className={styles.root}>
-        <p className={styles.loading}>{t('loading')}</p>
-      </main>
-    );
+    return <main className={styles.root}><p className={styles.loading}>{t('loading')}</p></main>;
   }
 
-  if (showManual) {
-    return (
-      <main className={styles.root}>
-        <form
-          className={styles.form}
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit(username.trim());
-          }}
-        >
-          <h1 className={styles.title}>Flight Finder</h1>
-          <input
-            type="text"
-            className={styles.input}
-            placeholder={t('usernamePlaceholder')}
-            value={username}
-            onChange={(e) => setUsername(e.target.value)}
-            autoComplete="username"
-            autoFocus
-            required
-          />
-          <input
-            type="password"
-            className={styles.input}
-            placeholder={t('passwordPlaceholder')}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            required
-          />
-          {error && <p className={styles.error}>{error}</p>}
-          <button className={styles.button} type="submit" disabled={loading}>
-            {loading ? t('signingIn') : t('signIn')}
-          </button>
-          {profiles.length > 0 && (
-            <button
-              type="button"
-              className={styles.linkButton}
-              onClick={() => {
-                setManual(false);
-                setError('');
-                setPassword('');
-              }}
-            >
-              {t('backToProfiles')}
-            </button>
-          )}
-        </form>
-      </main>
-    );
-  }
-
-  // Password screen for a chosen profile.
-  if (selected) {
-    const name = selected.displayName || selected.username;
-    return (
-      <main className={styles.root}>
-        <form
-          className={styles.form}
-          onSubmit={(e) => {
-            e.preventDefault();
-            submit(selected.username);
-          }}
-        >
-          <Avatar slug={selected.avatar} name={name} size={88} />
-          <h1 className={styles.title}>{name}</h1>
-          <input
-            type="password"
-            className={styles.input}
-            placeholder={t('passwordPlaceholder')}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            autoComplete="current-password"
-            autoFocus
-            required
-          />
-          {error && <p className={styles.error}>{error}</p>}
-          <button className={styles.button} type="submit" disabled={loading}>
-            {loading ? t('signingIn') : t('signIn')}
-          </button>
-          <button
-            type="button"
-            className={styles.linkButton}
-            onClick={() => {
-              setSelected(null);
-              setError('');
-              setPassword('');
-            }}
-          >
-            {t('back')}
-          </button>
-        </form>
-      </main>
-    );
-  }
-
-  // Profile picker ("Who's using Flight Finder?").
   return (
     <main className={styles.root}>
-      <h1 className={styles.pickerTitle}>
-        {loading ? t('signingIn') : t('pickerTitle')}
-      </h1>
-      <div className={styles.profiles}>
-        {profiles.map((p) => {
-          const name = p.displayName || p.username;
-          return (
-            <button
-              key={p.id}
-              type="button"
-              className={styles.profile}
-              disabled={loading}
-              onClick={() => {
-                setError('');
-                // Passwordless members tap straight in; the rest get a password screen.
-                if (p.hasPassword) setSelected(p);
-                else submit(p.username);
-              }}
-            >
-              <Avatar slug={p.avatar} name={name} size={104} />
-              <span className={styles.profileName}>{name}</span>
-            </button>
-          );
-        })}
-      </div>
-      {error && <p className={styles.error}>{error}</p>}
-      <button
-        type="button"
-        className={styles.linkButton}
-        disabled={loading}
-        onClick={() => setManual(true)}
-      >
-        {t('manualSignIn')}
-      </button>
+      <h1 className={styles.pickerTitle}>{loading ? t('signingIn') : t('pickerTitle')}</h1>
+      {profiles.length === 0 ? <p className={styles.loading}>{t('noProfiles')}</p> : (
+        <div className={styles.profiles}>
+          {profiles.map((profile) => {
+            const name = profile.displayName || profile.username;
+            return (
+              <button
+                key={profile.id}
+                type="button"
+                className={styles.profile}
+                disabled={loading}
+                onClick={() => void selectProfile(profile.username)}
+              >
+                <Avatar slug={profile.avatar} name={name} size={104} />
+                <span className={styles.profileName}>{name}</span>
+                {profile.isAdmin && <span className={styles.profileRole}>Admin</span>}
+              </button>
+            );
+          })}
+        </div>
+      )}
+      {error && <p className={styles.error} role="alert">{error}</p>}
     </main>
   );
 }

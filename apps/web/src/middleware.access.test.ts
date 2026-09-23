@@ -82,6 +82,8 @@ beforeEach(async () => {
     boundary.owner,
     "household gate password",
   );
+  boundary.owner = await boundary.fixture!.access.enterHousehold("household gate password");
+  await boundary.fixture!.profiles.select(boundary.owner, "owner");
 });
 afterEach(() => vi.unstubAllEnvs());
 
@@ -98,6 +100,8 @@ describe("shared middleware admission", () => {
   it("enforces managed policy changes on the next anonymous request", async () => {
     await boundary.fixture!.access.configureHousehold(boundary.owner, null);
     expect((await run("/")).status).toBe(200);
+    boundary.owner = await boundary.fixture!.access.enterOpenHousehold();
+    await boundary.fixture!.profiles.select(boundary.owner, "owner");
     await boundary.fixture!.access.configureHousehold(
       boundary.owner,
       "replacement gate password",
@@ -120,7 +124,7 @@ describe("shared middleware admission", () => {
       scopesFor: () => ["api"],
       tokenPrefix: "ff_",
     });
-    const owner = (await boundary.fixture!.access.authenticate(boundary.owner))
+    const owner = (await boundary.fixture!.access.authenticate(boundary.owner, true))
       .principal!;
     const token = await sharedDevices.issueForOperator(
       owner.id,

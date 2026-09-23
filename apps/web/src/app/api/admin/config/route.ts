@@ -15,7 +15,6 @@ import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { validateInferenceSelection } from '@/lib/scraper/inference-selection';
-import { accessRouteResponse } from '@/lib/sidedoor/access/access-http';
 
 /**
  * Masks the middle of a secret so the full value never crosses the wire.
@@ -61,11 +60,8 @@ export async function PATCH(request: NextRequest) {
   const payload = await readAccessJson(request).catch(() => null);
   if (!payload || typeof payload !== 'object' || Array.isArray(payload)) return apiError('Invalid JSON body', 400);
   const body = payload as Record<string, unknown>;
-  if ('adminPassword' in body) {
-    if (Object.keys(body).some(key => key !== 'adminPassword' && key !== 'currentPassword'))
-      return apiError('Save account credentials separately from instance settings', 400);
-    return accessRouteResponse(request, 'change-password', { password: body.adminPassword, ...(body.currentPassword === undefined ? {} : { currentPassword: body.currentPassword }) });
-  }
+  if ('adminPassword' in body || 'currentPassword' in body)
+    return apiError('Change the shared password at /access/security', 400);
 
   const owner = await configurationRequestOwner(request);
   if (owner.response) return owner.response;

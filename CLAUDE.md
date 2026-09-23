@@ -88,7 +88,6 @@ npm run ci                     # lint + typecheck + test + build (both web and c
 | `api/admin/local-models/route.ts` | GET — probe local LLM servers (Ollama, llama.cpp, vLLM) and return available model IDs (admin only) |
 | `api/admin/providers/route.ts` | GET — list all LLM providers with readiness status (admin only) |
 | `api/account/settings/route.ts` | GET/PATCH — current user's preferences |
-| `api/account/password/route.ts` | POST — self-service password change (verifies current, rate limited) |
 | `api/alerts/route.ts` | GET — active queries with their current low-price alert state (scoped in multi user mode) |
 | `api/airports/route.ts` | GET — airport autocomplete search against bundled IATA dataset |
 | `api/analytics/track/route.ts` | POST — internal analytics write endpoint; middleware calls fire-and-forget; gated by ADMIN_SESSION_SECRET |

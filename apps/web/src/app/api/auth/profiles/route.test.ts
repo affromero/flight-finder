@@ -6,7 +6,7 @@ vi.mock('@/lib/prisma', () => ({ prisma: {
   extractionConfig: { findUnique: async () => ({ multiUserMode: boundary.multiUser }) },
   user: { findMany: async ({ where }: { where: { id: { in: string[] } } }) => {
     const state = await boundary.fixture!.access.store.read();
-    return state.principals.filter(principal => where.id.in.includes(principal.id)).map(principal => ({ id: principal.id, username: principal.name, displayName: null, avatar: 'globe' }));
+    return state.principals.filter(principal => where.id.in.includes(principal.id)).map(principal => ({ id: principal.id, username: principal.name, displayName: null, avatar: 'globe', isAdmin: principal.role === 'owner' }));
   } },
 } }));
 vi.mock('@/lib/sidedoor/access/service', async () => {
@@ -28,20 +28,18 @@ it('preserves profile names and avatars in an explicitly open household without 
   expect(result.status).toBe(200);
   const payload = await result.json();
   expect(payload.data.profiles).toEqual(expect.arrayContaining([
-    expect.objectContaining({ username: 'owner', avatar: 'globe', hasPassword: true }),
-    expect.objectContaining({ username: 'member', hasPassword: false }),
+    expect.objectContaining({ username: 'owner', avatar: 'globe' }),
+    expect.objectContaining({ username: 'member' }),
   ]));
   expect(JSON.stringify(payload)).not.toMatch(/private-hash|passwordHash/);
 });
-it('requires household admission and hides account names entirely in individual mode', async () => {
+it('requires household admission before showing profile names', async () => {
   await boundary.fixture!.access.configureHousehold(boundary.owner, 'household password for testing');
   expect((await GET()).status).toBe(401);
   boundary.token = await boundary.fixture!.access.enterHousehold('household password for testing');
   expect((await GET()).status).toBe(200);
-  await boundary.fixture!.access.setMode(boundary.owner, 'individual');
-  expect((await (await GET()).json()).data.profiles).toEqual([]);
 });
-it('does not expose profile selection when multiuser mode is disabled', async () => {
+it('shows the household picker even when the separate multiuser feature is disabled', async () => {
   boundary.multiUser = false;
-  expect((await GET()).status).toBe(404);
+  expect((await GET()).status).toBe(200);
 });
