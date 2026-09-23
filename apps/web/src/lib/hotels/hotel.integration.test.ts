@@ -35,7 +35,6 @@ describe.skipIf(!enabled)('hotel workflows against isolated PostgreSQL', () => {
     flightId = flight.id;
     ownerToken = await sharedAccess.claimOwner(await sharedAccess.issueOperatorToken(), 'hotel-owner', 'hotel-integration-owner-password', 'household');
     const ownerId = (await sharedAccess.store.read()).principals.find(principal => principal.role === 'owner')!.id;
-    await prisma.user.create({ data: { id: ownerId, username: 'hotel-owner', isAdmin: true } });
     await sharedProfiles.select(ownerToken, ownerId);
   });
   beforeEach(async () => {
