@@ -4,7 +4,7 @@ import { AccessSecurity, type AccessSecurityCopy } from 'thesidedoor/react';
 import { useTranslations } from 'next-intl';
 import styles from '../page.module.css';
 
-export function SecurityScreen() {
+export function SecurityScreen({ hosted }: { hosted: boolean }) {
   const t = useTranslations('SharedSecurity');
   const access = useTranslations('SharedAccess');
   const errors: Record<string, string> = {
@@ -30,7 +30,7 @@ export function SecurityScreen() {
   return <main className={styles.root}>
     <div className={styles.content}>
       <p className={styles.brand}>Flight Finder</p>
-      <AccessSecurity copy={copy} classes={{ root: styles.access, form: styles.form, label: styles.label, input: styles.input, button: styles.button, secondary: styles.secondary, error: styles.error, hint: styles.hint }}
+      <AccessSecurity copy={copy} showRecoveryCodes={hosted} classes={{ root: styles.access, form: styles.form, label: styles.label, input: styles.input, button: styles.button, secondary: styles.secondary, error: styles.error, hint: styles.hint }}
         onSignInRequired={() => window.location.assign('/access?next=%2Faccess%2Fsecurity')}
         onHouseholdEntered={() => window.location.assign('/login?next=%2Faccess%2Fsecurity')} />
     </div>

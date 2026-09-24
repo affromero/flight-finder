@@ -64,9 +64,8 @@ try {
       bad('Landing page title', 'got: ' + title);
     }
 
-    // A fresh install (no admin password set) redirects to the setup wizard;
-    // a configured instance shows the search bar; a gated host shows an invite
-    // input. All three are valid. Each detector resolves to its label on a
+    // A protected instance opens the access gate. An admitted visitor reaches
+    // the setup wizard, profile picker, or search. Each detector resolves on a
     // match and never settles on a miss (so a losing branch can't reject the
     // race), with a hard timeout as the only failure path.
     const detect = (p, label) => p.then(() => label).catch(() => new Promise(() => {}));
@@ -78,11 +77,7 @@ try {
       ),
       detect(page.waitForURL('**/setup', { timeout: 25000 }), 'setup'),
       detect(page.waitForURL('**/login**', { timeout: 25000 }), 'login'),
-      detect(
-        page.locator('input[placeholder*="invite"]')
-          .first().waitFor({ state: 'visible', timeout: 25000 }),
-        'invite',
-      ),
+      detect(page.waitForURL('**/access**', { timeout: 25000 }), 'access'),
       new Promise(resolve => setTimeout(() => resolve('timeout'), 20000)),
     ]);
 
@@ -92,10 +87,10 @@ try {
       ok('Setup wizard shown (first-run, no admin password set)');
     } else if (result === 'login') {
       ok('Login picker shown (multi user mode)');
-    } else if (result === 'invite') {
-      ok('Invite code input visible (gated mode)');
+    } else if (result === 'access') {
+      ok('Shared-password access gate shown');
     } else {
-      bad('Landing page', 'no search bar, setup wizard, login, nor invite input after 20s');
+      bad('Landing page', 'no search bar, setup wizard, profile picker, or access gate after 20s');
     }
 
     await page.close();

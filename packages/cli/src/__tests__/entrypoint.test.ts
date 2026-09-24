@@ -65,20 +65,21 @@ describe('flight CLI entrypoint alongside hotel and car commands', () => {
     expect(result.stderr).toContain('--view');
   });
 
-  it('requires the new shared password for local recovery', async () => {
-    const result = await runCli(['--reset-password']);
-    expect(result.code).toBe(1);
-    expect(result.stderr).toContain('--reset-password');
-  });
-
   it('validates local access commands before opening the database', async () => {
-    const result = await runCli(['access', 'recover']);
+    const result = await runCli(['access', 'setup', 'extra']);
     expect(result.code).toBe(1);
-    expect(result.stderr).toContain('access recover <principalId>');
+    expect(result.stderr).toContain('access setup');
     expect(result.stdout).toBe('');
   });
 
-  it('reports local access database failures without issuing a recovery code', async () => {
+  it.each(['claim', 'recover'])('does not expose %s as a private access command', async (operation) => {
+    const result = await runCli(['access', operation]);
+    expect(result.code).toBe(1);
+    expect(result.stderr).toContain('Use access initialize, setup, reset, list, or device.');
+    expect(result.stdout).toBe('');
+  });
+
+  it('reports local access database failures without exposing credentials', async () => {
     const result = await runCli(['access', 'list']);
     expect(result.code).toBe(1);
     expect(result.stderr).toContain('Error:');

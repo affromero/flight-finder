@@ -4,7 +4,7 @@ export function registerAccessCommands(program: Command): void {
   program
     .command("access <operation> [principalId] [deviceName]")
     .description(
-      "Local access administration: initialize, list, claim, recover, device",
+      "Local access administration: initialize, setup, reset, list, device",
     )
     .action(
       async (
@@ -17,6 +17,8 @@ export function registerAccessCommands(program: Command): void {
         );
         let database: { $disconnect(): Promise<void> } | undefined;
         try {
+          if (!['initialize', 'setup', 'reset', 'list', 'device', 'prepare', 'finalize'].includes(operation))
+            throw new Error('Use access initialize, setup, reset, list, or device.');
           if (operation === "prepare" || operation === "finalize") {
             if (args.length !== 1)
               throw new Error(`Use access ${operation}.`);
@@ -39,6 +41,8 @@ export function registerAccessCommands(program: Command): void {
             DeviceService,
             executeAccessCommand,
             parseAccessCommand,
+            readLocalSetupInput,
+            readLocalResetInput,
           } = await import("thesidedoor-core/access");
           parseAccessCommand(args);
           const { prisma } = await import("@/lib/prisma");
@@ -53,6 +57,8 @@ export function registerAccessCommands(program: Command): void {
                 await store.initialize();
                 return { warnings: [] };
               },
+              setupInput: readLocalSetupInput,
+              resetInput: readLocalResetInput,
               devices: {
                 service: new DeviceService({
                   access,

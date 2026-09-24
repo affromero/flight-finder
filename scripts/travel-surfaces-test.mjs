@@ -5,7 +5,7 @@ import { mkdir, readFile, writeFile } from 'node:fs/promises';
 import { resolve } from 'node:path';
 import { chromium } from 'playwright';
 import pg from 'pg';
-import { addBrowserSession, admitBrowserHousehold, claimBrowserOwner } from './access-browser-test.mjs';
+import { addBrowserSession, admitBrowserHousehold, setupBrowserOwner } from './access-browser-test.mjs';
 
 // Real pages, login, ownership checks and PostgreSQL. Only stored travel data
 // is seeded; no provider requests or live bookings are made by this matrix.
@@ -137,7 +137,7 @@ try {
     pass(`public-${locale}: product, metadata, mobile, install link and hotel access boundary`);
   }
 
-  const ownerSession = await claimBrowserOwner({ origin: privateUrl, name: 'surface-owner', password: 'surface-owner-test-password' });
+  const ownerSession = await setupBrowserOwner({ origin: privateUrl, name: 'surface-owner', password: 'surface-owner-test-password' });
 
   const solo = await context(privateUrl, 'en', ownerSession);
   const soloPage = await pageFor(solo);

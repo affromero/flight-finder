@@ -50,8 +50,9 @@ describe('shared account identity', () => {
   it('uses the selected household profile and grants Admin only to the first profile', async () => {
     const fixture = boundary.fixture!;
     await fixture.issue('member');
-    await fixture.issue('owner', true);
-    boundary.token = await fixture.access.enterOpenHousehold();
+    const owner = await fixture.issue('owner', true);
+    await fixture.access.configureHousehold(owner, 'household test password');
+    boundary.token = await fixture.access.enterHousehold('household test password');
     await fixture.profiles.select(boundary.token, 'member');
     expect(await getCurrentUser()).toMatchObject({ id: 'member', isAdmin: false });
     expect(await getCurrentProfile()).toMatchObject({ id: 'member', isAdmin: false });

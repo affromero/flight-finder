@@ -57,6 +57,9 @@ fi
 printf "${DIM}Starting app + DB + Redis...${RESET}\n"
 HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d --no-recreate db redis
 HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
+HOST_PORT="$PORT" TEST_ACCESS_NAME=integration-owner TEST_ACCESS_PASSWORD=integration-owner-test-password \
+  python3 scripts/testing/access-setup.py docker compose -p "$PROJECT" -f "$COMPOSE_FILE" \
+  run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js access setup
 HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d 2>&1 | while IFS= read -r line; do
   printf "  ${DIM}%s${RESET}\n" "$line"
 done
@@ -78,12 +81,8 @@ done
 echo ""
 
 COOKIE_JAR=$(mktemp)
-claim_output=$(HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T web \
-  node /app/packages/cli/dist/index.js access claim)
-claim_code=$(printf '%s\n' "$claim_output" | python3 -c 'import json,sys; print(json.loads(next(line for line in reversed(sys.stdin.read().splitlines()) if line.strip().startswith("{")))["code"])')
-claim_body=$(CLAIM_CODE="$claim_code" python3 -c 'import json,os; print(json.dumps({"token":os.environ["CLAIM_CODE"],"name":"integration-owner","password":"integration-owner-test-password","mode":"household"}))')
 curl -fsS -c "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" -H 'Content-Type: application/json' \
-  --data "$claim_body" "http://localhost:${PORT}/api/access/claim" >/dev/null
+  --data '{"password":"integration-owner-test-password"}' "http://localhost:${PORT}/api/access/household" >/dev/null
 app_curl() { curl -b "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" "$@"; }
 app_curl -fsS -H 'Content-Type: application/json' \
   --data '{"username":"integration-owner"}' "http://localhost:${PORT}/api/auth/login" >/dev/null

@@ -171,6 +171,17 @@ prepare_access() {
   dc stop web
   dc up -d --no-recreate db redis
   dc run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
+  local access_state
+  access_state=$(dc run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js access list)
+  if ! printf '%s\n' "$access_state" | grep -q '"role": "owner"'; then
+    if [ -t 0 ] || (tty -s </dev/tty 2>/dev/null); then
+      printf 'Create the first Admin profile and shared password before starting Flight Finder.\n'
+      cmd_access access setup </dev/tty
+    else
+      printf 'Run flight-finder access setup in a terminal before starting the web app.\n' >&2
+      return 1
+    fi
+  fi
 }
 
 cmd_start_foreground() {
@@ -547,12 +558,11 @@ cmd_help() {
   echo "    uninstall    Remove Flight Finder and all data"
   echo "    help         Show this help"
   echo ""
-  echo "  Shared access recovery (self hosted):"
+  echo "  Shared access (self hosted):"
+  echo "    access setup                           Create first Admin and shared password"
+  echo "    access reset                           Replace the shared password locally"
   echo "    access list                            List Sidedoor principals"
-  echo "    access recover <principal-id>          Create a one-use recovery code"
   echo "    access device <principal-id> [name]    Create an API device token"
-  echo "    reset-password <password>              Set a new shared app password"
-  echo "    disable-multi-user                     Stop separating trackers by profile"
   echo ""
   echo "  Terminal UI flags (forwarded to flight-finder-tui inside the container):"
   echo "    hotels <command>        Search, track, and manage hotels (hotels --help)"
@@ -567,7 +577,7 @@ cmd_help() {
 
 # Dispatch terminal UI flags to flight-finder-tui inside the running container.
 cmd_access() {
-  # Recovery must remain usable when the web server cannot become healthy.
+  # Local setup and reset must work even when the web server is not running.
   dc run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js "$@"
 }
 
@@ -631,49 +641,6 @@ cmd_travel() {
   fi
 }
 
-# Recover a locked out household by setting a new shared password.
-# Runs the recovery path inside the container against the same DB.
-cmd_reset_password() {
-  local newpass="${1:-}"
-  if [ "$#" -ne 1 ] || [ -z "$newpass" ]; then
-    printf "${RED}${BOLD}✗${RESET} Usage: flight-finder reset-password <new-password>\n"
-    printf "  ${DIM}The password is visible in your shell history; clear it afterward.${RESET}\n"
-    exit 1
-  fi
-
-  local health
-  health=$(fetch_health)
-  if [ -z "$health" ]; then
-    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: flightfinder\n"
-    exit 1
-  fi
-
-  # Same compose-flavor flag handling as cmd_tui (issue #72).
-  local stdin_tty stdout_tty exec_flags
-  [ -t 0 ] && stdin_tty=1 || stdin_tty=0
-  [ -t 1 ] && stdout_tty=1 || stdout_tty=0
-  exec_flags=$(_compose_exec_flags "$_DC" "$stdin_tty" "$stdout_tty")
-
-  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --reset-password "$newpass"
-}
-
-# Stop separating trackers by profile while retaining the shared gate.
-cmd_disable_multi_user() {
-  local health
-  health=$(fetch_health)
-  if [ -z "$health" ]; then
-    printf "${RED}${BOLD}✗${RESET} Flight Finder is not running. Start with: flightfinder\n"
-    exit 1
-  fi
-
-  local stdin_tty stdout_tty exec_flags
-  [ -t 0 ] && stdin_tty=1 || stdin_tty=0
-  [ -t 1 ] && stdout_tty=1 || stdout_tty=0
-  exec_flags=$(_compose_exec_flags "$_DC" "$stdin_tty" "$stdout_tty")
-
-  exec $_DC $COMPOSE_FILES exec $exec_flags web flight-finder-tui --disable-multi-user
-}
-
 cmd_migrate() {
   printf "${CYAN}${BOLD}▸${RESET} Running Flight Finder migration...\n"
   if [ -d "$HOME/.fairtrail" ]; then
@@ -694,8 +661,6 @@ case "${1:-}" in
     printf "${YELLOW}${BOLD}!${RESET} --tmux is not supported in the production install. Use the dev mode CLI: npm run cli -- --tmux ...\n"
     exit 1 ;;
   search)    shift; cmd_search "$@" ;;
-  reset-password)   shift; cmd_reset_password "$@" ;;
-  disable-multi-user) cmd_disable_multi_user ;;
   start)     cmd_start_background ;;
   stop)      cmd_stop ;;
   logs)      cmd_logs ;;

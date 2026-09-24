@@ -30,7 +30,7 @@ export default async function UsersPage() {
   return (
     <div className={styles.root}>
       <h1 className={styles.title}>{t('title')}</h1>
-      <AccessInvitation />
+      {process.env.SELF_HOSTED !== 'true' && <AccessInvitation />}
       <UsersClient
         initialUsers={users.map((u) => ({
           id: u.id,

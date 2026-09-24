@@ -97,16 +97,11 @@ describe("shared middleware admission", () => {
     expect((await run("/api/queries")).status).toBe(401);
     expect((await run("/sitemap.xml")).status).toBe(307);
   });
-  it("enforces managed policy changes on the next anonymous request", async () => {
-    await boundary.fixture!.access.configureHousehold(boundary.owner, null);
-    expect((await run("/")).status).toBe(200);
-    boundary.owner = await boundary.fixture!.access.enterOpenHousehold();
-    await boundary.fixture!.profiles.select(boundary.owner, "owner");
-    await boundary.fixture!.access.configureHousehold(
-      boundary.owner,
-      "replacement gate password",
-    );
+  it("keeps self-hosted data closed when stored household state has no password", async () => {
+    await boundary.fixture!.access.store.transact(state => { state.householdPasswordHash = null; });
     expect((await run("/")).status).toBe(307);
+    expect((await run("/api/queries")).status).toBe(401);
+    await expect(boundary.fixture!.access.enterOpenHousehold()).rejects.toMatchObject({ code: "forbidden" });
   });
   it("accepts persisted household admission until revoked without granting owner authority", async () => {
     const token = await boundary.fixture!.access.enterHousehold(

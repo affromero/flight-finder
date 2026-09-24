@@ -4,11 +4,11 @@ import { fileURLToPath } from 'node:url';
 
 const root = fileURLToPath(new URL('..', import.meta.url));
 
-function command(executable, args) {
+function command(executable, args, environment = {}) {
   return new Promise((resolve, reject) => {
     const child = spawn(executable, args, {
       cwd: root,
-      env: process.env,
+      env: { ...process.env, ...environment },
       stdio: ['ignore', 'pipe', 'pipe'],
     });
     let stdout = '';
@@ -23,24 +23,11 @@ function command(executable, args) {
   });
 }
 
-function commandResult(output) {
-  const result = output.split('\n').map(line => line.trim()).filter(Boolean).reverse().find(line => line.startsWith('{'));
-  assert.ok(result, `Access command did not return JSON:\n${output}`);
-  return JSON.parse(result);
-}
-
-export async function claimBrowserOwner({ origin, name, password }) {
-  const operator = commandResult(await command('npm', ['run', 'cli', '--', 'access', 'claim']));
-  const response = await fetch(`${origin}/api/access/claim`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', Origin: origin },
-    body: JSON.stringify({ token: operator.code, name, password, mode: 'household' }),
+export async function setupBrowserOwner({ origin, name, password }) {
+  await command('python3', ['scripts/testing/access-setup.py', 'npm', 'run', 'cli', '--', 'access', 'setup'], {
+    TEST_ACCESS_NAME: name, TEST_ACCESS_PASSWORD: password,
   });
-  assert.equal(response.status, 200, await response.text());
-  const cookie = response.headers.getSetCookie().find(value => value.startsWith('ft-session='));
-  assert.ok(cookie, 'Owner claim did not issue a browser session');
-  const token = cookie.slice('ft-session='.length).split(';', 1)[0];
-  assert.ok(token, 'Owner claim issued an empty browser session');
+  const token = await admitBrowserHousehold({ origin, password });
   const selected = await fetch(`${origin}/api/auth/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', Origin: origin, Cookie: `ft-session=${token}` },

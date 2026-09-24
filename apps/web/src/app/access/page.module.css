@@ -3,14 +3,17 @@
 .brand { font-family: var(--font-mono); color: var(--accent); letter-spacing: 0.12em; text-transform: uppercase; font-size: 0.8rem; }
 .title { font-family: var(--font-display); font-size: clamp(2rem, 5vw, 3.25rem); line-height: 1.05; color: var(--text); margin: 1rem 0 2rem; }
 .access { border-top: 1px solid var(--border); padding-top: 1.25rem; }
-.navigation { display: flex; flex-wrap: wrap; gap: 0.75rem 1rem; margin-bottom: 1.75rem; }
+.navigation { display: grid; gap: 0.6rem; margin-bottom: 1.75rem; }
+.navigation .secondary { display: flex; flex-direction: column; gap: 0.25rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); }
+.navigation .secondary:hover, .navigation .secondary[aria-pressed='true'] { border-color: var(--accent); text-decoration: none; }
+.navigation .secondary span { font-size: 0.8rem; line-height: 1.4; color: var(--text-secondary); }
 .form { display: flex; flex-direction: column; gap: 0.65rem; }
 .label { color: var(--text-secondary); font-size: 0.85rem; margin-top: 0.5rem; }
 .input { width: 100%; box-sizing: border-box; min-height: 3rem; padding: 0.75rem 1rem; border: 1px solid var(--border); border-radius: var(--radius-md); background: var(--surface); color: var(--text); font: inherit; }
 .input:focus-visible, .button:focus-visible, .secondary:focus-visible { outline: 2px solid var(--accent); outline-offset: 3px; }
 .button { min-height: 3rem; padding: 0.8rem 1rem; margin-top: 0.75rem; border: 0; border-radius: var(--radius-md); background: var(--accent); color: var(--bg); font-family: var(--font-display); font-weight: 700; cursor: pointer; }
 .secondary { border: 0; padding: 0.35rem 0; background: transparent; color: var(--text-secondary); font: inherit; cursor: pointer; text-align: left; }
-.secondary[aria-pressed='true'] { color: var(--accent); text-decoration: underline; text-underline-offset: 0.35em; }
+.secondary[aria-pressed='true'] { color: var(--accent); }
 .button:disabled, .secondary:disabled { opacity: 0.55; cursor: wait; }
 .hint { color: var(--text-secondary); font-size: 0.85rem; line-height: 1.6; margin: 0.3rem 0; }
 .error { color: var(--price-up); line-height: 1.6; margin: 0.5rem 0; }

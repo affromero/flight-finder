@@ -4,6 +4,7 @@ import { accessHandler } from '@/lib/sidedoor/access/access';
 export const dynamic = 'force-dynamic';
 
 export async function POST(request: Request) {
+  if (process.env.SELF_HOSTED === 'true') return new Response(null, { status: 403 });
   const authorized = await (await accessHandler())(withAccessBody(request, {}), 'authorize-owner');
   if (!authorized.ok) return authorized;
   return accessRouteResponse(request, 'issue-invitation', { ttlMs: 24 * 60 * 60 * 1000, uses: 1 }, payload => {

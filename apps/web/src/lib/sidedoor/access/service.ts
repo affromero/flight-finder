@@ -14,7 +14,6 @@ export const sharedAccess = new AccessService({
       ? sessionAge * 1000
       : 7 * 24 * 60 * 60 * 1000,
   householdSessionTtlMs: 12 * 60 * 60 * 1000,
-  allowOpenHousehold: process.env.SELF_HOSTED === "true",
   allowPrincipalAccessInHousehold: process.env.SELF_HOSTED !== "true",
 });
 export const sharedProfiles = new HouseholdProfileService(sharedAccess);
