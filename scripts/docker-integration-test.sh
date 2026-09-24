@@ -57,6 +57,9 @@ fi
 printf "${DIM}Starting app + DB + Redis...${RESET}\n"
 HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d --no-recreate db redis
 HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" run --rm --no-deps -e SIDEDOOR_PREPARE_ONLY=true web
+HOST_PORT="$PORT" TEST_ACCESS_NAME=integration-owner TEST_ACCESS_PASSWORD=integration-owner-test-password \
+  python3 scripts/testing/access-setup.py docker compose -p "$PROJECT" -f "$COMPOSE_FILE" \
+  run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js access setup
 HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" up -d 2>&1 | while IFS= read -r line; do
   printf "  ${DIM}%s${RESET}\n" "$line"
 done
@@ -78,42 +81,6 @@ done
 echo ""
 
 COOKIE_JAR=$(mktemp)
-HOST_PORT="$PORT" python3 - "$PROJECT" "$COMPOSE_FILE" <<'PY'
-import os
-import pty
-import select
-import subprocess
-import sys
-import time
-
-master, slave = pty.openpty()
-command = [
-    "docker", "compose", "-p", sys.argv[1], "-f", sys.argv[2],
-    "exec", "-it", "web", "node", "/app/packages/cli/dist/index.js", "access", "setup",
-]
-process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave)
-os.close(slave)
-prompts = [
-    (b"First Admin profile name: ", b"integration-owner\n"),
-    (b"Shared password: ", b"integration-owner-test-password\n"),
-    (b"Confirm shared password: ", b"integration-owner-test-password\n"),
-]
-seen = bytearray()
-deadline = time.monotonic() + 60
-try:
-    for prompt, answer in prompts:
-        while prompt not in seen:
-            if time.monotonic() >= deadline:
-                raise RuntimeError("Local household setup timed out")
-            if select.select([master], [], [], 1)[0]:
-                seen.extend(os.read(master, 4096))
-        os.write(master, answer)
-        seen.clear()
-    if process.wait(timeout=30) != 0:
-        raise RuntimeError("Local household setup failed")
-finally:
-    os.close(master)
-PY
 curl -fsS -c "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" -H 'Content-Type: application/json' \
   --data '{"password":"integration-owner-test-password"}' "http://localhost:${PORT}/api/access/household" >/dev/null
 app_curl() { curl -b "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" "$@"; }

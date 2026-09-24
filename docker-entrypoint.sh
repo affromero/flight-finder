@@ -98,7 +98,7 @@ if [ "${SIDEDOOR_PREPARE_ONLY:-false}" = "true" ]; then
   access_listing="$(node /app/packages/cli/dist/index.js access list)"
   printf '%s\n' "$access_listing"
   if ! printf '%s\n' "$access_listing" | grep -q '"role": "owner"'; then
-    node /app/packages/cli/dist/index.js access claim
+    printf 'Run flight-finder access setup locally to create the first Admin and shared password.\n'
   fi
   exit 0
 fi

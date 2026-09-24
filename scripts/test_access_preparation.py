@@ -32,7 +32,7 @@ class AccessPreparationTests(unittest.TestCase):
         self.assertIn("SIDEDOOR_IMPORT_OPENAI_API_KEY: ${OPENAI_API_KEY:-}", compose)
         self.assertIn("SIDEDOOR_IMPORT_GOOGLE_API_KEY: ${GOOGLE_AI_API_KEY:-}", compose)
 
-    def run_launcher(self, arguments: list[str], fails: bool):
+    def run_launcher(self, arguments: list[str], fails: bool, fresh: bool = False):
         with tempfile.TemporaryDirectory(prefix="flight-finder-prepare-") as temporary:
             directory = Path(temporary)
             binaries = directory / "bin"
@@ -46,6 +46,9 @@ class AccessPreparationTests(unittest.TestCase):
                 'case "$*" in *SIDEDOOR_PREPARE_ONLY*) '
                 'if [ "$TEST_PREPARATION_FAILURE" = 1 ]; then '
                 'echo "Preparation rejected" >&2; exit 42; fi;; esac\n'
+                'case "$*" in *"access list"*) '
+                'if [ "$TEST_FRESH" = 1 ]; then echo "{\\"principals\\":[]}"; '
+                'else echo "{\\"principals\\":[{\\"role\\": \\"owner\\"}]}"; fi;; esac\n'
             )
             docker.chmod(0o755)
             for name in ("open", "xdg-open", "curl"):
@@ -58,10 +61,12 @@ class AccessPreparationTests(unittest.TestCase):
                 "FLIGHT_FINDER_DIR": str(directory),
                 "TEST_COMPOSE_LOG": str(log),
                 "TEST_PREPARATION_FAILURE": "1" if fails else "0",
+                "TEST_FRESH": "1" if fresh else "0",
             }
             result = subprocess.run(
                 ["bash", str(ROOT / "apps/web/public/flight-finder-cli"), *arguments],
                 env=environment, capture_output=True, text=True, timeout=10, check=False,
+                stdin=subprocess.DEVNULL, start_new_session=True,
             )
             return result, log.read_text().splitlines()
 
@@ -90,6 +95,14 @@ class AccessPreparationTests(unittest.TestCase):
         self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
         self.assertTrue(any(command.endswith("run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js access list") for command in commands))
         self.assertFalse(any("SIDEDOOR_PREPARE_ONLY" in command or " up " in command for command in commands))
+
+    def test_fresh_noninteractive_install_stays_closed_until_local_password_setup(self):
+        for arguments in ([], ['start']):
+            with self.subTest(arguments=arguments):
+                result, commands = self.run_launcher(arguments, False, fresh=True)
+                self.assertNotEqual(result.returncode, 0)
+                self.assertIn('access setup', result.stderr)
+                self.assertFalse(any(command.endswith('up -d') for command in commands))
 
 
 if __name__ == "__main__":
