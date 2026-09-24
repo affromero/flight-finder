@@ -261,7 +261,7 @@
   },
   "AdminUsers": {
     "title": "Users",
-    "banner": "{count, plural, one {# existing tracker was} other {# existing trackers were}} assigned to you when you enabled multi user mode. Reassign any that belong to other household members from the <link>admin trackers page</link>.",
+    "banner": "{count, plural, one {# existing tracker was} other {# existing trackers were}} assigned to you when you enabled multi user mode. Reassign any that belong to other people from the <link>admin trackers page</link>.",
     "dismiss": "Dismiss",
     "addGuest": "+ Add a guest (no password)",
     "guestDisplayName": "Guest {n}",

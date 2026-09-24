@@ -1,6 +1,7 @@
 'use client';
 
 import { AccessSecurity, type AccessSecurityCopy } from 'thesidedoor/react';
+import 'thesidedoor/styles.css';
 import { useTranslations } from 'next-intl';
 import styles from '../page.module.css';
 
@@ -16,6 +17,12 @@ export function SecurityScreen({ hosted }: { hosted: boolean }) {
     invalid_password: access('invalid_password'),
   };
   const copy: AccessSecurityCopy = {
+    householdTitle: t('householdTitle'), householdHint: t('householdHint'),
+    passkeysHint: t('passkeysHint'), enrollPasskey: t('enrollPasskey'),
+    confirmHouseholdPassword: t('confirmHouseholdPassword'), defaultPasskeyName: t('defaultPasskeyName'),
+    continueToProfiles: t('continueToProfiles'), householdPasswordTitle: t('householdPasswordTitle'),
+    householdPasswordHint: t('householdPasswordHint'), sessionsHint: t('sessionsHint'),
+    otherSessions: t('otherSessions'), savedBrowser: t('savedBrowser'), passwordManagerName: 'Flight Finder',
     title: t('title'), verify: t('verify'), currentPassword: t('currentPassword'),
     verifyPassword: t('verifyPassword'), verifyPasskey: t('verifyPasskey'),
     passkeys: t('passkeys'), householdPasskeys: t('householdPasskeys'), passkeyName: t('passkeyName'), addPasskey: t('addPasskey'),

@@ -261,7 +261,7 @@
   },
   "AdminUsers": {
     "title": "Utilisateurs",
-    "banner": "{count, plural, one {# suivi existant t’a été attribué} other {# suivis existants t’ont été attribués}} à l’activation du mode multi-utilisateur. Réattribue ceux qui appartiennent à d’autres membres du foyer depuis la <link>page des suivis admin</link>.",
+    "banner": "{count, plural, one {# suivi existant t’a été attribué} other {# suivis existants t’ont été attribués}} à l’activation du mode multi-utilisateur. Réattribue ceux qui appartiennent à d’autres personnes depuis la <link>page des suivis admin</link>.",
     "dismiss": "Ignorer",
     "addGuest": "+ Ajouter un invité (sans mot de passe)",
     "guestDisplayName": "Invité {n}",

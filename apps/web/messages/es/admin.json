@@ -261,7 +261,7 @@
   },
   "AdminUsers": {
     "title": "Usuarios",
-    "banner": "{count, plural, one {# rastreador existente se te asignó} other {# rastreadores existentes se te asignaron}} al habilitar el modo multiusuario. Reasigna los que pertenezcan a otros miembros del hogar desde la <link>página de rastreadores del administrador</link>.",
+    "banner": "{count, plural, one {# rastreador existente se te asignó} other {# rastreadores existentes se te asignaron}} al habilitar el modo multiusuario. Reasigna los que pertenezcan a otras personas desde la <link>página de rastreadores del administrador</link>.",
     "dismiss": "Descartar",
     "addGuest": "+ Agregar un invitado (sin contraseña)",
     "guestDisplayName": "Invitado {n}",
