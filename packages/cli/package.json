@@ -25,7 +25,7 @@
     "ink-select-input": "^6.0.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
-    "thesidedoor-core": "0.3.1"
+    "thesidedoor-core": "0.3.2"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

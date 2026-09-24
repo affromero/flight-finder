@@ -21,9 +21,11 @@ beforeEach(async () => {
   boundary.owner = await boundary.fixture!.issue('owner', true);
   await boundary.fixture!.issue('member');
   await boundary.fixture!.access.store.transact(state => { state.principals[0]!.passwordHash = 'private-hash'; });
+  await boundary.fixture!.access.configureHousehold(boundary.owner, 'household password for testing');
+  boundary.token = await boundary.fixture!.access.enterHousehold('household password for testing');
 });
 afterEach(() => vi.unstubAllEnvs());
-it('preserves profile names and avatars in an explicitly open household without exposing hashes', async () => {
+it('preserves profile names and avatars after password admission without exposing hashes', async () => {
   const result = await GET();
   expect(result.status).toBe(200);
   const payload = await result.json();
@@ -34,10 +36,15 @@ it('preserves profile names and avatars in an explicitly open household without 
   expect(JSON.stringify(payload)).not.toMatch(/private-hash|passwordHash/);
 });
 it('requires household admission before showing profile names', async () => {
-  await boundary.fixture!.access.configureHousehold(boundary.owner, 'household password for testing');
+  boundary.token = '';
   expect((await GET()).status).toBe(401);
   boundary.token = await boundary.fixture!.access.enterHousehold('household password for testing');
   expect((await GET()).status).toBe(200);
+});
+it('keeps profile names private when stored household state has no password', async () => {
+  boundary.token = '';
+  await boundary.fixture!.access.store.transact(state => { state.householdPasswordHash = null; });
+  expect((await GET()).status).toBe(401);
 });
 it('shows the household picker even when the separate multiuser feature is disabled', async () => {
   boundary.multiUser = false;

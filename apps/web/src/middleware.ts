@@ -131,13 +131,13 @@ export async function middleware(request: NextRequest) {
           );
         const destination = new URL("/access", request.url);
         destination.searchParams.set("next", pathname + request.nextUrl.search);
-        if (!hasOwner) destination.searchParams.set("mode", "claim");
+        if (!hasOwner && !isSelfHosted) destination.searchParams.set("mode", "claim");
         return NextResponse.redirect(destination);
       }
       const privateInstance =
         policy.passwordRequired ||
         policy.mode === "individual" ||
-        (isSelfHosted && !hasOwner);
+        isSelfHosted;
       if (privateInstance && !auth && !device) {
         if (pathname.startsWith("/api/"))
           return NextResponse.json(
@@ -148,7 +148,7 @@ export async function middleware(request: NextRequest) {
         destination.searchParams.set("next", pathname + request.nextUrl.search);
         destination.searchParams.set(
           "mode",
-          hasOwner
+          isSelfHosted ? "household" : hasOwner
             ? policy.mode === "household"
               ? "household"
               : "login"

@@ -33,9 +33,11 @@ describe('tracker mutation authority', () => {
   it('limits a selected household profile to its own trackers', async () => {
     vi.stubEnv('SELF_HOSTED', 'true'); boundary.multiUser = true;
     const fixture = boundary.fixture!;
-    await fixture.issue('owner', true); await fixture.issue('member');
+    const owner = await fixture.issue('owner', true); await fixture.issue('member');
+    await fixture.access.configureHousehold(owner, 'household test password');
     boundary.user = { id: 'member', isAdmin: false };
-    boundary.token = await fixture.profiles.enterOpen('member');
+    boundary.token = await fixture.access.enterHousehold('household test password');
+    await fixture.profiles.select(boundary.token, 'member');
     for (const userId of ['member', 'someone-else', null]) {
       const query = { userId, deleteToken: 'capability' };
       expect(await canManageQueryWithoutToken(query)).toBe(userId === 'member');

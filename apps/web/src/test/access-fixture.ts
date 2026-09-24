@@ -16,7 +16,7 @@ export function createAccessFixture() {
       },
     },
   });
-  const access = new AccessService({ store, allowOpenHousehold: true });
+  const access = new AccessService({ store });
   return {
     access,
     profiles: new HouseholdProfileService(access),

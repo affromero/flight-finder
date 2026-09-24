@@ -78,12 +78,44 @@ done
 echo ""
 
 COOKIE_JAR=$(mktemp)
-claim_output=$(HOST_PORT="$PORT" docker compose -p "$PROJECT" -f "$COMPOSE_FILE" exec -T web \
-  node /app/packages/cli/dist/index.js access claim)
-claim_code=$(printf '%s\n' "$claim_output" | python3 -c 'import json,sys; print(json.loads(next(line for line in reversed(sys.stdin.read().splitlines()) if line.strip().startswith("{")))["code"])')
-claim_body=$(CLAIM_CODE="$claim_code" python3 -c 'import json,os; print(json.dumps({"token":os.environ["CLAIM_CODE"],"name":"integration-owner","password":"integration-owner-test-password","mode":"household"}))')
+HOST_PORT="$PORT" python3 - "$PROJECT" "$COMPOSE_FILE" <<'PY'
+import os
+import pty
+import select
+import subprocess
+import sys
+import time
+
+master, slave = pty.openpty()
+command = [
+    "docker", "compose", "-p", sys.argv[1], "-f", sys.argv[2],
+    "exec", "-it", "web", "node", "/app/packages/cli/dist/index.js", "access", "setup",
+]
+process = subprocess.Popen(command, stdin=slave, stdout=slave, stderr=slave)
+os.close(slave)
+prompts = [
+    (b"First Admin profile name: ", b"integration-owner\n"),
+    (b"Shared password: ", b"integration-owner-test-password\n"),
+    (b"Confirm shared password: ", b"integration-owner-test-password\n"),
+]
+seen = bytearray()
+deadline = time.monotonic() + 60
+try:
+    for prompt, answer in prompts:
+        while prompt not in seen:
+            if time.monotonic() >= deadline:
+                raise RuntimeError("Local household setup timed out")
+            if select.select([master], [], [], 1)[0]:
+                seen.extend(os.read(master, 4096))
+        os.write(master, answer)
+        seen.clear()
+    if process.wait(timeout=30) != 0:
+        raise RuntimeError("Local household setup failed")
+finally:
+    os.close(master)
+PY
 curl -fsS -c "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" -H 'Content-Type: application/json' \
-  --data "$claim_body" "http://localhost:${PORT}/api/access/claim" >/dev/null
+  --data '{"password":"integration-owner-test-password"}' "http://localhost:${PORT}/api/access/household" >/dev/null
 app_curl() { curl -b "$COOKIE_JAR" -H "Origin: http://localhost:${PORT}" "$@"; }
 app_curl -fsS -H 'Content-Type: application/json' \
   --data '{"username":"integration-owner"}' "http://localhost:${PORT}/api/auth/login" >/dev/null

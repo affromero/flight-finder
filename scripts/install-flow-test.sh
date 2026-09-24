@@ -182,37 +182,6 @@ test_cli_has_cmd_tui() {
 }
 
 # ---------------------------------------------------------------------------
-# Test: flight-finder-cli ships the multi user recovery commands (#102)
-# ---------------------------------------------------------------------------
-test_cli_has_recovery_commands() {
-  local cli="apps/web/public/flight-finder-cli"
-
-  if grep -q 'cmd_reset_password()' "$cli" && grep -q 'cmd_disable_multi_user()' "$cli"; then
-    pass "flight-finder-cli defines shared password and multi user recovery"
-  else
-    fail "flight-finder-cli should define shared password and multi user recovery"
-  fi
-
-  if grep -qE 'reset-password\)' "$cli" && grep -qE 'disable-multi-user\)' "$cli"; then
-    pass "flight-finder-cli dispatches reset-password and disable-multi-user"
-  else
-    fail "flight-finder-cli should dispatch reset-password and disable-multi-user"
-  fi
-
-  if grep -q 'flight-finder-tui --reset-password' "$cli" && grep -q 'flight-finder-tui --disable-multi-user' "$cli"; then
-    pass "recovery commands exec flight-finder-tui with the shared access flags"
-  else
-    fail "recovery commands should exec flight-finder-tui with shared access flags"
-  fi
-
-  if grep -q 'Shared access recovery' "$cli"; then
-    pass "cmd_help documents shared access recovery"
-  else
-    fail "cmd_help should document shared access recovery"
-  fi
-}
-
-# ---------------------------------------------------------------------------
 # Test: install.sh supports --no-browser flag
 # ---------------------------------------------------------------------------
 test_install_supports_no_browser() {
@@ -515,7 +484,6 @@ test_install_overrides
 test_ansi_variables_defined
 test_cli_dispatches_tui_flags
 test_cli_has_cmd_tui
-test_cli_has_recovery_commands
 test_install_supports_no_browser
 test_dockerfile_ships_cli
 test_install_supports_arch_family

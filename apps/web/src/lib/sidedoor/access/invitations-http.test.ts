@@ -22,22 +22,26 @@ beforeEach(async () => {
   await boundary.fixture!.profiles.select(boundary.owner, 'owner');
 });
 afterEach(() => vi.unstubAllEnvs());
-it('issues fragment-only invitation URLs and permits exactly one concurrent redemption', async () => {
+it('keeps hosted account invitations single-use without exposing their code in the URL', async () => {
+  vi.stubEnv('SELF_HOSTED', 'false');
+  await boundary.fixture!.access.setMode(boundary.owner, 'individual');
+  boundary.owner = await boundary.fixture!.issue('owner', true);
   const result = await issue(request('/api/admin/access-invitation', {}, boundary.owner));
   expect(result.status).toBe(200);
   const url = new URL((await result.json()).data.url);
   expect(url.searchParams.get('mode')).toBe('invite');
   const code = new URLSearchParams(url.hash.slice(1)).get('invite')!;
-  const responses = await Promise.all([redeemCode(code), redeemCode(code)]);
+  const enrollment = { name: 'friend', password: 'a sufficiently long password' };
+  const responses = await Promise.all([redeemCode(code, enrollment), redeemCode(code, enrollment)]);
   expect(responses.map(response => response.status).sort()).toEqual([200, 401]);
   const token = responses.find(response => response.ok)!.headers.get('set-cookie')!.split(';')[0]!.slice('ft-session='.length);
-  expect((await boundary.fixture!.access.authenticate(token)).principal).toBeNull();
-  await boundary.fixture!.profiles.select(token, 'owner');
-  expect((await boundary.fixture!.access.authenticate(token, true)).principal?.role).toBe('owner');
+  expect((await boundary.fixture!.access.authenticate(token)).principal?.role).toBe('member');
 });
-it('rejects household invitation issuance and cross-origin requests without allocating invitations', async () => {
+it('rejects private household invitation issuance and cross-origin requests', async () => {
+  vi.stubEnv('SELF_HOSTED', 'true');
   const guest = await boundary.fixture!.access.enterHousehold('original household password');
   expect((await issue(request('/api/admin/access-invitation', {}, guest))).status).toBe(403);
+  expect((await issue(request('/api/admin/access-invitation', {}, boundary.owner))).status).toBe(403);
   expect((await issue(request('/api/admin/access-invitation', {}, boundary.owner, 'https://attacker.example'))).status).toBe(403);
   expect((await boundary.fixture!.access.store.read()).invitations).toEqual([]);
 });

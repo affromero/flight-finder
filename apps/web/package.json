@@ -34,8 +34,8 @@
     "react-dom": "^19.3.0",
     "react-plotly.js": "^4.1.0",
     "recharts": "^3.10.1",
-    "thesidedoor": "0.3.1",
-    "thesidedoor-core": "0.3.1",
+    "thesidedoor": "0.3.2",
+    "thesidedoor-core": "0.3.2",
     "ua-parser-js": "^2.0.10",
     "undici": "^8.10.2"
   },

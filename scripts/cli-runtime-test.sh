@@ -70,6 +70,9 @@ SHIM_PREAMBLE='record_call() {
   else
     printf "%s\n" "$bin" >> "$RECORD_FILE"
   fi
+  if [[ " $* " == *" access list "* ]]; then
+    printf "%s\n" "{\"principals\": [{\"role\": \"owner\"}]}"
+  fi
 }'
 
 write_docker_shim() {
@@ -839,58 +842,18 @@ test_run_cli_captures_exit() {
 }
 
 # ---------------------------------------------------------------------------
-# Test cases for shared password and multi user recovery
+# Local shared password reset
 # ---------------------------------------------------------------------------
 
-test_reset_password_execs_with_shared_credential() {
+test_access_reset_uses_local_operator() {
   for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
-    run_cli reset-password secretpass123
-    LAST_RUNTIME="$rt"; LAST_CMD="reset-password"
-    case "$rt" in
-      docker_v2)        assert_recorded "reset-password -> docker compose exec -i web --reset-password" \
-        '^docker compose -f docker-compose.yml exec -i web flight-finder-tui --reset-password secretpass123$' ;;
-      docker_v1)        assert_recorded "reset-password -> docker-compose exec -i web --reset-password" \
-        '^docker-compose -f docker-compose.yml exec -i web flight-finder-tui --reset-password secretpass123$' ;;
-      podman_native)    assert_recorded "reset-password -> podman compose exec -i web --reset-password" \
-        '^podman compose -f docker-compose.yml exec -i web flight-finder-tui --reset-password secretpass123$' ;;
-      podman_delegated) assert_recorded "reset-password -> podman-compose exec -T web (delegated #96)" \
-        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --reset-password secretpass123$' ;;
-      podman_pc)        assert_recorded "reset-password -> podman-compose exec -T web (#72)" \
-        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --reset-password secretpass123$' ;;
-    esac
-    assert_not_recorded "reset-password never sends -it/-i to podman-compose" \
-      'podman-compose .* exec [^ ]*(-it|-i ) '
-  done
-}
-
-test_reset_password_requires_password() {
-  setup_runtime docker_v2
-  EXPECT_NONZERO=1 run_cli reset-password
-  unset EXPECT_NONZERO
-  assert_not_recorded "reset-password with no password never execs the container" \
-    'exec .* web flight-finder-tui --reset-password'
-}
-
-test_disable_multi_user_execs() {
-  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
-    setup_runtime "$rt"
-    run_cli disable-multi-user
-    LAST_RUNTIME="$rt"; LAST_CMD="disable-multi-user"
-    case "$rt" in
-      docker_v2)        assert_recorded "disable-multi-user -> docker compose exec -i web" \
-        '^docker compose -f docker-compose.yml exec -i web flight-finder-tui --disable-multi-user$' ;;
-      docker_v1)        assert_recorded "disable-multi-user -> docker-compose exec -i web" \
-        '^docker-compose -f docker-compose.yml exec -i web flight-finder-tui --disable-multi-user$' ;;
-      podman_native)    assert_recorded "disable-multi-user -> podman compose exec -i web" \
-        '^podman compose -f docker-compose.yml exec -i web flight-finder-tui --disable-multi-user$' ;;
-      podman_delegated) assert_recorded "disable-multi-user -> podman-compose exec -T web (delegated #96)" \
-        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --disable-multi-user$' ;;
-      podman_pc)        assert_recorded "disable-multi-user -> podman-compose exec -T web (#72)" \
-        '^podman-compose -f docker-compose.yml exec -T web flight-finder-tui --disable-multi-user$' ;;
-    esac
-    assert_not_recorded "disable-multi-user never sends -it/-i to podman-compose" \
-      'podman-compose .* exec [^ ]*(-it|-i ) '
+    run_cli access reset
+    LAST_RUNTIME="$rt"; LAST_CMD="access reset"
+    assert_recorded "access reset runs the local operator command" \
+      'run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js access reset$'
+    assert_not_recorded "access reset never passes a password in process arguments" \
+      'reset-password|secretpass123'
   done
 }
 
@@ -946,9 +909,7 @@ test_vpn_compose_excluded_when_empty_value
 test_vpn_compose_included_when_enabled
 test_missing_helper_fails_loudly
 test_run_cli_captures_exit
-test_reset_password_execs_with_shared_credential
-test_reset_password_requires_password
-test_disable_multi_user_execs
+test_access_reset_uses_local_operator
 
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"
