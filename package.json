@@ -34,9 +34,9 @@
     }
   },
   "dependencies": {
-    "@anthropic-ai/sdk": "^0.125.0",
+    "@anthropic-ai/sdk": "^0.126.0",
     "@google/generative-ai": "^0.24.1",
-    "openai": "^7.15.0",
+    "openai": "^7.17.0",
     "proper-lockfile": "4.1.2"
   },
   "devDependencies": {
@@ -45,7 +45,7 @@
     "tsup": "8.5.1",
     "@copilotkit/aimock": "^1.29.0",
     "csv-parse": "7.0.2",
-    "geo-tz": "8.1.8",
+    "geo-tz": "8.1.9",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   }
