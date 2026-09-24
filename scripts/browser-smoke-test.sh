@@ -141,8 +141,8 @@ try {
   {
     const page = await context.newPage();
     const response = await page.goto(BASE + '/access/security', { waitUntil: 'networkidle', timeout: 30000 });
-    const heading = page.getByRole('heading', { name: 'Account security' });
-    const passkeys = page.getByText('Household passkeys', { exact: true });
+    const heading = page.getByRole('heading', { name: 'App access', exact: true });
+    const passkeys = page.getByRole('heading', { name: 'Passkeys', exact: true });
     if (response?.ok() && await heading.isVisible({ timeout: 5000 }).catch(() => false) &&
         await passkeys.isVisible({ timeout: 5000 }).catch(() => false)) {
       ok('Account security page exposes passkey management');

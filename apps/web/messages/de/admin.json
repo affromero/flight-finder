@@ -261,7 +261,7 @@
   },
   "AdminUsers": {
     "title": "Benutzer",
-    "banner": "{count, plural, one {# bestehender Tracker wurde} other {# bestehende Tracker wurden}} dir beim Aktivieren des Mehrbenutzermodus zugewiesen. Tracker anderer Haushaltsmitglieder kannst du auf der <link>Admin-Tracker-Seite</link> neu zuweisen.",
+    "banner": "{count, plural, one {# bestehender Tracker wurde} other {# bestehende Tracker wurden}} dir beim Aktivieren des Mehrbenutzermodus zugewiesen. Tracker anderer Personen kannst du auf der <link>Admin-Tracker-Seite</link> neu zuweisen.",
     "dismiss": "Ausblenden",
     "addGuest": "+ Gast hinzufügen (ohne Passwort)",
     "guestDisplayName": "Gast {n}",

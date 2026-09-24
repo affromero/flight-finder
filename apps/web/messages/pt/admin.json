@@ -261,7 +261,7 @@
   },
   "AdminUsers": {
     "title": "Usuários",
-    "banner": "{count, plural, one {# rastreador existente foi atribuído} other {# rastreadores existentes foram atribuídos}} a você quando o modo multiusuário foi ativado. Reatribua os que pertencem a outros membros da residência na <link>página de rastreadores da administração</link>.",
+    "banner": "{count, plural, one {# rastreador existente foi atribuído} other {# rastreadores existentes foram atribuídos}} a você quando o modo multiusuário foi ativado. Reatribua os que pertencem a outras pessoas na <link>página de rastreadores da administração</link>.",
     "dismiss": "Dispensar",
     "addGuest": "+ Adicionar um convidado (sem senha)",
     "guestDisplayName": "Convidado {n}",

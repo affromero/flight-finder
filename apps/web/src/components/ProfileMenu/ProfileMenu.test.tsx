@@ -44,7 +44,7 @@ describe('ProfileMenu', () => {
     render(<ProfileMenu user={MEMBER} />);
     openMenu();
     expect(screen.queryByRole('menuitem', { name: 'Instance settings' })).toBeNull();
-    expect(screen.queryByRole('menuitem', { name: 'Manage household' })).toBeNull();
+    expect(screen.queryByRole('menuitem', { name: 'Manage profiles' })).toBeNull();
     expect(screen.queryByRole('menuitem', { name: 'Admin dashboard' })).toBeNull();
   });
 
@@ -52,7 +52,7 @@ describe('ProfileMenu', () => {
     render(<ProfileMenu user={ADMIN} />);
     openMenu();
     expect(screen.getByRole('menuitem', { name: 'Instance settings' })).toBeTruthy();
-    expect(screen.getByRole('menuitem', { name: 'Manage household' })).toBeTruthy();
+    expect(screen.getByRole('menuitem', { name: 'Manage profiles' })).toBeTruthy();
     expect(screen.getByRole('menuitem', { name: 'Admin dashboard' })).toBeTruthy();
   });
 
