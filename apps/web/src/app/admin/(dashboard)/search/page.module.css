@@ -1,4 +1,7 @@
 .root {
+  width: 100%;
+  max-width: 640px;
+  margin-inline: auto;
   display: flex;
   flex-direction: column;
   gap: 2rem;
