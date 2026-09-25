@@ -1,9 +1,8 @@
 # AGENTS.md
 
 Guidance for AI coding agents working on **Flight Finder**, a self-hosted flight
-price tracker. This is the cross-tool entry point. See [CLAUDE.md](CLAUDE.md) for
-the deeper conventions and the "Altitude" design system, [README.md](README.md)
-for the product overview, and [API.md](API.md) for the runtime HTTP API you can
+price tracker. This is the cross-tool entry point. See [README.md](README.md)
+for the product overview and [API.md](API.md) for the runtime HTTP API you can
 call against a running instance.
 
 ## Stack
@@ -87,6 +86,6 @@ module or provide a stub). Web-only tests pass without it; the full `npm run ci`
 
 Releases are tag driven and version-locked across all four packages. Run the
 pre-release gate first (the `docker-smoke`, `install-flow`, `cli-runtime`, and
-`migration` scripts under `scripts/`, listed in CLAUDE.md), then use the
+`migration` scripts under `scripts/`), then use the
 `/create-release` flow, which bumps every version point and regenerates the
 lockfiles. Web tags are `vX.Y.Z`; desktop tags are `desktop-vX.Y.Z`.
