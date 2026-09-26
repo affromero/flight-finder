@@ -16,43 +16,63 @@ Closes #<issue number>
 
 ## Summary
 
-One or two sentences describing what changes for users.
+<!-- Describe what changes for users. Link related issues or PRs where available. -->
 
 ## Problem
 
-What problem does this solve, and why does it matter? Include reproduction
-steps or observed output for bugs.
+<!-- Explain the problem and its impact. For bugs, include reproduction steps,
+expected behavior, and actual behavior. -->
 
-## Fix
+## Approach
 
-What does this change do, and why was this approach chosen?
+<!-- Explain the fix and why you chose it. Note alternatives or tradeoffs that
+matter to a reviewer. -->
 
-## Testing
+## Scope and remaining work
 
-How was the change verified? Include relevant test commands and results.
+<!-- State what is complete, what is unfinished, and known limitations.
+List concrete follow-up tasks, or write "None." Keep incomplete PRs in draft. -->
+
+## Verification
+
+<!-- Paste exact commands and results. List failed or skipped checks and explain
+why any check was not run. For bug fixes, identify the regression test and
+whether it fails before the fix and passes afterward. -->
 
 - [ ] `npm run ci` passes
-- [ ] Tests were added or updated where behavior changed
+- [ ] Tests were added or updated for changed behavior, or an explanation is provided
 - [ ] Documentation was updated where needed
 
 ## Screenshots or recordings
 
-For UI changes, add before and after screenshots or a short recording. Leave
-blank when not applicable.
+<!-- For visible UI changes, include before and after screenshots or a recording.
+Include relevant mobile layouts. Write "Not applicable" for other changes. -->
+
+## Compatibility and deployment
+
+<!-- Describe affected web, CLI, desktop, scraper, or notification behavior.
+Note provider/site assumptions, rate limits, schema changes, environment
+variables, and upgrade steps. Include CLI verification when shared scraper code
+changes, and relevant desktop checks when the launcher changes.
+Write "None" if there is no deployment or compatibility impact. -->
+
+## Checklist
+
+- [ ] I searched for related issues or PRs
+- [ ] No secrets, local environment files, private user data, or generated credentials are included
 
 ## Review assistance
 
-If review identifies changes, how would you like us to proceed?
+Choose one option for unfinished work and changes requested during review.
 
-- [ ] Please use our AI agents to review this PR and prepare any requested
-      follow-up changes. I will review the result.
-- [ ] I will make any requested changes myself. Please leave review comments
-      only.
-- [ ] No preference.
+- [ ] Maintainers may use AI agents to finish the work and prepare follow-up
+      changes within the scope below. I will review the result.
+- [ ] I will make the follow-up changes myself. Please leave review comments only.
+- [ ] Please ask me before preparing follow-up changes.
 
-If you selected AI-agent assistance, describe any constraints, acceptance
-criteria, or files that should be included in the follow-up work:
+Scope, acceptance criteria, and files or behavior that should stay unchanged:
 
-<!--
-Leave this section blank if you selected another option.
--->
+<!-- Describe your constraints, or write "No additional constraints." -->
+
+If the choice is blank or conflicting, maintainers will ask before preparing changes.
+This choice does not approve merging the PR.
