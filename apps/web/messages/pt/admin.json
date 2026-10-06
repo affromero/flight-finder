@@ -240,9 +240,15 @@
       "telegram": "Telegram",
       "email": "E-mail",
       "ntfy": "ntfy",
-      "webhook": "Webhook"
+      "webhook": "Webhook",
+      "pushover": "Pushover"
     },
     "fields": {
+      "userKey": "Chave de usuário ou grupo",
+      "device": "Dispositivos (separados por vírgulas)",
+      "priority": "Prioridade (-2 a 2; 2 exige repetição e expiração)",
+      "retry": "Intervalo de repetição urgente (segundos, mínimo 30)",
+      "expire": "Expiração urgente (segundos, máximo 10800)",
       "botToken": "Token do bot",
       "chatId": "ID do chat",
       "host": "Host SMTP",

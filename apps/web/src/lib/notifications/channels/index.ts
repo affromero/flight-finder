@@ -4,6 +4,7 @@ import { sendTelegram } from './telegram';
 import { sendEmail } from './email';
 import { sendNtfy } from './ntfy';
 import { sendWebhook } from './webhook';
+import { sendPushover } from './pushover/send';
 import type { NotificationTransportOptions } from './transport';
 
 /**
@@ -35,6 +36,8 @@ export async function sendToChannel(channel: SendChannel, message: ChannelMessag
       return sendNtfy(decryptChannelConfig('ntfy', channel.config), message, { ...options, trusted });
     case 'webhook':
       return sendWebhook(decryptChannelConfig('webhook', channel.config), message, { ...options, trusted });
+    case 'pushover':
+      return sendPushover(decryptChannelConfig('pushover', channel.config), message, options);
     default:
       throw new Error(`Unknown channel type: ${channel.type as string}`);
   }

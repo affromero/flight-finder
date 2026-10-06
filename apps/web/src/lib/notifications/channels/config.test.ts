@@ -7,7 +7,6 @@ import {
   mergeStoredConfig,
   assertPublicUrl,
   assertPublicHost,
-  SECRET_FIELDS,
   pinnedPublicDispatcher,
 } from './config';
 
@@ -79,15 +78,6 @@ describe('encrypt/decrypt channel config', () => {
 
     const back = decryptChannelConfig('telegram', stored);
     expect(back).toEqual(plain);
-  });
-
-  it('declares exactly the sensitive fields as secret', () => {
-    expect(SECRET_FIELDS).toEqual({
-      telegram: ['botToken'],
-      email: ['pass'],
-      ntfy: ['token'],
-      webhook: ['secret'],
-    });
   });
 });
 

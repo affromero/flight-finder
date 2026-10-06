@@ -97,6 +97,24 @@ occupancy, or requested policies are not guessed. Results can include usable
 offers alongside explicit provider errors. Configure a notification channel to
 receive alerts outside the app; approximate matches require explicit opt-in.
 
+### Pushover alerts
+
+In **Admin → Notifications**, add a **Pushover** channel with your application's
+API token and your user or group key. Both keys are stored encrypted and remain
+hidden when editing. Leave their fields blank to keep saved keys.
+
+The optional device field accepts comma-separated device names. An empty field
+sends to all devices. Pushover also sends to all active devices if a named device
+is no longer valid; ordinary delivery groups ignore device targeting. See the
+[Pushover API](https://pushover.net/api#users) for these provider rules.
+
+Priority defaults to `0`. Emergency priority `2` requires retry seconds (at
+least `30`) and expiry seconds (at most `10800`). Titles and messages are
+shortened to the provider's character limits; supplementary links longer than
+512 characters are omitted. Configure a public base URL to use short tracker
+links. A successful test confirms provider acceptance, which does not confirm
+that a device has received or acknowledged the alert.
+
 ### Car rental tracking
 
 Open **Cars** on your self-hosted instance. Select pickup and return locations
