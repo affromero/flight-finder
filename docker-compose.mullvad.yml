@@ -1,0 +1,52 @@
+# Requires the Tailscale Mullvad add-on and permission for this dedicated device.
+# Supply TS_AUTHKEY through the caller's environment for first enrollment.
+# No host ports, TUN device, NET_ADMIN or host network changes.
+services:
+  tailscale:
+    image: ${TAILSCALE_IMAGE:-docker.io/tailscale/tailscale:v1.102.5}
+    restart: unless-stopped
+    logging: &vpn-logs
+      driver: json-file
+      options:
+        max-size: "20m"
+        max-file: "3"
+    environment:
+      TS_AUTHKEY: ${TS_AUTHKEY:-}
+      TS_AUTH_ONCE: "true"
+      TS_HOSTNAME: ${TS_HOSTNAME:-flight-finder-mullvad}
+      TS_STATE_DIR: /var/lib/tailscale
+      TS_SOCKET: /var/run/tailscale/tailscaled.sock
+      TS_USERSPACE: "true"
+      TS_SOCKS5_SERVER: 0.0.0.0:1055
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - tailscale-socket:/var/run/tailscale
+
+  tailscale-vpn:
+    build:
+      context: .
+      dockerfile: scripts/vpn/Dockerfile.tailscale-vpn
+      args:
+        TAILSCALE_IMAGE: ${TAILSCALE_IMAGE:-docker.io/tailscale/tailscale:v1.102.5}
+    restart: unless-stopped
+    logging: *vpn-logs
+    init: true
+    depends_on:
+      tailscale:
+        condition: service_started
+    volumes:
+      - tailscale-socket:/var/run/tailscale
+    environment:
+      TAILSCALE_VPN_SOCKS_URL: socks5://tailscale:1055
+
+  web:
+    environment:
+      TAILSCALE_VPN_API_URL: http://tailscale-vpn:8000
+      TAILSCALE_VPN_SOCKS_URL: socks5://tailscale:1055
+    depends_on:
+      tailscale-vpn:
+        condition: service_started
+
+volumes:
+  tailscale-state:
+  tailscale-socket:
