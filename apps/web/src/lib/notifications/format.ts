@@ -2,6 +2,7 @@ import type { ChannelMessage } from './channels/types';
 import type { NewLowAlert } from './detect';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { formatCurrency } from '@/lib/currency';
+import { newLowText } from './content/new-low';
 
 export interface AlertRoute {
   origin: string;
@@ -17,7 +18,6 @@ export function formatNewLowMessage(params: {
   baseUrl: string | null;
 }): ChannelMessage {
   const { alert, route, baseUrl } = params;
-  const price = (n: number) => formatPrice(n, alert.currency);
   const chartUrl = baseUrl ? `${baseUrl.replace(/\/+$/, '')}/q/${alert.queryId}` : '';
   // Prefer the instance's own tracker page when a public URL is configured;
   // otherwise fall back to the fare's booking link so a self-hoster still gets
@@ -25,11 +25,8 @@ export function formatNewLowMessage(params: {
   // LLM-extracted). Empty when neither exists — senders omit the link.
   const url = chartUrl || safeHttpUrl(alert.bookingUrl);
   const travelDate = alert.travelDate.toISOString().slice(0, 10);
-  const lane = `${route.origin} to ${route.destination}`;
-  const title = `New low: ${lane} ${price(alert.currentMin)}`;
-  const body =
-    `${lane} dropped to ${price(alert.currentMin)} on ${alert.airline} ` +
-    `(was ${price(alert.baseline)}, down ${price(alert.drop)}). Travel date ${travelDate}.`;
+  const { title, body } = newLowText({ ...route, currentMin: alert.currentMin, baseline: alert.baseline, drop: alert.drop,
+    currency: alert.currency, airline: alert.airline, travelDate });
 
   return {
     title,

@@ -31,6 +31,9 @@ export function assertChannelUrls(type: ChannelType, rawConfig: unknown): void {
   if (type === 'webhook' && typeof c.url === 'string') {
     assertPublicUrl(c.url, { trusted: true });
   }
+  if (type === 'whatsapp' && typeof c.gatewayUrl === 'string') {
+    assertPublicUrl(c.gatewayUrl, { trusted: true });
+  }
   if (type === 'ntfy' && typeof c.server === 'string' && c.server.trim() && c.server !== 'https://ntfy.sh') {
     assertPublicUrl(c.server, { trusted: true });
   }

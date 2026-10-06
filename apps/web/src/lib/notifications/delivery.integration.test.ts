@@ -6,11 +6,13 @@ import { deliverFlightAlerts, recordFlightAlert, recordFlightAlertInTransaction 
 import { deliverHotelAlerts } from '../hotels/alerts';
 import { editHotelTracker } from '../hotels/store';
 import { runTravelAlertsSafely } from '../travel/schedule';
+import { prepareStoredConfig } from './channels/config';
+import type { Prisma } from '@/generated/prisma/client';
 
 describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and hotel delivery through PostgreSQL and local HTTP', () => {
   let server: Server, base = '', owner = '', other = '', queryId = '', trackerId = '', cycle: Date;
   let handle: (path: string) => Promise<number>;
-  const received: { path: string; data: { eventId: string; currentMin?: number } }[] = [];
+  const received: { path: string; data: { eventId: string; currentMin?: number }; gateway?: { account: string; phone?: string; groupId?: string; message: string }; apiKey?: string }[] = [];
   const channels: string[] = [];
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? 'http://invalid');
@@ -19,7 +21,8 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
     server = createServer((request, response) => {
       let body = ''; request.setEncoding('utf8'); request.on('data', part => { body += part; });
       request.on('end', () => {
-        received.push({ path: request.url!, data: JSON.parse(body).data });
+        const payload = JSON.parse(body);
+        received.push({ path: request.url!, data: payload.data, ...(request.headers['x-api-key'] ? { gateway: payload, apiKey: String(request.headers['x-api-key']) } : {}) });
         void handle(request.url!).then(status => { response.writeHead(status); response.end('Fixture response'); }, () => { response.writeHead(500); response.end('Fixture failure'); });
       });
     });
@@ -64,6 +67,12 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
     return prisma.queryNotificationPolicy.upsert({ where: { queryId }, create: { queryId, mode: 'selected', channelIds: ids, revision },
       update: { mode: 'selected', channelIds: ids, revision } });
   }
+  async function whatsapp(destinationType: 'phone' | 'group', destination: string) {
+    const id = `whatsapp-${crypto.randomUUID()}`; channels.push(id);
+    return prisma.notificationChannel.create({ data: { id, type: 'whatsapp', config: prepareStoredConfig('whatsapp', {
+      gatewayUrl: base, apiKey: 'fixture-gateway-key', account: 'fixture-account', destinationType, destination, locale: 'es',
+    }) as Prisma.InputJsonValue } });
+  }
   async function hotelEvent() {
     trackerId = (await prisma.hotelTracker.create({ data: { userId: owner, hotelName: 'Fixture hotel', search: {}, selection: {},
       options: { mode: 'best', targetPrice: 100, notifyLows: true, allowApproximateAlerts: false, scrapeInterval: 3 } } })).id;
@@ -93,6 +102,36 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
     expect(await event()).toMatchObject({ pending: false, deliveredIds: [selected.id] });
     expect((await prisma.query.findUniqueOrThrow({ where: { id: queryId } })).updatedAt).toEqual(before.updatedAt);
     expect(await prisma.priceSnapshot.count({ where: { queryId } })).toBe(2);
+  });
+  it('retains separate WhatsApp receipts while a failed group retries after an accepted phone', async () => {
+    const phone = await whatsapp('phone', '+573001234567'), group = await whatsapp('group', 'fixture@g.us');
+    await selectChannels([phone.id, group.id]);
+    handle = async path => path.includes('/groups/') ? 503 : 200;
+    await notifyNewLows([queryId], cycle);
+    expect(await event()).toMatchObject({ pending: true, deliveredIds: [phone.id] });
+    const initial = received.map(row => ({ path: row.path, gateway: row.gateway, apiKey: row.apiKey }));
+    expect(initial).toEqual(expect.arrayContaining([
+      { path: '/api/messages/send', gateway: { account: 'fixture-account', phone: '+573001234567', message: expect.stringContaining('Nuevo mínimo') }, apiKey: 'fixture-gateway-key' },
+      { path: '/api/groups/send-message', gateway: { account: 'fixture-account', groupId: 'fixture@g.us', message: expect.stringContaining('USD') }, apiKey: 'fixture-gateway-key' },
+    ]));
+    expect(received.every(row => !row.gateway?.message.includes('/q/'))).toBe(true);
+    handle = async () => 200; await retry(); await deliverFlightAlerts();
+    expect(received.filter(row => row.gateway?.phone).length).toBe(1);
+    expect(received.filter(row => row.gateway?.groupId).length).toBe(2);
+    expect(await event()).toMatchObject({ pending: false, deliveredIds: expect.arrayContaining([phone.id, group.id]) });
+    const stored = await prisma.notificationChannel.findUniqueOrThrow({ where: { id: phone.id } });
+    expect(JSON.stringify(stored.config)).not.toContain('fixture-gateway-key');
+    expect(JSON.stringify(stored.config)).not.toContain('+573001234567');
+  });
+  it('revokes a pending WhatsApp alert when its encrypted destination changes', async () => {
+    const phone = await whatsapp('phone', '+573001234567'); await selectChannels([phone.id]);
+    await recordFlightAlert(queryId, cycle);
+    await prisma.notificationChannel.update({ where: { id: phone.id }, data: { config: prepareStoredConfig('whatsapp', {
+      gatewayUrl: base, apiKey: 'fixture-gateway-key', account: 'fixture-account', destination: '+573001234568',
+    }) as Prisma.InputJsonValue } });
+    await deliverFlightAlerts();
+    expect(received).toEqual([]);
+    expect(await event()).toMatchObject({ pending: false, deliveredIds: [] });
   });
   it('waits for a disabled selected channel and retries it without resending acknowledged channels', async () => {
     const good = await channel('a'), disabled = await channel('b');

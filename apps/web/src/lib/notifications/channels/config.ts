@@ -11,8 +11,9 @@ import type {
   WebhookConfig,
 } from './types';
 import { validatePushoverConfig } from './pushover/config';
+import { validateWhatsAppConfig } from './whatsapp/config';
 
-const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook', 'pushover'];
+const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook', 'pushover', 'whatsapp'];
 
 /** Secret fields per channel type — encrypted at rest, redacted on read. */
 const SECRET_FIELDS: Record<ChannelType, string[]> = {
@@ -21,6 +22,7 @@ const SECRET_FIELDS: Record<ChannelType, string[]> = {
   ntfy: ['token'],
   webhook: ['secret'],
   pushover: ['token', 'userKey'],
+  whatsapp: ['apiKey', 'account', 'destination'],
 };
 
 export function isChannelType(v: unknown): v is ChannelType {
@@ -92,6 +94,11 @@ export function validateChannelConfig<T extends ChannelType>(type: T, raw: unkno
       return validateWebhook(o) as ChannelConfigMap[T];
     case 'pushover':
       return validatePushoverConfig(o) as ChannelConfigMap[T];
+    case 'whatsapp': {
+      const config = validateWhatsAppConfig(o);
+      assertPublicUrl(config.gatewayUrl, { trusted: true });
+      return config as ChannelConfigMap[T];
+    }
     default:
       throw new Error(`Unknown channel type: ${type as string}`);
   }
@@ -137,6 +144,8 @@ export function mergeStoredConfig(
 ): Record<string, unknown> {
   const existing = obj(existingStored);
   const update = obj(input);
+  if (type === 'whatsapp' && update.destinationType !== undefined && update.destinationType !== existing.destinationType
+    && (typeof update.destination !== 'string' || !update.destination.trim())) throw new Error('Select a new destination when changing its type');
   const merged: Record<string, unknown> = { ...existing };
   const secrets = SECRET_FIELDS[type];
   for (const [k, v] of Object.entries(update)) {
