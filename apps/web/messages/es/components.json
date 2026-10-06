@@ -1,4 +1,23 @@
 {
+  "TrackerNotifications": {
+    "notifications": "Notificaciones",
+    "recipients": "Destinatarios",
+    "inherit": "Valores predeterminados del hogar",
+    "selected": "Elegir canales",
+    "channels": "Canales",
+    "disabled": "Desactivado",
+    "noChannels": "No hay canales de notificación disponibles.",
+    "emptyMutes": "Sin canales seleccionados, se silencian las alertas de este seguimiento.",
+    "removedChannels": "Un canal seleccionado ya no está disponible. Elimínalo antes de guardar.",
+    "removeUnavailable": "Eliminar canales no disponibles",
+    "scope": "Estos ajustes se aplican solo a este seguimiento.",
+    "save": "Guardar",
+    "reload": "Recargar",
+    "cancel": "Cancelar",
+    "loading": "Cargando ajustes de notificaciones…",
+    "loadFailed": "No se pudieron cargar los ajustes de notificaciones.",
+    "saveFailed": "No se pudieron guardar los ajustes de notificaciones."
+  },
   "DepartureWindowFields": {
     "window": "Horario de salida de ida",
     "any": "Cualquier hora",

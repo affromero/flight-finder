@@ -19,6 +19,7 @@ import { StackedSortControls, type StackedItem } from '@/components/StackedSortC
 import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
 import { ForceScrapeButton } from '@/components/ForceScrapeButton';
 import { TrackerFilters } from '@/components/TrackerFilters';
+import { TrackerNotifications } from '@/components/notifications/TrackerNotifications';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { canManageQueryWithoutToken } from '@/lib/query-auth';
 import { filterSnapshotsByTrackerFilters } from '@/lib/snapshot-filters';
@@ -135,6 +136,7 @@ interface QueryWithSnapshots {
   }>;
   lastRun: { startedAt: Date; status: string; error: string | null } | null;
   globalScrapeInterval: number;
+  canEdit: boolean;
 }
 
 type Translator = Awaited<ReturnType<typeof getTranslations>>;
@@ -163,6 +165,7 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: T
         </div>
       )}
 
+      <TrackerNotifications queryId={qData.query.id} canEdit={qData.canEdit} />
       <section className={styles.chart}>
         <PriceChart
           snapshots={qData.snapshots}
@@ -278,6 +281,7 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
     })),
     lastRun,
     globalScrapeInterval: globalConfig?.scrapeInterval ?? 3,
+    canEdit: await canManageQueryWithoutToken(query),
   };
 }
 

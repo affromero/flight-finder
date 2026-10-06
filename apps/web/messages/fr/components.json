@@ -1,4 +1,23 @@
 {
+  "TrackerNotifications": {
+    "notifications": "Notifications",
+    "recipients": "Destinataires",
+    "inherit": "Réglages du foyer",
+    "selected": "Choisir les canaux",
+    "channels": "Canaux",
+    "disabled": "Désactivé",
+    "noChannels": "Aucun canal de notification disponible.",
+    "emptyMutes": "Sans canal sélectionné, les alertes de ce suivi sont désactivées.",
+    "removedChannels": "Un canal sélectionné n’est plus disponible. Retirez-le avant d’enregistrer.",
+    "removeUnavailable": "Retirer les canaux indisponibles",
+    "scope": "Ces réglages concernent uniquement ce suivi.",
+    "save": "Enregistrer",
+    "reload": "Recharger",
+    "cancel": "Annuler",
+    "loading": "Chargement des réglages de notification…",
+    "loadFailed": "Impossible de charger les réglages de notification.",
+    "saveFailed": "Impossible d’enregistrer les réglages de notification."
+  },
   "DepartureWindowFields": {
     "window": "Horaire de départ à l’aller",
     "any": "Toute heure",

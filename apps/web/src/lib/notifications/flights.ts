@@ -7,17 +7,13 @@ import { formatNewLowMessage } from './format';
 import { deliverClaimedAlert, DELIVERY_CLAIM_MS, type ClaimedDelivery } from './delivery';
 import type { ChannelMessage } from './channels/types';
 import { resolveBaseUrl } from './base-url';
+import { lockNotificationQuery as lockQuery, captureNotificationRouting, decodeNotificationRouting, assertNotificationRouting, type NotificationRouting } from './subscriptions/authority';
 
-interface FlightDelivery extends ClaimedDelivery { queryId: string; queryVersion: string; price: number }
+interface FlightDelivery extends ClaimedDelivery { queryId: string; queryVersion: string; price: number; routing: NotificationRouting }
 function criteriaVersion(query: Query): string {
   const metadata = new Set(['updatedAt', 'firstViewedAt', 'lastNotifiedLowPrice', 'lastNotifiedAt']);
   const criteria = Object.entries(query).filter(([key]) => !metadata.has(key)).sort(([a], [b]) => a.localeCompare(b));
   return createHash('sha256').update(JSON.stringify(criteria)).digest('hex');
-}
-async function lockQuery(tx: Prisma.TransactionClient, id: string) {
-  await lockTravelAdmission(tx);
-  await tx.$queryRaw`SELECT id FROM "Query" WHERE id = ${id} FOR UPDATE`;
-  return tx.query.findUnique({ where: { id } });
 }
 
 async function flightAlertOptions(tx: Prisma.TransactionClient, cycleStartedAt: Date) {
@@ -38,6 +34,8 @@ export async function recordFlightAlertInTransaction(tx: Prisma.TransactionClien
   const options = await flightAlertOptions(tx, cycleStartedAt);
   const query = await lockQuery(tx, queryId);
   if (!query?.active || query.expiresAt <= new Date()) return;
+  const routing = await captureNotificationRouting(tx, queryId, query.userId);
+  if (routing.mode === 'selected' && routing.channels.length === 0) return;
   if (query.cabinClass !== 'economy' && options.baselineCutoff && query.lastNotifiedLowPrice !== null
     && (!query.lastNotifiedAt || query.lastNotifiedAt < options.baselineCutoff)) {
     // Reset only the locked query. Locking siblings here would invert grouped
@@ -52,10 +50,13 @@ export async function recordFlightAlertInTransaction(tx: Prisma.TransactionClien
   const alert = await detectNewLow({ query: { ...query, lastNotifiedLowPrice: null }, cycleStartedAt, floorAbs: options.floorAbs, floorPct: options.floorPct, baselineFrom }, tx);
   if (!alert) return;
   const queryVersion = criteriaVersion(query);
-  const key = createHash('sha256').update(JSON.stringify([query.id, query.userId, queryVersion, alert.currency, alert.currentMin])).digest('hex');
+  const identity = [query.id, query.userId, queryVersion, alert.currency, alert.currentMin];
+  // Unchanged household routing retains the existing event identity on upgrades.
+  if (routing.revision !== 0 || routing.mode !== 'inherit') identity.push(routing.revision);
+  const key = createHash('sha256').update(JSON.stringify(identity)).digest('hex');
   const message = formatNewLowMessage({ alert, route: query, baseUrl: options.baseUrl });
   await tx.travelAlertDelivery.upsert({ where: { eventKey: `flight:${key}` }, update: {}, create: {
-    queryId, eventKey: `flight:${key}`, message: JSON.parse(JSON.stringify({ ...message, data: { ...message.data, userId: query.userId, queryVersion } })),
+    queryId, eventKey: `flight:${key}`, message: JSON.parse(JSON.stringify({ ...message, notificationRouting: routing, data: { ...message.data, userId: query.userId, queryVersion } })),
   } });
 }
 
@@ -64,7 +65,7 @@ export async function recordFlightAlert(queryId: string, cycleStartedAt: Date): 
   await notificationTransaction(tx => recordFlightAlertInTransaction(tx, queryId, cycleStartedAt));
 }
 
-function flightPayload(row: TravelAlertDelivery): { payload: ChannelMessage; owner: string | null; queryVersion: string; price: number } {
+function flightPayload(row: TravelAlertDelivery): { payload: ChannelMessage; owner: string | null; queryVersion: string; price: number; routing: NotificationRouting; requiredChannelIds?: string[] } {
   const message = row.message;
   if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('Invalid flight notification');
   const data = message.data;
@@ -72,7 +73,12 @@ function flightPayload(row: TravelAlertDelivery): { payload: ChannelMessage; own
     || (data.userId !== null && typeof data.userId !== 'string') || typeof data.queryVersion !== 'string'
     || typeof data.currentMin !== 'number' || !Number.isFinite(data.currentMin) || data.currentMin <= 0
     || typeof message.title !== 'string' || typeof message.body !== 'string' || typeof message.url !== 'string') throw new Error('Invalid flight notification');
-  return { payload: message as unknown as ChannelMessage, owner: data.userId, queryVersion: data.queryVersion, price: data.currentMin };
+  const routing = decodeNotificationRouting(message.notificationRouting);
+  return {
+    payload: { title: message.title, body: message.body, url: message.url, data: data as unknown as ChannelMessage['data'] },
+    owner: data.userId, queryVersion: data.queryVersion, price: data.currentMin, routing,
+    requiredChannelIds: routing.mode === 'selected' ? routing.channels.map(channel => channel.id) : undefined,
+  };
 }
 
 async function claim(id: string, queryId: string): Promise<FlightDelivery | null> {
@@ -84,6 +90,7 @@ async function claim(id: string, queryId: string): Promise<FlightDelivery | null
     try {
       details = flightPayload(row);
       if (!query?.active || query.expiresAt <= new Date() || query.userId !== details.owner || criteriaVersion(query) !== details.queryVersion) throw new Error('Flight query changed');
+      await assertNotificationRouting(tx, queryId, details.owner, details.routing);
     } catch {
       await tx.travelAlertDelivery.update({ where: { id }, data: { pending: false, claimToken: null, claimExpiresAt: null, lastError: 'Notification cancelled: its query or stored event is no longer valid.' } });
       return null;
@@ -99,6 +106,7 @@ async function guarded<T>(entry: FlightDelivery, work: (tx: Prisma.TransactionCl
     const row = await tx.travelAlertDelivery.findUnique({ where: { id: entry.id } });
     if (!query?.active || query.expiresAt <= new Date() || query.userId !== entry.owner || criteriaVersion(query) !== entry.queryVersion
       || !row?.pending || row.claimToken !== entry.claimToken || !row.claimExpiresAt || row.claimExpiresAt <= new Date()) throw new Error('Flight notification delivery authority was lost');
+    await assertNotificationRouting(tx, entry.queryId, entry.owner, entry.routing);
     return work(tx, row);
   });
 }

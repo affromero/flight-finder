@@ -1,4 +1,23 @@
 {
+  "TrackerNotifications": {
+    "notifications": "Benachrichtigungen",
+    "recipients": "Empfänger",
+    "inherit": "Haushaltsvorgaben",
+    "selected": "Kanäle auswählen",
+    "channels": "Kanäle",
+    "disabled": "Deaktiviert",
+    "noChannels": "Keine Benachrichtigungskanäle verfügbar.",
+    "emptyMutes": "Ohne ausgewählte Kanäle werden Meldungen für diesen Tracker stummgeschaltet.",
+    "removedChannels": "Ein ausgewählter Kanal ist nicht mehr verfügbar. Entferne ihn vor dem Speichern.",
+    "removeUnavailable": "Nicht verfügbare Kanäle entfernen",
+    "scope": "Diese Einstellungen gelten nur für diesen Tracker.",
+    "save": "Speichern",
+    "reload": "Neu laden",
+    "cancel": "Abbrechen",
+    "loading": "Benachrichtigungseinstellungen werden geladen…",
+    "loadFailed": "Benachrichtigungseinstellungen konnten nicht geladen werden.",
+    "saveFailed": "Benachrichtigungseinstellungen konnten nicht gespeichert werden."
+  },
   "DepartureWindowFields": {
     "window": "Abflugzeit für den Hinflug",
     "any": "Beliebige Uhrzeit",

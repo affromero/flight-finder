@@ -49,6 +49,7 @@ model Query {
   editEvents QueryEditEvent[]
   travelJobs TravelJob[]
   travelAlerts TravelAlertDelivery[]
+  notificationPolicy QueryNotificationPolicy?
   user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([active])
@@ -522,6 +523,15 @@ model TravelAlertDelivery {
   carTracker    CarTracker? @relation(fields: [carTrackerId], references: [id], onDelete: Cascade)
 
   @@index([pending, nextAttemptAt])
+}
+
+model QueryNotificationPolicy {
+  queryId    String @id
+  mode       String @default("inherit")
+  channelIds String[] @default([])
+  revision   Int @default(0)
+  updatedAt  DateTime @updatedAt
+  query      Query @relation(fields: [queryId], references: [id], onDelete: Cascade)
 }
 
 model NotificationChannel {
