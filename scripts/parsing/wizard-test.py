@@ -11,6 +11,7 @@ master, slave = pty.openpty()
 child = subprocess.Popen(
     [sys.argv[1], sys.argv[2], "--headless", "--parse-mode", "async"],
     stdin=slave, stdout=slave, stderr=slave, start_new_session=True,
+    env={**os.environ, "CI": "false", "CONTINUOUS_INTEGRATION": "false"},
 )
 os.close(slave)
 output = bytearray()
