@@ -50,6 +50,8 @@ model Query {
   travelJobs TravelJob[]
   travelAlerts TravelAlertDelivery[]
   notificationPolicy QueryNotificationPolicy?
+  alertSettings QueryAlertSettings?
+  alertRules QueryAlertRule[]
   user      User?           @relation(fields: [userId], references: [id], onDelete: SetNull)
 
   @@index([active])
@@ -532,6 +534,33 @@ model QueryNotificationPolicy {
   revision   Int @default(0)
   updatedAt  DateTime @updatedAt
   query      Query @relation(fields: [queryId], references: [id], onDelete: Cascade)
+}
+
+model QueryAlertSettings {
+  queryId  String @id
+  revision Int @default(0)
+  query    Query @relation(fields: [queryId], references: [id], onDelete: Cascade)
+}
+
+model QueryAlertRule {
+  id                String @id @default(cuid())
+  queryId           String
+  flightId          String?
+  currency          String
+  targetPrice       Float?
+  dropAbs           Float?
+  dropPct           Float?
+  enabled           Boolean @default(true)
+  cooldownMinutes   Int @default(0)
+  revision          Int @default(1)
+  baselinePrice     Float?
+  lastNotifiedPrice Float?
+  lastNotifiedAt    DateTime?
+  criteriaVersion   String
+  eventSequence     Int @default(0)
+  query             Query @relation(fields: [queryId], references: [id], onDelete: Cascade)
+
+  @@index([queryId, enabled])
 }
 
 model NotificationChannel {
