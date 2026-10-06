@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mockPrisma, mockNavigateGoogleFlights, mockNavigateSkyscanner, mockNavigateKayak, mockExtractPrices, runScrapeForQuery, BASE_QUERY } from './run-scrape-fixture';
+import { mockPrisma, mockNavigateGoogleFlights, mockNavigateSkyscanner, mockNavigateKayak, mockExtractPrices, runScrapeForQuery, BASE_QUERY } from '../../../test/scraper/run-scrape-fixture';
 import { resolveAggregatorChain } from '../run-scrape';
 
 describe('resolveAggregatorChain', () => {

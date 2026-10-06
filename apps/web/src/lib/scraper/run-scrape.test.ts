@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockExtractPrices, runScrapeForQuery, BASE_QUERY } from './testing/run-scrape-fixture';
+import { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockExtractPrices, runScrapeForQuery, BASE_QUERY } from '../../test/scraper/run-scrape-fixture';
 import { runScrapeAll } from './run-scrape';
 import { TravelCleanupError } from '../travel/execution';
 

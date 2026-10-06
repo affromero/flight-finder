@@ -1,7 +1,7 @@
 import { vi, beforeEach } from 'vitest';
 import { createHash } from 'node:crypto';
-import { withTravelContext } from '../../travel/context';
-import { TravelVpnSession } from '../../travel/vpn';
+import { withTravelContext } from '../../lib/travel/context';
+import { TravelVpnSession } from '../../lib/travel/vpn';
 import type { ExtractionConfig, TravelJob } from '@/generated/prisma/client';
 
 const { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockNavigateSkyscanner, mockNavigateKayak, mockExtractPrices } = vi.hoisted(() => {
@@ -30,14 +30,14 @@ export { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockN
 
 vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
 
-vi.mock('../navigate', () => ({
+vi.mock('../../lib/scraper/navigate', () => ({
   navigateGoogleFlights: (...args: unknown[]) => mockNavigateGoogleFlights(...args),
   navigateAirlineDirect: (...args: unknown[]) => mockNavigateAirlineDirect(...args),
   navigateSkyscanner: (...args: unknown[]) => mockNavigateSkyscanner(...args),
   navigateKayak: (...args: unknown[]) => mockNavigateKayak(...args),
 }));
 
-vi.mock('../extract-prices', () => ({
+vi.mock('../../lib/scraper/extract-prices', () => ({
   extractPrices: (...args: unknown[]) => mockExtractPrices(...args),
 }));
 
@@ -46,7 +46,7 @@ vi.mock('fs/promises', () => ({
   writeFile: vi.fn().mockResolvedValue(undefined),
 }));
 
-import { runScrapeForQuery as scrapeAdmittedQuery } from '../run-scrape';
+import { runScrapeForQuery as scrapeAdmittedQuery } from '../../lib/scraper/run-scrape';
 
 const lease = { id: 'vpn', owner: 'unit-worker', generation: 1, topologyVersion: 1 };
 const job = { id: 'unit-job', kind: 'flight_query', queryId: 'q1', userId: null, status: 'running' } as TravelJob;
