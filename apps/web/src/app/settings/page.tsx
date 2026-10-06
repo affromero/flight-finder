@@ -11,11 +11,13 @@ import { LOCALES, LOCALE_LABELS, LOCALE_COOKIE, isLocale } from '@/i18n/locales'
 import { ThemePicker } from '@/components/ThemePicker/ThemePicker';
 import { ReachGuide } from '@/components/ReachGuide/ReachGuide';
 import { HotelMapAdmin } from '@/components/hotels/HotelMapAdmin';
+import { VpnPreferences, type VpnReadiness } from '@/components/vpn/VpnPreferences';
 import { PROVIDER_METADATA, LOCAL_PROVIDERS, CLI_PROVIDERS } from '@/lib/scraper/provider-metadata';
 import { isThemeId, DEFAULT_THEME, type ThemeId } from '@/lib/theme';
 import styles from './page.module.css';
 import { CliModelPicker } from '@/components/CliModelPicker/CliModelPicker';
 import { orderedProviders, type ReasoningSelection } from '@/lib/scraper/cli-model-types';
+import type { ApiResponse } from '@/lib/api-response';
 
 interface Config {
   updatedAt: string;
@@ -62,9 +64,10 @@ export default function SettingsPage() {
   const [vpnCountries, setVpnCountries] = useState<string[]>([]);
   const [vpnActivationCode, setVpnActivationCode] = useState('');
   const [vpnCodeSaving, setVpnCodeSaving] = useState(false);
+  const [vpnPreferencesSaving, setVpnPreferencesSaving] = useState(false);
   const [vpnCodeMessage, setVpnCodeMessage] = useState('');
   const [hasVpnCode, setHasVpnCode] = useState(false);
-  const [vpnLive, setVpnLive] = useState<{ configured: boolean; sidecarRunning: boolean; ready: boolean } | null>(null);
+  const [vpnLive, setVpnLive] = useState<VpnReadiness | null>(null);
   const [detectedProviders, setDetectedProviders] = useState<string[]>([]);
   const [configuringProvider, setConfiguringProvider] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -179,19 +182,32 @@ export default function SettingsPage() {
   };
 
   const effectiveModel = customModel.trim() || model || (localModels.length > 0 ? localModels[0]!.id : '');
+  const configBusy = saving || verifying || vpnCodeSaving || vpnPreferencesSaving;
+
+  async function patchPreferences(fields: Record<string, unknown>): Promise<ApiResponse<Config>> {
+    if (configBusy) throw Error(t('extraction.saveFailed'));
+    setSaving(true);
+    try {
+      const response = await fetch('/api/admin/config', {
+        method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ ...fields, expectedUpdatedAt: config?.updatedAt, expectedRevision: config?.providerRevision }),
+      });
+      const result = await response.json() as ApiResponse<Config>;
+      if (response.ok && result.ok) setConfig(result.data);
+      return result;
+    } finally { setSaving(false); }
+  }
 
   const handleSave = async () => {
+    if (saving || verifying || vpnCodeSaving || vpnPreferencesSaving) return;
     if (!effectiveModel) {
       setMessage(t('extraction.enterModelId'));
       return;
     }
-    setSaving(true);
     setMessage('');
 
-    const res = await fetch('/api/admin/config', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
+    try {
+      const data = await patchPreferences({
         provider,
         model: effectiveModel,
         reasoningEffort: reasoning,
@@ -206,22 +222,16 @@ export default function SettingsPage() {
         defaultSearchMethod,
         vpnProvider: vpnProvider === 'none' ? null : vpnProvider,
         vpnCountries,
-      }),
-    });
-
-    const data = await res.json();
-    if (data.ok) {
-      setConfig(data.data);
-      setCredentialFields({});
-      setResetCredentials(false);
-      setMessage(t('extraction.saved'));
-      if (LOCAL_PROVIDERS.has(provider)) {
-        fetchLocalModels(provider);
+      });
+      if (data.ok) {
+        setCredentialFields({});
+        setResetCredentials(false);
+        setMessage(t('extraction.saved'));
+        if (LOCAL_PROVIDERS.has(provider)) fetchLocalModels(provider);
+      } else {
+        setMessage(data.error || t('extraction.saveFailed'));
       }
-    } else {
-      setMessage(data.error || t('extraction.saveFailed'));
-    }
-    setSaving(false);
+    } catch (error) { setMessage(error instanceof Error ? error.message : t('extraction.saveFailed')); }
   };
 
   if (!config) return null;
@@ -247,17 +257,12 @@ export default function SettingsPage() {
           <ThemePicker
             value={theme}
             onSelect={async (id) => {
+              if (saving || verifying || vpnCodeSaving || vpnPreferencesSaving) return;
               setTheme(id);
               setThemeMessage(t('appearance.saving'));
               try {
-                const res = await fetch('/api/admin/config', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ theme: id }),
-                });
-                const data = await res.json();
+                const data = await patchPreferences({ theme: id });
                 setThemeMessage(data.ok ? t('appearance.saved') : (data.error || t('appearance.saveThemeFailed')));
-                if (data.ok) setConfig(data.data);
               } catch {
                 setThemeMessage(t('appearance.saveThemeFailed'));
               }
@@ -307,17 +312,12 @@ export default function SettingsPage() {
               <button
                 type="button"
                 className={styles.button}
-                disabled={reachSaving}
+                disabled={reachSaving || configBusy}
                 onClick={async () => {
                   setReachSaving(true);
                   setReachMessage('');
                   try {
-                    const res = await fetch('/api/admin/config', {
-                      method: 'PATCH',
-                      headers: { 'Content-Type': 'application/json' },
-                      body: JSON.stringify({ publicBaseUrl: publicBaseUrl.trim() || null }),
-                    });
-                    const data = await res.json();
+                    const data = await patchPreferences({ publicBaseUrl: publicBaseUrl.trim() || null });
                     setReachMessage(data.ok ? t('reach.saved') : (data.error || t('reach.saveFailed')));
                   } catch {
                     setReachMessage(t('reach.saveFailed'));
@@ -506,7 +506,7 @@ export default function SettingsPage() {
           </div>
 
           <div className={styles.actions}>
-            <button className={styles.saveButton} onClick={handleSave} disabled={saving || verifying}>
+            <button className={styles.saveButton} onClick={handleSave} disabled={saving || verifying || vpnCodeSaving || vpnPreferencesSaving}>
               {saving ? t('extraction.saving') : t('extraction.save')}
             </button>
             {message && <span className={styles.message}>{message}</span>}
@@ -518,6 +518,11 @@ export default function SettingsPage() {
           <p className={styles.toggleHint}>
             {t('vpn.hint')}
           </p>
+
+          <VpnPreferences provider={vpnProvider} countries={vpnCountries} revision={config}
+            onProviderChange={setVpnProvider} onCountriesChange={setVpnCountries} status={vpnLive} onStatus={setVpnLive}
+            disabled={saving || vpnCodeSaving || verifying} onBusyChange={setVpnPreferencesSaving}
+            onSaved={saved => { setConfig(current => current ? { ...current, ...saved } : current); setVpnProvider(saved.vpnProvider || 'none'); setVpnCountries(saved.vpnCountries); }} />
 
           <div className={styles.vpnProviderGrid}>
             <button
@@ -532,8 +537,8 @@ export default function SettingsPage() {
             >
               <div className={styles.vpnCardHeader}>
                 <span className={styles.vpnCardName}>ExpressVPN</span>
-                <span className={vpnLive?.ready ? styles.vpnCardStatusReady : hasVpnCode ? styles.vpnCardStatusWarn : styles.vpnCardStatusOff}>
-                  {vpnLive?.ready ? t('vpn.statusConnected') : hasVpnCode ? (vpnLive?.sidecarRunning === false ? t('vpn.statusSidecarOffline') : t('vpn.statusCodeSaved')) : t('vpn.statusNotSetUp')}
+                <span className={vpnLive?.provider === 'expressvpn' && vpnLive.ready ? styles.vpnCardStatusReady : hasVpnCode ? styles.vpnCardStatusWarn : styles.vpnCardStatusOff}>
+                  {vpnLive?.provider === 'expressvpn' && vpnLive.ready ? t('vpn.statusConnected') : hasVpnCode ? (vpnLive?.provider === 'expressvpn' && vpnLive.sidecarRunning === false ? t('vpn.statusSidecarOffline') : t('vpn.statusCodeSaved')) : t('vpn.statusNotSetUp')}
                 </span>
               </div>
               <span className={styles.vpnCardDesc}>{t('vpn.expressVpnDesc')}</span>
@@ -547,13 +552,13 @@ export default function SettingsPage() {
               <span className={styles.vpnCardDesc}>{t('vpn.nordVpnDesc')}</span>
             </div>
 
-            <div className={styles.vpnCardDisabled}>
+            <button type="button" className={`${styles.vpnCard} ${vpnProvider === 'mullvad' ? styles.vpnCardActive : ''}`} disabled={configBusy} onClick={() => setVpnProvider('mullvad')}>
               <div className={styles.vpnCardHeader}>
                 <span className={styles.vpnCardName}>Mullvad</span>
-                <span className={styles.vpnCardStatusOff}>{t('vpn.comingSoon')}</span>
+                <span className={vpnLive?.provider === 'mullvad' && vpnLive.ready ? styles.vpnCardStatusReady : styles.vpnCardStatusOff}>{vpnLive?.provider === 'mullvad' && vpnLive.ready ? t('vpn.statusReady') : t('vpn.statusNotSetUp')}</span>
               </div>
               <span className={styles.vpnCardDesc}>{t('vpn.mullvadDesc')}</span>
-            </div>
+            </button>
 
             <div className={styles.vpnCardDisabled}>
               <div className={styles.vpnCardHeader}>
@@ -618,31 +623,38 @@ export default function SettingsPage() {
             <div className={styles.actions}>
               <button
                 className={styles.saveButton}
-                disabled={vpnCodeSaving || !vpnActivationCode}
+                disabled={vpnCodeSaving || saving || verifying || vpnPreferencesSaving || !vpnActivationCode}
                 onClick={async () => {
+                  if (configBusy) return;
                   setVpnCodeSaving(true);
                   setVpnCodeMessage('');
-                  const res = await fetch('/api/admin/config', {
+                  try {
+                    const res = await fetch('/api/admin/config', {
                     method: 'PATCH',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
                       vpnActivationCode: vpnActivationCode,
                       vpnProvider: 'expressvpn',
+                      expectedUpdatedAt: config.updatedAt,
+                      expectedRevision: config.providerRevision,
                     }),
                   });
-                  const data = await res.json();
-                  if (data.ok) {
+                    const data = await res.json();
+                    if (!res.ok || !data.ok) throw Error(data.error || t('vpn.saveFailed'));
                     setConfig(data.data);
                     setHasVpnCode(true);
                     setVpnActivationCode('');
                     setVpnProvider('expressvpn');
                     setVpnCodeMessage(t('vpn.configured'));
-                    // Refresh live status
-                    fetch('/api/vpn/status').then((r) => r.json()).then((s) => { if (s.ok) setVpnLive(s.data); }).catch(() => {});
-                  } else {
-                    setVpnCodeMessage(data.error || t('vpn.saveFailed'));
-                  }
-                  setVpnCodeSaving(false);
+                    try {
+                      const response = await fetch('/api/vpn/status', { cache: 'no-store' });
+                      const checked = await response.json();
+                      if (!response.ok || !checked.ok) throw Error('Readiness unavailable');
+                      setVpnLive(checked.data);
+                      if (checked.data.error || checked.data.provider !== 'expressvpn') setVpnCodeMessage(t('vpn.savedReadinessFailed'));
+                    } catch { setVpnCodeMessage(t('vpn.savedReadinessFailed')); }
+                  } catch (error) { setVpnCodeMessage(error instanceof Error ? error.message : t('vpn.saveFailed')); }
+                  finally { setVpnCodeSaving(false); }
                 }}
               >
                 {vpnCodeSaving ? t('vpn.saving') : hasVpnCode ? t('vpn.updateCode') : t('vpn.saveCode')}
@@ -683,15 +695,11 @@ export default function SettingsPage() {
             <button
               type="button"
               className={`${styles.toggle} ${config.communitySharing ? styles.toggleOn : ''}`}
+              disabled={saving || verifying || vpnCodeSaving || vpnPreferencesSaving}
               onClick={async () => {
                 const newValue = !config.communitySharing;
-                const res = await fetch('/api/admin/config', {
-                  method: 'PATCH',
-                  headers: { 'Content-Type': 'application/json' },
-                  body: JSON.stringify({ communitySharing: newValue }),
-                });
-                const data = await res.json();
-                if (data.ok) setConfig(data.data);
+                try { const result = await patchPreferences({ communitySharing: newValue }); if (!result.ok) setMessage(result.error); }
+                catch (error) { setMessage(error instanceof Error ? error.message : t('extraction.saveFailed')); }
               }}
             >
               <span className={styles.toggleKnob} />
@@ -713,15 +721,11 @@ export default function SettingsPage() {
               <button
                 type="button"
                 className={`${styles.toggle} ${config.communityRegistrationOpen ? styles.toggleOn : ''}`}
+                disabled={saving || verifying || vpnCodeSaving || vpnPreferencesSaving}
                 onClick={async () => {
                   const newValue = !config.communityRegistrationOpen;
-                  const res = await fetch('/api/admin/config', {
-                    method: 'PATCH',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ communityRegistrationOpen: newValue }),
-                  });
-                  const data = await res.json();
-                  if (data.ok) setConfig(data.data);
+                  try { const result = await patchPreferences({ communityRegistrationOpen: newValue }); if (!result.ok) setMessage(result.error); }
+                  catch (error) { setMessage(error instanceof Error ? error.message : t('extraction.saveFailed')); }
                 }}
               >
                 <span className={styles.toggleKnob} />

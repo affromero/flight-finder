@@ -500,6 +500,65 @@ Content-Type: application/json
 
 ### Admin endpoints
 
+#### Mullvad comparisons through Tailscale
+
+Settings supports `none` (the existing default), `expressvpn` and `mullvad`.
+Administrators save `vpnProvider` and `vpnCountries` through
+`PATCH /api/admin/config`, with `expectedUpdatedAt` and `expectedRevision` from
+the current configuration. Disabling the provider stores `null`. Mullvad does
+not use an ExpressVPN activation code. Comparison countries must have a
+[supported browser profile](apps/web/src/lib/scraper/country-profiles.ts).
+The provider also requires an available exit peer before connecting.
+
+Mullvad requires the [Tailscale Mullvad add-on and device permission](https://tailscale.com/docs/features/exit-nodes/mullvad-exit-nodes).
+An ordinary Mullvad subscription does not grant this Tailscale device access.
+The optional `docker-compose.mullvad.yml` overlay runs a dedicated daemon in
+[userspace networking mode](https://tailscale.com/docs/concepts/userspace-networking)
+with its own state and socket volumes. It exposes no host ports and requires
+neither a TUN device nor `NET_ADMIN`. The bridge mounts only that dedicated
+daemon's socket. Supply `TS_AUTHKEY` through the caller's environment on first
+enrollment, grant the device Mullvad access, then select Mullvad in Settings.
+The overlay pins the daemon and bridge CLI to Tailscale `v1.102.5`; both use
+`TAILSCALE_IMAGE` when the operator supplies another compatible version.
+
+```sh
+docker compose -f docker-compose.prod.yml -f docker-compose.mullvad.yml up -d
+```
+
+Use one VPN overlay at a time. The standalone web application captures
+`TAILSCALE_VPN_API_URL` (default `http://tailscale-vpn:8000`) and
+`TAILSCALE_VPN_SOCKS_URL` (default `socks5://tailscale:1055`). The API URL accepts
+HTTP or HTTPS with no credentials, query, fragment or path. The browser proxy
+accepts SOCKS5 with no credentials, query, fragment or path. The bridge must use
+the identical proxy URL. Endpoint and proxy identities are fingerprinted in
+persistent travel admission; changing either while a lease is held quarantines
+shared execution.
+
+`GET /api/vpn/status` reports `provider`, `configured`, `sidecarRunning`, and
+`ready`. Mullvad also reports available `countries` that have supported browser
+profiles. A malformed response, proxy mismatch, unavailable peers or a bridge
+incident produces `ready: false` and an explicit `error`, without internal
+endpoint URLs or daemon output. Reading readiness never changes the exit node.
+Readiness does not mean a comparison has connected or that every configured
+country is currently available.
+
+Before a comparison, the bridge validates the daemon's userspace and selected
+exit state. It changes only exit selection, verifies the selected peer, probes
+Mullvad through the same SOCKS proxy with remote DNS, and rechecks selection.
+The web provider independently verifies the observed IP's country with the
+installed country database. It accepts no unverified or private exit address.
+Mullvad uses the existing serialized VPN lease alongside independent browser
+work; successful completion verifies disconnect before releasing that lease.
+
+Cancellation reaches HTTP requests and real CLI subprocesses, including the
+initial disconnect before work starts. An uncertain mutation leaves the bridge
+and shared admission blocked. Stop the old worker, inspect the dedicated
+daemon's selected exit, verify network state, then restart the bridge and use
+the [administrator recovery flow](#shared-travel-recovery). Neither a readiness
+response nor a bridge restart automatically clears persistent quarantine.
+Never mount the host Tailscale socket here. The bridge performs no `down`,
+`logout` or re-enrollment operation.
+
 #### Shared travel recovery
 
 `GET /api/admin/travel` returns the authenticated `actorScope` and shared worker admission state: `quarantinedAt`,

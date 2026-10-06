@@ -15,6 +15,7 @@ import { updateCronInterval } from '@/lib/cron';
 import { requireAdminApi } from '@/lib/admin-guard';
 import { isAggregatorSource } from '@/lib/scraper/navigate';
 import { validateInferenceSelection } from '@/lib/scraper/inference-selection';
+import { getCountryProfile } from '@/lib/scraper/country-profiles';
 
 /**
  * Masks the middle of a secret so the full value never crosses the wire.
@@ -194,7 +195,7 @@ export async function PATCH(request: NextRequest) {
     data.defaultCountry = body.defaultCountry;
   }
   if (body.vpnProvider !== undefined) {
-    const validProviders = ['none', 'expressvpn'];
+    const validProviders = ['none', 'expressvpn', 'mullvad'];
     if (body.vpnProvider !== null && (typeof body.vpnProvider !== 'string' || !validProviders.includes(body.vpnProvider))) {
       return apiError(`vpnProvider must be one of: ${validProviders.join(', ')}`, 400);
     }
@@ -210,6 +211,13 @@ export async function PATCH(request: NextRequest) {
       }
     }
     data.vpnCountries = body.vpnCountries;
+  }
+  if ((body.vpnProvider !== undefined || body.vpnCountries !== undefined)
+    && (body.vpnProvider !== undefined ? body.vpnProvider : existingConfig?.vpnProvider) === 'mullvad') {
+    const countries = data.vpnCountries ?? existingConfig?.vpnCountries ?? [];
+    if (!Array.isArray(countries) || countries.some(code => typeof code !== 'string' || !getCountryProfile(code))) {
+      return apiError('Mullvad countries require a supported browser profile', 400);
+    }
   }
   if (typeof body.vpnActivationCode === 'string' && body.vpnActivationCode.length > 0) {
     data.vpnActivationCode = encryptSecret(body.vpnActivationCode);

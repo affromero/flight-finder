@@ -9,6 +9,48 @@ permissions:
   contents: read
 
 jobs:
+  vpn-settings-browser:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: integration
+          POSTGRES_PASSWORD: integration-local-only
+          POSTGRES_DB: flight_forks
+        ports:
+          - 55448:5432
+        options: >-
+          --health-cmd "pg_isready -U integration -d flight_forks"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgresql://integration:integration-local-only@127.0.0.1:55448/flight_forks
+      ADMIN_SESSION_SECRET: flight-fork-disposable-test-secret-2026
+      TEST_ACCESS_NAME: ForkIntegrationOwner
+      TEST_ACCESS_PASSWORD: flight-fork-test-password
+      SELF_HOSTED: 'true'
+      CRON_ENABLED: 'false'
+      REDIS_URL: ''
+    steps:
+      - uses: actions/checkout@v7.0.1
+      - uses: actions/setup-node@v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run db:generate
+      - run: npx prisma db push --schema=apps/web/prisma/schema.prisma
+      - run: node scripts/apply-travel-constraints.mjs
+      - run: npm run cli -- access initialize
+      - run: python3 scripts/testing/access-setup.py npm run cli -- access setup
+      - run: node scripts/vpn/prepare-browser.mjs
+      - run: npm run build
+      - run: npx playwright install chromium --with-deps
+      - run: node scripts/vpn/browser-test.mjs
+
   execution-browser:
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -62,6 +104,9 @@ jobs:
       - run: npm run test --workspace=@flight-finder/web -- src/lib/travel/jobs.integration.test.ts src/lib/travel/admission.integration.test.ts src/lib/travel/admission-http.integration.test.ts src/lib/travel/coordinator.integration.test.ts src/lib/travel/recovery-search.integration.test.ts --no-file-parallelism
         env:
           TRAVEL_COORDINATOR_INTEGRATION_TESTS: '1'
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/travel/mullvad/session.integration.test.ts
+        env:
+          TRAVEL_MULLVAD_INTEGRATION_TESTS: '1'
       - run: psql "$DATABASE_URL" -c 'CREATE DATABASE travel_flight_test'
       - run: npm run db:push
         env:

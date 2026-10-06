@@ -82,6 +82,16 @@
       "saveFailed": "Failed to save"
     },
     "vpn": {
+      "statusReady": "VPN ready",
+      "providerLabel": "VPN provider",
+      "disabledOption": "Disabled",
+      "countriesLabel": "Comparison countries",
+      "countriesHint": "Enter country codes separated by commas. Mullvad comparisons require an available exit node and a supported browser profile.",
+      "mullvadSetup": "Enroll the dedicated Tailscale device, enable the Mullvad add-on and grant the device access before saving.",
+      "setupGuide": "Setup guide",
+      "invalidCountries": "Use two-letter country codes with supported browser profiles for Mullvad.",
+      "savedReadinessFailed": "Preferences saved. VPN readiness could not be verified; check the sidecar and device access.",
+      "savePreferences": "Save VPN preferences",
       "title": "VPN Price Comparison",
       "hint": "Test the myth: do flight prices change based on your VPN location?",
       "statusConnected": "Connected",

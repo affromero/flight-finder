@@ -82,6 +82,16 @@
       "saveFailed": "Speichern fehlgeschlagen"
     },
     "vpn": {
+      "statusReady": "VPN bereit",
+      "providerLabel": "VPN-Anbieter",
+      "disabledOption": "Deaktiviert",
+      "countriesLabel": "Länder für den Preisvergleich",
+      "countriesHint": "Ländercodes durch Kommas trennen. Mullvad benötigt einen verfügbaren Ausgangsknoten und ein unterstütztes Browserprofil.",
+      "mullvadSetup": "Das separate Tailscale-Gerät registrieren, die Mullvad-Erweiterung aktivieren und dem Gerät Zugriff gewähren, bevor du speicherst.",
+      "setupGuide": "Einrichtungsanleitung",
+      "invalidCountries": "Zweistellige Ländercodes mit unterstützten Browserprofilen für Mullvad verwenden.",
+      "savedReadinessFailed": "Einstellungen gespeichert. VPN-Bereitschaft konnte nicht bestätigt werden. Dienst und Gerätezugriff prüfen.",
+      "savePreferences": "VPN-Einstellungen speichern",
       "title": "VPN-Preisvergleich",
       "hint": "Teste den Mythos: Ändern sich Flugpreise je nach VPN-Standort?",
       "statusConnected": "Verbunden",

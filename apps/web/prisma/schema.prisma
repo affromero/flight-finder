@@ -143,7 +143,7 @@ model ExtractionConfig {
   defaultCurrency      String?   // ISO 4217 (EUR, GBP). null = Google auto-detects
   defaultCountry       String?   // ISO 3166-1 alpha-2 (DE, GB). null = Google auto-detects
   customBaseUrl        String?   // e.g. http://localhost:11434/v1
-  vpnProvider          String?   // 'none' | 'expressvpn'
+  vpnProvider          String?   // 'none' | 'expressvpn' | 'mullvad'
   vpnCountries         String[]  @default([]) // default VPN countries (used when query has none)
   vpnActivationCode    String?   // encrypted VPN activation code
   multiUserMode        Boolean   @default(false) // self-hosted only; admin manages User table for households

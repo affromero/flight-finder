@@ -59,7 +59,7 @@ export async function executeTravelJob(id: string, work: (job: TravelJob, lease:
       });
       timer = setTimeout(() => { heartbeat = tick(); }, HEARTBEAT_MS);
       execution.check();
-      vpn = new TravelVpnSession(lease, (config?.vpnProvider ?? 'none') as VpnProviderType);
+      vpn = new TravelVpnSession(lease, (config?.vpnProvider ?? 'none') as VpnProviderType, execution.signal);
       await vpn.prepare();
       execution.check();
       const session = vpn;

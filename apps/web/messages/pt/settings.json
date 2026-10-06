@@ -82,6 +82,16 @@
       "saveFailed": "Falha ao salvar"
     },
     "vpn": {
+      "statusReady": "VPN pronta",
+      "providerLabel": "Provedor de VPN",
+      "disabledOption": "Desativado",
+      "countriesLabel": "Países para comparação",
+      "countriesHint": "Insira códigos de país separados por vírgulas. Mullvad requer um nó de saída disponível e um perfil de navegador compatível.",
+      "mullvadSetup": "Registre o dispositivo Tailscale dedicado, ative o complemento Mullvad e autorize o dispositivo antes de salvar.",
+      "setupGuide": "Guia de configuração",
+      "invalidCountries": "Use códigos de duas letras com perfis de navegador compatíveis para Mullvad.",
+      "savedReadinessFailed": "Preferências salvas. Não foi possível verificar a VPN. Verifique o serviço e o acesso do dispositivo.",
+      "savePreferences": "Salvar preferências de VPN",
       "title": "Comparação de Preços via VPN",
       "hint": "Teste o mito: os preços dos voos mudam de acordo com a localização da sua VPN?",
       "statusConnected": "Conectado",
