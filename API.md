@@ -253,6 +253,63 @@ legacy events retain their identity.
 
 ---
 
+### Configure a WhatsApp gateway channel
+
+Create a channel through `POST /api/admin/notifications` under an admin session:
+
+```json
+{
+  "type": "whatsapp",
+  "label": "My phone",
+  "config": {
+    "gatewayUrl": "https://gateway.example/whatsapp",
+    "apiKey": "gateway-api-key",
+    "account": "gateway-account",
+    "destinationType": "phone",
+    "destination": "+573001234567",
+    "locale": "en",
+    "includeTrackerLink": false
+  }
+}
+```
+
+Each channel has one destination and its own outbox receipt. Phone destinations
+use a `+` country code followed by 7 to 15 digits. For a group, set
+`destinationType` to `group` and supply the gateway's group ID without whitespace.
+The API key, account and destination are encrypted at rest. Channel responses
+replace them with `apiKeySet`, `accountSet` and `destinationSet` flags. Blank
+secret fields on PATCH retain their current values. Switching between phone
+and group requires a new destination in that PATCH.
+
+The gateway URL must use HTTP or HTTPS without embedded credentials, a query
+string or fragment. Its path prefix is preserved. The gateway must implement
+these POST endpoints with the `X-API-Key` header:
+
+| Destination | Endpoint appended to `gatewayUrl` | JSON body |
+| --- | --- | --- |
+| Phone | `/api/messages/send` | `{ "account": "...", "phone": "+...", "message": "..." }` |
+| Group | `/api/groups/send-message` | `{ "account": "...", "groupId": "...", "message": "..." }` |
+
+HTTP 2xx acknowledges acceptance. The gateway must return a non-2xx status when
+it rejects a message; a JSON error inside a 2xx response cannot signal failure.
+Requests reject redirects, respect cancellation and have a 15-second deadline.
+Errors expose the HTTP status without gateway response bodies. User-owned
+channels require public destinations and pin validated DNS addresses. Household
+channels configured by an admin can use an internal gateway.
+
+Flight price messages support `en`, `es`, `pt`, `de` and `fr`, with English as
+the default. Other alert and test messages keep their original content. HTTP(S)
+booking links are included when available. Tracker links are omitted unless
+`includeTrackerLink` is true. Recipients can see any tracker link that you share.
+Select these channels through the tracker recipient controls described above.
+
+Successful channel receipts survive retries of other recipients. A gateway may
+accept a message before a request times out or before its receipt is saved, so
+delivery retries can repeat that message. No new schema or environment variables
+are required for the channel.
+
+---
+
 ### Get price data
 
 Returns all price snapshots for a tracked query. This is the data that powers the chart.

@@ -241,9 +241,26 @@
       "email": "Correo",
       "ntfy": "ntfy",
       "webhook": "Webhook",
-      "pushover": "Pushover"
+      "pushover": "Pushover",
+      "whatsapp": "WhatsApp"
+    },
+    "options": {
+      "phone": "Teléfono",
+      "group": "Grupo",
+      "en": "Inglés",
+      "es": "Español",
+      "pt": "Portugués",
+      "de": "Alemán",
+      "fr": "Francés"
     },
     "fields": {
+      "gatewayUrl": "URL de la pasarela",
+      "apiKey": "Clave API de la pasarela",
+      "account": "Cuenta de la pasarela",
+      "destinationType": "Tipo de destinatario",
+      "destination": "Teléfono (+ código de país) o ID del grupo",
+      "locale": "Idioma de las alertas de vuelos",
+      "includeTrackerLink": "Incluir enlace al seguimiento",
       "userKey": "Clave de usuario o grupo",
       "device": "Dispositivos (separados por comas)",
       "priority": "Prioridad (-2 a 2; 2 requiere reintento y caducidad)",

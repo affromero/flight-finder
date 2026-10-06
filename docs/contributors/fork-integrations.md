@@ -43,6 +43,16 @@ revisions, owner and capability authorization, explicit mute, and guarded
 outbox delivery. Source forks did not implement this generic policy model.
 Tracking issue [#259](https://github.com/affromero/flight-finder/issues/259).
 
+WhatsApp channels credit [ssantss (Santiago Jimenez)](https://github.com/ssantss)
+for the [phone and group gateway transport](https://github.com/ssantss/flight-finder/blob/561a4941fcd25c0b6ed33f26f0a01ce306ef7743/apps/web/src/lib/notifications/whatsapp-alert.ts).
+The upstream [sender](../../apps/web/src/lib/notifications/channels/whatsapp/send.ts)
+preserves the gateway's endpoints, JSON fields and API key header. The adaptation
+uses one encrypted destination per channel, existing delivery receipts,
+owner-aware network validation, cancellation and localized flight text.
+Tracker links require an explicit option. Configuration and compatibility are
+documented in the [API guide](../../API.md#configure-a-whatsapp-gateway-channel).
+Tracking issue [#260](https://github.com/affromero/flight-finder/issues/260).
+
 The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
@@ -61,3 +71,7 @@ Departure window screenshots: [before](screenshots/flight-departure-before.png),
 Tracker recipient screenshots: [before](screenshots/flight-subscriptions-before.png),
 [desktop](screenshots/flight-subscriptions-desktop.png),
 [mobile](screenshots/flight-subscriptions-mobile.png).
+
+WhatsApp configuration screenshots: [before](screenshots/flight-whatsapp-before.png),
+[desktop](screenshots/flight-whatsapp-desktop.png),
+[mobile](screenshots/flight-whatsapp-mobile.png).
