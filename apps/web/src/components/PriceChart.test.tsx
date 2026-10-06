@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render } from '@testing-library/react';
+import { render, screen, fireEvent, act } from '@testing-library/react';
 
 // Capture the onClick prop PriceChart passes to its dynamically-imported Plot.
 // Mocking next/dynamic to return a tiny prop-capturing stub avoids loading the
@@ -8,12 +8,16 @@ import { render } from '@testing-library/react';
 // dynamic() resolves its loader module.
 const plot = vi.hoisted(() => ({
   onClick: undefined as ((data: object) => void) | undefined,
+  onError: undefined as ((error: Error) => void) | undefined,
+  onUpdate: undefined as (() => void) | undefined,
 }));
 
 vi.mock('next/dynamic', () => ({
   default: () => {
-    const Stub = (props: { onClick?: (data: object) => void }) => {
+    const Stub = (props: { onClick?: (data: object) => void; onError?: (error: Error) => void; onUpdate?: () => void }) => {
       plot.onClick = props.onClick;
+      plot.onError = props.onError;
+      plot.onUpdate = props.onUpdate;
       return null;
     };
     return Stub;
@@ -58,6 +62,25 @@ describe('PriceChart: booking URL security (M6/M7)', () => {
 
   afterEach(() => {
     openSpy.mockRestore();
+    localStorage.clear();
+  });
+
+  it('keeps airline grouping as the default and remembers an explicit flight view', () => {
+    const initial = render(<PriceChart snapshots={[makeSnapshot()]} trackerId="chart-preference-test" />);
+    const grouping = screen.getByRole('combobox', { name: 'Group by' });
+    expect(grouping).toHaveValue('airline');
+    fireEvent.change(grouping, { target: { value: 'flight' } });
+    initial.unmount();
+    render(<PriceChart snapshots={[makeSnapshot()]} trackerId="chart-preference-test" />);
+    expect(screen.getByRole('combobox', { name: 'Group by' })).toHaveValue('flight');
+  });
+
+  it('surfaces a renderer failure and clears it after a successful draw', () => {
+    render(<PriceChart snapshots={[makeSnapshot()]} />);
+    act(() => plot.onError?.(new Error('Rendering unavailable')));
+    expect(screen.getByRole('alert')).toHaveTextContent('The chart could not be drawn: Rendering unavailable');
+    act(() => plot.onUpdate?.());
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument();
   });
 
   it('opens a valid https booking URL with noopener,noreferrer', () => {
@@ -76,6 +99,41 @@ describe('PriceChart: booking URL security (M6/M7)', () => {
       '_blank',
       'noopener,noreferrer',
     );
+  });
+
+  it('opens the clicked flight when unified hover lists another flight first', () => {
+    render(<PriceChart snapshots={[makeSnapshot()]} />);
+    getPlotOnClick()!({
+      event: { clientX: 50, clientY: 200 },
+      points: [
+        { bbox: { x0: 47, x1: 53, y0: 97, y1: 103 }, customdata: ['https://booking.example/DL101'] },
+        { bbox: { x0: 47, x1: 53, y0: 197, y1: 203 }, customdata: ['https://booking.example/DL102'] },
+      ],
+    });
+    expect(openSpy).toHaveBeenCalledWith('https://booking.example/DL102', '_blank', 'noopener,noreferrer');
+  });
+
+  it('does not guess a flight when prices overlap or the pointer coordinate is missing', () => {
+    render(<PriceChart snapshots={[makeSnapshot()]} />);
+    const points = [
+      { bbox: { x0: 47, x1: 53, y0: 97, y1: 103 }, customdata: ['https://booking.example/DL101'] },
+      { bbox: { x0: 47, x1: 53, y0: 97, y1: 103 }, customdata: ['https://booking.example/DL102'] },
+    ];
+    getPlotOnClick()!({ event: { clientX: 50, clientY: 100 }, points });
+    getPlotOnClick()!({ points });
+    expect(openSpy).not.toHaveBeenCalled();
+  });
+
+  it('does not open a neighboring flight when the clicked sold-out point has no booking URL', () => {
+    render(<PriceChart snapshots={[makeSnapshot()]} />);
+    getPlotOnClick()!({
+      event: { clientX: 50, clientY: 200 },
+      points: [
+        { bbox: { x0: 47, x1: 53, y0: 97, y1: 103 }, customdata: ['https://booking.example/DL101'] },
+        { bbox: { x0: 47, x1: 53, y0: 197, y1: 203 }, customdata: [null] },
+      ],
+    });
+    expect(openSpy).not.toHaveBeenCalled();
   });
 
   it('does not open a javascript: URL', () => {

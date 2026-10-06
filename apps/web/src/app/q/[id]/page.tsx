@@ -165,6 +165,7 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: T
 
       <section className={styles.chart}>
         <PriceChart
+          trackerId={qData.query.id}
           snapshots={qData.snapshots}
           allSnapshots={qData.allSnapshots}
           editEvents={qData.editEvents}
@@ -186,7 +187,7 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: T
       </section>
 
       <section className={styles.history}>
-        <PriceHistory snapshots={qData.snapshots} />
+        <PriceHistory snapshots={qData.snapshots} trackerId={qData.query.id} />
       </section>
 
       <section className={styles.calendar}>

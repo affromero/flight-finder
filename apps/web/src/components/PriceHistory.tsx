@@ -4,6 +4,7 @@ import styles from './PriceHistory.module.css';
 
 export interface Snapshot {
   id: string;
+  travelDate?: string;
   price: number;
   currency: string;
   airline: string;
@@ -33,7 +34,7 @@ function countryLabel(key: string, localLabel: string): string {
  * scrape as a flat, cheapest-first snapshot of what is bookable right now, with
  * the full chronological log tucked behind a toggle. See PriceHistorySection.
  */
-export async function PriceHistory({ snapshots }: { snapshots: Snapshot[] }) {
+export async function PriceHistory({ snapshots, trackerId }: { snapshots: Snapshot[]; trackerId?: string }) {
   const t = await getTranslations('PriceHistory');
   if (snapshots.length === 0) return null;
 
@@ -61,7 +62,7 @@ export async function PriceHistory({ snapshots }: { snapshots: Snapshot[] }) {
       {countryGroups.map(([key, items]) => (
         <div key={key}>
           {hasCountryData && <div className={styles.countryHeader}>{countryLabel(key, t('local'))}</div>}
-          <PriceHistorySection snapshots={items} />
+          <PriceHistorySection snapshots={items} trackerId={trackerId} />
         </div>
       ))}
     </div>

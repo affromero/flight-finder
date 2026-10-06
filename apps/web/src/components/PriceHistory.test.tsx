@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, within } from '@testing-library/react';
 import { PriceHistory, type Snapshot } from './PriceHistory';
 import { PriceHistorySection } from './PriceHistorySection';
 
@@ -40,6 +40,16 @@ const SNAPSHOTS: Snapshot[] = [
 ];
 
 describe('layover capture (issue #190)', () => {
+  it('keeps price changes independent when a flight is observed in different currencies', () => {
+    render(<PriceHistorySection snapshots={[
+      snap({ id: 'usd-old', flightId: 'A', airline: 'Alpha', price: 100, scrapedAt: '2026-05-01T08:00:00Z' }),
+      snap({ id: 'eur-new', flightId: 'A', airline: 'Alpha', price: 80, currency: 'EUR', scrapedAt: '2026-05-02T08:00:00Z' }),
+    ]} />);
+    const row = screen.getByRole('row', { name: /Alpha/ });
+    expect(within(row).getByText(/80\s*EUR/)).toBeVisible();
+    expect(within(row).queryByText(/20/)).not.toBeInTheDocument();
+  });
+
   it('shows total ground time and where it is spent next to the stop count', () => {
     render(
       <PriceHistorySection
