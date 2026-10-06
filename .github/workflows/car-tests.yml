@@ -124,7 +124,7 @@ jobs:
       - run: npm run db:generate
       - run: npm run db:push
       - run: npm run build --workspace=@flight-finder/cli
-      - run: npm run test --workspace=@flight-finder/web -- src/lib/flight-pricing.integration.test.ts src/lib/notifications/delivery.integration.test.ts --no-file-parallelism
+      - run: npm run test --workspace=@flight-finder/web -- src/lib/flight-pricing.integration.test.ts src/lib/notifications/delivery.integration.test.ts src/lib/notifications/rules/delivery.integration.test.ts --no-file-parallelism
 
   migration:
     runs-on: ubuntu-latest

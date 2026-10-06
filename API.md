@@ -12,7 +12,7 @@ Auth requirements depend on mode and endpoint family:
 
 - `/api/cron/scrape` always requires `Authorization: Bearer <CRON_SECRET>`.
 - `/api/admin/*` routes require an admin session cookie.
-- `/api/queries/{id}/notifications` requires the tracker owner's selected profile,
+- `/api/queries/{id}/notifications` and `/api/queries/{id}/alerts` require the tracker owner's selected profile,
   an admin session, or the matching tracker capability, within the instance's access rules.
 - `/api/analytics/track` is gated to internal callers via `ADMIN_SESSION_SECRET`.
 - `/api/community/ingest` requires a registered community API key.
@@ -250,6 +250,87 @@ its recipient before a policy change takes effect.
 Upgrades add the `QueryNotificationPolicy` table through the existing schema
 update flow. Existing trackers inherit their previous recipients and pending
 legacy events retain their identity.
+
+---
+
+### Configure flight price alert rules
+
+`GET /api/queries/{id}/alerts` returns `{ "ok": true, "data": { "settings":
+{ "revision": 0, "rules": [], "currency": "USD", "fixedCurrency": null,
+"flights": [...] } } }`. The owner profile, an admin session or a matching
+tracker capability can read and edit it. Send the capability as `x-delete-token`
+on GET or `deleteToken` in the PUT body. Responses are private and uncached.
+
+```http
+PUT /api/queries/{id}/alerts
+Content-Type: application/json
+
+{
+  "revision": 0,
+  "rules": [{
+    "flightId": null,
+    "currency": "USD",
+    "targetPrice": 150,
+    "dropAbs": 20,
+    "dropPct": 0.1,
+    "enabled": true,
+    "cooldownMinutes": 0
+  }]
+}
+```
+
+PUT replaces this tracker's full rule collection, up to 20 rules. Keep the
+server's `id` when editing a rule; omit an ID when creating one. Omitted rules
+are deleted. Foreign and duplicate IDs return 400. An unchanged collection
+retains its revision and runtime state. Stale revisions return 409; reload
+before saving. Tracker groups have independent rule collections and recipient
+settings. Rule edits preserve scrape criteria and price history.
+
+Every rule requires at least one positive threshold. `targetPrice` and `dropAbs`
+are amounts in its explicit three-letter currency. `dropPct` is a fraction
+strictly between 0 and 1: `0.1` means 10%. The browser displays percentages, so
+enter 10 there. Thresholds are combined with OR. Cooldown is an integer from
+0 to 10080 minutes, defaulting to 0. Thresholds accept finite JSON numbers up
+to 1e12; strings and server-owned runtime fields are rejected.
+
+`flightId: null` follows the lowest eligible latest fare in the rule's currency.
+Flight-specific rules use an identifiable `id` and currency pair from `flights`.
+Choices reconcile legacy observations with canonical flight identities and omit
+ambiguous or unavailable flights. A previously selected unavailable flight can
+still be paused, edited without changing scope, or removed. `currency` suggests
+the current comparison currency; it does not convert fares. `fixedCurrency`
+is the tracker's explicit currency, if set. Auto-currency trackers can use a
+different explicit rule currency, including before any fare is observed.
+Changing the scope's currency requires reconsidering amount thresholds.
+
+Drops start from the latest eligible price when a rule is saved. If none exists,
+the first eligible observation establishes its drop baseline. A triggered drop
+advances that baseline in the same transaction as its durable event. Repeated
+prices are suppressed until another decrease or a recovery above the target
+and drop baseline. Target-only rules rearm above their target. Cooldown limits
+new events without consuming a qualifying decrease during the wait. Changing
+rule configuration resets its baseline, deduplication and cooldown. Changing
+scrape criteria resets those values against the next eligible observation.
+Latest observations win before availability, criteria or currency filtering;
+old cheap fares cannot reappear after a newer unavailable observation.
+
+One or more enabled rules replace generic historical-low notifications for this
+tracker. With no enabled rules, historical-low notifications remain active.
+Existing visual price history and historical lows are unchanged. Custom events
+never advance the historical-low notification compatibility marker. Recipients
+still use the independent notification policy described above.
+
+Rule state and outbox events share the price transaction. Failed recipients retry
+the durable event, and accepted receipts survive other recipients' failures.
+Rule collection, rule revision, scrape criteria and recipient authority are
+checked when claiming, sending and acknowledging. Configuration edits revoke
+queued events. An already accepted or in-flight transport request may still
+reach its recipient, and a lost acknowledgment may cause a retry to repeat it.
+
+Upgrades add `QueryAlertSettings` and `QueryAlertRule` through the existing schema
+update flow. Existing trackers have no custom rules and keep historical-low
+behavior. No environment variables or CLI defaults change. The web controls
+and API configure rules; web scraping and delivery evaluate them.
 
 ---
 

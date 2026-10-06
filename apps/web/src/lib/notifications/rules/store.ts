@@ -30,7 +30,7 @@ async function settings(tx: Prisma.TransactionClient, query: Query) {
   const collection = await ruleCollection(tx, query.id);
   const observations = await ruleObservations(tx, query, await notificationBaselineFrom(tx, query));
   return { revision: collection.revision, rules: collection.rules.map(ruleConfig), flights: ruleFlightChoices(observations),
-    currency: observations.comparisonCurrency };
+    currency: observations.comparisonCurrency, fixedCurrency: query.currency };
 }
 
 export async function readPriceRules(queryId: string, token: string | null) {

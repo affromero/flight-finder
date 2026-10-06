@@ -1,0 +1,19 @@
+.root { margin-bottom: 1rem; }
+.root button, .root select, .root input {
+  font: inherit;
+  color: var(--text-secondary);
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 0.4rem 0.65rem;
+}
+.root button, .root select { cursor: pointer; }
+.panel { margin-top: 0.5rem; padding: 0.8rem; border: 1px solid var(--border); background: var(--elevated); }
+.panel label { display: flex; align-items: center; flex-wrap: wrap; gap: 0.5rem; margin: 0.5rem 0; overflow-wrap: anywhere; }
+.panel fieldset { min-width: 0; margin: 0.6rem 0; padding: 0.7rem; border: 1px solid var(--border); }
+.panel button { margin: 0.2rem; }
+.panel p { font-size: 0.85rem; }
+.panel input, .panel select { min-width: 0; max-width: 100%; box-sizing: border-box; }
+.thresholds { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 230px), 1fr)); gap: 0 1rem; }
+.thresholds label { align-items: start; flex-direction: column; }
+.thresholds input { width: 100%; }

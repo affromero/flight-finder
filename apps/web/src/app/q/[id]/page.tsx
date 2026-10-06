@@ -20,6 +20,7 @@ import { ScrapeStatusDot } from '@/components/ScrapeStatusDot';
 import { ForceScrapeButton } from '@/components/ForceScrapeButton';
 import { TrackerFilters } from '@/components/TrackerFilters';
 import { TrackerNotifications } from '@/components/notifications/TrackerNotifications';
+import { TrackerPriceRules } from '@/components/notifications/TrackerPriceRules';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
 import { canManageQueryWithoutToken } from '@/lib/query-auth';
 import { filterSnapshotsByTrackerFilters } from '@/lib/snapshot-filters';
@@ -166,6 +167,7 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: T
       )}
 
       <TrackerNotifications queryId={qData.query.id} canEdit={qData.canEdit} />
+      <TrackerPriceRules queryId={qData.query.id} canEdit={qData.canEdit} />
       <section className={styles.chart}>
         <PriceChart
           trackerId={qData.query.id}

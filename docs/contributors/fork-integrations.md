@@ -53,6 +53,18 @@ Tracker links require an explicit option. Configuration and compatibility are
 documented in the [API guide](../../API.md#configure-a-whatsapp-gateway-channel).
 Tracking issue [#260](https://github.com/affromero/flight-finder/issues/260).
 
+Configurable price rules credit [sammorris01](https://github.com/sammorris01) for
+the [rule evaluator](https://github.com/sammorris01/flight-finder/blob/d2536f7750cdca00c4715d23e851e6c78102f21b/apps/web/src/lib/notifications/rules.ts),
+[tracker API](https://github.com/sammorris01/flight-finder/blob/d2536f7750cdca00c4715d23e851e6c78102f21b/apps/web/src/app/api/queries/%5Bid%5D/alerts/route.ts)
+and [alert editor](https://github.com/sammorris01/flight-finder/blob/d2536f7750cdca00c4715d23e851e6c78102f21b/apps/web/src/components/AlertsButton.tsx).
+The upstream [rules](../../apps/web/src/lib/notifications/rules/record.ts)
+preserve target, absolute-drop and percentage-drop conditions while adding
+transactional events, explicit currency and identity boundaries, independent
+configuration revisions and guarded recipient receipts. The
+[editor](../../apps/web/src/components/notifications/TrackerPriceRules.tsx)
+supports owner and capability access in all five languages. Tracking issue
+[#261](https://github.com/affromero/flight-finder/issues/261).
+
 The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
@@ -75,3 +87,7 @@ Tracker recipient screenshots: [before](screenshots/flight-subscriptions-before.
 WhatsApp configuration screenshots: [before](screenshots/flight-whatsapp-before.png),
 [desktop](screenshots/flight-whatsapp-desktop.png),
 [mobile](screenshots/flight-whatsapp-mobile.png).
+
+Price rule screenshots: [before](screenshots/flight-price-rules-before.png),
+[desktop](screenshots/flight-price-rules-desktop.png),
+[mobile](screenshots/flight-price-rules-mobile.png).
