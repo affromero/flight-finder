@@ -122,6 +122,7 @@ export function SearchBar({
   const [manualMode, setManualMode] = useState(false);
   const [manualRawInput, setManualRawInput] = useState('');
   const [manualFormValues, setManualFormValues] = useState<ManualFormValues | null>(null);
+  const searchMethodChosen = useRef(false);
 
   useEffect(() => {
     fetch('/api/preview')
@@ -141,9 +142,11 @@ export function SearchBar({
         if (d.data.defaultCurrency) setAdminCurrency(d.data.defaultCurrency);
         if (typeof d.data.maxTrackedPerRoute === 'number') setMaxTrackedPerRoute(d.data.maxTrackedPerRoute);
         if (typeof d.data.previewMaxCombos === 'number') setPreviewMaxCombos(d.data.previewMaxCombos);
-        const searchMethod = d.data.defaultSearchMethod === 'manual' ? 'manual' : 'ai';
-        setActiveSearchMethod(searchMethod);
-        setManualMode(searchMethod === 'manual');
+        if (!searchMethodChosen.current) {
+          const searchMethod = d.data.defaultSearchMethod === 'manual' ? 'manual' : 'ai';
+          setActiveSearchMethod(searchMethod);
+          setManualMode(searchMethod === 'manual');
+        }
       })
       .catch(() => {});
   }, []);
@@ -152,6 +155,7 @@ export function SearchBar({
     const saved = readSavedPreview(storageKey);
     if (!saved) return;
 
+    searchMethodChosen.current = true;
     setParsed(saved.parsed);
     setQuery(saved.query);
     setManualRawInput(saved.manualRawInput);
@@ -161,6 +165,7 @@ export function SearchBar({
   }, [storageKey]);
 
   const doParse = useCallback(async (input: string, history: ConversationMessage[]): Promise<boolean> => {
+    searchMethodChosen.current = true;
     setLoading(true);
     setError(null);
 
@@ -402,6 +407,7 @@ export function SearchBar({
           maxDurationHours: parsed.maxDurationHours ?? null,
           preferredAirlines: parsed.preferredAirlines,
           timePreference: parsed.timePreference,
+          strictDepartureTime: parsed.strictDepartureTime ?? false,
           currency: parsed.currency,
           cabinClass: parsed.cabinClass,
           tripType: parsed.tripType,
@@ -530,6 +536,7 @@ export function SearchBar({
     <div className={styles.root}>
       <LinkImport onBusy={setLoading} kind="flights" disabled={loading || previewLoading} value={parsed?.sourceUrl} onClear={() => { setParsed(null); setPreviewRoutes(null); setPreviewRunId(null); clearSavedPreview(storageKey); }} onImport={draft => {
         if (!draft.flight) return;
+        searchMethodChosen.current = true;
         setParsed(draft.flight); setManualMode(false); setPreviewRoutes(null); setPreviewRunId(null); setCreatedTrackers(null); setAmbiguities([]); setError(null);
         setQuery(`${draft.flight.origin} to ${draft.flight.destination} ${draft.flight.dateFrom}${draft.flight.tripType === 'round_trip' ? ` returning ${draft.flight.dateTo}` : ''}`);
         setManualRawInput(''); clearSavedPreview(storageKey);
@@ -537,6 +544,7 @@ export function SearchBar({
       {manualMode ? (
         <ManualEntryForm
           onSubmit={(nextParsed, rawInput, formValues) => {
+            searchMethodChosen.current = true;
             setParsed(nextParsed);
             setManualRawInput(rawInput);
             setManualFormValues(formValues);
@@ -544,6 +552,7 @@ export function SearchBar({
             setEditingValues(null);
           }}
           onCancel={() => {
+            searchMethodChosen.current = true;
             setActiveSearchMethod('ai');
             setManualMode(false);
             setEditingValues(null);
@@ -561,7 +570,10 @@ export function SearchBar({
               className={styles.input}
               placeholder={t('placeholder')}
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                searchMethodChosen.current = true;
+                setQuery(e.target.value);
+              }}
               onKeyDown={handleKeyDown}
               disabled={loading}
               autoFocus
@@ -589,6 +601,7 @@ export function SearchBar({
                   type="button"
                   className={styles.hintBtn}
                   onClick={() => {
+                    searchMethodChosen.current = true;
                     setQuery(example);
                     inputRef.current?.focus();
                   }}
@@ -638,6 +651,7 @@ export function SearchBar({
                 type="button"
                 className={styles.manualToggle}
                 onClick={() => {
+                  searchMethodChosen.current = true;
                   setError(null);
                   setAmbiguities([]);
                   setPartialParsed(null);
@@ -680,6 +694,13 @@ export function SearchBar({
           vpnCountries={vpnCountries}
           onVpnCountriesChange={setVpnCountries}
           previewMaxCombos={previewMaxCombos}
+          onDepartureCriteriaChange={(timePreference, strictDepartureTime) => {
+            setParsed({ ...parsed, timePreference, strictDepartureTime });
+            setManualFormValues((values) => values ? { ...values, timePreference, strictDepartureTime } : null);
+            setPreviewRoutes(null);
+            setPreviewRunId(null);
+            clearSavedPreview(storageKey);
+          }}
         />
       )}
 

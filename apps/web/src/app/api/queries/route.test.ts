@@ -85,6 +85,44 @@ const validBody = {
 };
 
 describe('POST /api/queries', () => {
+  it.each([
+    { timePreference: 'morning', strictDepartureTime: 'false' },
+    { timePreference: 'any', strictDepartureTime: true },
+    { timePreference: 'invalid', strictDepartureTime: false },
+  ])('rejects invalid departure criteria before creating a tracker: %j', async (criteria) => {
+    const res = await POST(makeRequest({ ...validBody, ...criteria }));
+    expect(res.status).toBe(400);
+    expect(mockQueryCreate.mock.calls).toEqual([]);
+  });
+
+  it.each([null, '19:00', '09:00 UTC'])('rejects an incompatible strict seed departure %s', async (departureTime) => {
+    const res = await POST(makeRequest({ ...validBody, timePreference: 'morning', strictDepartureTime: true,
+      routes: [{ ...validBody.routes[0], selectedFlights: [{ travelDate: '2026-06-15', airline: 'Delta', price: 300, departureTime }] }],
+    }));
+    expect(res.status).toBe(400);
+    expect(mockQueryCreate.mock.calls).toEqual([]);
+  });
+
+  it('stores explicit departure criteria and the selected flight clock and identity', async () => {
+    const res = await POST(makeRequest({ ...validBody, timePreference: 'morning', strictDepartureTime: true,
+      routes: [{ ...validBody.routes[0], selectedFlights: [{ travelDate: '2026-06-15', airline: 'Delta', price: 300, departureTime: '09:00', arrivalTime: '12:00', flightNumber: 'DL 345' }] }],
+    }));
+    expect(res.status).toBe(201);
+    expect(mockQueryCreate.mock.calls[0]?.[0].data).toMatchObject({ timePreference: 'morning', strictDepartureTime: true });
+    expect(mockSnapshotCreateMany.mock.calls[0]?.[0].data[0]).toMatchObject({ departureTime: '09:00', arrivalTime: '12:00', flightNumber: 'DL 345', flightId: 'Delta-DL345-JFK-LAX-2026-06-15' });
+  });
+
+  it('keeps strict filtering disabled for existing create requests', async () => {
+    const res = await POST(makeRequest(validBody));
+    expect(res.status).toBe(201);
+    expect(mockQueryCreate.mock.calls[0]?.[0].data.strictDepartureTime).toBe(false);
+  });
+
+  it.each([null, 123, {}, ' '])('rejects malformed airline metadata before deriving a flight identity: %j', async (airline) => {
+    const res = await POST(makeRequest({ ...validBody, routes: [{ ...validBody.routes[0], selectedFlights: [{ travelDate: '2026-06-15', price: 300, airline }] }] }));
+    expect(res.status).toBe(400);
+    expect(mockQueryCreate.mock.calls).toEqual([]);
+  });
   it('stores an imported itinerary without trusting client-supplied seed prices', async () => {
     const parsed = flightLinkQuery(FLIGHT_IMPORT_URL);
     const res = await POST(makeRequest({ ...parsed, rawInput: 'Selected ORD to DUS round trip', routes: [{ origin: 'ORD', destination: 'DUS', originName: 'Chicago', destinationName: 'Dusseldorf', selectedFlights: [{ price: 1, airline: 'Invented', travelDate: parsed.dateFrom, bookingUrl: FLIGHT_IMPORT_URL }] }] }));

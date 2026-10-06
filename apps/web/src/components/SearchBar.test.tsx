@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { render, screen, waitFor, cleanup } from '@testing-library/react';
+import { render, screen, waitFor, cleanup, fireEvent, act } from '@testing-library/react';
 import { SearchBar } from './SearchBar';
 import type { PreviewRunStatusPayload } from '@/lib/preview-run';
 
@@ -66,6 +66,61 @@ afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+});
+
+describe('SearchBar startup preferences', () => {
+  it('preserves a manual draft when settings arrive after manual entry opens', async () => {
+    let resolveConfig!: (response: Response) => void;
+    const pendingConfig = new Promise<Response>((resolve) => { resolveConfig = resolve; });
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/admin/config') return pendingConfig;
+      return new Response(JSON.stringify({ ok: true, data: { previewMaxCombos: 24 } }));
+    });
+
+    render(<SearchBar />);
+    fireEvent.click(screen.getByRole('button', { name: 'Enter flight details manually' }));
+    fireEvent.change(screen.getByRole('combobox', { name: 'Origin' }), { target: { value: 'JFK' } });
+
+    await act(async () => { resolveConfig(configResponse()); await pendingConfig; });
+
+    expect(screen.getByRole('combobox', { name: 'Origin' })).toHaveValue('JFK');
+    expect(screen.getByRole('button', { name: 'Use AI search' })).toBeVisible();
+  });
+
+  it.each(['typed', 'example'])('preserves %s AI input when a manual default arrives later', async (choice) => {
+    let resolveConfig!: (response: Response) => void;
+    const pendingConfig = new Promise<Response>((resolve) => { resolveConfig = resolve; });
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => {
+      if (String(input) === '/api/admin/config') return pendingConfig;
+      return new Response(JSON.stringify({ ok: true, data: { previewMaxCombos: 24 } }));
+    });
+
+    render(<SearchBar />);
+    const input = screen.getByPlaceholderText('NYC to Paris around June 15 +/- 3 days');
+    const expected = choice === 'typed' ? 'JFK to LAX next month' : 'JFK to CDG June 15-20';
+    if (choice === 'typed') fireEvent.change(input, { target: { value: expected } });
+    else fireEvent.click(screen.getByRole('button', { name: expected }));
+    await act(async () => {
+      resolveConfig(new Response(JSON.stringify({ ok: true, data: { defaultSearchMethod: 'manual' } })));
+      await pendingConfig;
+    });
+
+    expect(input).toBeVisible();
+    expect(input).toHaveValue(expected);
+    expect(screen.queryByRole('combobox', { name: 'Origin' })).not.toBeInTheDocument();
+  });
+
+  it('applies the manual default before the user chooses a search method', async () => {
+    vi.stubGlobal('fetch', async (input: RequestInfo | URL) => new Response(JSON.stringify({
+      ok: true,
+      data: String(input) === '/api/admin/config' ? { defaultSearchMethod: 'manual' } : { previewMaxCombos: 24 },
+    })));
+
+    render(<SearchBar />);
+
+    expect(await screen.findByRole('combobox', { name: 'Origin' })).toBeVisible();
+    expect(screen.getByRole('button', { name: 'Use AI search' })).toBeVisible();
+  });
 });
 
 describe('SearchBar preview polling', () => {

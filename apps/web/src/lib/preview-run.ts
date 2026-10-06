@@ -9,6 +9,7 @@ export interface PreviewRequestPayload {
   maxDurationHours: number | null;
   preferredAirlines: string[];
   timePreference: string;
+  strictDepartureTime?: boolean;
   cabinClass: string;
   tripType: string;
   currency: string | null;

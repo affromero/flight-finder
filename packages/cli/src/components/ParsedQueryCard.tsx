@@ -27,7 +27,7 @@ export function ParsedQueryCard({ parsed }: ParsedQueryCardProps) {
   if (parsed.cabinClass !== 'economy') filters.push(parsed.cabinClass.replace('_', ' '));
   if (parsed.tripType === 'one_way') filters.push('One way');
   if (parsed.preferredAirlines.length > 0) filters.push(parsed.preferredAirlines.join(', '));
-  if (parsed.timePreference !== 'any') filters.push(parsed.timePreference);
+  if (parsed.timePreference !== 'any') filters.push(`${parsed.timePreference}${parsed.strictDepartureTime ? ' (strict, airport local time)' : ''}`);
 
   return (
     <Box flexDirection="column">

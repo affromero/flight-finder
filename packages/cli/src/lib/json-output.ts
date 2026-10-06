@@ -2,6 +2,7 @@
 // single tracker, otherwise the whole list. Plain TypeScript (no JSX) so the
 // pure getters are unit testable by mocking the prisma client.
 import { prisma } from '@/lib/prisma';
+import { filterSnapshotsByTrackerFilters } from './criteria/snapshot-filters.js';
 import { ACTUAL_FLIGHT_FARE_WHERE } from './flight-pricing.js';
 
 interface JsonSnapshot {
@@ -88,7 +89,7 @@ export async function getQueryJson(id: string): Promise<JsonQuery | null> {
   });
   if (!row) return null;
 
-  const snapshots = row.snapshots;
+  const snapshots = filterSnapshotsByTrackerFilters(row.snapshots, row);
   const best = snapshots.length > 0
     ? snapshots.reduce((min, s) => (s.price < min.price ? s : min), snapshots[0]!)
     : null;
@@ -139,7 +140,7 @@ export async function getQueryListJson(): Promise<JsonQuerySummary[]> {
       snapshots: {
         where: { status: 'available', ...ACTUAL_FLIGHT_FARE_WHERE },
         orderBy: { price: 'asc' },
-        select: { price: true },
+        select: { price: true, stops: true, duration: true, airline: true, departureTime: true },
       },
       fetchRuns: {
         orderBy: { startedAt: 'desc' },
@@ -149,7 +150,7 @@ export async function getQueryListJson(): Promise<JsonQuerySummary[]> {
     },
   });
 
-  return rows.map((r) => ({
+  return rows.map((row) => ({ ...row, snapshots: filterSnapshotsByTrackerFilters(row.snapshots, row) })).map((r) => ({
     id: r.id,
     origin: r.origin,
     originName: r.originName,

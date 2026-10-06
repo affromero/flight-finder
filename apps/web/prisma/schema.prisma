@@ -24,6 +24,7 @@ model Query {
   preferredAirlines String[] @default([])
   preferredAggregators String[] @default([]) // per-query override of User.preferredAggregators; empty = inherit
   timePreference  String   @default("any")
+  strictDepartureTime Boolean @default(false)
   cabinClass      String   @default("economy")
   tripType        String   @default("round_trip") // 'one_way' | 'round_trip'
   currency        String?

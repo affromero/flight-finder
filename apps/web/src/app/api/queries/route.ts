@@ -16,6 +16,8 @@ import { assertFlightLinkSearch, readFlightLink } from '@/lib/scraper/flight-lin
 import { assertAccountActor } from '@/lib/account-actor';
 import { lockTravelAdmission } from '@/lib/travel/admission';
 import { TravelJobError } from '@/lib/travel/errors';
+import { departureCriteriaError, matchesDepartureWindow } from '@/lib/criteria/departure';
+import { flightIdentifiers } from '@/lib/scraper/identity/flight';
 
 const MAX_ROUTES = 20;
 const MAX_FLIGHTS_PER_ROUTE = 50;
@@ -56,6 +58,8 @@ interface RouteInput {
     duration?: string | null;
     layovers?: unknown; // shape-checked by coerceLayovers before persistence
     flightNumber?: string | null;
+    departureTime?: string | null;
+    arrivalTime?: string | null;
   }>;
 }
 
@@ -122,11 +126,15 @@ export async function POST(request: NextRequest) {
     maxDurationHours,
     preferredAirlines,
     timePreference,
+    strictDepartureTime,
     cabinClass,
     tripType,
     currency: bodyCurrency,
     vpnCountries: bodyVpnCountries,
   } = body;
+
+  const departureError = departureCriteriaError(timePreference, strictDepartureTime);
+  if (departureError) return apiError(departureError, 400);
 
   // Validate rawInput length
   if (typeof rawInput === 'string' && rawInput.length > MAX_RAW_INPUT) {
@@ -247,6 +255,15 @@ export async function POST(request: NextRequest) {
     }
 
     for (const f of flights) {
+      for (const field of ['departureTime', 'arrivalTime'] as const) {
+        const clock = f[field];
+        if (clock !== undefined && clock !== null && (typeof clock !== 'string' || clock.length > MAX_DURATION_LENGTH)) {
+          return apiError(`Selected flight ${field} must be a string of at most ${MAX_DURATION_LENGTH} characters`, 400);
+        }
+      }
+      if (strictDepartureTime === true && !matchesDepartureWindow(f.departureTime, timePreference)) {
+        return apiError('Selected flight does not match the strict departure window', 400);
+      }
       if (isLegacySplitFare(f.airline)) {
         return apiError(LEGACY_SPLIT_PREVIEW_ERROR, 400);
       }
@@ -259,12 +276,12 @@ export async function POST(request: NextRequest) {
         return apiError('Selected flight price must be a finite non-negative number', 400);
       }
 
-      if (typeof f.airline === 'string' && f.airline.length > MAX_AIRLINE_LENGTH) {
+      if (typeof f.airline !== 'string' || !f.airline.trim() || f.airline.length > MAX_AIRLINE_LENGTH) {
         return apiError(`Selected flight airline must be ${MAX_AIRLINE_LENGTH} characters or fewer`, 400);
       }
 
       if (f.flightNumber !== undefined && f.flightNumber !== null) {
-        if (typeof f.flightNumber === 'string' && f.flightNumber.length > MAX_FLIGHT_NUMBER_LENGTH) {
+        if (typeof f.flightNumber !== 'string' || f.flightNumber.length > MAX_FLIGHT_NUMBER_LENGTH) {
           return apiError(`Selected flight flightNumber must be ${MAX_FLIGHT_NUMBER_LENGTH} characters or fewer`, 400);
         }
       }
@@ -384,6 +401,7 @@ export async function POST(request: NextRequest) {
           preferredAggregators: aggregators,
           label,
           timePreference: timePreference || 'any',
+          strictDepartureTime: strictDepartureTime ?? false,
           cabinClass: cabinClass || 'economy',
           tripType: tripType === 'one_way' ? 'one_way' : 'round_trip',
           currency,
@@ -417,6 +435,9 @@ export async function POST(request: NextRequest) {
               duration: f.duration ?? null,
               ...(layovers ? { layovers } : {}),
               flightNumber: f.flightNumber ?? null,
+              departureTime: f.departureTime ?? null,
+              arrivalTime: f.arrivalTime ?? null,
+              flightId: flightIdentifiers(route.origin, route.destination, f).flightId,
             };
           }),
         });

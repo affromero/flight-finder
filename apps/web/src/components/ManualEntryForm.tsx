@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { useTranslations } from 'next-intl';
 import type { ParsedQuery } from './ConfirmationCard';
 import { AirportCombobox } from './AirportCombobox';
+import { DepartureWindowFields } from './criteria/DepartureWindowFields';
 import { detectLocaleCurrency } from '@/lib/currency';
 import styles from './ManualEntryForm.module.css';
 
@@ -19,6 +20,7 @@ export interface ManualFormValues {
   maxDuration: string;
   airlines: string;
   timePreference: 'any' | 'morning' | 'afternoon' | 'evening' | 'redeye';
+  strictDepartureTime?: boolean;
   cabinClass: 'economy' | 'premium_economy' | 'business' | 'first';
   currency: string;
 }
@@ -93,6 +95,7 @@ export function ManualEntryForm({
   const [cabinClass, setCabinClass] = useState<'economy' | 'premium_economy' | 'business' | 'first'>(
     iv?.cabinClass ?? 'economy',
   );
+  const [strictDepartureTime, setStrictDepartureTime] = useState(iv?.strictDepartureTime ?? false);
   const [currency, setCurrency] = useState(iv?.currency ?? '');
 
   const clearError = (field: string) => {
@@ -161,6 +164,7 @@ export function ManualEntryForm({
       maxDurationHours: maxDuration ? parseInt(maxDuration, 10) : null,
       preferredAirlines: airlines ? airlines.split(',').map((s) => s.trim()).filter(Boolean) : [],
       timePreference,
+      strictDepartureTime,
       cabinClass,
       tripType,
       currency: currency || adminCurrency || detectLocaleCurrency(),
@@ -188,6 +192,7 @@ export function ManualEntryForm({
       maxDuration,
       airlines,
       timePreference,
+      strictDepartureTime,
       cabinClass,
       currency,
     };
@@ -318,19 +323,8 @@ export function ManualEntryForm({
 
           <div className={styles.fieldRow}>
             <div className={styles.field}>
-              <label className={styles.label} htmlFor="me-time">{t('timePreference')}</label>
-              <select
-                id="me-time"
-                className={styles.input}
-                value={timePreference}
-                onChange={(e) => setTimePreference(e.target.value as typeof timePreference)}
-              >
-                <option value="any">{t('any')}</option>
-                <option value="morning">{t('morning')}</option>
-                <option value="afternoon">{t('afternoon')}</option>
-                <option value="evening">{t('evening')}</option>
-                <option value="redeye">{t('redEye')}</option>
-              </select>
+              <DepartureWindowFields timePreference={timePreference} strictDepartureTime={strictDepartureTime}
+                onChange={(preference, strict) => { setTimePreference(preference); setStrictDepartureTime(strict); }} />
             </div>
             <div className={styles.field}>
               <label className={styles.label} htmlFor="me-cabin">{t('cabinClass')}</label>

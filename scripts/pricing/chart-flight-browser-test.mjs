@@ -190,6 +190,14 @@ try {
   await page.waitForFunction(() => document.querySelector('.js-plotly-plot')?.data?.some(trace => trace.y.includes(310)));
   await page.setViewportSize({ width: 390, height: 844 });
   await page.waitForFunction(() => (document.querySelector('.js-plotly-plot')?.getBoundingClientRect().width ?? 1000) < 390);
+  await page.waitForFunction(() => {
+    const graph = document.querySelector('.js-plotly-plot');
+    const plot = graph?.querySelector('.nsewdrag')?.getBoundingClientRect();
+    return plot && plot.right <= window.innerWidth && [...graph.querySelectorAll('.scatterlayer .point')].some(point => {
+      const marker = point.getBoundingClientRect();
+      return marker.width > 0 && marker.height > 0 && marker.x >= plot.x && marker.right <= plot.right && marker.y >= plot.y && marker.bottom <= plot.bottom;
+    });
+  }).catch(async error => { throw new Error(`${error.message}\n${JSON.stringify(await chartState())}`); });
   assert.equal(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth), true);
   assert.equal(await grouping.inputValue(), 'flight');
   await page.screenshot({ path: '/tmp/flight-chart-mobile.png', fullPage: true });

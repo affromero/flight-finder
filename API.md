@@ -155,7 +155,27 @@ Content-Type: application/json
 }
 ```
 
-**Optional fields:** `maxPrice` (number), `maxStops` (number), `preferredAirlines` (string[]), `timePreference` (string).
+**Optional fields:** `maxPrice` (number), `maxStops` (number), `maxDurationHours`
+(integer from 1 to 48), `preferredAirlines` (string[]), `timePreference`
+(`any`, `morning`, `afternoon`, `evening`, `redeye`), `strictDepartureTime` (boolean,
+default `false`). These departure fields also apply to `POST /api/preview`.
+
+Departure windows use the outbound airport's local clock. Morning is before
+12:00, afternoon is 12:00 through 18:00 inclusive, evening is after 18:00, and
+red-eye is 22:00 through 23:59. With `strictDepartureTime: true`, a named window
+is required and unknown or malformed departure times are excluded. With strict
+filtering disabled, the window remains a search preference. The parser never
+enables strict filtering without an explicit user choice.
+
+Selected flights can carry `departureTime`, `arrivalTime` and `flightNumber`.
+The server preserves these and derives the flight identity. A selected fare
+outside a strict window returns 400 before creating a tracker.
+
+`PATCH /api/queries/{id}` accepts the same departure fields with the existing
+owner session or `deleteToken` authorization. Changes apply to grouped siblings
+and record edit history, which establishes the revised alert baseline. An edit
+that would leave any sibling strict without a named window returns 400. Changing
+or disabling the window changes visible history without deleting observations.
 
 **Response:**
 

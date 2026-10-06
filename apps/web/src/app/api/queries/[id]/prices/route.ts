@@ -28,6 +28,7 @@ export async function GET(
       maxDurationHours: true,
       preferredAirlines: true,
       timePreference: true,
+      strictDepartureTime: true,
       cabinClass: true,
       tripType: true,
       currency: true,

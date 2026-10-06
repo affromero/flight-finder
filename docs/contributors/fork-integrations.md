@@ -23,6 +23,14 @@ Chart screenshots: [before](screenshots/flight-chart-before.png),
 [desktop](screenshots/flight-chart-desktop.png),
 [mobile](screenshots/flight-chart-mobile.png).
 
+Departure criteria credit [sammorris01](https://github.com/sammorris01) for
+[shared flight filtering](https://github.com/sammorris01/flight-finder/commit/743fdd38aa6c83331634ef44808fd55346a28637)
+and the [departure-window contribution](https://github.com/sammorris01/flight-finder/commit/51e401aeca15e6f3abcc4cc9096e214855d16121).
+The upstream adaptation adds an explicit strict option, airport-local clock
+validation, web and CLI history filtering, preview isolation and audited edits.
+The existing soft preference remains the default. Tracking issue
+[#254](https://github.com/affromero/flight-finder/issues/254).
+
 The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
@@ -33,3 +41,7 @@ Pushover configuration screenshots: [before](screenshots/flight-pushover-before.
 
 Latest observed fare screenshots: [desktop](screenshots/flight-latest-fares-desktop.png),
 [mobile filter result](screenshots/flight-latest-fares-mobile.png).
+
+Departure window screenshots: [before](screenshots/flight-departure-before.png),
+[desktop](screenshots/flight-departure-desktop.png),
+[mobile](screenshots/flight-departure-mobile.png).

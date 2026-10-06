@@ -160,10 +160,15 @@ export function SearchWizard() {
             <SelectInput
               items={[
                 { label: 'Search flights', value: 'search' },
+                ...(parsed.timePreference !== 'any' ? [{
+                  label: parsed.strictDepartureTime ? 'Disable strict departure window' : 'Require this departure window (airport local time; unknown times excluded)',
+                  value: 'strict',
+                }] : []),
                 { label: 'Edit query', value: 'edit' },
               ]}
               onSelect={(item) => {
                 if (item.value === 'search') handleConfirm();
+                else if (item.value === 'strict') setParsed({ ...parsed, strictDepartureTime: !parsed.strictDepartureTime });
                 else {
                   setStep('input');
                   setError('');

@@ -1,4 +1,14 @@
 {
+  "DepartureWindowFields": {
+    "window": "Horaire de départ à l’aller",
+    "any": "Toute heure",
+    "morning": "Matin (avant 12:00)",
+    "afternoon": "Après-midi (de 12:00 à 18:00)",
+    "evening": "Soir (après 18:00)",
+    "redeye": "Vol de nuit (de 22:00 à 23:59)",
+    "strict": "Inclure uniquement les vols dans ce créneau",
+    "help": "Les heures sont locales à l’aéroport de départ. Le filtre strict exclut les vols sans heure de départ connue. Sinon, il s’agit d’une préférence."
+  },
   "AggregatorPicker": {
     "sources": "Sources",
     "disabledByAdmin": "Désactivé par l’admin"
