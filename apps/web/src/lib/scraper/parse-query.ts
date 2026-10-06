@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import { normalizeCabinClass } from '@/lib/cabin-class';
 import { matchingJsonEnd } from './extract-prices';
 import { recordExtraction } from './usage-log';
+import { isTimePreference } from '../criteria/departure';
 
 export interface Airport {
   code: string; // IATA 3-letter code
@@ -27,6 +28,7 @@ export interface ParsedFlightQuery {
   maxDurationHours: number | null; // total trip duration cap (hours), null = no cap
   preferredAirlines: string[]; // empty = no preference
   timePreference: 'any' | 'morning' | 'afternoon' | 'evening' | 'redeye';
+  strictDepartureTime?: boolean;
   cabinClass: 'economy' | 'premium_economy' | 'business' | 'first';
   tripType: 'one_way' | 'round_trip';
   currency: string | null; // ISO 4217 currency code (e.g., USD, EUR, GBP). null = auto-detect
@@ -214,6 +216,9 @@ function normalizeAirports(parsed: Record<string, unknown>): ParsedFlightQuery {
     destination: destinations[0]?.code ?? '',
     destinationName: destinations[0]?.name ?? '',
     currency: typeof p.currency === 'string' && p.currency ? p.currency : null,
+    timePreference: isTimePreference(p.timePreference) ? p.timePreference : 'any',
+    // Strictness requires an explicit choice in the confirmation UI or API.
+    strictDepartureTime: false,
     maxDurationHours: typeof p.maxDurationHours === 'number' && p.maxDurationHours > 0 ? p.maxDurationHours : null,
     // Clamp LLM-emitted cabin to the enum. Load-bearing for the CLI, which
     // writes parsed.cabinClass straight to Prisma without hitting the API

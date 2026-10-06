@@ -5,6 +5,7 @@ import { useTranslations } from 'next-intl';
 import { useRouter } from 'next/navigation';
 import { getDeleteToken } from '@/lib/tracker-storage';
 import { MAX_PRICE_VALUE } from '@/lib/limits';
+import { DepartureWindowFields } from './criteria/DepartureWindowFields';
 import styles from './TrackerFilters.module.css';
 
 interface TrackerFilterState {
@@ -12,6 +13,8 @@ interface TrackerFilterState {
   maxStops: number | null;
   maxDurationHours: number | null;
   preferredAirlines: string[];
+  timePreference?: string;
+  strictDepartureTime?: boolean;
 }
 
 interface Props {
@@ -26,6 +29,7 @@ function countActiveFilters(filters: TrackerFilterState): number {
     filters.maxStops !== null,
     filters.maxDurationHours !== null,
     filters.preferredAirlines.length > 0,
+    !!filters.timePreference && filters.timePreference !== 'any',
   ].filter(Boolean).length;
 }
 
@@ -46,6 +50,8 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
   const [maxStops, setMaxStops] = useState(filters.maxStops?.toString() ?? '');
   const [maxDurationHours, setMaxDurationHours] = useState(filters.maxDurationHours?.toString() ?? '');
   const [preferredAirlines, setPreferredAirlines] = useState(filters.preferredAirlines.join(', '));
+  const [timePreference, setTimePreference] = useState(filters.timePreference ?? 'any');
+  const [strictDepartureTime, setStrictDepartureTime] = useState(filters.strictDepartureTime ?? false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -56,8 +62,10 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
     setMaxStops(filters.maxStops?.toString() ?? '');
     setMaxDurationHours(filters.maxDurationHours?.toString() ?? '');
     setPreferredAirlines(filters.preferredAirlines.join(', '));
+    setTimePreference(filters.timePreference ?? 'any');
+    setStrictDepartureTime(filters.strictDepartureTime ?? false);
     setError(null);
-  }, [filters.maxDurationHours, filters.maxPrice, filters.maxStops, filters.preferredAirlines]);
+  }, [filters.maxDurationHours, filters.maxPrice, filters.maxStops, filters.preferredAirlines, filters.timePreference, filters.strictDepartureTime]);
 
   const closePanel = useCallback(() => {
     syncDraftFromFilters();
@@ -105,6 +113,8 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
     setMaxStops('');
     setMaxDurationHours('');
     setPreferredAirlines('');
+    setTimePreference('any');
+    setStrictDepartureTime(false);
     setError(null);
   };
 
@@ -159,6 +169,8 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
           maxStops: nextMaxStops,
           maxDurationHours: nextMaxDurationHours,
           preferredAirlines: airlines,
+          timePreference,
+          strictDepartureTime,
         }),
       });
       const data = await res.json();
@@ -245,6 +257,9 @@ export function TrackerFilters({ queryId, filters, canEdit = false }: Props) {
               />
             </label>
           </div>
+
+          <DepartureWindowFields timePreference={timePreference} strictDepartureTime={strictDepartureTime}
+            disabled={saving} onChange={(preference, strict) => { setTimePreference(preference); setStrictDepartureTime(strict); }} />
 
           {error && <p className={styles.error}>{error}</p>}
 

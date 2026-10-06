@@ -7,6 +7,7 @@
  */
 import { mkdir, writeFile } from 'fs/promises';
 import { createHash } from 'crypto';
+import { departureCriteriaError } from './criteria/departure';
 import { prisma } from '@/lib/prisma';
 import { currentTravelContext } from './travel/context';
 import { withPreviewTravelAdmission } from './travel/preview';
@@ -206,6 +207,7 @@ interface ScrapeRouteParams {
   maxDurationHours: number | null;
   preferredAirlines: string[];
   timePreference: string;
+  strictDepartureTime?: boolean;
   currency: string | null;
   context: ExtractionContext;
   /** Unique task slot. Threaded into the debug HTML filename so two
@@ -247,7 +249,7 @@ export function buildCacheKey(
   cabinClass: string,
   tripType: string,
   currency: string | null,
-  filters?: Pick<PreviewRequestPayload, 'maxPrice' | 'maxStops' | 'maxDurationHours' | 'preferredAirlines' | 'timePreference'>,
+  filters?: Pick<PreviewRequestPayload, 'maxPrice' | 'maxStops' | 'maxDurationHours' | 'preferredAirlines' | 'timePreference' | 'strictDepartureTime'>,
 ): string {
   const hash = createHash('sha256')
     .update(`${origin}:${destination}:${dateFrom}:${dateTo}:${cabinClass}:${tripType}:${currency ?? 'auto'}:${JSON.stringify(filters ?? null)}`)
@@ -262,6 +264,8 @@ export function validatePreviewPayload(
   payload: PreviewRequestPayload,
   maxCombos = 24,
 ): PreviewValidationResult {
+  const departureError = departureCriteriaError(payload.timePreference, payload.strictDepartureTime);
+  if (departureError) throw new Error(departureError);
   const { dateFrom, dateTo, outboundDates, returnDates, origins, destinations, tripType } = payload;
 
   if (origins.length === 0 || destinations.length === 0 || !dateFrom || !dateTo) {
@@ -340,6 +344,7 @@ async function scrapeGoogleOneWayLeg(
     maxDurationHours: params.maxDurationHours,
     preferredAirlines: params.preferredAirlines,
     timePreference: params.timePreference,
+    strictDepartureTime: params.strictDepartureTime ?? false,
     cabinClass: params.cabinClass,
   };
 
@@ -402,7 +407,7 @@ async function scrapeOneWayEstimate(params: ScrapeRouteParams): Promise<OneWayEs
   if (outbound.failureReason || outbound.prices.length === 0) {
     throw new Error(`Could not load outbound flights for ${origin}→${destination}`);
   }
-  const inbound = await scrapeGoogleOneWayLeg(params, destination, origin, dateTo, dateToStr);
+  const inbound = await scrapeGoogleOneWayLeg({ ...params, timePreference: 'any', strictDepartureTime: false }, destination, origin, dateTo, dateToStr);
   if (inbound.failureReason || inbound.prices.length === 0) {
     throw new Error(`Could not load return flights for ${destination}→${origin}`);
   }
@@ -447,6 +452,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     maxDurationHours: params.maxDurationHours,
     preferredAirlines: airlines,
     timePreference: params.timePreference,
+    strictDepartureTime: params.strictDepartureTime ?? false,
     cabinClass,
   };
 
@@ -604,7 +610,7 @@ export async function runPreview(
   if (!travel) return withPreviewTravelAdmission(() => runPreview(payload, options), options);
   const config = travel.config;
   const { origins, destinations, isOneWay } = validatePreviewPayload(payload, config?.previewMaxCombos ?? 24);
-  const { dateFrom, dateTo, maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference, cabinClass, tripType, currency: bodyCurrency } = payload;
+  const { dateFrom, dateTo, maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference, strictDepartureTime, cabinClass, tripType, currency: bodyCurrency } = payload;
   const currency: string | null = config?.defaultCurrency ?? bodyCurrency;
   const provider = config?.provider ?? 'anthropic';
   const model = config?.model ?? 'claude-haiku-4-5-20251001';
@@ -663,7 +669,7 @@ export async function runPreview(
       cabinClass || 'economy',
       tripType || 'round_trip',
       currency,
-      { maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference },
+      { maxPrice, maxStops, maxDurationHours, preferredAirlines, timePreference, strictDepartureTime: strictDepartureTime ?? false },
     );
 
     try {
@@ -682,6 +688,7 @@ export async function runPreview(
         maxDurationHours,
         preferredAirlines,
         timePreference: timePreference || 'any',
+        strictDepartureTime: strictDepartureTime ?? false,
         currency,
         context,
         taskIndex,

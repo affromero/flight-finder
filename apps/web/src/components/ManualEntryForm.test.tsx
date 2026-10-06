@@ -1,6 +1,6 @@
 /** @vitest-environment jsdom */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { fireEvent, render, screen } from '@testing-library/react';
 import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
 
 function makeInitialValues(): ManualFormValues {
@@ -22,6 +22,21 @@ function makeInitialValues(): ManualFormValues {
 }
 
 describe('ManualEntryForm — edit flow (issue #60)', () => {
+  it('submits explicit strictness and preserves it when editing the manual draft', () => {
+    const submit = vi.fn();
+    const initial = { ...makeInitialValues(), dateFrom: '2099-05-07', dateTo: '2099-05-21', timePreference: 'morning' as const };
+    const first = render(<ManualEntryForm onSubmit={submit} onCancel={vi.fn()} adminCurrency={null} initialValues={initial} />);
+    const checkbox = screen.getByRole('checkbox', { name: 'Only include flights in this window' });
+    expect(checkbox).not.toBeChecked();
+    fireEvent.click(checkbox);
+    fireEvent.click(screen.getByRole('button', { name: 'Show available flights' }));
+    const [parsed, , saved] = submit.mock.calls[0]!;
+    expect(parsed).toMatchObject({ timePreference: 'morning', strictDepartureTime: true });
+    expect(saved).toMatchObject({ timePreference: 'morning', strictDepartureTime: true });
+    first.unmount();
+    render(<ManualEntryForm onSubmit={submit} onCancel={vi.fn()} adminCurrency={null} initialValues={saved} />);
+    expect(screen.getByRole('checkbox', { name: 'Only include flights in this window' })).toBeChecked();
+  });
   beforeEach(() => {
     // jsdom does not implement fetch; AirportCombobox calls /api/airports.
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue({

@@ -17,8 +17,10 @@ const mockQueryFindMany = vi.fn();
 const mockQueryUpdateMany = vi.fn();
 const mockQueryUpdate = vi.fn();
 const mockQueryEditEventCreateMany = vi.fn();
+const mockLockedQueries = vi.fn();
 
 interface MockTransactionClient {
+  $queryRaw: (...args: unknown[]) => unknown;
   query: {
     updateMany: (...args: unknown[]) => unknown;
     update: (...args: unknown[]) => unknown;
@@ -29,6 +31,7 @@ interface MockTransactionClient {
 }
 
 const mockTransaction = vi.fn((callback: (tx: MockTransactionClient) => unknown) => callback({
+  $queryRaw: (...args: unknown[]) => mockLockedQueries(...args),
   query: {
     updateMany: (...args: unknown[]) => mockQueryUpdateMany(...args),
     update: (...args: unknown[]) => mockQueryUpdate(...args),
@@ -309,6 +312,10 @@ describe('PATCH /api/queries/[id]', () => {
   beforeEach(async () => {
     vi.clearAllMocks();
     mockQueryFindMany.mockResolvedValue([]);
+    mockLockedQueries.mockImplementation(async () => {
+      const primary = await mockQueryFindUnique();
+      return [{ ...primary, id: primary.id ?? 'q1' }, ...await mockQueryFindMany()];
+    });
     mockQueryUpdateMany.mockResolvedValue({ count: 1 });
     mockQueryEditEventCreateMany.mockResolvedValue({ count: 0 });
     mockIsMultiUserEnabled.mockResolvedValue(false);
@@ -439,6 +446,57 @@ describe('PATCH /api/queries/[id]', () => {
       preferredAggregators: [],
     };
 
+    it('records strict departure changes for every sibling and permits disabling without deleting history', async () => {
+      mockQueryFindUnique.mockResolvedValue({ ...editableQuery, deleteToken: 'real-token', timePreference: 'morning', strictDepartureTime: false });
+      mockQueryFindMany.mockResolvedValue([{ ...editableQuery, id: 'q2', timePreference: 'afternoon', strictDepartureTime: false }]);
+      const res = await PATCH(...makePatchRequest('q1', { deleteToken: 'real-token', timePreference: 'morning', strictDepartureTime: true }));
+      expect(res.status).toBe(200);
+      expect(mockQueryUpdateMany.mock.calls[0]?.[0]).toMatchObject({ where: { id: { in: ['q1', 'q2'] } }, data: { timePreference: 'morning', strictDepartureTime: true } });
+      const events = mockQueryEditEventCreateMany.mock.calls[0]?.[0].data as Array<{ queryId: string; changes: { changes: Array<{ field: string; after: unknown }> } }>;
+      expect(events.map((event) => event.queryId)).toEqual(['q1', 'q2']);
+      for (const event of events) expect(event.changes.changes).toContainEqual(expect.objectContaining({ field: 'strictDepartureTime', after: true }));
+      mockQueryFindUnique.mockResolvedValue({ ...editableQuery, deleteToken: 'real-token', timePreference: 'morning', strictDepartureTime: true });
+      const disabled = await PATCH(...makePatchRequest('q1', { deleteToken: 'real-token', strictDepartureTime: false }));
+      expect(disabled.status).toBe(200);
+      expect(mockQueryUpdateMany.mock.calls.at(-1)?.[0].data).toEqual({ strictDepartureTime: false });
+    });
+
+    it('allows enabling strictness on a saved window without resubmitting the window', async () => {
+      mockQueryFindUnique.mockResolvedValue({ ...editableQuery, groupId: null, deleteToken: 'real-token', timePreference: 'morning', strictDepartureTime: false });
+      const res = await PATCH(...makePatchRequest('q1', { deleteToken: 'real-token', strictDepartureTime: true }));
+      expect(res.status).toBe(200);
+      expect(mockQueryUpdateMany.mock.calls[0]?.[0].data).toEqual({ strictDepartureTime: true });
+    });
+
+    it('rejects conflicting fresh criteria after acquiring the row lock', async () => {
+      mockQueryFindUnique.mockResolvedValue({ ...editableQuery, groupId: null, deleteToken: 'real-token', timePreference: 'morning', strictDepartureTime: false });
+      mockLockedQueries.mockResolvedValue([{ ...editableQuery, groupId: null, deleteToken: 'real-token', timePreference: 'any', strictDepartureTime: false }]);
+      const res = await PATCH(...makePatchRequest('q1', { deleteToken: 'real-token', strictDepartureTime: true }));
+      expect(res.status).toBe(409);
+      expect((await res.json()).error).toContain('concurrently');
+      expect(mockQueryUpdateMany.mock.calls).toEqual([]);
+      expect(mockQueryEditEventCreateMany.mock.calls).toEqual([]);
+    });
+
+    it.each([
+      { strictDepartureTime: 'false' }, { strictDepartureTime: true },
+      { timePreference: 'invalid' }, { timePreference: null },
+    ])('rejects invalid departure edits before changing any row: %j', async (criteria) => {
+      mockQueryFindUnique.mockResolvedValue({ ...editableQuery, deleteToken: 'real-token', strictDepartureTime: false });
+      const res = await PATCH(...makePatchRequest('q1', { deleteToken: 'real-token', ...criteria }));
+      expect(res.status).toBe(400);
+      expect(mockQueryUpdateMany.mock.calls).toEqual([]);
+      expect(mockQueryEditEventCreateMany.mock.calls).toEqual([]);
+    });
+
+    it('rejects a group edit that would leave a sibling strict without a named window', async () => {
+      mockQueryFindUnique.mockResolvedValue({ ...editableQuery, deleteToken: 'real-token', timePreference: 'morning', strictDepartureTime: false });
+      mockQueryFindMany.mockResolvedValue([{ ...editableQuery, id: 'q2', strictDepartureTime: false }]);
+      const res = await PATCH(...makePatchRequest('q1', { deleteToken: 'real-token', strictDepartureTime: true }));
+      expect(res.status).toBe(400);
+      expect(mockQueryUpdateMany.mock.calls).toEqual([]);
+    });
+
     it('updates tracker filters across grouped queries and records owner edit events', async () => {
       process.env.SELF_HOSTED = 'true';
       await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
@@ -525,13 +583,12 @@ describe('PATCH /api/queries/[id]', () => {
       expect(data.data).toMatchObject({ maxPrice: 2_550_760 });
     });
 
-    it('rejects time and cabin edits because snapshots cannot enforce them', async () => {
+    it('rejects cabin edits because retained snapshots cannot establish a different cabin', async () => {
       process.env.SELF_HOSTED = 'true';
       await sessionBoundary.fixture!.signIn({ id: 'owner', isAdmin: true });
       mockQueryFindUnique.mockResolvedValue(editableQuery);
 
       const res = await PATCH(...makePatchRequest('q1', {
-        timePreference: 'morning',
         cabinClass: 'business',
       }));
       const data = await res.json();

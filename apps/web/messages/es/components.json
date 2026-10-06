@@ -1,4 +1,14 @@
 {
+  "DepartureWindowFields": {
+    "window": "Horario de salida de ida",
+    "any": "Cualquier hora",
+    "morning": "Mañana (antes de las 12:00)",
+    "afternoon": "Tarde (de 12:00 a 18:00)",
+    "evening": "Noche (después de las 18:00)",
+    "redeye": "Vuelo nocturno (de 22:00 a 23:59)",
+    "strict": "Incluir solo vuelos en este horario",
+    "help": "Las horas son locales al aeropuerto de salida. El filtro estricto excluye vuelos con hora de salida desconocida. En caso contrario, es una preferencia."
+  },
   "AggregatorPicker": {
     "sources": "Fuentes",
     "disabledByAdmin": "Deshabilitado por el administrador"

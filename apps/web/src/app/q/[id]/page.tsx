@@ -113,6 +113,7 @@ interface QueryWithSnapshots {
     maxDurationHours: number | null;
     preferredAirlines: string[];
     timePreference: string;
+    strictDepartureTime: boolean;
     cabinClass: string;
     expiresAt: Date;
     createdAt: Date;
@@ -472,6 +473,8 @@ export default async function ChartPage({ params }: Props) {
                   maxStops: primary.query.maxStops,
                   maxDurationHours: primary.query.maxDurationHours,
                   preferredAirlines: primary.query.preferredAirlines,
+                  timePreference: primary.query.timePreference,
+                  strictDepartureTime: primary.query.strictDepartureTime,
                 }}
                 canEdit={canEdit}
               />

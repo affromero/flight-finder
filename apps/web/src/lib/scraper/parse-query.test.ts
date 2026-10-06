@@ -69,6 +69,15 @@ function makeLlmResponse(data: Record<string, unknown>): string {
 }
 
 describe('parseFlightQuery', () => {
+  it.each(['morning', 'invented'])('requires user opt-in even when the model requests strict %s departures', async (timePreference) => {
+    mockExtract.mockResolvedValue({ content: makeLlmResponse({ confidence: 'high', ambiguities: [], parsed: {
+      origin: 'JFK', destination: 'LAX', dateFrom: '2026-06-15', dateTo: '2026-06-15',
+      flexibility: 0, maxPrice: null, maxStops: null, preferredAirlines: [],
+      timePreference, strictDepartureTime: true, cabinClass: 'economy', tripType: 'one_way',
+    } }), usage: { inputTokens: 1, outputTokens: 1 } });
+    const result = await parseFlightQuery('JFK to LAX in the morning');
+    expect(result.response.parsed).toMatchObject({ timePreference: timePreference === 'morning' ? 'morning' : 'any', strictDepartureTime: false });
+  });
   const query = {
     origins: [{ code: 'JFK', name: 'New York {JFK} "Terminal" \\' }],
     destinations: [{ code: 'BKK', name: 'Bangkok [BKK]' }],

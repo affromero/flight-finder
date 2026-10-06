@@ -1,4 +1,14 @@
 {
+  "DepartureWindowFields": {
+    "window": "Abflugzeit für den Hinflug",
+    "any": "Beliebige Uhrzeit",
+    "morning": "Vormittag (vor 12:00)",
+    "afternoon": "Nachmittag (12:00 bis 18:00)",
+    "evening": "Abend (nach 18:00)",
+    "redeye": "Nachtflug (22:00 bis 23:59)",
+    "strict": "Nur Flüge in diesem Zeitfenster anzeigen",
+    "help": "Es gilt die Ortszeit am Abflughafen. Der strikte Filter schließt Flüge ohne bekannte Abflugzeit aus. Andernfalls ist dies eine Präferenz."
+  },
   "AggregatorPicker": {
     "sources": "Quellen",
     "disabledByAdmin": "Vom Admin deaktiviert"

@@ -2,6 +2,8 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { DepartureWindowFields } from './criteria/DepartureWindowFields';
+import type { TimePreference } from '@/lib/criteria/departure';
 import type { Airport } from '@/lib/scraper/parse-query';
 import { formatCurrency } from '@/lib/currency';
 import {
@@ -32,6 +34,7 @@ export interface ParsedQuery {
   maxDurationHours: number | null;
   preferredAirlines: string[];
   timePreference: string;
+  strictDepartureTime?: boolean;
   cabinClass: string;
   tripType: string;
   currency: string | null;
@@ -99,6 +102,7 @@ export function ConfirmationCard({
   vpnCountries,
   onVpnCountriesChange,
   previewMaxCombos = 24,
+  onDepartureCriteriaChange,
 }: {
   parsed: ParsedQuery;
   onTrack: () => void;
@@ -109,6 +113,7 @@ export function ConfirmationCard({
   vpnCountries?: string[];
   onVpnCountriesChange?: (countries: string[]) => void;
   previewMaxCombos?: number;
+  onDepartureCriteriaChange?: (preference: TimePreference, strict: boolean) => void;
 }) {
   const t = useTranslations('ConfirmationCard');
   const [vpnOpen, setVpnOpen] = useState(false);
@@ -275,6 +280,11 @@ export function ConfirmationCard({
             <span className={styles.tag}>{parsed.cabinClass.replace('_', ' ')}</span>
           )}
         </div>
+      )}
+
+      {onDepartureCriteriaChange && (
+        <DepartureWindowFields timePreference={parsed.timePreference} strictDepartureTime={parsed.strictDepartureTime ?? false}
+          onChange={onDepartureCriteriaChange} disabled={loading} />
       )}
 
       {onVpnCountriesChange && (

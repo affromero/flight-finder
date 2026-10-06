@@ -1,3 +1,5 @@
+import { departureClockMinutes } from '../../criteria/departure';
+
 interface FlightIdentity {
   airline: string;
   departureTime?: string | null;
@@ -19,13 +21,8 @@ export function flightIdentifiers(origin: string, destination: string, flight: F
 
 /** Reconciliation requires a known local clock; persisted legacy IDs are lossy. */
 export function flightDepartureAlias(origin: string, destination: string, flight: FlightIdentity): string | null {
-  const match = flight.departureTime?.trim().match(/^(\d{1,2}):(\d{2})\s*(AM|PM)?$/i);
-  if (!match) return null;
-  let hour = Number(match[1]);
-  const minute = Number(match[2]);
-  const meridiem = match[3]?.toUpperCase();
-  if (minute > 59 || (meridiem ? hour < 1 || hour > 12 : hour > 23)) return null;
-  if (meridiem) hour = hour % 12 + (meridiem === 'PM' ? 12 : 0);
+  const minutes = departureClockMinutes(flight.departureTime);
+  if (minutes === null) return null;
   const airline = flightIdentifiers(origin, destination, flight).flightIdLegacy.split('-')[0];
-  return JSON.stringify([airline, origin, destination, flight.travelDate, hour * 60 + minute]);
+  return JSON.stringify([airline, origin, destination, flight.travelDate, minutes]);
 }

@@ -124,6 +124,22 @@ describe('extractPrices', () => {
     expect(result.failureReason).toBeUndefined();
   });
 
+  it('enforces explicit criteria when the provider returns incompatible fares', async () => {
+    const base = { travelDate: '2026-06-15', price: 300, currency: 'USD', airline: 'Delta', stops: 0, duration: '2h', departureTime: '09:00' };
+    mockExtract.mockResolvedValue({ content: JSON.stringify([
+      base, { ...base, departureTime: '19:00' }, { ...base, departureTime: null },
+      { ...base, price: 501 }, { ...base, stops: 1 }, { ...base, airline: 'United' }, { ...base, duration: '5h' },
+    ]), usage: { inputTokens: 1, outputTokens: 1 } });
+    const criteria = { maxPrice: 500, maxStops: 0, maxDurationHours: 4, preferredAirlines: ['Delta'], timePreference: 'morning', cabinClass: 'economy' };
+    const strict = await extractPrices('page', 'https://flights.google.com', '2026-06-15', { ...criteria, strictDepartureTime: true });
+    expect(strict.prices).toHaveLength(1);
+    expect(strict.prices[0]).toMatchObject(base);
+    const soft = await extractPrices('page', 'https://flights.google.com', '2026-06-15', criteria);
+    expect(soft.prices.map((flight) => flight.departureTime)).toEqual(['09:00', '19:00', null]);
+    const empty = await extractPrices('page', 'https://flights.google.com', '2026-06-15', { ...criteria, timePreference: 'redeye', strictDepartureTime: true });
+    expect(empty).toMatchObject({ prices: [], failureReason: 'all_filtered_out' });
+  });
+
   it('captures layovers, tolerating the shapes models drift into (issue #190)', async () => {
     mockExtract.mockResolvedValue({
       content: JSON.stringify([

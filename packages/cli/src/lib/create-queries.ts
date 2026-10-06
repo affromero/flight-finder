@@ -3,6 +3,9 @@ import { prisma } from '@/lib/prisma';
 import type { ParsedFlightQuery } from '../../../../apps/web/src/lib/scraper/parse-query.js';
 import type { PriceData } from '../../../../apps/web/src/lib/scraper/extract-prices.js';
 import type { RouteResult } from './preview.js';
+import { departureCriteriaError } from './criteria/departure.js';
+import { filterSnapshotsByTrackerFilters } from './criteria/snapshot-filters.js';
+import { flightIdentifiers } from '../../../../apps/web/src/lib/scraper/identity/flight.js';
 
 /**
  * When the instance has multi user mode enabled, CLI created trackers attach
@@ -44,6 +47,11 @@ export async function createTrackedQueries(
   rawInput: string,
   selections: RouteSelection[],
 ): Promise<CreatedQuery[]> {
+  const error = departureCriteriaError(parsed.timePreference, parsed.strictDepartureTime);
+  if (error) throw new Error(error);
+  if (parsed.strictDepartureTime && selections.some(({ flights }) => filterSnapshotsByTrackerFilters(flights, parsed).length !== flights.length)) {
+    throw new Error('Selected flights do not match tracker criteria');
+  }
   const from = new Date(parsed.dateFrom + 'T00:00:00Z');
   const to = new Date(parsed.dateTo + 'T00:00:00Z');
   const flex = Math.max(0, Math.min(parsed.flexibility || 0, 14));
@@ -73,8 +81,10 @@ export async function createTrackedQueries(
         flexibility: routeFlex,
         maxPrice: parsed.maxPrice,
         maxStops: parsed.maxStops,
+        maxDurationHours: parsed.maxDurationHours ?? null,
         preferredAirlines: parsed.preferredAirlines,
         timePreference: parsed.timePreference || 'any',
+        strictDepartureTime: parsed.strictDepartureTime ?? false,
         cabinClass: parsed.cabinClass || 'economy',
         tripType: parsed.tripType === 'one_way' ? 'one_way' : 'round_trip',
         currency: parsed.currency,
@@ -96,6 +106,10 @@ export async function createTrackedQueries(
           bookingUrl: f.bookingUrl || '',
           stops: f.stops ?? 0,
           duration: f.duration ?? null,
+          departureTime: f.departureTime,
+          arrivalTime: f.arrivalTime,
+          flightNumber: f.flightNumber,
+          flightId: flightIdentifiers(route.origin, route.destination, f).flightId,
           // Prisma treats an explicit null on a Json column as ambiguous.
           ...(f.layovers ? { layovers: f.layovers } : {}),
         })),
