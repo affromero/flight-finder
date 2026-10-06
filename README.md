@@ -441,6 +441,13 @@ Flight Finder walks an ordered chain of price sources per query. The chain is ad
 
 Skyscanner and Kayak are off by default. Admin enables them in `/admin/config`; users then order them in `/account/settings`. When a source returns no flights the next source in the chain runs; an `all_filtered_out` result (real flights existed but query filters excluded them) short circuits the chain because changing sources cannot help.
 
+If one airline check succeeds while another fails, the scrape retains the
+successful fares and reports a partial result with the affected date, airline
+and failure category. It does not infer unavailable flights for that partially
+checked date. Fully checked dates keep the existing disappearance detection.
+Failed and unsampled dates retain their earlier observations. Check the booking
+provider to confirm live availability.
+
 For Skyscanner and Kayak to be production grade you would need residential proxies or paid CAPTCHA solving, neither of which Flight Finder ships. If those sources fail consistently for your route, leave them off.
 
 ## Managing Flight Finder

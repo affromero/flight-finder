@@ -1,69 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { readFileSync } from 'fs';
-import { resolve } from 'path';
-import { createHash } from 'node:crypto';
-import { withTravelContext } from '../travel/context';
-import { TravelVpnSession } from '../travel/vpn';
-import type { ExtractionConfig, TravelJob } from '@/generated/prisma/client';
-
-const { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockNavigateSkyscanner, mockNavigateKayak, mockExtractPrices } = vi.hoisted(() => {
-  const mockPrisma = {
-    $transaction: vi.fn(),
-    $queryRaw: vi.fn(),
-    $executeRaw: vi.fn(),
-    travelAdmission: { upsert: vi.fn() },
-    query: { findUnique: vi.fn() },
-    fetchRun: { create: vi.fn(), update: vi.fn() },
-    extractionConfig: { findFirst: vi.fn(), findUnique: vi.fn() },
-    priceSnapshot: { createMany: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), aggregate: vi.fn() },
-    queryEditEvent: { findFirst: vi.fn() },
-    travelAlertDelivery: { upsert: vi.fn() },
-    apiUsageLog: { create: vi.fn() },
-  };
-  const mockNavigateGoogleFlights = vi.fn();
-  const mockNavigateAirlineDirect = vi.fn();
-  const mockNavigateSkyscanner = vi.fn();
-  const mockNavigateKayak = vi.fn();
-  const mockExtractPrices = vi.fn();
-  return { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockNavigateSkyscanner, mockNavigateKayak, mockExtractPrices };
-});
-
-vi.mock('@/lib/prisma', () => ({ prisma: mockPrisma }));
-
-vi.mock('./navigate', () => ({
-  navigateGoogleFlights: (...args: unknown[]) => mockNavigateGoogleFlights(...args),
-  navigateAirlineDirect: (...args: unknown[]) => mockNavigateAirlineDirect(...args),
-  navigateSkyscanner: (...args: unknown[]) => mockNavigateSkyscanner(...args),
-  navigateKayak: (...args: unknown[]) => mockNavigateKayak(...args),
-}));
-
-vi.mock('./extract-prices', () => ({
-  extractPrices: (...args: unknown[]) => mockExtractPrices(...args),
-}));
-
-vi.mock('fs/promises', () => ({
-  mkdir: vi.fn().mockResolvedValue(undefined),
-  writeFile: vi.fn().mockResolvedValue(undefined),
-}));
-
-import { runScrapeForQuery as scrapeAdmittedQuery, runScrapeAll } from './run-scrape';
-
-const lease = { id: 'vpn', owner: 'unit-worker', generation: 1, topologyVersion: 1 };
-const job = { id: 'unit-job', kind: 'flight_query', queryId: 'q1', userId: null, status: 'running' } as TravelJob;
-beforeEach(() => {
-  mockPrisma.$transaction.mockImplementation((work: (tx: typeof mockPrisma) => Promise<unknown>) => work(mockPrisma));
-  mockPrisma.$executeRaw.mockResolvedValue(1);
-  mockPrisma.$queryRaw.mockImplementation(async (sql: TemplateStringsArray) => sql.join('').includes('FROM "TravelJob"') ? [job] : [{ id: 'vpn' }]);
-  mockPrisma.travelAdmission.upsert.mockResolvedValue({ quarantinedAt: null, topologyVersion: 1, topologyHash: createHash('sha256').update(JSON.stringify(['none', null, null])).digest('hex') });
-  mockPrisma.extractionConfig.findUnique.mockResolvedValue({ vpnProvider: 'none' });
-});
-
-// These extraction regressions exercise the admitted pipeline. Queue and worker
-// lifecycle behavior is covered separately against PostgreSQL and real browsers.
-async function runScrapeForQuery(...args: Parameters<typeof scrapeAdmittedQuery>) {
-  const config = await mockPrisma.extractionConfig.findFirst() as ExtractionConfig | null;
-  return withTravelContext({ job, lease, config, vpn: new TravelVpnSession(lease, 'none') }, () => scrapeAdmittedQuery(...args));
-}
+import { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockExtractPrices, runScrapeForQuery, BASE_QUERY } from './testing/run-scrape-fixture';
+import { runScrapeAll } from './run-scrape';
+import { TravelCleanupError } from '../travel/execution';
 
 describe('runScrapeAll pause gate (issue #106)', () => {
   beforeEach(() => vi.clearAllMocks());
@@ -75,32 +13,6 @@ describe('runScrapeAll pause gate (issue #106)', () => {
     expect(mockPrisma.query.findUnique).not.toHaveBeenCalled();
   });
 });
-
-const BASE_QUERY = {
-  id: 'q1',
-  userId: null,
-  updatedAt: new Date('2026-01-01'),
-  active: true,
-  isSeed: false,
-  origin: 'JFK',
-  destination: 'LAX',
-  dateFrom: new Date('2026-06-15'),
-  dateTo: new Date('2026-06-20'),
-  cabinClass: 'economy',
-  tripType: 'round_trip',
-  currency: null,
-  preferredAirlines: [],
-  preferredAggregators: [] as string[],
-  maxPrice: null,
-  maxStops: null,
-  maxDurationHours: null,
-  timePreference: 'any',
-  flexibility: 0,
-  lookAheadDays: 14,
-  expiresAt: new Date('2027-01-01'),
-  vpnCountries: [],
-  user: null as { preferredAggregators: string[] } | null,
-};
 
 describe('runScrapeForQuery', () => {
   beforeEach(() => {
@@ -146,6 +58,34 @@ describe('runScrapeForQuery', () => {
       expect.objectContaining({ flightNumber: 'DL200', price: 100 }),
     ]));
     expect(saved.some(row => row.status === 'sold_out')).toBe(false);
+  });
+
+  it.each(['navigation failure', 'unloaded page', 'extraction failure', 'empty extraction', 'filtered extraction'])('retains successful direct fares without inferring unavailable flights after %s', async failure => {
+    const fresh = { travelDate: '2026-06-15', price: 250, currency: 'USD', airline: 'Delta', bookingUrl: '', stops: 0, duration: '5h', flightNumber: 'DL100' };
+    mockPrisma.query.findUnique.mockResolvedValue({ ...BASE_QUERY, preferredAirlines: ['Delta', 'American Airlines'] });
+    mockPrisma.priceSnapshot.findMany.mockResolvedValue([{ ...fresh, airline: 'American Airlines', flightId: 'AmericanAirlines-AA200-JFK-LAX-2026-06-15', travelDate: new Date(fresh.travelDate), status: 'available' }]);
+    mockNavigateAirlineDirect.mockImplementation(async (_params, airline) => {
+      if (airline === 'American Airlines' && failure === 'navigation failure') throw new Error('Provider unavailable');
+      return { html: airline, url: 'https://example.com/fare', source: 'airline_direct', resultsFound: airline === 'Delta' || failure !== 'unloaded page' };
+    });
+    mockExtractPrices.mockImplementation(async html => {
+      if (html === 'Delta') return { prices: [fresh], usage: { inputTokens: 10, outputTokens: 5 } };
+      if (failure === 'extraction failure') throw new Error('Extraction unavailable');
+      return { prices: [], failureReason: failure === 'filtered extraction' ? 'all_filtered_out' : 'empty_extraction', usage: { inputTokens: 10, outputTokens: 5 } };
+    });
+    expect(await runScrapeForQuery('q1')).toMatchObject({ status: 'partial', snapshotsCount: 1, error: expect.stringContaining('2026-06-15') });
+    const saved = mockPrisma.priceSnapshot.createMany.mock.calls.flatMap(([input]) => input.data);
+    expect(saved).toMatchObject([{ airline: 'Delta', price: 250, flightNumber: 'DL100' }]);
+    expect(saved.some(row => row.status === 'sold_out')).toBe(false);
+    expect(mockPrisma.fetchRun.update.mock.calls.at(-1)?.[0].data).toMatchObject({ status: 'partial', snapshotsCount: 1, completedAt: expect.any(Date) });
+  });
+
+  it('does not mask unsafe browser cleanup as a partial scrape', async () => {
+    mockPrisma.query.findUnique.mockResolvedValue({ ...BASE_QUERY, preferredAirlines: ['Delta'] });
+    const error = new TravelCleanupError([new Error('Browser close failed')], 'Unsafe browser cleanup');
+    mockNavigateAirlineDirect.mockRejectedValue(error);
+    await expect(runScrapeForQuery('q1')).rejects.toBe(error);
+    expect(mockPrisma.priceSnapshot.createMany.mock.calls.flatMap(([input]) => input.data)).toEqual([]);
   });
 
   it('stores empty-string bookingUrl when extractPrices coerced null to empty string', async () => {
@@ -709,7 +649,8 @@ describe('runScrapeForQuery extraction failure surfacing (issue #65)', () => {
 
     const result = await runScrapeForQuery('q1');
 
-    expect(result.status).toBe('success');
+    expect(result.status).toBe('partial');
+    expect(result.error).toContain('2026-11-07');
     // Chain-walk catch logs the per-aggregator throw rather than letting the
     // pair bubble up; subsequent pairs still run because the chain returns
     // normally with empty prices.
@@ -950,302 +891,5 @@ describe('runScrapeForQuery airline_direct -> google_flights diversification (is
     expect(googleExtractCall).toBeDefined();
     const filtersArg = googleExtractCall![3] as { preferredAirlines: string[] };
     expect(filtersArg.preferredAirlines).toEqual(['Lufthansa']);
-  });
-});
-
-describe('PriceSnapshot schema', () => {
-  it('bookingUrl must be optional (String?) to accept LLM null values', () => {
-    const schema = readFileSync(
-      resolve(__dirname, '../../../prisma/schema.prisma'),
-      'utf-8'
-    );
-    const match = schema.match(/model PriceSnapshot\s*\{[\s\S]*?\}/);
-    expect(match).not.toBeNull();
-    const model = match![0];
-    expect(model).toMatch(/bookingUrl\s+String\?/);
-  });
-});
-
-import { resolveAggregatorChain } from './run-scrape';
-
-describe('resolveAggregatorChain', () => {
-  const ALL_ENABLED = ['google_flights', 'airline_direct', 'skyscanner', 'kayak'];
-  const DEFAULT_ENABLED = ['google_flights', 'airline_direct'];
-
-  it('returns google_flights only when no prefs and default admin allowlist', () => {
-    expect(resolveAggregatorChain([], [], DEFAULT_ENABLED)).toEqual(['google_flights']);
-  });
-
-  it('falls back to admin allowlist order when query and user prefs are empty', () => {
-    expect(resolveAggregatorChain([], [], ALL_ENABLED)).toEqual(['google_flights', 'skyscanner', 'kayak']);
-  });
-
-  it('uses user prefs when query prefs are empty', () => {
-    expect(resolveAggregatorChain([], ['kayak', 'google_flights'], ALL_ENABLED)).toEqual(['kayak', 'google_flights']);
-  });
-
-  it('per-query prefs override per-user prefs', () => {
-    const chain = resolveAggregatorChain(['skyscanner'], ['kayak', 'google_flights'], ALL_ENABLED);
-    expect(chain).toEqual(['skyscanner', 'google_flights']);
-  });
-
-  it('filters out aggregators not allowed by admin', () => {
-    const chain = resolveAggregatorChain(['skyscanner', 'kayak'], [], DEFAULT_ENABLED);
-    expect(chain).toEqual(['google_flights']);
-  });
-
-  it('drops airline_direct from the chain (handled separately)', () => {
-    const chain = resolveAggregatorChain(['airline_direct', 'skyscanner'], [], ALL_ENABLED);
-    expect(chain).toEqual(['skyscanner', 'google_flights']);
-  });
-
-  it('dedupes when google_flights is already in user prefs', () => {
-    const chain = resolveAggregatorChain([], ['google_flights', 'skyscanner', 'google_flights'], ALL_ENABLED);
-    expect(chain).toEqual(['google_flights', 'skyscanner']);
-  });
-
-  it('forces google_flights as terminal fallback when only kayak is requested', () => {
-    expect(resolveAggregatorChain(['kayak'], [], ALL_ENABLED)).toEqual(['kayak', 'google_flights']);
-  });
-
-  it('does NOT append google_flights when admin disabled it', () => {
-    const chain = resolveAggregatorChain(['skyscanner'], [], ['skyscanner', 'kayak']);
-    expect(chain).toEqual(['skyscanner']);
-  });
-
-  it('forces google_flights when admin misconfigured everything off', () => {
-    const chain = resolveAggregatorChain([], [], []);
-    expect(chain).toEqual(['google_flights']);
-  });
-
-  it('ignores unknown strings in any source', () => {
-    const chain = resolveAggregatorChain(['expedia', 'skyscanner'], [], ALL_ENABLED);
-    expect(chain).toEqual(['skyscanner', 'google_flights']);
-  });
-});
-
-describe('runScrapeForQuery aggregator chain walk', () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    mockPrisma.query.findUnique.mockResolvedValue(BASE_QUERY);
-    mockPrisma.fetchRun.create.mockResolvedValue({ id: 'run1' });
-    mockPrisma.fetchRun.update.mockResolvedValue({});
-    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
-      provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
-      scrapeInterval: 3,
-      defaultCurrency: null,
-      defaultCountry: null,
-      vpnProvider: null,
-      vpnCountries: [],
-    });
-    mockPrisma.priceSnapshot.findMany.mockResolvedValue([]);
-    mockPrisma.priceSnapshot.createMany.mockResolvedValue({ count: 1 });
-    mockPrisma.apiUsageLog.create.mockResolvedValue({});
-  });
-
-  it('walks google_flights for a no-airline-pref query with default admin allowlist', async () => {
-    mockNavigateGoogleFlights.mockResolvedValue({
-      html: '<html/>', url: 'https://g', resultsFound: true, source: 'google_flights',
-    });
-    mockExtractPrices.mockResolvedValue({
-      prices: [{
-        travelDate: '2026-06-15', price: 350, currency: 'USD', airline: 'Delta',
-        bookingUrl: 'https://g', stops: 0, duration: '5h',
-        departureTime: null, arrivalTime: null, seatsLeft: null,
-      }],
-      usage: { inputTokens: 100, outputTokens: 20 },
-    });
-
-    const result = await runScrapeForQuery('q1');
-
-    expect(result.status).toBe('success');
-    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(1);
-    expect(mockNavigateSkyscanner).not.toHaveBeenCalled();
-    expect(mockNavigateKayak).not.toHaveBeenCalled();
-  });
-
-  it('falls through to skyscanner when google_flights returns empty extraction', async () => {
-    mockPrisma.query.findUnique.mockResolvedValue({
-      ...BASE_QUERY,
-      user: { preferredAggregators: ['google_flights', 'skyscanner'] },
-    });
-    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
-      provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
-      scrapeInterval: 3,
-      defaultCurrency: null,
-      defaultCountry: null,
-      vpnProvider: null,
-      vpnCountries: [],
-      aggregatorsEnabled: ['google_flights', 'skyscanner'],
-    });
-    mockNavigateGoogleFlights.mockResolvedValue({
-      html: '<html/>', url: 'https://g', resultsFound: true, source: 'google_flights',
-    });
-    mockNavigateSkyscanner.mockResolvedValue({
-      html: '<html/>', url: 'https://s', resultsFound: true, source: 'skyscanner',
-    });
-    mockExtractPrices
-      .mockResolvedValueOnce({
-        prices: [],
-        usage: { inputTokens: 100, outputTokens: 20 },
-        failureReason: 'empty_extraction',
-      })
-      .mockResolvedValueOnce({
-        prices: [{
-          travelDate: '2026-06-15', price: 290, currency: 'USD', airline: 'JetBlue',
-          bookingUrl: 'https://s', stops: 0, duration: '5h',
-          departureTime: null, arrivalTime: null, seatsLeft: null,
-        }],
-        usage: { inputTokens: 110, outputTokens: 25 },
-      });
-
-    const result = await runScrapeForQuery('q1');
-
-    expect(result.status).toBe('success');
-    expect(result.snapshotsCount).toBe(1);
-    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(1);
-    expect(mockNavigateSkyscanner).toHaveBeenCalledTimes(1);
-  });
-
-  it('short-circuits the chain on all_filtered_out (does not call skyscanner)', async () => {
-    mockPrisma.query.findUnique.mockResolvedValue({
-      ...BASE_QUERY,
-      user: { preferredAggregators: ['google_flights', 'skyscanner'] },
-    });
-    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
-      provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
-      scrapeInterval: 3,
-      defaultCurrency: null,
-      defaultCountry: null,
-      vpnProvider: null,
-      vpnCountries: [],
-      aggregatorsEnabled: ['google_flights', 'skyscanner'],
-    });
-    mockNavigateGoogleFlights.mockResolvedValue({
-      html: '<html/>', url: 'https://g', resultsFound: true, source: 'google_flights',
-    });
-    mockExtractPrices.mockResolvedValue({
-      prices: [],
-      usage: { inputTokens: 100, outputTokens: 20 },
-      failureReason: 'all_filtered_out',
-    });
-
-    await runScrapeForQuery('q1');
-
-    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(2); // two extract attempts
-    expect(mockNavigateSkyscanner).not.toHaveBeenCalled();
-    expect(mockNavigateKayak).not.toHaveBeenCalled();
-  });
-
-  it('admin disabled skyscanner -> user pref [skyscanner, kayak] resolves to [kayak]', async () => {
-    mockPrisma.query.findUnique.mockResolvedValue({
-      ...BASE_QUERY,
-      user: { preferredAggregators: ['skyscanner', 'kayak'] },
-    });
-    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
-      provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
-      scrapeInterval: 3,
-      defaultCurrency: null,
-      defaultCountry: null,
-      vpnProvider: null,
-      vpnCountries: [],
-      aggregatorsEnabled: ['google_flights', 'kayak'],
-    });
-    mockNavigateKayak.mockResolvedValue({
-      html: '<html/>', url: 'https://k', resultsFound: true, source: 'kayak',
-    });
-    mockExtractPrices.mockResolvedValue({
-      prices: [{
-        travelDate: '2026-06-15', price: 310, currency: 'USD', airline: 'Spirit',
-        bookingUrl: 'https://k', stops: 0, duration: '5h',
-        departureTime: null, arrivalTime: null, seatsLeft: null,
-      }],
-      usage: { inputTokens: 90, outputTokens: 20 },
-    });
-
-    const result = await runScrapeForQuery('q1');
-
-    expect(result.status).toBe('success');
-    expect(mockNavigateKayak).toHaveBeenCalledTimes(1);
-    expect(mockNavigateSkyscanner).not.toHaveBeenCalled();
-  });
-
-  it('per-query prefs override per-user prefs in the resolved chain', async () => {
-    mockPrisma.query.findUnique.mockResolvedValue({
-      ...BASE_QUERY,
-      preferredAggregators: ['skyscanner'],
-      user: { preferredAggregators: ['kayak', 'google_flights'] },
-    });
-    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
-      provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
-      scrapeInterval: 3,
-      defaultCurrency: null,
-      defaultCountry: null,
-      vpnProvider: null,
-      vpnCountries: [],
-      aggregatorsEnabled: ['google_flights', 'skyscanner', 'kayak'],
-    });
-    mockNavigateSkyscanner.mockResolvedValue({
-      html: '<html/>', url: 'https://s', resultsFound: true, source: 'skyscanner',
-    });
-    mockExtractPrices.mockResolvedValue({
-      prices: [{
-        travelDate: '2026-06-15', price: 280, currency: 'USD', airline: 'British Airways',
-        bookingUrl: 'https://s', stops: 0, duration: '5h',
-        departureTime: null, arrivalTime: null, seatsLeft: null,
-      }],
-      usage: { inputTokens: 95, outputTokens: 22 },
-    });
-
-    await runScrapeForQuery('q1');
-
-    expect(mockNavigateSkyscanner).toHaveBeenCalledTimes(1);
-    expect(mockNavigateKayak).not.toHaveBeenCalled();
-  });
-
-  it('anonymous query (user null) falls back to admin allowlist order', async () => {
-    mockPrisma.query.findUnique.mockResolvedValue({
-      ...BASE_QUERY,
-      user: null,
-    });
-    mockPrisma.extractionConfig.findFirst.mockResolvedValue({
-      provider: 'anthropic',
-      model: 'claude-haiku-4-5-20251001',
-      scrapeInterval: 3,
-      defaultCurrency: null,
-      defaultCountry: null,
-      vpnProvider: null,
-      vpnCountries: [],
-      aggregatorsEnabled: ['google_flights', 'kayak'],
-    });
-    // google_flights returns empty -> chain walks kayak
-    mockNavigateGoogleFlights.mockResolvedValue({
-      html: '<html/>', url: 'https://g', resultsFound: true, source: 'google_flights',
-    });
-    mockNavigateKayak.mockResolvedValue({
-      html: '<html/>', url: 'https://k', resultsFound: true, source: 'kayak',
-    });
-    mockExtractPrices
-      .mockResolvedValueOnce({
-        prices: [], usage: { inputTokens: 80, outputTokens: 10 }, failureReason: 'empty_extraction',
-      })
-      .mockResolvedValueOnce({
-        prices: [{
-          travelDate: '2026-06-15', price: 415, currency: 'USD', airline: 'Frontier',
-          bookingUrl: 'https://k', stops: 0, duration: '5h',
-          departureTime: null, arrivalTime: null, seatsLeft: null,
-        }],
-        usage: { inputTokens: 100, outputTokens: 18 },
-      });
-
-    const result = await runScrapeForQuery('q1');
-    expect(result.status).toBe('success');
-    expect(mockNavigateGoogleFlights).toHaveBeenCalledTimes(1);
-    expect(mockNavigateKayak).toHaveBeenCalledTimes(1);
   });
 });
