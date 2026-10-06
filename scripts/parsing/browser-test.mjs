@@ -19,6 +19,19 @@ const beforeDirectory = process.env.PARSE_BROWSER_BEFORE_DIRECTORY;
 const errors = [];
 let web, browser, token, headers, memberId;
 let serverOutput = '';
+function runCli(args, session, cancelled) {
+  const child = spawn(process.execPath, [join(root, 'packages/cli/dist/index.js'), 'parse', ...args, '--server', origin, '--json'], {
+    cwd: root, env: { ...process.env, DATABASE_URL: 'postgresql://test:test@127.0.0.1:1/unavailable', FLIGHT_FINDER_SESSION: session, FLIGHT_FINDER_TOKEN: '' }, stdio: ['ignore', 'pipe', 'pipe'],
+  });
+  let stdout = '', stderr = '';
+  child.stdout.on('data', chunk => { stdout += chunk; }); child.stderr.on('data', chunk => { stderr += chunk; });
+  return new Promise((resolve, reject) => {
+    child.once('error', reject);
+    const timeout = setTimeout(() => { child.kill('SIGKILL'); reject(Error('Remote CLI timeout: ' + stderr)); }, 25_000);
+    child.once('exit', code => { clearTimeout(timeout); resolve({ code, stdout, stderr }); });
+    if (cancelled) void cancelled().then(() => child.kill('SIGINT'), reject);
+  });
+}
 let hold = false;
 let malformed = false;
 const requests = [];
@@ -127,6 +140,10 @@ try {
     assert.equal((await privateStatus(job.id)).data.data.status, 'completed');
     const dedup = await api('/api/parse', { query: 'JFK to LAX Friday', mode: 'async' }); assert.equal(dedup.data.data.id, job.id);
     await search.screenshot({ path: join(screenshots, 'flight-parse-desktop.png') });
+    const cliSync = await runCli(['JFK to LAX remote sync'], token);
+    assert.equal(cliSync.code, 0, cliSync.stderr); assert.equal(JSON.parse(cliSync.stdout).confidence, 'medium');
+    const cliAsync = await runCli(['JFK to LAX remote async', '--mode', 'async'], token);
+    assert.equal(cliAsync.code, 0, cliAsync.stderr); assert.equal(JSON.parse(cliAsync.stdout).confidence, 'medium');
 
     const memberName = 'ParseBrowserMember' + process.pid;
     const created = await api('/api/admin/users', { username: memberName }); assert.equal(created.response.status, 201, JSON.stringify(created.data));
@@ -143,6 +160,8 @@ try {
     // An admitted household without a selected profile exercises guest capabilities.
     const guestToken = await admitBrowserHousehold({ origin, password: process.env.TEST_ACCESS_PASSWORD });
     const guest = { ...headers, Cookie: 'ft-session=' + guestToken };
+    const cliGuest = await runCli(['JFK to LAX remote guest', '--mode', 'async'], guestToken);
+    assert.equal(cliGuest.code, 0, cliGuest.stderr); assert.equal(JSON.parse(cliGuest.stdout).confidence, 'medium');
     const anonymous = await api('/api/parse', { query: 'JFK to LAX Saturday', mode: 'async' }, { headers: guest });
     assert.equal(anonymous.response.status, 202); assert.match(anonymous.data.data.capability, /^[a-f0-9]{64}$/);
     const capability = { ...guest, 'X-Parse-Capability': anonymous.data.data.capability };
@@ -151,6 +170,11 @@ try {
     await waitFor(async () => (await privateStatus(anonymous.data.data.id, capability)).data.data.status === 'completed');
     assert.equal((await api('/api/parse', { query: 'JFK to LAX Saturday', mode: 'async' }, { headers: capability })).data.data.id, anonymous.data.data.id);
     assert.equal((await api('/api/parse', { query: 'JFK to LAX Saturday', mode: 'async' }, { headers: guest })).data.data.id === anonymous.data.data.id, false);
+    await settled();
+
+    hold = true; const remoteCount = requests.length;
+    const cliCancelled = await runCli(['JFK to LAX remote cancellation', '--mode', 'async'], token, () => waitFor(() => requests.length > remoteCount));
+    assert.equal(cliCancelled.code, 130, cliCancelled.stderr); assert.match(JSON.parse(cliCancelled.stderr).error, /cancelled/i);
     await settled();
 
     hold = true; const count = requests.length;

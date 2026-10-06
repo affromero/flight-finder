@@ -8,10 +8,12 @@ import { launchTmuxView } from './lib/tmux-view.js';
 import { registerHotelCommands } from './lib/hotel-cli.js';
 import { registerCarCommands } from './lib/car-cli.js';
 import { registerAccessCommands } from './lib/access-cli.js';
+import { registerParseCommand } from './lib/parsing/command.js';
 
 const hotelCommandHandled = registerHotelCommands(program);
 const carCommandHandled = registerCarCommands(program);
 registerAccessCommands(program);
+const parseCommandHandled = registerParseCommand(program);
 
 program
   .name('flightfinder')
@@ -23,14 +25,17 @@ program
   .option('--json', 'Output JSON: with --view <id> one tracker, otherwise the full list')
   .option('--backend <provider>', 'AI backend: claude-code, codex, anthropic, openai, google')
   .option('--model <model>', 'Model override (e.g. sonnet, opus, gpt-4.1-mini, codex)')
+  .option('--parse-mode <mode>', 'Interactive parsing: sync or async', 'sync')
   .action(runFlightCommand);
 
 
 async function runFlightCommand(): Promise<void> {
-  const opts = program.opts<{ headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string }>();
+  const opts = program.opts<{ headless?: boolean; list?: boolean; view?: string; tmux?: boolean; json?: boolean; backend?: string; model?: string; parseMode: string }>();
   try {
     if (opts.tmux && !opts.headless) throw new Error('--tmux requires --headless mode');
     if (opts.tmux && !opts.view) throw new Error('--tmux requires --view <id>');
+    if (!['sync', 'async'].includes(opts.parseMode)) throw new Error('--parse-mode must be sync or async');
+    if (opts.parseMode === 'async' && (!opts.headless || opts.list || opts.view || opts.json)) throw new Error('--parse-mode async requires the interactive --headless search');
     if (opts.backend) {
       process.env.FLIGHT_FINDER_BACKEND = opts.backend;
       const defaultModels: Record<string, string> = {
@@ -62,7 +67,10 @@ async function runFlightCommand(): Promise<void> {
       if (opts.view && opts.tmux) await launchTmuxView(opts.view);
       else {
         const mode = opts.list ? 'list' as const : opts.view ? 'view' as const : 'search' as const;
-        render(<App mode={mode} viewId={opts.view} />);
+        if (opts.parseMode === 'async') {
+          const { runAsyncWizard } = await import('./lib/parsing/wizard.js');
+          await runAsyncWizard();
+        } else render(<App mode={mode} viewId={opts.view} />);
       }
       return;
     }
@@ -85,4 +93,4 @@ async function runFlightCommand(): Promise<void> {
 }
 
 await program.parseAsync();
-if (hotelCommandHandled() || carCommandHandled()) process.exit(process.exitCode ?? 0);
+if (hotelCommandHandled() || carCommandHandled() || parseCommandHandled()) process.exit(process.exitCode ?? 0);

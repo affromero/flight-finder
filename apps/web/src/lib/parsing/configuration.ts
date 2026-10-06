@@ -1,10 +1,10 @@
 import { createHmac } from 'node:crypto';
 import type { Prisma } from '@/generated/prisma/client';
 import { deriveSecretEncryptionKey } from '@/lib/secret-crypto';
-import { providerVault } from '@/lib/sidedoor/providers/provider-credentials';
-import { CLI_PROVIDERS, EXTRACTION_PROVIDERS } from '@/lib/scraper/ai-registry';
-import type { ParseConfiguration } from '@/lib/scraper/parse-query';
-import type { ReasoningSelection } from '@/lib/scraper/cli-model-types';
+import { providerVault } from '../sidedoor/providers/provider-credentials';
+import { CLI_PROVIDERS, EXTRACTION_PROVIDERS } from '../scraper/ai-registry';
+import type { ParseConfiguration } from '../scraper/parse-query';
+import type { ReasoningSelection } from '../scraper/cli-model-types';
 
 export function parseDigest(value: unknown): string {
   return createHmac('sha256', deriveSecretEncryptionKey()).update(JSON.stringify(value)).digest('hex');

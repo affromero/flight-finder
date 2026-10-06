@@ -507,7 +507,7 @@ Shared access (self hosted):
 ```
 
 <details>
-<summary>Headless CLI</summary>
+<summary id="headless-cli">Headless CLI</summary>
 
 Run Flight Finder entirely in the terminal:
 
@@ -521,6 +521,37 @@ flight-finder --headless --view <id> --tmux           # Split grouped routes int
 ```
 
 Without `--headless`, `--view` opens the chart in your browser and `--list` opens the admin dashboard.
+
+Flight parsing is synchronous by default. Background mode is opt-in:
+
+```bash
+flight-finder --headless --parse-mode async
+flight-finder parse "JFK to LAX Friday" --mode async --json
+flight-finder parse "JFK to LAX Friday" --mode async --server https://flights.example.com --json
+```
+
+`parse` returns the existing parsed route and clarification fields. It does not
+create a tracker. Local background mode needs the database, initialized access
+and an owner; it can run without the web process. The local operator uses the
+canonical owner profile, or the authenticated profile selected by
+`FLIGHT_FINDER_SESSION`. Its worker claims only its own job and stops when the
+command finishes. Other workers can claim the same job first; the command then
+polls its private status.
+
+Server mode uses the existing `FLIGHT_FINDER_SESSION` cookie or
+`FLIGHT_FINDER_TOKEN` device credential, sends the server's exact origin and
+rejects redirects. A device credential admits the request without selecting a
+profile; those jobs use the returned anonymous capability. Server parsing
+requires no local database or provider configuration. Ctrl+C cancels an
+acknowledged job and waits for local execution to settle. An uncertain
+cancellation is reported explicitly. No worker survives a normal command exit.
+The interactive wizard's later preview and tracking still run locally.
+
+The installed `parse` command launches the packaged CLI in a one-off Compose
+container, with no web-health prerequisite or automatic service start. The
+existing `search` command retains its synchronous parsing behavior. See the
+[background API contract](API.md#optional-background-parsing) for retention,
+capacity and interrupted-worker recovery.
 
 ### Hotel tracking
 

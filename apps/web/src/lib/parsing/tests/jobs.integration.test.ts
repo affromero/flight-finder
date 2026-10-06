@@ -125,6 +125,15 @@ describe.skipIf(process.env.PARSE_INTEGRATION_TESTS !== '1')('durable parsing th
     expect(await prisma.parseReservation.count({ where: { settledAt: null } })).toBe(1);
     expect(await prisma.travelLease.count()).toBe(0);
   });
+  it('restricts command-local execution to its requested private job', async () => {
+    const unrelated = await enqueueParse(input, actor, 'ip-one');
+    const selected = await enqueueParse({ query: 'JFK to LAX Friday' }, second, 'ip-two');
+    expect(await executeNextParse(undefined, selected.id)).toBe(true);
+    expect((await readParseJob(selected.id, second)).status).toBe('completed');
+    expect((await readParseJob(unrelated.id, actor)).status).toBe('queued');
+    expect(await executeNextParse(undefined, 'missing-job')).toBe(false);
+    expect(requests).toHaveLength(1);
+  });
   it('fails queued configuration changes explicitly while unrelated preferences leave authority unchanged', async () => {
     const before = await serializable(captureParseConfiguration);
     await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { theme: 'changed', providerRevision: { increment: 1 } } });
