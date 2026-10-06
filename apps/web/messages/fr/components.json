@@ -385,6 +385,13 @@
     "daysAgo": "il y a {count} j"
   },
   "SearchBar": {
+    "backgroundParse": "Interpréter en arrière-plan",
+    "parseQueued": "En attente du traitement de votre recherche…",
+    "parseRunning": "Interprétation de votre recherche…",
+    "cancelParse": "Annuler le traitement",
+    "parseCancelled": "Traitement annulé.",
+    "parseCancellationFailed": "L’annulation n’a pas pu être confirmée. Le serveur traite peut-être encore cette recherche.",
+    "backgroundParseFailed": "Le traitement s’est arrêté. Vérifiez les paramètres du fournisseur et réessayez.",
     "parseFailed": "Échec de l’analyse de la requête",
     "networkError": "Erreur réseau - réessaie",
     "beMoreSpecific": "Peux-tu être plus précis ?",

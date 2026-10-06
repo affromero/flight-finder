@@ -385,6 +385,13 @@
     "daysAgo": "vor {count} Tagen"
   },
   "SearchBar": {
+    "backgroundParse": "Im Hintergrund interpretieren",
+    "parseQueued": "Deine Suche wartet auf die Verarbeitung…",
+    "parseRunning": "Deine Suche wird interpretiert…",
+    "cancelParse": "Verarbeitung abbrechen",
+    "parseCancelled": "Verarbeitung abgebrochen.",
+    "parseCancellationFailed": "Der Abbruch konnte nicht bestätigt werden. Der Server verarbeitet diese Suche möglicherweise noch.",
+    "backgroundParseFailed": "Die Verarbeitung wurde angehalten. Prüfe die Anbietereinstellungen und versuche es erneut.",
     "parseFailed": "Anfrage konnte nicht verarbeitet werden",
     "networkError": "Netzwerkfehler – bitte versuche es erneut",
     "beMoreSpecific": "Kannst du das genauer beschreiben?",

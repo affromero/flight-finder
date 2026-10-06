@@ -10,5 +10,7 @@ export async function register() {
     await startCron();
     const { startTravelScheduler } = await import('./lib/travel/schedule');
     startTravelScheduler();
+    const { startParseScheduler } = await import('./lib/parsing/schedule');
+    startParseScheduler();
   }
 }

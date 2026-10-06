@@ -61,6 +61,54 @@ model Query {
   @@index([userId])
 }
 
+model ParseJob {
+  id String @id @default(cuid())
+  ownerId String?
+  owner User? @relation(fields: [ownerId], references: [id], onDelete: Cascade)
+  capabilityHash String?
+  actorScope String
+  ipHash String
+  dedupKey String
+  status String @default("queued")
+  input Json
+  provider String
+  configFingerprint String
+  promptDate String
+  claimOwner String?
+  generation Int @default(0)
+  leaseUntil DateTime?
+  result Json?
+  error String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  expiresAt DateTime
+  queueUntil DateTime
+
+  @@index([status, createdAt])
+  @@index([actorScope, dedupKey, expiresAt])
+  @@index([ipHash, createdAt])
+  @@index([expiresAt])
+}
+
+// Retained independently of result ownership until local execution settles.
+model ParseReservation {
+  id String @id
+  jobId String @unique
+  actorScope String
+  ipHash String
+  provider String
+  claimOwner String
+  generation Int
+  leaseUntil DateTime
+  deadline DateTime
+  quarantinedAt DateTime?
+  settledAt DateTime?
+  recoveredBy String?
+  createdAt DateTime @default(now())
+
+  @@index([settledAt, provider])
+}
+
 model QueryEditEvent {
   id        String   @id @default(cuid())
   queryId   String
@@ -200,6 +248,7 @@ model User {
   carRefreshRequests CarRefreshRequest[]
   carParseGate CarParseGate?
   travelJobs TravelJob[]
+  parseJobs ParseJob[]
   channels NotificationChannel[]
 
   @@index([isAdmin])

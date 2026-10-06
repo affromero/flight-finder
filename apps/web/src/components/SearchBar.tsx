@@ -15,6 +15,8 @@ import { FlightPicker, type RouteFlights } from './FlightPicker';
 import { LinkImport } from './travel/LinkImport';
 import { LinkBanner, type CreatedTracker } from './LinkBanner';
 import { ManualEntryForm, type ManualFormValues } from './ManualEntryForm';
+import { ParseControls } from './parsing/ParseControls';
+import { requestFlightParse, ParseClientError } from '@/lib/parsing/client';
 
 // "ft-" prefix kept across the Flight Finder rename so existing browsers preserve state.
 const PREVIEW_STORAGE_KEY_BASE = 'ft-preview-run';
@@ -102,6 +104,14 @@ export function SearchBar({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const parseController = useRef<AbortController | null>(null);
+  const [backgroundParse, setBackgroundParse] = useState(false);
+  const [parseStatus, setParseStatus] = useState<string | null>(null);
+  useEffect(() => () => {
+    const controller = parseController.current;
+    parseController.current = null;
+    controller?.abort();
+  }, []);
 
   const [conversation, setConversation] = useState<ConversationMessage[]>([]);
   const [ambiguities, setAmbiguities] = useState<ParseAmbiguity[]>([]);
@@ -165,21 +175,17 @@ export function SearchBar({
   }, [storageKey]);
 
   const doParse = useCallback(async (input: string, history: ConversationMessage[]): Promise<boolean> => {
+    parseController.current?.abort();
+    const controller = new AbortController();
+    parseController.current = controller;
     searchMethodChosen.current = true;
     setLoading(true);
     setError(null);
 
     try {
-      const res = await fetch('/api/parse', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          query: input,
-          conversationHistory: history.length > 0 ? history : undefined,
-        }),
-      });
-
-      const data = await res.json();
+      const data = await requestFlightParse({ query: input, conversationHistory: history.length > 0 ? history : undefined }, backgroundParse, controller.signal,
+        job => { if (parseController.current === controller) setParseStatus(job?.status ?? null); });
+      if (parseController.current !== controller || controller.signal.aborted) return false;
 
       if (!data.ok) {
         setError(data.error || t('parseFailed'));
@@ -213,13 +219,15 @@ export function SearchBar({
         setConversation((prev) => [...prev, ...assistantTurns]);
       }
       return true;
-    } catch {
-      setError(t('networkError'));
+    } catch (error) {
+      if (parseController.current !== controller) return false;
+      setError(error instanceof ParseClientError && error.code === 'cancellation_unconfirmed' ? t('parseCancellationFailed')
+        : controller.signal.aborted ? t('parseCancelled') : error instanceof ParseClientError ? t('backgroundParseFailed') : t('networkError'));
       return false;
     } finally {
-      setLoading(false);
+      if (parseController.current === controller) { setLoading(false); setParseStatus(null); parseController.current = null; }
     }
-  }, [adminCurrency, t]);
+  }, [adminCurrency, backgroundParse, t]);
 
   useEffect(() => {
     if (!previewRunId || !parsed) return;
@@ -592,6 +600,8 @@ export function SearchBar({
               )}
             </button>
           </div>
+
+          <ParseControls background={backgroundParse} busy={loading} status={parseStatus} onChange={setBackgroundParse} onCancel={() => parseController.current?.abort()} />
 
           <div className={styles.hints}>
             {[t('example1'), t('example2'), t('example3')].map((example, i) => (

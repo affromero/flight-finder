@@ -4,6 +4,26 @@ import { normalizeCabinClass } from '@/lib/cabin-class';
 import { matchingJsonEnd } from './extract-prices';
 import { recordExtraction } from './usage-log';
 import { isTimePreference } from '../criteria/departure';
+import { effectiveParseHistory, type ParseMessage } from '../parsing/input';
+import type { CredentialValues } from 'thesidedoor-core/ai';
+import type { ReasoningSelection } from './cli-model-types';
+import type { Prisma } from '@/generated/prisma/client';
+
+export interface ParseConfiguration {
+  provider: string;
+  model: string;
+  customBaseUrl: string | null;
+  reasoningEffort: ReasoningSelection;
+  extractTimeoutSeconds: number;
+  credentials?: CredentialValues;
+}
+
+export interface ParseOptions {
+  signal?: AbortSignal;
+  promptDate?: string;
+  configuration?: ParseConfiguration;
+  persistUsage?: (data: Prisma.ApiUsageLogCreateInput) => Promise<unknown>;
+}
 
 export interface Airport {
   code: string; // IATA 3-letter code
@@ -47,8 +67,7 @@ export interface ParseResponse {
   dateSpanDays: number;
 }
 
-function buildSystemPrompt(): string {
-  const today = new Date().toISOString().split('T')[0];
+function buildSystemPrompt(today = new Date().toISOString().split('T')[0]): string {
   return `You are a flight query parser. Extract structured flight search parameters from natural language input.
 
 Return ONLY valid JSON with this exact shape:
@@ -153,7 +172,6 @@ Parsing rules:
 const MS_PER_DAY = 1000 * 60 * 60 * 24;
 const LEG_WINDOW_LIMIT_DAYS = 7;
 const SINGLE_RANGE_LIMIT_DAYS = 14;
-const CONVERSATION_HISTORY_LIMIT = 6;
 
 /** Span in days between the earliest and latest date in a sorted ISO date array. */
 function legSpanDays(dates: string[] | undefined): number {
@@ -264,9 +282,11 @@ export function extractJsonObject(
 
 export async function parseFlightQuery(
   rawInput: string,
-  conversationHistory?: Array<{ role: 'user' | 'assistant'; content: string }>
+  conversationHistory?: ParseMessage[],
+  options?: ParseOptions,
 ): Promise<{ response: ParseResponse; usage: ExtractionResult['usage'] }> {
-  const config = await prisma.extractionConfig.findFirst({
+  options?.signal?.throwIfAborted();
+  const config = options?.configuration ?? await prisma.extractionConfig.findFirst({
     where: { id: 'singleton' },
   });
 
@@ -280,7 +300,7 @@ export async function parseFlightQuery(
 
   const isCliProvider = provider in CLI_PROVIDERS;
   const isLocalProvider = LOCAL_PROVIDERS.has(provider);
-  const credentials = isCliProvider ? undefined : await resolveProviderCredentials(provider);
+  const credentials = isCliProvider ? undefined : options?.configuration?.credentials ?? await resolveProviderCredentials(provider);
   const hasLocalEndpoint =
     (provider === 'openai' && (config?.customBaseUrl || typeof credentials?.baseUrl === 'string')) ||
     isLocalProvider;
@@ -293,13 +313,12 @@ export async function parseFlightQuery(
   // prevent token bloat across long clarification loops. Clamp each entry's
   // content so a single oversized entry cannot inflate the prompt beyond a
   // safe bound (CONVERSATION_HISTORY_LIMIT turns x 2000 chars = ~12 KB max).
-  const HISTORY_ENTRY_MAX_CHARS = 2000;
   let fullPrompt = rawInput;
   if (conversationHistory?.length) {
-    const recentHistory = conversationHistory.slice(-CONVERSATION_HISTORY_LIMIT);
+    const recentHistory = effectiveParseHistory(conversationHistory);
     fullPrompt = recentHistory
       .map((m) => {
-        const content = String(m.content).slice(0, HISTORY_ENTRY_MAX_CHARS);
+        const content = m.content;
         return `${m.role === 'user' ? 'User' : 'Assistant'}: ${content}`;
       })
       .join('\n') + '\nUser: ' + rawInput;
@@ -308,11 +327,12 @@ export async function parseFlightQuery(
   const result = await recordExtraction('parse-query', provider, model, () => providerConfig.extract(
     apiKey,
     model,
-    buildSystemPrompt(),
+    buildSystemPrompt(options?.promptDate),
     fullPrompt,
     {
       baseUrl: config?.customBaseUrl ?? undefined,
       credentials,
+      signal: options?.signal,
       reasoningEffort: config?.reasoningEffort as import('./cli-model-types').ReasoningSelection | undefined,
       // Read the admin configured timeout from the DB so slow CPU bound local
       // models can be granted more than the 90s default (issue #86). Falls
@@ -329,7 +349,9 @@ export async function parseFlightQuery(
       // default OpenAI model follows the JSON instruction reliably anyway.
       ...(isLocalProvider ? { responseFormat: 'json_object' as const } : {}),
     }
-  ));
+  ), options?.persistUsage);
+
+  options?.signal?.throwIfAborted();
 
   const extracted = extractJsonObject(result.content);
   if (!extracted.ok) {
