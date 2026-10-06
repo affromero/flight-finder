@@ -3,6 +3,7 @@ import type { Page } from 'playwright';
 import { launchBrowser, createStealthContext } from './browser';
 import { getAirlineUrl } from './airline-urls';
 import type { CountryProfile } from './country-profiles';
+import { dismissGoogleConsent } from './navigation/consent';
 
 /** Random delay between min and max milliseconds */
 function randomDelay(min: number, max: number): Promise<void> {
@@ -385,17 +386,7 @@ export async function navigateGoogleFlights(
       // Wait for page to settle — randomized to look human
       await randomDelay(attempt === 1 ? 2000 : 4000, attempt === 1 ? 4000 : 7000);
 
-      // Dismiss consent/cookie dialog — Google renders two identical "Accept all"
-      // buttons; without .first() Playwright strict mode throws on the ambiguity
-      try {
-        const consentButton = page.locator('button:has-text("Accept all")').first();
-        if (await consentButton.isVisible({ timeout: 2000 })) {
-          await consentButton.click();
-          await randomDelay(2000, 4000);
-        }
-      } catch {
-        // No consent dialog — continue
-      }
+      if (await dismissGoogleConsent(page)) await randomDelay(2000, 4000);
 
       // Wait for flight results. [data-gs] is only the results *container* — it
       // appears (empty) within ~20ms, long before Google renders priced flight
@@ -530,16 +521,7 @@ export async function navigateFlightDetail(
 
     await randomDelay(2000, 4000);
 
-    // Dismiss consent
-    try {
-      const consentButton = page.locator('button:has-text("Accept all")').first();
-      if (await consentButton.isVisible({ timeout: 2000 })) {
-        await consentButton.click();
-        await randomDelay(2000, 4000);
-      }
-    } catch {
-      // No consent dialog
-    }
+    if (await dismissGoogleConsent(page)) await randomDelay(2000, 4000);
 
     // Wait for results
     try {
