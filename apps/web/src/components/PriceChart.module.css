@@ -7,6 +7,25 @@
   overflow: hidden;
 }
 
+.plot {
+  width: 100%;
+  height: 400px;
+}
+
+.plotError {
+  color: var(--price-up);
+  font-size: 0.8125rem;
+  overflow-wrap: anywhere;
+}
+
+.groupingLabel {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  color: var(--muted);
+  font-size: 0.75rem;
+}
+
 .controls {
   display: flex;
   align-items: center;
@@ -53,6 +72,8 @@
 
 .viewFilter {
   display: flex;
+  flex-wrap: wrap;
+  min-width: 0;
   align-items: center;
   gap: 0.5rem;
 }

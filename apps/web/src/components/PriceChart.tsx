@@ -4,8 +4,11 @@ import { useEffect, useMemo, useState } from 'react';
 import { useTranslations } from 'next-intl';
 import dynamic from 'next/dynamic';
 import { formatCurrency } from '@/lib/currency';
-import { safeHttpUrl } from '@/lib/safe-url';
+import { clickedBookingUrl } from '@/lib/chart/booking';
 import { airTimeMinutes, formatMinutes, layoverLabel } from '@/lib/scraper/duration';
+import { flightVisibilityKey, flightSeriesKey, chartTraceUid } from '@/lib/chart/identity';
+import { useTrackerChartView } from '@/lib/chart/view';
+import { localAxisTicks, chartRangeChange } from '@/lib/chart/axis';
 import styles from './PriceChart.module.css';
 
 const Plot = dynamic(async () => {
@@ -27,6 +30,7 @@ interface Snapshot {
   duration: string | null;
   layovers?: unknown;
   flightId: string | null;
+  flightNumber?: string | null;
   departureTime: string | null;
   arrivalTime: string | null;
   seatsLeft: number | null;
@@ -135,28 +139,45 @@ function usePlotTheme(): PlotTheme {
   return plotTheme;
 }
 
-function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: boolean, t: Translator) {
+function flightLabel(snapshot: Snapshot, hasVpnData: boolean, mixedCurrencies: boolean, t: Translator): string {
+  return [
+    snapshot.airline, snapshot.flightNumber, snapshot.travelDate.slice(0, 10), snapshot.departureTime ?? '?',
+    mixedCurrencies ? `(${snapshot.currency})` : null,
+    hasVpnData ? `(${snapshot.vpnCountry ?? t('local')})` : null,
+  ].filter(Boolean).join(' ');
+}
+
+function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: boolean, t: Translator, byFlight: boolean, hidden: string[]) {
   const available = snapshots.filter((s) => s.status !== 'sold_out');
   const soldOut = snapshots.filter((s) => s.status === 'sold_out');
+  const mixedCurrencies = new Set(snapshots.map(snapshot => snapshot.currency)).size > 1;
 
   const byGroup = new Map<string, Snapshot[]>();
   for (const s of available) {
-    const key = hasVpnData && s.vpnCountry ? `${s.airline} (${s.vpnCountry})` : s.airline;
+    const carrier = `${s.airline}${mixedCurrencies ? ` (${s.currency})` : ''}`;
+    const key = byFlight ? flightSeriesKey(s) : hasVpnData && s.vpnCountry ? `${carrier} (${s.vpnCountry})` : carrier;
     const existing = byGroup.get(key) ?? [];
     existing.push(s);
     byGroup.set(key, existing);
   }
 
   let idx = 0;
-  const result = Array.from(byGroup.entries()).map(([group, points]) => {
+  const result = Array.from(byGroup.entries()).map(([group, unsortedPoints]) => {
+    const points = [...unsortedPoints].sort((a, b) => a.scrapedAt.localeCompare(b.scrapedAt));
+    const first = points[0]!;
     const baseAirline = points[0]?.airline ?? group;
-    const color = getAirlineColor(baseAirline, idx++);
+    const colorIndex = [...group].reduce((hash, character) => (hash * 31 + character.charCodeAt(0)) >>> 0, 0);
+    const color = byFlight ? COUNTRY_COLORS[colorIndex % COUNTRY_COLORS.length]! : getAirlineColor(baseAirline, idx++);
+    const label = byFlight ? flightLabel(first, hasVpnData, mixedCurrencies, t) : group;
     return {
       x: points.map((p) => p.scrapedAt),
       y: points.map((p) => p.price),
       type: 'scatter' as const,
       mode: 'lines+markers' as const,
-      name: group,
+      name: label,
+      uid: chartTraceUid(`detail:${group}`),
+      meta: byFlight ? flightVisibilityKey(first) : undefined,
+      visible: byFlight && hidden.includes(flightVisibilityKey(first)) ? 'legendonly' as const : true,
       line: { color, width: 2 },
       marker: { color, size: 6 },
       customdata: points.map((p) => [p.bookingUrl]),
@@ -181,17 +202,29 @@ function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: 
     };
   });
 
-  if (soldOut.length > 0) {
+  const soldOutGroups = new Map<string, Snapshot[]>();
+  for (const snapshot of soldOut) {
+    const key = byFlight ? flightSeriesKey(snapshot) : 'sold-out';
+    const points = soldOutGroups.get(key) ?? [];
+    points.push(snapshot);
+    soldOutGroups.set(key, points);
+  }
+  for (const [key, unsortedPoints] of soldOutGroups) {
+    const points = [...unsortedPoints].sort((a, b) => a.scrapedAt.localeCompare(b.scrapedAt));
+    const first = points[0]!;
     result.push({
-      x: soldOut.map((p) => p.scrapedAt),
-      y: soldOut.map((p) => p.price),
+      x: points.map((p) => p.scrapedAt),
+      y: points.map((p) => p.price),
       type: 'scatter' as const,
       mode: 'lines+markers' as const,
-      name: t('soldOut'),
+      name: byFlight ? `${flightLabel(first, hasVpnData, mixedCurrencies, t)} (${t('soldOut')})` : t('soldOut'),
+      uid: chartTraceUid(`sold-out:${key}`),
+      meta: byFlight ? flightVisibilityKey(first) : undefined,
+      visible: byFlight && hidden.includes(flightVisibilityKey(first)) ? 'legendonly' as const : true,
       line: { color: '#ef4444', width: 0 },
       marker: { color: '#ef4444', size: 10 },
-      customdata: soldOut.map((p) => [p.bookingUrl]),
-      text: soldOut.map((p) => {
+      customdata: points.map(() => [null]),
+      text: points.map((p) => {
         const lines = [
           `<b>${formatCurrency(p.price, p.currency ?? currency)}</b> ${t('soldOutSuffix')}`,
           new Date(p.scrapedAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }),
@@ -211,18 +244,20 @@ function buildDetailTraces(snapshots: Snapshot[], currency: string, hasVpnData: 
 /** Comparison view: one line per country showing the cheapest price at each scrape time */
 function buildComparisonTraces(snapshots: Snapshot[], currency: string, t: Translator) {
   const available = snapshots.filter((s) => s.status !== 'sold_out');
+  const mixedCurrencies = new Set(available.map(snapshot => snapshot.currency)).size > 1;
 
   // Group by country label
   const byCountry = new Map<string, Snapshot[]>();
   for (const s of available) {
-    const label = s.vpnCountry ?? 'Local';
-    const existing = byCountry.get(label) ?? [];
+    const key = JSON.stringify([s.vpnCountry, s.currency]);
+    const existing = byCountry.get(key) ?? [];
     existing.push(s);
-    byCountry.set(label, existing);
+    byCountry.set(key, existing);
   }
 
   let idx = 0;
-  return Array.from(byCountry.entries()).map(([label, points]) => {
+  return Array.from(byCountry.entries()).map(([key, points]) => {
+    const label = points[0]!.vpnCountry ?? 'Local';
     // Group by scrapedAt timestamp (rounded to minute) and pick cheapest
     const byTime = new Map<string, Snapshot>();
     for (const p of points) {
@@ -247,7 +282,9 @@ function buildComparisonTraces(snapshots: Snapshot[], currency: string, t: Trans
       y: cheapest.map((p) => p.price),
       type: 'scatter' as const,
       mode: 'lines+markers' as const,
-      name: `${flag}${displayLabel}`,
+      name: `${flag}${displayLabel}${mixedCurrencies ? ` (${points[0]!.currency})` : ''}`,
+      uid: chartTraceUid(`country:${key}`),
+      meta: undefined,
       line: { color, width: 3 },
       marker: { color, size: 8 },
       customdata: cheapest.map((p) => [p.bookingUrl]),
@@ -269,15 +306,20 @@ interface Props {
   allSnapshots?: Snapshot[];
   editEvents?: EditEvent[];
   currency?: string;
+  trackerId?: string;
 }
 
-export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency = 'USD' }: Props) {
+export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency = 'USD', trackerId }: Props) {
   const t = useTranslations('PriceChart');
   const plotTheme = usePlotTheme();
   const fullHistory = allSnapshots ?? snapshots;
   const hasFilteredHistory = fullHistory.length !== snapshots.length;
   const [historyMode, setHistoryMode] = useState<HistoryMode>('current');
   const historySnapshots = historyMode === 'all' ? fullHistory : snapshots;
+  const chartView = useTrackerChartView(trackerId);
+  const [plotError, setPlotError] = useState<string | null>(null);
+  const [axisState, setAxisState] = useState<{ trackerId?: string; range: [number, number] | null }>({ trackerId, range: null });
+  const axisRange = axisState.trackerId === trackerId ? axisState.range : null;
 
   // Detect VPN data and available countries
   const vpnCountries = useMemo(() => {
@@ -302,10 +344,14 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
 
   const traces = useMemo(() => {
     if (view === 'comparison') {
-      return buildComparisonTraces(filteredSnapshots, currency, t);
+      const visible = chartView.grouping === 'flight' ? filteredSnapshots.filter(snapshot => !chartView.hidden.includes(flightVisibilityKey(snapshot))) : filteredSnapshots;
+      return buildComparisonTraces(visible, currency, t);
     }
-    return buildDetailTraces(filteredSnapshots, currency, hasVpnData && view === 'all', t);
-  }, [filteredSnapshots, currency, view, hasVpnData, t]);
+    return buildDetailTraces(filteredSnapshots, currency, hasVpnData && view === 'all', t, chartView.grouping === 'flight', chartView.hidden);
+  }, [filteredSnapshots, currency, view, hasVpnData, t, chartView.grouping, chartView.hidden]);
+  const axisTicks = useMemo(() => localAxisTicks([
+    ...filteredSnapshots.map(snapshot => snapshot.scrapedAt), ...editEvents.map(event => event.editedAt),
+  ], axisRange), [filteredSnapshots, editEvents, axisRange]);
 
   const editShapes = useMemo(() => editEvents.map((event) => ({
     type: 'line' as const,
@@ -337,6 +383,18 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
 
   const controls = (
     <>
+      <div className={styles.viewFilter}>
+        <label className={styles.groupingLabel}>
+          {t('groupBy')}
+          <select className={styles.viewSelect} value={chartView.grouping} onChange={event => chartView.setGrouping(event.target.value === 'flight' ? 'flight' : 'airline')}>
+            <option value="airline">{t('byAirline')}</option>
+            <option value="flight">{t('byFlight')}</option>
+          </select>
+        </label>
+        {chartView.grouping === 'flight' && chartView.hidden.length > 0 && (
+          <button type="button" className={styles.historyOption} onClick={chartView.showAll}>{t('showAllFlights')}</button>
+        )}
+      </div>
       {hasFilteredHistory && (
         <div className={styles.historyFilter}>
           <button
@@ -359,6 +417,7 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
         <div className={styles.viewFilter}>
           <select
             className={styles.viewSelect}
+            aria-label={t('countryView')}
             value={view}
             onChange={(e) => setView(e.target.value)}
           >
@@ -375,7 +434,7 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
       )}
     </>
   );
-  const hasControls = hasFilteredHistory || hasVpnData;
+  const hasControls = fullHistory.length > 0;
 
   if (fullHistory.length === 0) {
     return (
@@ -405,21 +464,26 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
   return (
     <div className={styles.root}>
       {hasControls && <div className={styles.controls}>{controls}</div>}
+      {plotError && <p role="alert" className={styles.plotError}>{t('plotError', { message: plotError })}</p>}
       <Plot
+        className={styles.plot}
         data={traces}
         layout={{
+          uirevision: trackerId ?? 'chart',
           paper_bgcolor: 'transparent',
           plot_bgcolor: 'transparent',
           font: { family: 'IBM Plex Mono, monospace', color: plotTheme.axisText, size: 11 },
           margin: { t: 20, r: 20, b: 50, l: 60 },
           xaxis: {
+            type: 'date',
             gridcolor: plotTheme.grid,
-            tickformat: '%b %d %H:%M',
+            tickmode: 'array',
+            ...axisTicks,
             title: { text: '' },
           },
           yaxis: {
             gridcolor: plotTheme.grid,
-            title: { text: currency },
+            title: { text: new Set(filteredSnapshots.map(snapshot => snapshot.currency)).size > 1 ? t('price') : filteredSnapshots[0]?.currency ?? currency },
           },
           legend: {
             orientation: 'h',
@@ -445,13 +509,27 @@ export function PriceChart({ snapshots, allSnapshots, editEvents = [], currency 
           responsive: true,
           displayModeBar: false,
         }}
-        style={{ width: '100%', height: '400px' }}
+        onError={error => setPlotError(error instanceof Error ? error.message : String(error))}
+        onUpdate={() => setPlotError(null)}
+        onRelayout={event => {
+          const range = chartRangeChange(event);
+          if (range !== undefined) setAxisState({ trackerId, range });
+        }}
+        onLegendClick={event => {
+          if (chartView.grouping !== 'flight' || view === 'comparison') return true;
+          const key = traces[event.curveNumber]?.meta;
+          if (typeof key === 'string') chartView.toggle(key);
+          return false;
+        }}
+        onLegendDoubleClick={event => {
+          if (chartView.grouping !== 'flight' || view === 'comparison') return true;
+          const key = traces[event.curveNumber]?.meta;
+          if (typeof key === 'string') chartView.isolate(key, fullHistory.map(flightVisibilityKey));
+          return false;
+        }}
         onClick={(data) => {
-          const point = data.points[0];
-          if (point?.customdata) {
-            const url = safeHttpUrl((point.customdata as string[])[0]);
-            if (url) window.open(url, '_blank', 'noopener,noreferrer');
-          }
+          const url = clickedBookingUrl(data);
+          if (url) window.open(url, '_blank', 'noopener,noreferrer');
         }}
       />
     </div>

@@ -6,17 +6,14 @@ import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { useHydrated } from '@/lib/use-hydrated';
 import { layoverLabel } from '@/lib/scraper/duration';
+import { flightVisibilityKey, flightSeriesKey } from '@/lib/chart/identity';
+import { useTrackerChartView } from '@/lib/chart/view';
 import styles from './PriceHistory.module.css';
 import type { Snapshot } from './PriceHistory';
 
 // The full-history log can run to flights x scrapes rows. Collapsed by default;
 // when expanded this bounds the DOM, and the note row reports anything trimmed.
 const MAX_HISTORY_ROWS = 200;
-
-/** Stable identity for one flight across scrapes. */
-function flightKey(s: Snapshot): string {
-  return s.flightId ?? `${s.airline}|${s.flightNumber ?? ''}|${s.departureTime ?? ''}|${s.arrivalTime ?? ''}`;
-}
 
 function formatScrapeTime(iso: string, timeZone?: string): string {
   return new Date(iso).toLocaleDateString('en-US', {
@@ -60,9 +57,9 @@ function timesLabel(s: Snapshot): string | null {
 function buildPreviousMap(snapshots: Snapshot[]): Map<string, Snapshot | null> {
   const byFlight = new Map<string, Snapshot[]>();
   for (const s of snapshots) {
-    const arr = byFlight.get(flightKey(s)) ?? [];
+    const arr = byFlight.get(flightSeriesKey(s)) ?? [];
     arr.push(s);
-    byFlight.set(flightKey(s), arr);
+    byFlight.set(flightSeriesKey(s), arr);
   }
   const prev = new Map<string, Snapshot | null>();
   for (const series of byFlight.values()) {
@@ -144,10 +141,13 @@ function FlightRow({
  * lifetime-cheapest price, so flights last seen days ago interleaved with live
  * ones and it was impossible to read today's situation at a glance.
  */
-export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
+export function PriceHistorySection({ snapshots, trackerId }: { snapshots: Snapshot[]; trackerId?: string }) {
   const t = useTranslations('PriceHistorySection');
   const [expanded, setExpanded] = useState(false);
+  const chartView = useTrackerChartView(trackerId);
   if (snapshots.length === 0) return null;
+  const visible = (snapshot: Snapshot) => chartView.grouping !== 'flight' || !chartView.hidden.includes(flightVisibilityKey(snapshot));
+  const flightChoices = [...snapshots.reduce((choices, snapshot) => choices.set(flightVisibilityKey(snapshot), snapshot), new Map<string, Snapshot>())];
 
   const previousMap = buildPreviousMap(snapshots);
 
@@ -159,16 +159,16 @@ export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
   );
   const current = Array.from(
     snapshots
-      .filter((s) => s.scrapedAt === latestScrapedAt)
+      .filter((s) => s.scrapedAt === latestScrapedAt && visible(s))
       .reduce((m, s) => {
-        const existing = m.get(flightKey(s));
-        if (!existing || s.price < existing.price) m.set(flightKey(s), s);
+        const existing = m.get(flightSeriesKey(s));
+        if (!existing || s.price < existing.price) m.set(flightSeriesKey(s), s);
         return m;
       }, new Map<string, Snapshot>())
       .values(),
   ).sort((a, b) => (a.price !== b.price ? a.price - b.price : a.airline.localeCompare(b.airline)));
 
-  const history = [...snapshots].sort((a, b) => {
+  const history = snapshots.filter(visible).sort((a, b) => {
     const t = new Date(b.scrapedAt).getTime() - new Date(a.scrapedAt).getTime();
     return t !== 0 ? t : a.price - b.price;
   });
@@ -178,6 +178,17 @@ export function PriceHistorySection({ snapshots }: { snapshots: Snapshot[] }) {
 
   return (
     <div className={styles.section}>
+      {chartView.grouping === 'flight' && (
+        <fieldset className={styles.flightChoices}>
+          <legend>{t('visibleFlights')}</legend>
+          {flightChoices.map(([key, snapshot]) => (
+            <label key={key}>
+              <input type="checkbox" checked={!chartView.hidden.includes(key)} onChange={() => chartView.toggle(key)} />
+              {t('showFlight', { flight: `${flightName(snapshot)} ${snapshot.departureTime ?? '?'} ${snapshot.travelDate?.slice(0, 10) ?? ''} ${snapshot.currency}` })}
+            </label>
+          ))}
+        </fieldset>
+      )}
       <div className={styles.caption}>
         {t('latestCheck')} &middot; <ScrapeTime iso={latestScrapedAt} /> &middot; {t('flightCount', { count: current.length })}
       </div>
