@@ -99,7 +99,7 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
     await prisma.notificationChannel.update({ where: { id: disabled.id }, data: { enabled: false } });
     await selectChannels([good.id, disabled.id]);
     await notifyNewLows([queryId], cycle);
-    expect(await event()).toMatchObject({ pending: true, deliveredIds: [good.id] });
+    expect(await event()).toMatchObject({ pending: true, deliveredIds: [good.id], lastError: expect.stringMatching(/Waiting/) });
     await prisma.notificationChannel.update({ where: { id: disabled.id }, data: { enabled: true } });
     await retry(); await deliverFlightAlerts();
     expect(received.map(row => row.path)).toEqual(['/a', '/b']);
