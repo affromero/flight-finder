@@ -97,6 +97,16 @@ occupancy, or requested policies are not guessed. Results can include usable
 offers alongside explicit provider errors. Configure a notification channel to
 receive alerts outside the app; approximate matches require explicit opt-in.
 
+### Flight price observations
+
+Flight tracker booking cards and date calendars use the latest observed fare for
+each flight, travel date and VPN location. The card shows when the price was
+observed. A failed or unsampled check can leave an older observation visible;
+the booking provider confirms current availability. Historical lows remain
+separate dated information. Price comparisons use one currency, without currency
+conversion, and current tracker filters apply after the latest observation is
+selected.
+
 ### Pushover alerts
 
 In **Admin → Notifications**, add a **Pushover** channel with your application's

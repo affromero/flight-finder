@@ -37,7 +37,7 @@ function formatScrapeTime(iso: string, timeZone?: string): string {
  * hydration warning. Travel dates stay absolute and are handled elsewhere; only
  * a moment-in-time like a scrape timestamp is localized to the viewer.
  */
-function ScrapeTime({ iso }: { iso: string }) {
+export function ScrapeTime({ iso }: { iso: string }) {
   const hydrated = useHydrated();
   // UTC until mounted (so it matches the server-rendered markup), then the
   // visitor's own local zone (omitting timeZone uses Intl's local default).

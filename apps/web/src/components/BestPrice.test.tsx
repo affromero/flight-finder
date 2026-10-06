@@ -16,6 +16,9 @@ interface Snap {
   vpnCountry: string | null;
   scrapedAt: string;
   status?: string;
+  flightId?: string | null;
+  flightNumber?: string | null;
+  travelDate?: string;
 }
 
 function snap(overrides: Partial<Snap>): Snap {
@@ -50,8 +53,8 @@ describe('BestPrice — sold-out exclusion (issue #64)', () => {
       </>,
     );
 
-    expect(screen.queryByText(/Best price found/)).toBeTruthy();
-    expect(screen.getByText(/175/)).toBeTruthy();
+    expect(screen.queryByText(/Latest observed price/)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Latest observed price' })).toHaveTextContent(/175/);
     expect(screen.queryByText(/96$/)).toBeNull();
   });
 
@@ -81,10 +84,10 @@ describe('BestPrice — sold-out exclusion (issue #64)', () => {
         })}
       </>,
     );
-    expect(screen.getByText(/220/)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Latest observed price' })).toHaveTextContent(/220/);
   });
 
-  it('falls back gracefully when snapshots have no status field', async () => {
+  it('reads legacy observations whose status is absent', async () => {
     // Defensive: callers passing legacy data without `status` should still work.
     render(
       <>
@@ -96,7 +99,46 @@ describe('BestPrice — sold-out exclusion (issue #64)', () => {
         })}
       </>,
     );
-    expect(screen.getByText(/90/)).toBeTruthy();
+    expect(screen.getByRole('region', { name: 'Latest observed price' })).toHaveTextContent(/90/);
+  });
+});
+
+describe('latest fares and historical lows', () => {
+  it('books the newer fare while keeping the historical low as dated information', async () => {
+    render(<>{await BestPrice({ snapshots: [
+      snap({ price: 90, flightId: 'one', bookingUrl: 'https://old.example/fare' }),
+      snap({ price: 240, flightId: 'one', bookingUrl: 'https://new.example/fare', scrapedAt: '2026-05-02T00:00:00.000Z' }),
+    ] })}</>);
+    expect(screen.getByRole('region', { name: 'Latest observed price' })).toHaveTextContent(/240/);
+    const history = screen.getByRole('complementary', { name: 'Historical low' });
+    expect(history).toHaveTextContent(/90/);
+    expect(history).toHaveTextContent(/May/);
+    expect(screen.getByRole('link', { name: 'Book on Delta' })).toHaveAttribute('href', 'https://new.example/fare');
+    expect(history.querySelector('a')).toBeNull();
+  });
+
+  it.each([
+    { status: 'sold_out', price: 90 },
+    { status: 'available', price: 240 },
+  ])('keeps history without offering an older booking when the latest observation is unavailable or over budget %j', async change => {
+    render(<>{await BestPrice({
+      snapshots: [snap({ flightId: 'one', price: 90, bookingUrl: 'https://old.example/fare' }),
+        snap({ ...change, flightId: 'one', scrapedAt: '2026-05-02T00:00:00.000Z' })],
+      filters: { maxPrice: 100, maxStops: null, maxDurationHours: null, preferredAirlines: [] },
+    })}</>);
+    expect(screen.queryByRole('link')).toBeNull();
+    expect(screen.getByText(/No latest observation matches/)).toBeTruthy();
+    expect(screen.getByRole('complementary', { name: 'Historical low' })).toHaveTextContent(/90/);
+  });
+
+  it('does not numerically compare fares from different currencies', async () => {
+    render(<>{await BestPrice({ currency: 'USD', snapshots: [
+      snap({ flightId: 'usd', price: 240, bookingUrl: 'https://usd.example/fare' }),
+      snap({ flightId: 'eur', currency: 'EUR', price: 90, bookingUrl: 'https://eur.example/fare' }),
+    ] })}</>);
+    expect(screen.getByRole('region', { name: 'Latest observed price' })).toHaveTextContent(/240/);
+    expect(screen.getByRole('link')).toHaveAttribute('href', 'https://usd.example/fare');
+    expect(screen.getByRole('complementary', { name: 'Historical low' })).toHaveTextContent(/240/);
   });
 });
 

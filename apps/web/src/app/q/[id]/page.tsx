@@ -2,7 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
-import { ACTUAL_FLIGHT_FARE_WHERE } from '@/lib/flight-pricing';
+import { ACTUAL_FLIGHT_FARE_WHERE, latestFlightObservations, flightComparisonCurrency, lowestFlightFare, availableFlightFares } from '@/lib/flight-pricing';
 import { PriceChart } from '@/components/PriceChart';
 import { BestPrice } from '@/components/BestPrice';
 import { PriceHistory } from '@/components/PriceHistory';
@@ -138,15 +138,18 @@ interface QueryWithSnapshots {
 
 type Translator = Awaited<ReturnType<typeof getTranslations>>;
 
-function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: Translator) {
+function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: Translator, comparisonCurrency: string | null) {
   const isRoundTrip = qData.query.tripType === 'round_trip';
   const hasDistinctReturn = qData.query.dateFrom.getTime() < qData.query.dateTo.getTime();
   const dateLabel = isRoundTrip && hasDistinctReturn
     ? `${formatDate(qData.query.dateFrom)} → ${formatDate(qData.query.dateTo)}`
     : formatDate(qData.query.dateFrom);
+  const currentSnapshots = filterSnapshotsByTrackerFilters(
+    availableFlightFares(latestFlightObservations(qData.allSnapshots, qData.query), comparisonCurrency), qData.query,
+  );
 
   return (
-    <div key={qData.query.id} className={styles.routeBlock}>
+    <section key={qData.query.id} className={styles.routeBlock} aria-label={`${t('routeName', { origin: qData.query.originName, destination: qData.query.destinationName })} ${dateLabel}`}>
       {isMultiRoute && (
         <div className={styles.routeBlockHeader}>
           <span className={styles.routeBlockCode}>{qData.query.origin}</span>
@@ -178,7 +181,7 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: T
       </section>
 
       <section className={styles.best}>
-        <BestPrice snapshots={qData.snapshots} />
+        <BestPrice snapshots={qData.allSnapshots} currency={comparisonCurrency} filters={qData.query} route={qData.query} />
       </section>
 
       <section className={styles.history}>
@@ -186,46 +189,23 @@ function renderRouteBlock(qData: QueryWithSnapshots, isMultiRoute: boolean, t: T
       </section>
 
       <section className={styles.calendar}>
-        <PriceCalendar snapshots={qData.snapshots} currency={qData.query.currency ?? 'USD'} />
+        <PriceCalendar snapshots={currentSnapshots} currency={comparisonCurrency ?? 'USD'} />
       </section>
-    </div>
+    </section>
   );
 }
 
-/**
- * "Current price" per sibling = the lowest latest-scrape price across the
- * distinct flights that were scraped for this route. We group snapshots by
- * `flightId ?? airline`, keep the most recent `scrapedAt` per group, then
- * take the minimum across those latest snapshots. Sold-out flights are
- * excluded so the price sort can't rank a row by an unavailable fare
- * (matches the bookable filter used in BestPrice). Returns null when the
- * row has no available snapshots so the sort dropdown can push it to the
- * bottom in "lowest price first" mode.
- */
-function currentPriceForSibling(qData: QueryWithSnapshots): number | null {
-  if (qData.snapshots.length === 0) return null;
-  const latestByGroup = new Map<string, { price: number; scrapedAt: string; status: string }>();
-  for (const s of qData.snapshots) {
-    const key = s.flightId ?? s.airline;
-    const existing = latestByGroup.get(key);
-    if (!existing || s.scrapedAt > existing.scrapedAt) {
-      latestByGroup.set(key, { price: s.price, scrapedAt: s.scrapedAt, status: s.status });
-    }
-  }
-  let min = Number.POSITIVE_INFINITY;
-  for (const v of latestByGroup.values()) {
-    if (v.status === 'sold_out') continue;
-    if (v.price < min) min = v.price;
-  }
-  return Number.isFinite(min) ? min : null;
+function currentPriceForSibling(qData: QueryWithSnapshots, currency: string | null): number | null {
+  const latest = latestFlightObservations(qData.allSnapshots, qData.query);
+  return lowestFlightFare(filterSnapshotsByTrackerFilters(latest, qData.query), currency)?.price ?? null;
 }
 
-function buildStackedItem(qData: QueryWithSnapshots, t: Translator): StackedItem {
+function buildStackedItem(qData: QueryWithSnapshots, t: Translator, currency: string | null): StackedItem {
   return {
     key: qData.query.id,
     outboundDate: qData.query.dateFrom.toISOString().slice(0, 10),
-    currentPrice: currentPriceForSibling(qData),
-    node: renderRouteBlock(qData, true, t),
+    currentPrice: currentPriceForSibling(qData, currency),
+    node: renderRouteBlock(qData, true, t, currency),
   };
 }
 
@@ -356,6 +336,9 @@ export default async function ChartPage({ params }: Props) {
   }
 
   const isMultiRoute = allQueries.length > 1;
+  const comparisonCurrency = flightComparisonCurrency(
+    allQueries.flatMap(data => latestFlightObservations(data.allSnapshots, data.query)), primary.query.currency,
+  ) ?? flightComparisonCurrency(allQueries.flatMap(data => data.allSnapshots), primary.query.currency);
   // Expiry and the page-level date bubble both span the whole group. Each
   // sibling in a flex group stores a single pinned date (dateFrom == dateTo),
   // so reading the primary alone would show "Nov 7 - Nov 7" for a window
@@ -512,9 +495,9 @@ export default async function ChartPage({ params }: Props) {
       ) : null}
 
       {isMultiRoute ? (
-        <StackedSortControls items={allQueries.map((q) => buildStackedItem(q, t))} />
+        <StackedSortControls items={allQueries.map((q) => buildStackedItem(q, t, comparisonCurrency))} />
       ) : (
-        renderRouteBlock(primary, false, t)
+        renderRouteBlock(primary, false, t, comparisonCurrency)
       )}
 
       <Footer />
