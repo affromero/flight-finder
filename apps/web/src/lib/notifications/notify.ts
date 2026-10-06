@@ -3,6 +3,7 @@ import type { ChannelMessage, ChannelType } from './channels/types';
 import { sendToChannel } from './channels/index';
 import { notificationTransaction } from './database';
 import type { Prisma } from '@/generated/prisma/client';
+import { channelAuthority } from './subscriptions/authority';
 
 export interface NotifyOutcome {
   channelId: string;
@@ -13,8 +14,9 @@ export interface NotifyOutcome {
 
 export interface NotificationDeliveryControl {
   signal: AbortSignal;
-  beforeSend: (channelId: string) => Promise<void>;
+  beforeSend: (channelId: string, version: string) => Promise<void>;
   onDelivered: (channelId: string) => Promise<void>;
+  selectedChannelIds?: string[];
 }
 
 /**
@@ -41,6 +43,7 @@ export async function dispatchNotifications(
     where: {
       enabled: true,
       ...(deliveredChannelIds.length ? { id: { notIn: deliveredChannelIds } } : {}),
+      ...(control?.selectedChannelIds ? { id: { in: control.selectedChannelIds, notIn: deliveredChannelIds } } : {}),
       // SQL `IN (id, NULL)` never matches NULL rows, so OR the two explicitly.
       ...(ownerUserId === null
         ? { userId: null }
@@ -73,7 +76,7 @@ export async function dispatchNotifications(
     // A channel can be disabled, removed or reassigned after batch enumeration.
     const channel = await read(tx => tx.notificationChannel.findUnique({ where: { id: entry.id } }));
     if (!channel?.enabled || (channel.userId !== null && channel.userId !== ownerUserId)) continue;
-    await control.beforeSend(entry.id);
+    await control.beforeSend(entry.id, channelAuthority(channel));
     control.signal.throwIfAborted();
     const outcome = await send(channel);
     // Persistence/authority failures stop the batch, not just this channel.

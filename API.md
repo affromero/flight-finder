@@ -12,6 +12,8 @@ Auth requirements depend on mode and endpoint family:
 
 - `/api/cron/scrape` always requires `Authorization: Bearer <CRON_SECRET>`.
 - `/api/admin/*` routes require an admin session cookie.
+- `/api/queries/{id}/notifications` requires the tracker owner's selected profile,
+  an admin session, or the matching tracker capability, within the instance's access rules.
 - `/api/analytics/track` is gated to internal callers via `ADMIN_SESSION_SECRET`.
 - `/api/community/ingest` requires a registered community API key.
 - `/api/community/register` requires `COMMUNITY_REGISTRATION_OPEN=true` and passes rate limiting.
@@ -206,6 +208,48 @@ headless CLI (`flight-finder --headless`) talks directly to Postgres and
 auto-attaches new trackers to the first admin user in multi user mode,
 so it keeps working without auth. Solo and hosted deployments are
 unaffected.
+
+---
+
+### Choose notification recipients for a flight tracker
+
+`GET /api/queries/{id}/notifications` returns
+`{ "ok": true, "data": { "settings": { "mode": "inherit", "revision": 0,
+"channelIds": [], "channels": [...] } } }`. Each available channel includes
+only its `id`, `type`, `label` and `enabled` flag. Credentials and destinations
+are omitted. Responses use `Cache-Control: private, no-store`.
+
+An admin session or the tracker's selected owner profile can read and edit these
+settings. A matching tracker capability also grants access. Send it as
+`x-delete-token` on GET or `deleteToken` in the PATCH body.
+
+```http
+PATCH /api/queries/{id}/notifications
+Content-Type: application/json
+
+{ "mode": "selected", "channelIds": ["channel-id"], "revision": 0 }
+```
+
+`inherit` preserves the existing owner and household channels. `selected`
+chooses specific available channels, including disabled channels. An explicit
+empty selection mutes this tracker. Inherited settings require an empty
+`channelIds` array. Channel IDs are normalized and duplicate IDs are removed.
+The PATCH response returns the same settings shape with its new revision.
+An unchanged normalized selection retains its revision. A stale revision returns
+409; reload before saving again. Unavailable or foreign channel IDs return 400.
+
+Recipient edits affect only this tracker, including when its page shows grouped
+routes. They preserve its scrape criteria, history and alert baseline. Pending
+events with explicit recipients retain the policy revision and channel
+configuration authority. Changing the policy, deleting or reassigning a
+selected channel, or changing its configuration cancels those pending events.
+Disabled selected channels wait for re-enabling, and accepted channels retain
+their delivery receipts during retries. A request already in flight may reach
+its recipient before a policy change takes effect.
+
+Upgrades add the `QueryNotificationPolicy` table through the existing schema
+update flow. Existing trackers inherit their previous recipients and pending
+legacy events retain their identity.
 
 ---
 

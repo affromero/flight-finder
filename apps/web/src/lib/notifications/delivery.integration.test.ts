@@ -2,7 +2,7 @@ import { createServer, type Server } from 'node:http';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { prisma } from '../prisma';
 import { notifyNewLows } from './run';
-import { deliverFlightAlerts } from './flights';
+import { deliverFlightAlerts, recordFlightAlert, recordFlightAlertInTransaction } from './flights';
 import { deliverHotelAlerts } from '../hotels/alerts';
 import { editHotelTracker } from '../hotels/store';
 import { runTravelAlertsSafely } from '../travel/schedule';
@@ -60,6 +60,10 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
   }
   const event = () => prisma.travelAlertDelivery.findFirstOrThrow({ where: { queryId } });
   const retry = () => prisma.travelAlertDelivery.updateMany({ where: { queryId }, data: { nextAttemptAt: new Date(0) } });
+  async function selectChannels(ids: string[], revision = 1) {
+    return prisma.queryNotificationPolicy.upsert({ where: { queryId }, create: { queryId, mode: 'selected', channelIds: ids, revision },
+      update: { mode: 'selected', channelIds: ids, revision } });
+  }
   async function hotelEvent() {
     trackerId = (await prisma.hotelTracker.create({ data: { userId: owner, hotelName: 'Fixture hotel', search: {}, selection: {},
       options: { mode: 'best', targetPrice: 100, notifyLows: true, allowApproximateAlerts: false, scrapeInterval: 3 } } })).id;
@@ -79,6 +83,87 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
     expect(received.map(row => row.data.currentMin)).toEqual([250, 250]);
     expect(new Set(received.map(row => row.data.eventId)).size).toBe(1);
     expect(await prisma.travelAlertDelivery.count({ where: { queryId } })).toBe(1);
+  });
+  it('sends only to selected channels without changing scrape criteria or history', async () => {
+    const selected = await channel('a'); await channel('b');
+    const before = await prisma.query.findUniqueOrThrow({ where: { id: queryId } });
+    await selectChannels([selected.id]);
+    await notifyNewLows([queryId], cycle);
+    expect(received.map(row => row.path)).toEqual(['/a']);
+    expect(await event()).toMatchObject({ pending: false, deliveredIds: [selected.id] });
+    expect((await prisma.query.findUniqueOrThrow({ where: { id: queryId } })).updatedAt).toEqual(before.updatedAt);
+    expect(await prisma.priceSnapshot.count({ where: { queryId } })).toBe(2);
+  });
+  it('waits for a disabled selected channel and retries it without resending acknowledged channels', async () => {
+    const good = await channel('a'), disabled = await channel('b');
+    await prisma.notificationChannel.update({ where: { id: disabled.id }, data: { enabled: false } });
+    await selectChannels([good.id, disabled.id]);
+    await notifyNewLows([queryId], cycle);
+    expect(await event()).toMatchObject({ pending: true, deliveredIds: [good.id], lastError: expect.stringMatching(/Waiting/) });
+    await prisma.notificationChannel.update({ where: { id: disabled.id }, data: { enabled: true } });
+    await retry(); await deliverFlightAlerts();
+    expect(received.map(row => row.path)).toEqual(['/a', '/b']);
+    expect(await event()).toMatchObject({ pending: false, deliveredIds: expect.arrayContaining([good.id, disabled.id]) });
+  });
+  it('mutes selected-empty trackers without creating a recipient-free outbox event', async () => {
+    await channel('a'); await selectChannels([]);
+    await notifyNewLows([queryId], cycle);
+    expect(received).toEqual([]);
+    expect(await prisma.travelAlertDelivery.count({ where: { queryId } })).toBe(0);
+  });
+  it('cancels a captured event when subscription recipients change before delivery', async () => {
+    const a = await channel('a'), b = await channel('b');
+    await selectChannels([a.id]); await recordFlightAlert(queryId, cycle);
+    await selectChannels([b.id], 2); await deliverFlightAlerts();
+    expect(received).toEqual([]);
+    expect(await event()).toMatchObject({ pending: false, deliveredIds: [] });
+  });
+  it.each(['config', 'owner', 'removed'] as const)('cancels a selected recipient after its %s changes', async change => {
+    const selected = await channel('a'); await selectChannels([selected.id]); await recordFlightAlert(queryId, cycle);
+    if (change === 'removed') await prisma.notificationChannel.delete({ where: { id: selected.id } });
+    else await prisma.notificationChannel.update({ where: { id: selected.id }, data: change === 'owner' ? { userId: other } : { config: { url: `${base}/replacement` } } });
+    await deliverFlightAlerts();
+    expect(received).toEqual([]);
+    expect(await event()).toMatchObject({ pending: false, deliveredIds: [] });
+  });
+  it('retains observations when a selected channel disappeared before detection', async () => {
+    const selected = await channel('a'); await selectChannels([selected.id]);
+    await prisma.notificationChannel.delete({ where: { id: selected.id } });
+    await prisma.$transaction(async tx => {
+      await tx.priceSnapshot.create({ data: { queryId, travelDate: new Date(Date.now() + 30 * 86_400_000), price: 200, airline: 'Fixture Air', currency: 'USD' } });
+      await recordFlightAlertInTransaction(tx, queryId, cycle);
+    });
+    await deliverFlightAlerts();
+    expect(await prisma.priceSnapshot.count({ where: { queryId } })).toBe(3);
+    expect(received).toEqual([]);
+    expect(await event()).toMatchObject({ pending: false });
+  });
+  it('stops sending and acknowledging when subscriptions change during transport', async () => {
+    const a = await channel('a'), b = await channel('b'); await selectChannels([a.id, b.id]);
+    handle = async () => { await selectChannels([], 2); return 200; };
+    await notifyNewLows([queryId], cycle);
+    expect(received.map(row => row.path)).toEqual(['/a']);
+    expect(await event()).toMatchObject({ pending: true, deliveredIds: [] });
+    await prisma.travelAlertDelivery.updateMany({ where: { queryId }, data: { claimExpiresAt: new Date(0) } });
+    await retry(); await deliverFlightAlerts();
+    expect(await event()).toMatchObject({ pending: false });
+    expect(received.map(row => row.path)).toEqual(['/a']);
+  });
+  it('preserves household delivery for a legacy event without routing metadata', async () => {
+    await channel('a'); await recordFlightAlert(queryId, cycle);
+    const row = await event();
+    await prisma.$executeRaw`UPDATE "TravelAlertDelivery" SET message = message - 'notificationRouting' WHERE id = ${row.id}`;
+    await deliverFlightAlerts();
+    expect(received.map(row => row.path)).toEqual(['/a']);
+    expect(await event()).toMatchObject({ pending: false });
+  });
+  it('cancels malformed routing instead of sending to household channels', async () => {
+    await channel('a'); await recordFlightAlert(queryId, cycle);
+    const row = await event();
+    await prisma.$executeRaw`UPDATE "TravelAlertDelivery" SET message = jsonb_set(message, '{notificationRouting}', 'null'::jsonb) WHERE id = ${row.id}`;
+    await deliverFlightAlerts();
+    expect(received).toEqual([]);
+    expect(await event()).toMatchObject({ pending: false });
   });
   it('retains successful channel receipts when another channel retries without another scrape', async () => {
     const good = await channel('a'); await channel('b');

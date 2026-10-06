@@ -1,12 +1,14 @@
 import type { Prisma, TravelAlertDelivery } from '@/generated/prisma/client';
 import { dispatchNotifications } from './notify';
 import type { ChannelMessage } from './channels/types';
+import { channelAuthority } from './subscriptions/authority';
 
 const DELIVERY_RETRY_MS = 300_000;
 export const DELIVERY_CLAIM_MS = 120_000;
 export interface ClaimedDelivery extends TravelAlertDelivery {
   owner: string | null;
   payload: ChannelMessage;
+  requiredChannelIds?: string[];
 }
 export type DeliveryGuard = <T>(work: (tx: Prisma.TransactionClient, row: TravelAlertDelivery) => Promise<T>) => Promise<T>;
 
@@ -25,16 +27,25 @@ export async function deliverClaimedAlert(entry: ClaimedDelivery, guarded: Deliv
   try {
     const outcomes = await dispatchNotifications(entry.owner, { ...entry.payload, data: { ...entry.payload.data, eventId: entry.eventKey } }, entry.deliveredIds, {
       signal,
-      beforeSend: () => guarded(async () => { signal.throwIfAborted(); }),
+      selectedChannelIds: entry.requiredChannelIds,
+      beforeSend: (id, version) => guarded(async tx => {
+        signal.throwIfAborted();
+        const channel = await tx.notificationChannel.findUnique({ where: { id } });
+        if (!channel?.enabled || (channel.userId !== null && channel.userId !== entry.owner) || channelAuthority(channel) !== version) {
+          throw new Error('Notification channel changed before transport');
+        }
+      }),
       onDelivered: id => guarded(async (tx, row) => {
         await update(tx, { deliveredIds: [...new Set([...row.deliveredIds, id])] });
       }),
     });
     await guarded(async (tx, row) => {
       const failed = outcomes.filter(outcome => !outcome.ok);
-      const pending = failed.length > 0 || row.deliveredIds.length === 0;
+      const missingRecipients = entry.requiredChannelIds?.some(id => !row.deliveredIds.includes(id));
+      const pending = failed.length > 0 || (entry.requiredChannelIds ? missingRecipients === true : row.deliveredIds.length === 0);
+      const waiting = entry.requiredChannelIds ? 'Waiting for an available notification channel; delivery will retry.' : 'No enabled notification channel is available; delivery will retry.';
       await update(tx, { pending, claimToken: null, claimExpiresAt: null, nextAttemptAt: new Date(Date.now() + DELIVERY_RETRY_MS),
-        lastError: failed.length ? failed.map(outcome => outcome.error).join('; ').slice(0, 1000) : pending ? 'No enabled notification channel is available; delivery will retry.' : null });
+        lastError: failed.length ? failed.map(outcome => outcome.error).join('; ').slice(0, 1000) : pending ? waiting : null });
     });
   } catch (error) {
     await guarded(async tx => {

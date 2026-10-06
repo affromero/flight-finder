@@ -11,6 +11,7 @@ const { mockPrisma, mockNavigateGoogleFlights, mockNavigateAirlineDirect, mockNa
     $executeRaw: vi.fn(),
     travelAdmission: { upsert: vi.fn() },
     query: { findUnique: vi.fn() },
+    queryNotificationPolicy: { findUnique: vi.fn() },
     fetchRun: { create: vi.fn(), update: vi.fn() },
     extractionConfig: { findFirst: vi.fn(), findUnique: vi.fn() },
     priceSnapshot: { createMany: vi.fn(), findMany: vi.fn(), findFirst: vi.fn(), aggregate: vi.fn() },
@@ -56,6 +57,7 @@ beforeEach(() => {
   mockPrisma.$queryRaw.mockImplementation(async (sql: TemplateStringsArray) => sql.join('').includes('FROM "TravelJob"') ? [job] : [{ id: 'vpn' }]);
   mockPrisma.travelAdmission.upsert.mockResolvedValue({ quarantinedAt: null, topologyVersion: 1, topologyHash: createHash('sha256').update(JSON.stringify(['none', null, null])).digest('hex') });
   mockPrisma.extractionConfig.findUnique.mockResolvedValue({ vpnProvider: 'none' });
+  mockPrisma.queryNotificationPolicy.findUnique.mockResolvedValue(null);
 });
 
 // These extraction regressions exercise the admitted pipeline. Queue and worker

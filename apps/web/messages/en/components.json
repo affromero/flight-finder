@@ -1,4 +1,23 @@
 {
+  "TrackerNotifications": {
+    "notifications": "Notifications",
+    "recipients": "Notification recipients",
+    "inherit": "Household defaults",
+    "selected": "Choose channels",
+    "channels": "Channels",
+    "disabled": "Disabled",
+    "noChannels": "No notification channels are available.",
+    "emptyMutes": "Selecting no channels mutes alerts for this tracker.",
+    "removedChannels": "A selected channel is no longer available. Remove it before saving.",
+    "removeUnavailable": "Remove unavailable channels",
+    "scope": "These settings apply only to this tracker.",
+    "save": "Save",
+    "reload": "Reload",
+    "cancel": "Cancel",
+    "loading": "Loading notification settings…",
+    "loadFailed": "Could not load notification settings.",
+    "saveFailed": "Could not save notification settings."
+  },
   "DepartureWindowFields": {
     "window": "Outbound departure window",
     "any": "Any time",

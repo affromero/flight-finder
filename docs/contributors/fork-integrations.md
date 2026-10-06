@@ -31,6 +31,18 @@ validation, web and CLI history filtering, preview isolation and audited edits.
 The existing soft preference remains the default. Tracking issue
 [#254](https://github.com/affromero/flight-finder/issues/254).
 
+Tracker recipient controls credit [ssantss (Santiago Jimenez)](https://github.com/ssantss)
+for the [per-query WhatsApp recipients](https://github.com/ssantss/flight-finder/blob/561a4941fcd25c0b6ed33f26f0a01ce306ef7743/apps/web/src/app/api/queries/%5Bid%5D/whatsapp/route.ts)
+and [recipient model](https://github.com/ssantss/flight-finder/blob/561a4941fcd25c0b6ed33f26f0a01ce306ef7743/apps/web/prisma/schema.prisma).
+[sammorris01](https://github.com/sammorris01)'s
+[tracker and flight alert rules](https://github.com/sammorris01/flight-finder/blob/d2536f7750cdca00c4715d23e851e6c78102f21b/apps/web/src/lib/notifications/rules.ts)
+provide related alert context. The upstream
+[subscription policy](../../apps/web/src/lib/notifications/subscriptions/policy.ts)
+adapts tracker recipients to every existing channel type, with independent
+revisions, owner and capability authorization, explicit mute, and guarded
+outbox delivery. Source forks did not implement this generic policy model.
+Tracking issue [#259](https://github.com/affromero/flight-finder/issues/259).
+
 The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
@@ -45,3 +57,7 @@ Latest observed fare screenshots: [desktop](screenshots/flight-latest-fares-desk
 Departure window screenshots: [before](screenshots/flight-departure-before.png),
 [desktop](screenshots/flight-departure-desktop.png),
 [mobile](screenshots/flight-departure-mobile.png).
+
+Tracker recipient screenshots: [before](screenshots/flight-subscriptions-before.png),
+[desktop](screenshots/flight-subscriptions-desktop.png),
+[mobile](screenshots/flight-subscriptions-mobile.png).
