@@ -217,6 +217,13 @@
     "cellTitle": "{date} : {price} ({airline})"
   },
   "PriceChart": {
+    "plotError": "Le graphique n’a pas pu être affiché : {message}",
+    "price": "Prix",
+    "groupBy": "Grouper par",
+    "byAirline": "Compagnie",
+    "byFlight": "Vol",
+    "showAllFlights": "Afficher tous les vols",
+    "countryView": "Vue par pays",
     "seatsLeft": "{count} sièges restants",
     "scrapedFrom": "Extrait depuis {country}",
     "soldOut": "Complet",
@@ -242,6 +249,8 @@
     "local": "Local"
   },
   "PriceHistorySection": {
+    "visibleFlights": "Vols visibles",
+    "showFlight": "Afficher {flight}",
     "latestCheck": "Dernière vérification",
     "flightCount": "{count, plural, one {# vol} other {# vols}}",
     "airline": "Compagnie",
