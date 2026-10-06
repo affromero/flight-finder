@@ -38,6 +38,14 @@ export function latestFlightObservations<T extends FareObservation>(
   snapshots: readonly T[],
   route: { origin: string; destination: string } = { origin: '', destination: '' },
 ): T[] {
+  return latestFlightObservationEntries(snapshots, route).map(entry => entry.snapshot);
+}
+
+/** An ambiguous unnumbered observation cannot authorize a flight-specific rule. */
+export function latestFlightObservationEntries<T extends FareObservation>(
+  snapshots: readonly T[],
+  route: { origin: string; destination: string } = { origin: '', destination: '' },
+): { snapshot: T; flightId: string | null }[] {
   const numberedAliases = new Map<string, { availableAt?: string; identities: Set<string> }>();
   const availableLegacyAliases = new Map<string, string>();
   const identified = snapshots.filter(snapshot => !isLegacySplitFare(snapshot.airline)).map(snapshot => {
@@ -59,7 +67,7 @@ export function latestFlightObservations<T extends FareObservation>(
     }
     return { snapshot, ids, scope, alias, legacy };
   });
-  const latest = new Map<string, T>();
+  const latest = new Map<string, { snapshot: T; flightId: string | null }>();
   for (const { snapshot, ids, scope, alias, legacy } of identified) {
     const numbered = alias ? numberedAliases.get(alias) : undefined;
     if (legacy && numbered?.availableAt && numbered.availableAt > snapshot.scrapedAt) continue;
@@ -70,11 +78,13 @@ export function latestFlightObservations<T extends FareObservation>(
     const identity = legacyIdentity ?? (snapshot.flightNumber?.trim() ? ids.flightId
       : legacy && alias ? alias : snapshot.flightId ?? JSON.stringify([ids.flightIdLegacy, snapshot.arrivalTime ?? '']));
     const key = JSON.stringify([identity, scope]);
-    const previous = latest.get(key);
+    const previous = latest.get(key)?.snapshot;
     const newer = !previous || snapshot.scrapedAt > previous.scrapedAt;
     const tied = previous && snapshot.scrapedAt === previous.scrapedAt;
     if (newer || (tied && (snapshot.status === 'sold_out' && previous.status !== 'sold_out'
-      || (snapshot.status ?? 'available') === (previous.status ?? 'available') && snapshot.price < previous.price))) latest.set(key, snapshot);
+      || (snapshot.status ?? 'available') === (previous.status ?? 'available') && snapshot.price < previous.price))) {
+      latest.set(key, { snapshot, flightId: snapshot.flightNumber?.trim() ? ids.flightId : legacyIdentity ?? null });
+    }
   }
   return [...latest.values()];
 }

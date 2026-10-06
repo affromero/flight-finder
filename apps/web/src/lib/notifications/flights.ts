@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
-import type { Prisma, Query, TravelAlertDelivery } from '@/generated/prisma/client';
+import type { Prisma, TravelAlertDelivery } from '@/generated/prisma/client';
 import { lockTravelAdmission } from '../travel/admission';
 import { notificationTransaction } from './database';
 import { detectNewLow } from './detect';
@@ -7,14 +7,12 @@ import { formatNewLowMessage } from './format';
 import { deliverClaimedAlert, DELIVERY_CLAIM_MS, type ClaimedDelivery } from './delivery';
 import type { ChannelMessage } from './channels/types';
 import { resolveBaseUrl } from './base-url';
+import { criteriaVersion, notificationBaselineFrom } from './authority/flight';
+import { recordPriceRuleAlerts } from './rules/record';
+import { decodePriceAuthority, assertPriceAuthority, type PriceEventAuthority } from './rules/authority';
 import { lockNotificationQuery as lockQuery, captureNotificationRouting, decodeNotificationRouting, assertNotificationRouting, type NotificationRouting } from './subscriptions/authority';
 
-interface FlightDelivery extends ClaimedDelivery { queryId: string; queryVersion: string; price: number; routing: NotificationRouting }
-function criteriaVersion(query: Query): string {
-  const metadata = new Set(['updatedAt', 'firstViewedAt', 'lastNotifiedLowPrice', 'lastNotifiedAt']);
-  const criteria = Object.entries(query).filter(([key]) => !metadata.has(key)).sort(([a], [b]) => a.localeCompare(b));
-  return createHash('sha256').update(JSON.stringify(criteria)).digest('hex');
-}
+interface FlightDelivery extends ClaimedDelivery { queryId: string; queryVersion: string; price: number; routing: NotificationRouting; priceAuthority: PriceEventAuthority }
 
 async function flightAlertOptions(tx: Prisma.TransactionClient, cycleStartedAt: Date) {
   await lockTravelAdmission(tx);
@@ -42,9 +40,9 @@ export async function recordFlightAlertInTransaction(tx: Prisma.TransactionClien
     // user edits, and delivery metadata must preserve scraper criteria authority.
     await tx.query.update({ where: { id: queryId }, data: { lastNotifiedLowPrice: null, lastNotifiedAt: null, updatedAt: query.updatedAt } });
   }
-  const edit = await tx.queryEditEvent.findFirst({ where: { queryId }, orderBy: { editedAt: 'desc' }, select: { editedAt: true } });
-  const boundaries = [edit?.editedAt, query.cabinClass !== 'economy' ? options.baselineCutoff : null].filter((date): date is Date => Boolean(date));
-  const baselineFrom = boundaries.length ? new Date(Math.max(...boundaries.map(date => date.getTime()))) : null;
+  const baselineFrom = await notificationBaselineFrom(tx, query, options.baselineCutoff);
+  const ruleResult = await recordPriceRuleAlerts(tx, query, cycleStartedAt, routing, baselineFrom, options.baseUrl);
+  if (ruleResult.custom) return;
   // Legacy notification markers have no currency or criteria identity. The
   // outbox deduplicates events; only matching observations define their low.
   const alert = await detectNewLow({ query: { ...query, lastNotifiedLowPrice: null }, cycleStartedAt, floorAbs: options.floorAbs, floorPct: options.floorPct, baselineFrom }, tx);
@@ -53,10 +51,12 @@ export async function recordFlightAlertInTransaction(tx: Prisma.TransactionClien
   const identity = [query.id, query.userId, queryVersion, alert.currency, alert.currentMin];
   // Unchanged household routing retains the existing event identity on upgrades.
   if (routing.revision !== 0 || routing.mode !== 'inherit') identity.push(routing.revision);
+  if (ruleResult.revision !== 0) identity.push(ruleResult.revision);
   const key = createHash('sha256').update(JSON.stringify(identity)).digest('hex');
   const message = formatNewLowMessage({ alert, route: query, baseUrl: options.baseUrl });
   await tx.travelAlertDelivery.upsert({ where: { eventKey: `flight:${key}` }, update: {}, create: {
-    queryId, eventKey: `flight:${key}`, message: JSON.parse(JSON.stringify({ ...message, notificationRouting: routing, data: { ...message.data, userId: query.userId, queryVersion } })),
+    queryId, eventKey: `flight:${key}`, message: JSON.parse(JSON.stringify({ ...message,
+      priceAuthority: { kind: 'new-low', collectionRevision: ruleResult.revision }, notificationRouting: routing, data: { ...message.data, userId: query.userId, queryVersion } })),
   } });
 }
 
@@ -65,7 +65,7 @@ export async function recordFlightAlert(queryId: string, cycleStartedAt: Date): 
   await notificationTransaction(tx => recordFlightAlertInTransaction(tx, queryId, cycleStartedAt));
 }
 
-function flightPayload(row: TravelAlertDelivery): { payload: ChannelMessage; owner: string | null; queryVersion: string; price: number; routing: NotificationRouting; requiredChannelIds?: string[] } {
+function flightPayload(row: TravelAlertDelivery): { payload: ChannelMessage; owner: string | null; queryVersion: string; price: number; routing: NotificationRouting; priceAuthority: PriceEventAuthority; requiredChannelIds?: string[] } {
   const message = row.message;
   if (!message || typeof message !== 'object' || Array.isArray(message)) throw new Error('Invalid flight notification');
   const data = message.data;
@@ -74,9 +74,10 @@ function flightPayload(row: TravelAlertDelivery): { payload: ChannelMessage; own
     || typeof data.currentMin !== 'number' || !Number.isFinite(data.currentMin) || data.currentMin <= 0
     || typeof message.title !== 'string' || typeof message.body !== 'string' || typeof message.url !== 'string') throw new Error('Invalid flight notification');
   const routing = decodeNotificationRouting(message.notificationRouting);
+  const priceAuthority = decodePriceAuthority(row.eventKey, message.priceAuthority);
   return {
     payload: { title: message.title, body: message.body, url: message.url, data: data as unknown as ChannelMessage['data'] },
-    owner: data.userId, queryVersion: data.queryVersion, price: data.currentMin, routing,
+    owner: data.userId, queryVersion: data.queryVersion, price: data.currentMin, routing, priceAuthority,
     requiredChannelIds: routing.mode === 'selected' ? routing.channels.map(channel => channel.id) : undefined,
   };
 }
@@ -91,6 +92,7 @@ async function claim(id: string, queryId: string): Promise<FlightDelivery | null
       details = flightPayload(row);
       if (!query?.active || query.expiresAt <= new Date() || query.userId !== details.owner || criteriaVersion(query) !== details.queryVersion) throw new Error('Flight query changed');
       await assertNotificationRouting(tx, queryId, details.owner, details.routing);
+      await assertPriceAuthority(tx, queryId, details.priceAuthority);
     } catch {
       await tx.travelAlertDelivery.update({ where: { id }, data: { pending: false, claimToken: null, claimExpiresAt: null, lastError: 'Notification cancelled: its query or stored event is no longer valid.' } });
       return null;
@@ -107,6 +109,7 @@ async function guarded<T>(entry: FlightDelivery, work: (tx: Prisma.TransactionCl
     if (!query?.active || query.expiresAt <= new Date() || query.userId !== entry.owner || criteriaVersion(query) !== entry.queryVersion
       || !row?.pending || row.claimToken !== entry.claimToken || !row.claimExpiresAt || row.claimExpiresAt <= new Date()) throw new Error('Flight notification delivery authority was lost');
     await assertNotificationRouting(tx, entry.queryId, entry.owner, entry.routing);
+    await assertPriceAuthority(tx, entry.queryId, entry.priceAuthority);
     return work(tx, row);
   });
 }
@@ -120,7 +123,7 @@ export async function deliverFlightAlerts(signal?: AbortSignal): Promise<void> {
       const entry = await claim(row.id, row.queryId!);
       if (!entry) continue;
       await deliverClaimedAlert(entry, work => guarded(entry, work), signal, async (tx, updated) => {
-        if (!updated.deliveredIds.length) return;
+        if (!updated.deliveredIds.length || entry.priceAuthority.kind !== 'new-low') return;
         // Delivery metadata is not a criteria edit. Preserve the criteria version
         // used by flight result commits and pending notification guards.
         const query = await tx.query.findUniqueOrThrow({ where: { id: entry.queryId } });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isLegacySplitFare, latestFlightObservations, flightComparisonCurrency, lowestFlightFare } from './flight-pricing';
+import { isLegacySplitFare, latestFlightObservations, latestFlightObservationEntries, flightComparisonCurrency, lowestFlightFare } from './flight-pricing';
 
 describe('legacy split fare identification', () => {
   it('recognizes the synthetic label written by older previews', () => {
@@ -112,5 +112,31 @@ describe('fare comparison currency', () => {
   it('does not anchor comparisons to stale prices copied into unavailable observations', () => {
     expect(flightComparisonCurrency([fare({ currency: 'EUR', status: 'sold_out', scrapedAt: newTime }), fare()])).toBe('USD');
     expect(flightComparisonCurrency([])).toBeNull();
+  });
+});
+
+describe('flight-specific alert identities', () => {
+  it('retains a numbered identity when the latest matching fare omits its number', () => {
+    const legacy = fare({ flightId: 'Delta-0800-JFK-LAX-2026-06-15', flightNumber: null, scrapedAt: newTime });
+    const entries = latestFlightObservationEntries([fare(), legacy], route);
+    expect(entries).toEqual([{ snapshot: legacy, flightId: baseFare().flightId }]);
+    expect(entries.map(entry => entry.snapshot)).toEqual(latestFlightObservations([fare(), legacy], route));
+  });
+
+  it('does not assign an ambiguous unnumbered fare to either codeshare', () => {
+    const other = fare({ flightNumber: 'DL200', flightId: 'Delta-DL200-JFK-LAX-2026-06-15' });
+    const legacy = fare({ flightId: 'Delta-0800-JFK-LAX-2026-06-15', flightNumber: null, scrapedAt: newTime });
+    const entries = latestFlightObservationEntries([fare(), other, legacy], route);
+    expect(entries.find(entry => entry.snapshot === legacy)?.flightId).toBeNull();
+    expect(entries.filter(entry => entry.flightId).map(entry => entry.flightId)).toEqual(expect.arrayContaining([baseFare().flightId, other.flightId]));
+  });
+
+  it('keeps morning and evening aliases separate despite colliding stored time IDs', () => {
+    const morning = fare({ departureTime: '08:00 AM' });
+    const evening = fare({ departureTime: '08:00 PM', flightNumber: 'DL200', flightId: 'Delta-DL200-JFK-LAX-2026-06-15' });
+    const newer = [morning, evening].map(snapshot => ({ ...snapshot, flightNumber: null, flightId: 'Delta-0800-JFK-LAX-2026-06-15', scrapedAt: newTime }));
+    expect(latestFlightObservationEntries([morning, evening, ...newer], route)).toEqual([
+      { snapshot: newer[0], flightId: morning.flightId }, { snapshot: newer[1], flightId: evening.flightId },
+    ]);
   });
 });
