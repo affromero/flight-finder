@@ -114,13 +114,14 @@ and [local-provider timeout contribution](https://github.com/avephill/fairtrail/
 The upstream adaptation fixes consent in both Google search and flight detail.
 The [consent helper](../../apps/web/src/lib/scraper/navigation/consent.ts) waits
 once for a visible exact localized action, skips hidden duplicates and limits
-generic labels to a dialog with its own consent name or heading. Click failures
+generic labels to a dialog with its own consent name or heading and no nested
+dialogs. Mixed parent dialogs receive no generic consent action. Click failures
 and execution cancellation propagate through canonical browser cleanup.
 Tracking issue [#265](https://github.com/affromero/flight-finder/issues/265).
 
 | Reviewed source behavior | Upstream decision and evidence |
 | --- | --- |
-| Localized consent buttons | Adapted with a bounded visibility wait and dialog scope. [Chromium regressions](../../apps/web/src/lib/scraper/navigation/consent.browser.test.ts) cover delayed and duplicate actions, adjacent booking dialogs, absence, click failure, page closure and cancellation. |
+| Localized consent buttons | Adapted with a bounded visibility wait and dialog scope. [Chromium regressions](../../apps/web/src/lib/scraper/navigation/consent.browser.test.ts) cover delayed and duplicate actions, adjacent and nested booking dialogs, unnamed consent headings, absence, click failure, page closure and cancellation. |
 | Reject an empty results container | Existing [Google navigation](../../apps/web/src/lib/scraper/navigate.ts) already requires prices and the requested directional route. New [canonical browser fixtures](../../apps/web/src/lib/scraper/navigation/google.browser.test.ts) exercise delayed prices, empty shells, reverse routes and flight detail. |
 | Regex prices after a failed provider response | Preserve explicit extraction failures. [Regressions](../../apps/web/src/lib/scraper/extract-prices.test.ts) confirm fare-like page text cannot turn empty or malformed provider output into guessed prices, currencies or stop counts. |
 | Force a ten-minute SDK timeout | Preserve the configured timeout and existing default in the [shared provider](../../apps/web/src/lib/scraper/shared-provider.ts). [Real HTTP tests](../../apps/web/src/lib/scraper/providers/tests/http.test.ts) verify deadlines, caller cancellation and measured usage for OpenAI, Ollama, llama.cpp and vLLM. |

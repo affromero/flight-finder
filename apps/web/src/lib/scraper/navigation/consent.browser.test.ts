@@ -42,6 +42,32 @@ describe.skipIf(process.env.TRAVEL_BROWSER_TESTS !== '1')('Google consent in Chr
       expect(await page.getAttribute('body', 'data-booked')).toBeNull();
     } finally { await page.close(); }
   });
+  it('accepts an unnamed consent dialog through its own heading', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent('<div role="dialog"><h2>Cookie consent</h2><button onclick="document.body.dataset.accepted=\'yes\'">Continue</button></div>');
+      expect(await dismissGoogleConsent(page)).toBe(true);
+      expect(await page.getAttribute('body', 'data-accepted')).toBe('yes');
+    } finally { await page.close(); }
+  });
+  it('accepts nested cookie consent without clicking its outer booking dialog', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent('<div role="dialog" aria-label="Book your flight"><button onclick="document.body.dataset.booked=\'yes\'">Continue</button><div role="dialog" aria-label="Cookie consent"><h2>Cookie consent</h2><button onclick="document.body.dataset.accepted=\'yes\'">Continue</button></div></div>');
+      expect(await dismissGoogleConsent(page)).toBe(true);
+      expect(await page.getAttribute('body', 'data-booked')).toBeNull();
+      expect(await page.getAttribute('body', 'data-accepted')).toBe('yes');
+    } finally { await page.close(); }
+  });
+  it('declines a mixed consent dialog containing a nested booking dialog', async () => {
+    const page = await browser.newPage();
+    try {
+      await page.setContent('<div role="dialog" aria-label="Cookie consent"><h2>Cookie consent</h2><div role="dialog" aria-label="Book your flight"><button onclick="document.body.dataset.booked=\'yes\'">Continue</button></div><button onclick="document.body.dataset.accepted=\'yes\'">Continue</button></div>');
+      expect(await dismissGoogleConsent(page)).toBe(false);
+      expect(await page.getAttribute('body', 'data-booked')).toBeNull();
+      expect(await page.getAttribute('body', 'data-accepted')).toBeNull();
+    } finally { await page.close(); }
+  });
   it('surfaces a consent click timeout rather than treating it as absent consent', async () => {
     const page = await browser.newPage();
     try {
