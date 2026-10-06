@@ -75,10 +75,11 @@ try {
   const memberLogin = await request('/api/auth/login', 'POST', { username: createdMember.json.data.user.username }, memberHeaders);
   assert.equal(memberLogin.status, 200, JSON.stringify(memberLogin.json));
 
-  for (const id of ids) {
+  for (const [index, id] of ids.entries()) {
+    const travelDate = `2027-06-${15 + index}`;
     await pool.query('INSERT INTO "Query" (id,"rawInput",origin,"originName",destination,"destinationName","dateFrom","dateTo","expiresAt","groupId","userId","deleteToken","updatedAt","firstViewedAt",active) VALUES ($1,$2,$3,$4,$5,$6,$7,$7,$8,$9,$10,$11,now(),now(),false)',
-      [id, 'Subscription acceptance', 'JFK', 'New York', 'LAX', 'Los Angeles', '2027-06-15', '2027-06-20', groupId, owner.id, capability]);
-    await pool.query('INSERT INTO "PriceSnapshot" (id,"queryId","travelDate",price,currency,airline) VALUES ($1,$2,$3,100,$4,$5)', [randomUUID(), id, '2027-06-15', 'USD', 'Fixture Air']);
+      [id, 'Subscription acceptance', 'JFK', 'New York', 'LAX', 'Los Angeles', travelDate, '2027-06-20', groupId, owner.id, capability]);
+    await pool.query('INSERT INTO "PriceSnapshot" (id,"queryId","travelDate",price,currency,airline) VALUES ($1,$2,$3,100,$4,$5)', [randomUUID(), id, travelDate, 'USD', 'Fixture Air']);
   }
   const before = (await pool.query('SELECT "updatedAt" FROM "Query" WHERE id=$1', [ids[0]])).rows[0].updatedAt;
   for (const [label, enabled] of [['Acceptance channel A', true], ['Acceptance channel B', false]]) {
