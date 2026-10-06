@@ -194,6 +194,7 @@ describe('POST /api/parse', () => {
         { role: 'user', content: 'hello' },
         { role: 'assistant', content: 'reply' },
       ],
+      expect.objectContaining({ signal: expect.any(AbortSignal) }),
     );
   });
 
@@ -239,6 +240,6 @@ describe('POST /api/parse', () => {
 
     await POST(makeRequest({ query: 'JFK to LAX June 15', conversationHistory: 'not-an-array' }));
 
-    expect(mockParseFlightQuery).toHaveBeenCalledWith(expect.any(String), undefined);
+    expect(mockParseFlightQuery).toHaveBeenCalledWith(expect.any(String), undefined, expect.objectContaining({ signal: expect.any(AbortSignal) }));
   });
 });

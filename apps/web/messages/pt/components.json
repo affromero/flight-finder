@@ -385,6 +385,13 @@
     "daysAgo": "há {count}d"
   },
   "SearchBar": {
+    "backgroundParse": "Interpretar em segundo plano",
+    "parseQueued": "A aguardar a interpretação da pesquisa…",
+    "parseRunning": "A interpretar a pesquisa…",
+    "cancelParse": "Cancelar interpretação",
+    "parseCancelled": "Interpretação cancelada.",
+    "parseCancellationFailed": "Não foi possível confirmar o cancelamento. O servidor pode ainda estar a processar esta pesquisa.",
+    "backgroundParseFailed": "A interpretação parou. Verifique as definições do fornecedor e tente novamente.",
     "parseFailed": "Falha ao interpretar a consulta",
     "networkError": "Erro de rede - tente novamente",
     "beMoreSpecific": "Pode ser mais específico?",

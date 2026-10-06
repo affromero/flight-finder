@@ -3,10 +3,10 @@ import { apiSuccess, apiError } from '@/lib/api-response';
 import { parseFlightQuery } from '@/lib/scraper/parse-query';
 import { redis } from '@/lib/redis';
 import { getClientIp } from '@/lib/trusted-ip';
+import { readParseInput, type ParseInput } from '@/lib/parsing/input';
 
 const PARSE_RATE_LIMIT = 30;        // max requests
 const PARSE_RATE_WINDOW_SECONDS = 60; // per 60 seconds
-const PARSE_HISTORY_MAX_ENTRIES = 12; // defensive server-side cap on history array length
 
 async function checkParseRateLimit(ip: string): Promise<{ limited: boolean; retryAfter: number }> {
   if (!redis) return { limited: false, retryAfter: 0 };
@@ -43,37 +43,19 @@ export async function POST(request: NextRequest) {
   }
 
   const body = await request.json().catch(() => null);
-  if (!body?.query || typeof body.query !== 'string') {
-    return apiError('Missing or invalid "query" field', 400);
-  }
-
-  const rawInput = body.query.trim();
-  if (rawInput.length < 5 || rawInput.length > 500) {
-    return apiError('Query must be between 5 and 500 characters', 400);
-  }
-
-  // Validate and sanitize conversationHistory defensively before passing to
-  // the parser. Each entry must have string role and content; cap the array
-  // length so callers cannot bypass the per-entry truncation done in
-  // parse-query.ts via sheer volume.
-  let conversationHistory: Array<{ role: 'user' | 'assistant'; content: string }> | undefined;
-  if (Array.isArray(body.conversationHistory)) {
-    const raw = (body.conversationHistory as unknown[]).slice(0, PARSE_HISTORY_MAX_ENTRIES);
-    const valid = raw.filter(
-      (entry): entry is { role: string; content: string } =>
-        entry !== null &&
-        typeof entry === 'object' &&
-        typeof (entry as Record<string, unknown>).role === 'string' &&
-        typeof (entry as Record<string, unknown>).content === 'string',
-    );
-    conversationHistory = valid.map((entry) => ({
-      role: entry.role === 'assistant' ? 'assistant' : 'user',
-      content: entry.content,
-    }));
+  let input: ParseInput;
+  try { input = readParseInput(body); }
+  catch (error) { return apiError(error instanceof Error ? error.message : 'Invalid parse request', 400); }
+  if (body.mode !== undefined && body.mode !== 'sync' && body.mode !== 'async') return apiError('Invalid parse mode', 400);
+  if (body.mode === 'async') {
+    const [{ enqueueParse }, { privateParseEndpoint, requestParseActor }] = await Promise.all([
+      import('@/lib/parsing/jobs'), import('@/lib/parsing/http'),
+    ]);
+    return privateParseEndpoint(async () => apiSuccess(await enqueueParse(input, await requestParseActor(request), ip), 202));
   }
 
   try {
-    const { response } = await parseFlightQuery(rawInput, conversationHistory);
+    const { response } = await parseFlightQuery(input.query, input.conversationHistory, { signal: request.signal });
 
     return apiSuccess(response);
   } catch (err) {

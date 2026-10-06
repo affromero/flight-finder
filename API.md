@@ -62,32 +62,37 @@ Content-Type: application/json
 
 ```json
 {
+  "ok": true,
   "data": {
-    "routes": [
-      {
-        "origin": "JFK",
-        "originName": "New York JFK",
-        "destination": "CDG",
-        "destinationName": "Paris Charles de Gaulle"
-      }
-    ],
-    "dateFrom": "2026-06-12",
-    "dateTo": "2026-06-18",
-    "flexibility": 3,
-    "cabinClass": "economy",
-    "tripType": "round_trip",
-    "currency": "USD",
-    "maxPrice": null,
-    "maxStops": null,
-    "preferredAirlines": [],
-    "timePreference": "any",
-    "message": "Searching JFK → CDG around June 15 ± 3 days",
-    "needsClarification": false
+    "parsed": {
+      "origin": "JFK",
+      "originName": "New York JFK",
+      "destination": "CDG",
+      "destinationName": "Paris Charles de Gaulle",
+      "origins": [{ "code": "JFK", "name": "New York JFK" }],
+      "destinations": [{ "code": "CDG", "name": "Paris Charles de Gaulle" }],
+      "dateFrom": "2026-06-12",
+      "dateTo": "2026-06-18",
+      "flexibility": 3,
+      "cabinClass": "economy",
+      "tripType": "round_trip",
+      "currency": "USD",
+      "maxPrice": null,
+      "maxStops": null,
+      "maxDurationHours": null,
+      "preferredAirlines": [],
+      "timePreference": "any"
+    },
+    "confidence": "high",
+    "ambiguities": [],
+    "dateSpanDays": 6
   }
 }
 ```
 
-If `needsClarification` is `true`, the response includes a `message` asking the user to clarify. You can continue the conversation by passing `conversationHistory`:
+When confidence is `medium` or `low`, `ambiguities` contains questions and
+optional answer choices. `parsed` retains the best available route, or is null
+when no route can be inferred. Continue by passing `conversationHistory`:
 
 ```json
 {
@@ -98,6 +103,76 @@ If `needsClarification` is `true`, the response includes a `message` asking the 
   ]
 }
 ```
+
+#### Optional background parsing
+
+Synchronous parsing remains the default. Add `"mode": "async"` to the same
+request to persist a private job and return HTTP 202:
+
+```json
+{
+  "ok": true,
+  "data": {
+    "id": "parse-job-id",
+    "status": "queued",
+    "expiresAt": "2026-10-07T12:00:00.000Z"
+  }
+}
+```
+
+Poll `GET /api/parse/{id}`. Status is `queued`, `running`, `completed`, `failed`
+or `cancelled`. A completed job includes `data.result` with the synchronous
+response's `parsed`, `confidence`, `ambiguities` and `dateSpanDays` fields.
+`DELETE /api/parse/{id}` cancels queued or running work. Terminal jobs retain
+their existing status. Responses use `Cache-Control: private, no-store`.
+
+Jobs belong to the current profile, including the household owner in solo mode.
+Another profile receives 404, including administrators. Anonymous creation,
+where instance admission permits it, also returns a random `data.capability`.
+Send it in `X-Parse-Capability` for polling, cancellation or an identical POST
+retry. Keep capabilities out of URLs and logs. The database stores their keyed
+hashes. Capabilities cannot authorize another profile's job. Access-store
+failures return 503.
+
+Deduplication includes the owner or capability scope, effective conversation
+history, selected provider/model, relevant settings, credential authority and
+captured UTC prompt date. An identical completed request can reuse its private
+result for 24 hours. Failed or cancelled work requires a new request. Queries
+are trimmed to 5 through 500 characters; history takes the first 12 valid
+entries, then the last six turns with 2,000 characters per turn.
+
+Async parsing allows two persisted execution reservations globally and one per
+provider, independently of browser/VPN travel admission. Queued work is capped
+at 32 globally, four outstanding jobs per owner/capability and eight per trusted
+client IP. At most 30 new jobs per IP are admitted per minute; the existing
+request limiter remains in place. A capacity rejection returns 429 and
+`Retry-After`. Rotating guest capabilities does not bypass IP admission.
+
+The worker runs even when automatic scraping is disabled. Queued work survives
+server restarts and expires after ten minutes in the queue. Running work has a
+630-second outer deadline, in addition to the configured SDK timeout or the
+CLI's 240-second limit. Claims renew every two seconds and expire after 15
+seconds. Configuration or credential changes fail the old job with
+`configuration_changed`. Usage is recorded once through the canonical parser;
+a blocked usage write fails with `usage_unavailable` instead of accepting an
+unlogged result. Cancellation reaches the provider transport and CLI process
+group. An interrupted worker fails explicitly and is never retried
+automatically. Retained input and results expire after 24 hours.
+
+An unverified execution reservation pauses new work for that provider. After
+stopping the previous local worker and its CLI processes, an administrator
+can read `GET /api/admin/parse` and POST the returned reservation `id`,
+`generation`, `actorScope` and `"localWorkersStopped": true` to the same
+endpoint. Recovery rejects live claims and stale generations. It releases
+capacity without reviving the interrupted job. Local cancellation or recovery
+does not guarantee that a remote provider stops processing or billing.
+
+The web checkbox is opt-in. The UI polls with bounded HTTP requests, returns
+results through the existing clarification flow and cancels acknowledged jobs
+when the component unmounts. A failed cancellation is reported explicitly.
+Apply the additive Prisma schema before starting upgraded web workers.
+Optional CLI background parsing is tracked separately in
+[#264](https://github.com/affromero/flight-finder/issues/264).
 
 ---
 

@@ -78,6 +78,22 @@ job cancellation and independent cleanup guard the network changes.
 five languages and coordinates configuration saves. Tracking issue
 [#262](https://github.com/affromero/flight-finder/issues/262).
 
+Background parsing credits [aph82 (avephill)](https://github.com/avephill) for
+the [source commit](https://github.com/avephill/fairtrail/commit/e5ea7d901944ba8a6e389e3d7742165f513be114),
+[job execution](https://github.com/avephill/fairtrail/blob/e5ea7d901944ba8a6e389e3d7742165f513be114/apps/web/src/app/api/parse/parse-run-job.ts)
+and [status endpoint](https://github.com/avephill/fairtrail/blob/e5ea7d901944ba8a6e389e3d7742165f513be114/apps/web/src/app/api/parse/%5Bid%5D/route.ts).
+The upstream [queue](../../apps/web/src/lib/parsing/jobs.ts) retains explicit
+async mode and private polling. The adaptation adds persisted claims and
+execution reservations, owner or capability access, configuration-bound
+deduplication, bounded cancellation and interrupted-worker recovery.
+The [executor](../../apps/web/src/lib/parsing/executor.ts) calls the canonical
+parser and usage recorder. Source code's query-global cache and extra usage
+insert are replaced by private authority and one canonical usage attempt.
+[Web controls](../../apps/web/src/components/parsing/ParseControls.tsx) are
+opt-in in all five languages. Tracking issue
+[#263](https://github.com/affromero/flight-finder/issues/263). The API and recovery
+contract are documented in [API.md](../../API.md#optional-background-parsing).
+
 The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
@@ -108,3 +124,7 @@ Price rule screenshots: [before](screenshots/flight-price-rules-before.png),
 Mullvad settings screenshots: [before](screenshots/flight-mullvad-before.png),
 [desktop](screenshots/flight-mullvad-desktop.png),
 [mobile](screenshots/flight-mullvad-mobile.png).
+
+Background parsing screenshots: [before](screenshots/flight-parse-before.png),
+[desktop](screenshots/flight-parse-desktop.png),
+[mobile](screenshots/flight-parse-mobile.png).

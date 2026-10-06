@@ -385,6 +385,13 @@
     "daysAgo": "{count}d ago"
   },
   "SearchBar": {
+    "backgroundParse": "Parse in the background",
+    "parseQueued": "Waiting to parse your search…",
+    "parseRunning": "Interpreting your search…",
+    "cancelParse": "Cancel parsing",
+    "parseCancelled": "Parsing cancelled.",
+    "parseCancellationFailed": "Could not confirm cancellation. The server may still be processing this search.",
+    "backgroundParseFailed": "Background parsing stopped. Check the provider settings and try again.",
     "parseFailed": "Failed to parse query",
     "networkError": "Network error - please try again",
     "beMoreSpecific": "Can you be more specific?",
