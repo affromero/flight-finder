@@ -1,5 +1,8 @@
 import assert from 'node:assert/strict';
 import { randomUUID } from 'node:crypto';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright';
 import pg from 'pg';
 import { admitBrowserHousehold, addBrowserSession } from '../access-browser-test.mjs';
@@ -25,6 +28,13 @@ const queryIds = [randomUUID(), randomUUID()];
 const groupId = randomUUID();
 const clocks = ['09:00', '12:00 PM', '18:00', '18:01', '10:00 PM', null];
 const observedAt = new Date().toISOString();
+const cliEntry = fileURLToPath(new URL('../../packages/cli/dist/index.js', import.meta.url));
+
+async function cliJson(view) {
+  const args = [cliEntry, '--json', ...(view ? ['--view', view] : [])];
+  const { stdout } = await promisify(execFile)(process.execPath, args, { env: process.env, timeout: 15000 });
+  return JSON.parse(stdout);
+}
 
 async function patch(criteria) {
   return fetch(`${origin}/api/queries/${queryIds[0]}`, { method: 'PATCH', headers, body: JSON.stringify(criteria) });
@@ -63,6 +73,7 @@ try {
     }
   }
   assert.deepEqual((await prices(queryIds[0])).sort(), [...clocks].sort(), 'Soft preference retains every observation');
+  assert.equal((await cliJson(queryIds[0])).snapshotCount, 6, 'Packaged CLI retains soft-preference history');
   await page.goto(`${origin}/q/${queryIds[0]}`);
   await page.getByRole('button', { name: /^Filters/ }).click();
   const checkbox = page.getByRole('checkbox', { name: 'Only include flights in this window' });
@@ -74,6 +85,12 @@ try {
     return fares.length > 0 && fares.every(element => element.textContent.includes('500'));
   });
   for (const id of queryIds) assert.deepEqual(await prices(id), ['09:00']);
+  const strictCli = await cliJson(queryIds[0]);
+  assert.equal(strictCli.snapshotCount, 1);
+  assert.equal(strictCli.bestPrice.price, 500);
+  const strictList = (await cliJson()).filter(query => queryIds.includes(query.id));
+  assert.equal(strictList.length, 2);
+  assert.ok(strictList.every(query => query.snapshotCount === 1 && query.minPrice === 500));
   const booking = page.getByRole('region', { name: 'Latest observed price', exact: true }).first();
   assert.equal(await booking.getByRole('link').getAttribute('href'), 'https://booking.example/DL100');
   await page.waitForFunction(() => {
@@ -90,6 +107,7 @@ try {
   const disabled = await patch({ timePreference: 'any', strictDepartureTime: false });
   assert.equal(disabled.status, 200, await disabled.text());
   for (const id of queryIds) assert.equal((await prices(id)).length, clocks.length);
+  assert.equal((await cliJson(queryIds[0])).snapshotCount, 6, 'Disabling the window restores packaged CLI history');
   assert.equal((await pool.query('SELECT count(*)::int AS count FROM "PriceSnapshot" WHERE "queryId"=ANY($1::text[])', [queryIds])).rows[0].count, 12, 'Edits preserve all stored history');
   assert.ok((await pool.query('SELECT count(*)::int AS count FROM "QueryEditEvent" WHERE "queryId"=ANY($1::text[])', [queryIds])).rows[0].count >= 10, 'Each changed sibling records edit history');
 
