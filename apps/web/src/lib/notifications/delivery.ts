@@ -43,8 +43,9 @@ export async function deliverClaimedAlert(entry: ClaimedDelivery, guarded: Deliv
       const failed = outcomes.filter(outcome => !outcome.ok);
       const missingRecipients = entry.requiredChannelIds?.some(id => !row.deliveredIds.includes(id));
       const pending = failed.length > 0 || (entry.requiredChannelIds ? missingRecipients === true : row.deliveredIds.length === 0);
+      const waiting = entry.requiredChannelIds ? 'Waiting for an available notification channel; delivery will retry.' : 'No enabled notification channel is available; delivery will retry.';
       await update(tx, { pending, claimToken: null, claimExpiresAt: null, nextAttemptAt: new Date(Date.now() + DELIVERY_RETRY_MS),
-        lastError: failed.length ? failed.map(outcome => outcome.error).join('; ').slice(0, 1000) : pending ? 'Waiting for an available notification channel; delivery will retry.' : null });
+        lastError: failed.length ? failed.map(outcome => outcome.error).join('; ').slice(0, 1000) : pending ? waiting : null });
     });
   } catch (error) {
     await guarded(async tx => {

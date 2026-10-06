@@ -241,9 +241,26 @@
       "email": "E-mail",
       "ntfy": "ntfy",
       "webhook": "Webhook",
-      "pushover": "Pushover"
+      "pushover": "Pushover",
+      "whatsapp": "WhatsApp"
+    },
+    "options": {
+      "phone": "Telefone",
+      "group": "Grupo",
+      "en": "Inglês",
+      "es": "Espanhol",
+      "pt": "Português",
+      "de": "Alemão",
+      "fr": "Francês"
     },
     "fields": {
+      "gatewayUrl": "URL do gateway",
+      "apiKey": "Chave API do gateway",
+      "account": "Conta do gateway",
+      "destinationType": "Tipo de destinatário",
+      "destination": "Telefone (+ código do país) ou ID do grupo",
+      "locale": "Idioma dos alertas de voos",
+      "includeTrackerLink": "Incluir link do acompanhamento",
       "userKey": "Chave de usuário ou grupo",
       "device": "Dispositivos (separados por vírgulas)",
       "priority": "Prioridade (-2 a 2; 2 exige repetição e expiração)",

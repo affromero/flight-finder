@@ -8,7 +8,8 @@ import type { ChannelType } from '@/lib/notifications/channels/types';
 
 interface FieldDef {
   key: string;
-  type: 'text' | 'password' | 'number' | 'checkbox';
+  type: 'text' | 'password' | 'number' | 'checkbox' | 'select';
+  options?: string[];
   placeholder?: string;
   optional?: boolean;
   secret?: boolean;
@@ -45,9 +46,18 @@ const FIELD_DEFS: Record<ChannelType, FieldDef[]> = {
     { key: 'retry', type: 'number', placeholder: '30', optional: true },
     { key: 'expire', type: 'number', placeholder: '10800', optional: true },
   ],
+  whatsapp: [
+    { key: 'gatewayUrl', type: 'text', placeholder: 'https://gateway.example' },
+    { key: 'apiKey', type: 'password', secret: true },
+    { key: 'account', type: 'password', secret: true },
+    { key: 'destinationType', type: 'select', options: ['phone', 'group'] },
+    { key: 'destination', type: 'password', secret: true },
+    { key: 'locale', type: 'select', options: ['en', 'es', 'pt', 'de', 'fr'] },
+    { key: 'includeTrackerLink', type: 'checkbox' },
+  ],
 };
 
-const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook', 'pushover'];
+const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook', 'pushover', 'whatsapp'];
 
 type FormValues = Record<string, string | boolean>;
 
@@ -67,6 +77,8 @@ function initialValues(type: ChannelType, config?: Record<string, unknown>): For
       values[f.key] = ''; // never prefilled; redacted on the server
     } else if (f.type === 'checkbox') {
       values[f.key] = config ? Boolean(config[f.key]) : false;
+    } else if (f.type === 'select') {
+      values[f.key] = typeof config?.[f.key] === 'string' ? String(config[f.key]) : f.options?.[0] ?? '';
     } else {
       values[f.key] = config && config[f.key] != null ? String(config[f.key]) : '';
     }
@@ -349,7 +361,12 @@ export default function NotificationsPage() {
               {t(`fields.${f.key}`)}
               {f.optional && <span className={styles.optional}>{t('form.optionalSuffix')}</span>}
             </label>
-            {f.type === 'checkbox' ? (
+            {f.type === 'select' ? (
+              <select id={`channel-${f.key}`} className={styles.select} value={String(formValues[f.key] ?? '')}
+                onChange={(event) => setFormValues(values => ({ ...values, [f.key]: event.target.value }))}>
+                {f.options?.map(value => <option key={value} value={value}>{t(`options.${value}`)}</option>)}
+              </select>
+            ) : f.type === 'checkbox' ? (
               <input
                 id={`channel-${f.key}`}
                 type="checkbox"

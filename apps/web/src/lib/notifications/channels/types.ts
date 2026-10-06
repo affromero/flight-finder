@@ -1,4 +1,4 @@
-export type ChannelType = 'telegram' | 'email' | 'ntfy' | 'webhook' | 'pushover';
+export type ChannelType = 'telegram' | 'email' | 'ntfy' | 'webhook' | 'pushover' | 'whatsapp';
 
 export interface TelegramConfig {
   botToken: string;
@@ -35,12 +35,23 @@ export interface PushoverConfig {
   expire?: number;
 }
 
+export interface WhatsAppConfig {
+  gatewayUrl: string;
+  apiKey: string;
+  account: string;
+  destinationType: 'phone' | 'group';
+  destination: string;
+  locale: 'en' | 'es' | 'pt' | 'de' | 'fr';
+  includeTrackerLink: boolean;
+}
+
 export interface ChannelConfigMap {
   telegram: TelegramConfig;
   email: EmailConfig;
   ntfy: NtfyConfig;
   webhook: WebhookConfig;
   pushover: PushoverConfig;
+  whatsapp: WhatsAppConfig;
 }
 
 /** A notification ready to render across any channel. */
