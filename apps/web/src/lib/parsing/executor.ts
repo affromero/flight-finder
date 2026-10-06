@@ -1,7 +1,7 @@
 import { Prisma } from '@/generated/prisma/client';
 import { parseTransaction } from './database';
-import { notificationTransaction } from '@/lib/notifications/database';
-import { parseFlightQuery } from '@/lib/scraper/parse-query';
+import { notificationTransaction } from '../notifications/database';
+import { parseFlightQuery } from '../scraper/parse-query';
 import { captureParseConfiguration } from './configuration';
 import { claimParseJob, lockParseQueue } from './jobs';
 import { readParseInput } from './input';
@@ -54,9 +54,9 @@ async function heartbeat(claim: Claim): Promise<void> {
 }
 
 /** Claim once, execute through the canonical parser, and fence the private result. */
-export async function executeNextParse(signal?: AbortSignal): Promise<boolean> {
+export async function executeNextParse(signal?: AbortSignal, jobId?: string): Promise<boolean> {
   signal?.throwIfAborted();
-  const claim = await claimParseJob();
+  const claim = await claimParseJob(jobId);
   if (!claim) return false;
   const controller = new AbortController();
   const abortShutdown = () => controller.abort(new ParseExecutionError('worker_shutdown'));

@@ -7,9 +7,11 @@ export class ParseClientError extends Error {
   constructor(readonly code: string) { super(code); }
 }
 
-async function cancelJob(job: ParseJobStatus): Promise<void> {
+type ParseTransport = (path: string, init: RequestInit) => Promise<Response>;
+
+async function cancelJob(job: ParseJobStatus, transport: ParseTransport): Promise<void> {
   try {
-    const cancelled = await fetch(`/api/parse/${encodeURIComponent(job.id)}`, {
+    const cancelled = await transport(`/api/parse/${encodeURIComponent(job.id)}`, {
       method: 'DELETE', signal: AbortSignal.timeout(5000),
       headers: job.capability ? { 'X-Parse-Capability': job.capability } : {},
     });
@@ -26,24 +28,24 @@ function pause(signal: AbortSignal): Promise<void> {
   });
 }
 
-async function parseRequest<T>(url: string, init: RequestInit, signal: AbortSignal, deadline?: number): Promise<{ status: number; body: ApiResponse<T> }> {
+async function parseRequest<T>(transport: ParseTransport, url: string, init: RequestInit, signal: AbortSignal, deadline?: number): Promise<{ status: number; body: ApiResponse<T> }> {
   const timeout = new AbortController();
   const remaining = deadline === undefined ? undefined : Math.min(30_000, deadline - Date.now());
   if (remaining !== undefined && remaining <= 0) throw new ParseClientError('timeout');
   const timer = remaining === undefined ? undefined : setTimeout(() => timeout.abort(new ParseClientError('timeout')), remaining);
   try {
-    const response = await fetch(url, { ...init, signal: AbortSignal.any([signal, timeout.signal]) });
+    const response = await transport(url, { ...init, signal: AbortSignal.any([signal, timeout.signal]) });
     const body = await response.json() as ApiResponse<T>;
     return { status: response.status, body };
   } finally { clearTimeout(timer); }
 }
 
-export async function requestFlightParse(input: ParseInput, background: boolean, signal: AbortSignal, onJob: (job: ParseJobStatus | null) => void): Promise<ApiResponse<ParseResponse>> {
+export async function requestFlightParse(input: ParseInput, background: boolean, signal: AbortSignal, onJob: (job: ParseJobStatus | null) => void, transport: ParseTransport = fetch): Promise<ApiResponse<ParseResponse>> {
   let job: ParseJobStatus | null = null;
   let terminal = false;
   const deadline = Date.now() + 22 * 60 * 1000;
   try {
-    const response = await parseRequest<ParseResponse | ParseJobStatus>('/api/parse', {
+    const response = await parseRequest<ParseResponse | ParseJobStatus>(transport, '/api/parse', {
       method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ ...input, ...(background ? { mode: 'async' } : {}) }),
     }, signal, background ? deadline : undefined);
@@ -60,7 +62,7 @@ export async function requestFlightParse(input: ParseInput, background: boolean,
       if (!['queued', 'running'].includes(job.status)) throw new ParseClientError('invalid_status');
       if (Date.now() >= deadline) throw new ParseClientError('timeout');
       await pause(signal);
-      const next: ApiResponse<ParseJobStatus> = (await parseRequest<ParseJobStatus>(`/api/parse/${encodeURIComponent(job.id)}`, {
+      const next: ApiResponse<ParseJobStatus> = (await parseRequest<ParseJobStatus>(transport, `/api/parse/${encodeURIComponent(job.id)}`, {
         cache: 'no-store', headers: job.capability ? { 'X-Parse-Capability': job.capability } : {},
       }, signal, deadline)).body;
       if (!next.ok) return next;
@@ -76,7 +78,7 @@ export async function requestFlightParse(input: ParseInput, background: boolean,
     onJob(null);
     if (job && !terminal) {
       // Cancellation has its own bounded request after the polling signal stops.
-      await cancelJob(job);
+      await cancelJob(job, transport);
     }
   }
 }

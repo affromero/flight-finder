@@ -98,6 +98,16 @@ The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
 
+CLI background parsing credits [aph82 (avephill)](https://github.com/avephill)
+for the [original polling contribution](https://github.com/avephill/fairtrail/commit/4cd5f7fa36994c0c82025407387f9a42f519b819).
+The upstream [runner](../../packages/cli/src/lib/parsing/runner.ts) reuses the
+private job lifecycle and bounded client transport. Server mode forwards the
+existing account/device credentials and capability. Standalone mode resolves
+canonical access state and targets its own persisted claim; command and
+interactive cancellation await verified local settlement. The installed
+`parse` command uses one-off packaged execution. Tracking issue
+[#264](https://github.com/affromero/flight-finder/issues/264).
+
 Pushover configuration screenshots: [before](screenshots/flight-pushover-before.png),
 [desktop](screenshots/flight-pushover-desktop.png),
 [mobile](screenshots/flight-pushover-mobile.png).

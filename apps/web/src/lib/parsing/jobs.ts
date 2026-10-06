@@ -95,14 +95,14 @@ export async function readParseJob(id: string, actor: ParseActor, cancel = false
   });
 }
 
-export async function claimParseJob() {
+export async function claimParseJob(jobId?: string) {
   return parseTransaction(async database => {
     await lockParseQueue(database);
     const now = new Date();
     await maintainParseQueue(database, now);
     const reservations = await database.parseReservation.findMany({ where: { settledAt: null } });
     if (reservations.length >= PARSE_MAX_RUNNING) return null;
-    const candidates = await database.parseJob.findMany({ where: { status: 'queued', queueUntil: { gt: now } }, orderBy: { createdAt: 'asc' }, take: PARSE_MAX_QUEUED });
+    const candidates = await database.parseJob.findMany({ where: { ...(jobId ? { id: jobId } : {}), status: 'queued', queueUntil: { gt: now } }, orderBy: { createdAt: 'asc' }, take: PARSE_MAX_QUEUED });
     const next = candidates.find(job => !reservations.some(reservation => reservation.provider === job.provider));
     if (!next) return null;
     const claimOwner = randomUUID();

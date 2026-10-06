@@ -846,6 +846,20 @@ test_run_cli_captures_exit() {
 # Local shared password reset
 # ---------------------------------------------------------------------------
 
+test_parse_uses_one_off_packaged_execution() {
+  for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
+    setup_runtime "$rt"
+    FLIGHT_FINDER_SESSION=fixture-session FLIGHT_FINDER_TOKEN=fixture-device run_cli parse --mode async --json "JFK to LAX Friday"
+    LAST_RUNTIME="$rt"; LAST_CMD="parse"
+    assert_recorded "parse launches the packaged CLI without a running web worker" \
+      'run --rm --no-deps -e FLIGHT_FINDER_SESSION -e FLIGHT_FINDER_TOKEN --entrypoint node web /app/packages/cli/dist/index.js parse --mode async --json JFK\\ to\\ LAX\\ Friday'
+    assert_not_recorded "parse preserves credential values outside process arguments" \
+      'fixture-session|fixture-device'
+    assert_not_recorded "parse needs no local web health prerequisite or automatic service start" \
+      '/api/health| up -d'
+  done
+}
+
 test_access_reset_uses_local_operator() {
   for rt in docker_v2 docker_v1 podman_native podman_delegated podman_pc; do
     setup_runtime "$rt"
@@ -911,6 +925,7 @@ test_vpn_compose_included_when_enabled
 test_missing_helper_fails_loudly
 test_run_cli_captures_exit
 test_access_reset_uses_local_operator
+test_parse_uses_one_off_packaged_execution
 
 echo ""
 printf "${BOLD}Results: ${GREEN}%d passed${RESET}, ${RED}%d failed${RESET}\n" "$PASS" "$FAIL"

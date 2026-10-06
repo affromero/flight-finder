@@ -532,6 +532,7 @@ cmd_help() {
   echo "  Terminal UI flags (forwarded to flight-finder-tui inside the container):"
   echo "    hotels <command>        Search, track, and manage hotels (hotels --help)"
   echo "    cars <command>          Search, track, and manage rental cars (cars --help)"
+  echo "    parse <query>           Parse locally or on a server (parse --help)"
   echo "    --headless              Render the Ink terminal UI"
   echo "    --list                  List tracked queries (with --headless)"
   echo "    --view <id>             View a tracker (with --headless)"
@@ -544,6 +545,13 @@ cmd_help() {
 cmd_access() {
   # Local setup and reset must work even when the web server is not running.
   dc run --rm --no-deps --entrypoint node web /app/packages/cli/dist/index.js "$@"
+}
+
+cmd_parse() {
+  local parse_env=()
+  [ -n "${FLIGHT_FINDER_SESSION:-}" ] && parse_env+=(-e FLIGHT_FINDER_SESSION)
+  [ -n "${FLIGHT_FINDER_TOKEN:-}" ] && parse_env+=(-e FLIGHT_FINDER_TOKEN)
+  dc run --rm --no-deps "${parse_env[@]}" --entrypoint node web /app/packages/cli/dist/index.js parse "$@"
 }
 
 cmd_tui() {
@@ -626,6 +634,7 @@ case "${1:-}" in
     printf "${YELLOW}${BOLD}!${RESET} --tmux is not supported in the production install. Use the dev mode CLI: npm run cli -- --tmux ...\n"
     exit 1 ;;
   search)    shift; cmd_search "$@" ;;
+  parse)     shift; cmd_parse "$@" ;;
   start)     cmd_start_background ;;
   stop)      cmd_stop ;;
   logs)      cmd_logs ;;

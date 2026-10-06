@@ -172,7 +172,11 @@ results through the existing clarification flow and cancels acknowledged jobs
 when the component unmounts. A failed cancellation is reported explicitly.
 Apply the additive Prisma schema before starting upgraded web workers.
 Optional CLI background parsing is tracked separately in
-[#264](https://github.com/affromero/flight-finder/issues/264).
+[#264](https://github.com/affromero/flight-finder/issues/264) and available through
+`flight-finder parse "JFK to LAX Friday" --mode async --server <origin> --json`.
+Local `parse --mode async` runs a worker for its own job until command exit;
+`--headless --parse-mode async` opts the terminal wizard into the same lifecycle.
+See [CLI usage](README.md#headless-cli) for identity and cancellation behavior.
 
 ---
 

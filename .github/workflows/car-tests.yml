@@ -49,7 +49,9 @@ jobs:
       - run: node scripts/parsing/prepare-browser.mjs
       - run: npm run build
       - run: npx playwright install chromium --with-deps
+      - run: npm run build --workspace=@flight-finder/cli
       - run: node scripts/parsing/browser-test.mjs
+      - run: node scripts/parsing/cli-test.mjs
 
   vpn-settings-browser:
     runs-on: ubuntu-latest

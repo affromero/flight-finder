@@ -1,9 +1,11 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import { Box, Text } from 'ink';
 import TextInput from 'ink-text-input';
 import Spinner from 'ink-spinner';
 import SelectInput from 'ink-select-input';
-import { parseFlightQuery, type ParsedFlightQuery, type ParseAmbiguity } from '../../../../apps/web/src/lib/scraper/parse-query.js';
+import type { ParsedFlightQuery, ParseAmbiguity } from '../../../../apps/web/src/lib/scraper/parse-query.js';
+import { parseCliFlight } from '../lib/parsing/runner.js';
+import type { CliParseSession } from '../lib/parsing/session.js';
 import type { PriceData as BasePriceData } from '../../../../apps/web/src/lib/scraper/extract-prices.js';
 
 type PriceData = BasePriceData & { _routeIdx?: number };
@@ -14,7 +16,7 @@ import { FlightTable } from '../components/FlightTable.js';
 
 type Step = 'input' | 'parsing' | 'confirm' | 'clarify' | 'previewing' | 'select' | 'tracking' | 'done';
 
-export function SearchWizard() {
+export function SearchWizard({ parseSession }: { parseSession?: CliParseSession }) {
   const [step, setStep] = useState<Step>('input');
   const [rawInput, setRawInput] = useState('');
   const [inputValue, setInputValue] = useState('');
@@ -25,12 +27,20 @@ export function SearchWizard() {
   const [progressMsg, setProgressMsg] = useState('');
   const [error, setError] = useState('');
   const [createdQueries, setCreatedQueries] = useState<CreatedQuery[]>([]);
+  const active = useRef<AbortController | null>(null);
+  const [parseStatus, setParseStatus] = useState('');
+  useEffect(() => () => { active.current?.abort(); active.current = null; }, []);
 
   const handleParse = useCallback(async (input: string, history?: Array<{ role: 'user' | 'assistant'; content: string }>) => {
+    active.current?.abort();
+    const controller = new AbortController();
+    active.current = controller;
     setStep('parsing');
     setError('');
     try {
-      const { response } = await parseFlightQuery(input, history);
+      const response = parseSession ? await parseSession.run(input, history, controller.signal, job => { if (active.current === controller) setParseStatus(job?.status ?? ''); })
+        : await parseCliFlight(input, history, { mode: 'sync' }, controller.signal);
+      if (active.current !== controller || controller.signal.aborted) return;
 
       if (response.parsed) {
         setParsed(response.parsed);
@@ -48,10 +58,13 @@ export function SearchWizard() {
         setStep('input');
       }
     } catch (err) {
+      if (active.current !== controller || controller.signal.aborted) return;
       setError(err instanceof Error ? err.message : 'Parse failed');
       setStep('input');
+    } finally {
+      if (active.current === controller) { active.current = null; setParseStatus(''); }
     }
-  }, []);
+  }, [parseSession]);
 
   const handleSubmitQuery = useCallback(() => {
     if (!inputValue.trim()) return;
@@ -149,7 +162,7 @@ export function SearchWizard() {
       {step === 'parsing' && (
         <Box>
           <Text color="cyan"><Spinner type="dots" /></Text>
-          <Text>{' '}Parsing your query...</Text>
+          <Text>{' '}{parseStatus === 'queued' ? 'Waiting for background parsing...' : 'Parsing your query...'}</Text>
         </Box>
       )}
 
