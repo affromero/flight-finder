@@ -94,9 +94,9 @@ opt-in in all five languages. Tracking issue
 [#263](https://github.com/affromero/flight-finder/issues/263). The API and recovery
 contract are documented in [API.md](../../API.md#optional-background-parsing).
 
-The active integration scopes are tracked in
-[#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
-adds its source and implementation links here.
+Integration scopes are tracked in
+[#253](https://github.com/affromero/flight-finder/issues/253). Each port links its
+source and implementation here.
 
 CLI background parsing credits [aph82 (avephill)](https://github.com/avephill)
 for the [original polling contribution](https://github.com/avephill/fairtrail/commit/4cd5f7fa36994c0c82025407387f9a42f519b819).
@@ -107,6 +107,27 @@ canonical access state and targets its own persisted claim; command and
 interactive cancellation await verified local settlement. The installed
 `parse` command uses one-off packaged execution. Tracking issue
 [#264](https://github.com/affromero/flight-finder/issues/264).
+
+Google navigation reliability credits [aph82 (avephill)](https://github.com/avephill)
+for the [consent and content contribution](https://github.com/avephill/fairtrail/commit/7c53f77a5a029ff8f70c2f398a9c95636abae440)
+and [local-provider timeout contribution](https://github.com/avephill/fairtrail/commit/90dd4319386ff0981d4b4b0fdb702ac5216d9d55).
+The upstream adaptation fixes consent in both Google search and flight detail.
+The [consent helper](../../apps/web/src/lib/scraper/navigation/consent.ts) waits
+once for a visible exact localized action, skips hidden duplicates and limits
+generic labels to a dialog with its own consent name or heading. Click failures
+and execution cancellation propagate through canonical browser cleanup.
+Tracking issue [#265](https://github.com/affromero/flight-finder/issues/265).
+
+| Reviewed source behavior | Upstream decision and evidence |
+| --- | --- |
+| Localized consent buttons | Adapted with a bounded visibility wait and dialog scope. [Chromium regressions](../../apps/web/src/lib/scraper/navigation/consent.browser.test.ts) cover delayed and duplicate actions, adjacent booking dialogs, absence, click failure, page closure and cancellation. |
+| Reject an empty results container | Existing [Google navigation](../../apps/web/src/lib/scraper/navigate.ts) already requires prices and the requested directional route. New [canonical browser fixtures](../../apps/web/src/lib/scraper/navigation/google.browser.test.ts) exercise delayed prices, empty shells, reverse routes and flight detail. |
+| Regex prices after a failed provider response | Preserve explicit extraction failures. [Regressions](../../apps/web/src/lib/scraper/extract-prices.test.ts) confirm fare-like page text cannot turn empty or malformed provider output into guessed prices, currencies or stop counts. |
+| Force a ten-minute SDK timeout | Preserve the configured timeout and existing default in the [shared provider](../../apps/web/src/lib/scraper/shared-provider.ts). [Real HTTP tests](../../apps/web/src/lib/scraper/providers/tests/http.test.ts) verify deadlines, caller cancellation and measured usage for OpenAI, Ollama, llama.cpp and vLLM. |
+| Force Ollama Qwen3 thinking off | Preserve provider defaults. The HTTP tests verify the upstream adapter adds no forced `think` or `reasoning_effort` field. Existing [Codex reasoning controls](../../apps/web/src/lib/scraper/codex-extraction.test.ts) remain a separate explicit setting. |
+
+The audit retains existing expiry, timezone and extraction settings. No new
+fallback path or provider configuration is introduced.
 
 Pushover configuration screenshots: [before](screenshots/flight-pushover-before.png),
 [desktop](screenshots/flight-pushover-desktop.png),

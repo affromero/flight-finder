@@ -91,6 +91,16 @@ describe('extractPrices', () => {
     mockExtract.mockReset();
   });
 
+  it.each([
+    ['[]', 'empty_extraction'],
+    ['No structured answer', 'no_json_in_response'],
+    ['[{"price": invalid}]', 'json_parse_error'],
+  ])('reports %s explicitly even when page text resembles a fare', async (content, failureReason) => {
+    mockExtract.mockResolvedValue({ content, usage: { inputTokens: 12, outputTokens: 8 } });
+    const result = await extractPrices('Flights from JFK to LAX\nDelta\n10:25 AM\n5 hr 30 min\nNonstop\n€623\nEUR 623\nEUR 700', 'https://www.google.com/travel/flights', '2026-06-15');
+    expect(result).toEqual({ prices: [], usage: { inputTokens: 12, outputTokens: 8 }, failureReason });
+  });
+
   it('returns page_not_loaded when resultsFound is false', async () => {
     const result = await extractPrices(
       '<html>loading...</html>',
