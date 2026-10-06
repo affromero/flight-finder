@@ -2,6 +2,9 @@ import { getTranslations } from 'next-intl/server';
 import { formatCurrency } from '@/lib/currency';
 import { safeHttpUrl } from '@/lib/safe-url';
 import { airTimeMinutes, formatMinutes } from '@/lib/scraper/duration';
+import { latestFlightObservations, flightComparisonCurrency, lowestFlightFare } from '@/lib/flight-pricing';
+import { filterSnapshotsByTrackerFilters, type TrackerSnapshotFilters } from '@/lib/snapshot-filters';
+import { ScrapeTime } from './PriceHistorySection';
 import styles from './BestPrice.module.css';
 
 interface Snapshot {
@@ -17,51 +20,68 @@ interface Snapshot {
   vpnCountry: string | null;
   scrapedAt: string;
   status?: string;
+  travelDate?: string;
+  flightId?: string | null;
+  flightNumber?: string | null;
 }
 
-export async function BestPrice({ snapshots }: { snapshots: Snapshot[] }) {
-  const t = await getTranslations('BestPrice');
-  // Sold-out snapshots carry the last seen price (run-scrape.ts marks the row
-  // sold_out but copies the prior price). The listing is no longer bookable,
-  // so excluding them keeps a vanished cheap fare from outranking real ones
-  // and avoids a Book button that points at a dead URL.
-  const bookable = snapshots.filter((s) => s.status !== 'sold_out');
-  if (bookable.length === 0) return null;
+interface Props {
+  snapshots: Snapshot[];
+  currency?: string | null;
+  filters?: TrackerSnapshotFilters;
+  route?: { origin: string; destination: string };
+}
 
-  const best = bookable.reduce((min, s) => (s.price < min.price ? s : min), bookable[0]!);
+export async function BestPrice({ snapshots, currency, filters, route }: Props) {
+  const t = await getTranslations('BestPrice');
+  const latest = latestFlightObservations(snapshots, route);
+  const comparisonCurrency = flightComparisonCurrency(latest, currency) ?? flightComparisonCurrency(snapshots, currency);
+  const qualifying = (observations: Snapshot[]) => filters ? filterSnapshotsByTrackerFilters(observations, filters) : observations;
+  const best = lowestFlightFare(qualifying(latest), comparisonCurrency);
+  const historical = lowestFlightFare(qualifying(snapshots), comparisonCurrency);
+  if (!best && !historical) return null;
   // Duration is gate-to-gate, so on a connecting fare most of the difference
   // between two similar itineraries is ground time. Issue #190.
-  const airTime = airTimeMinutes(best.duration, best.layovers);
+  const airTime = best ? airTimeMinutes(best.duration, best.layovers) : null;
 
   return (
     <div className={styles.root}>
       <div className={styles.header}>
-        <span className={styles.label}>{t('bestPriceFound')}</span>
+        <span className={styles.label}>{t('latestObservedPrice')}</span>
       </div>
-      <div className={styles.content}>
-        <span className={styles.price}>
-          {formatCurrency(best.price, best.currency)}
-        </span>
-        <div className={styles.details}>
-          <span className={styles.airline}>{best.airline}</span>
-          <span className={styles.meta}>
-            {best.stops === 0 ? t('nonstop') : t('stops', { count: best.stops })}
-            {best.duration && ` · ${best.duration}`}
-            {airTime !== null && ` (${t('airTime', { time: formatMinutes(airTime) })})`}
-            {(best.departureTime || best.arrivalTime) && ` · ${best.departureTime ?? '?'} - ${best.arrivalTime ?? '?'}`}
+      {best ? (
+        <div className={styles.content} role="region" aria-label={t('latestObservedPrice')}>
+          <span className={styles.price}>
+            {formatCurrency(best.price, best.currency)}
           </span>
+          <div className={styles.details}>
+            <span className={styles.airline}>{best.airline}</span>
+            <span className={styles.meta}>
+              {best.stops === 0 ? t('nonstop') : t('stops', { count: best.stops })}
+              {best.duration && ` · ${best.duration}`}
+              {airTime !== null && ` (${t('airTime', { time: formatMinutes(airTime) })})`}
+              {(best.departureTime || best.arrivalTime) && ` · ${best.departureTime ?? '?'} - ${best.arrivalTime ?? '?'}`}
+            </span>
+            <span className={styles.meta}>{t('observedAt')}: <ScrapeTime iso={best.scrapedAt} /></span>
+          </div>
+          {safeHttpUrl(best.bookingUrl) && (
+            <a
+              href={safeHttpUrl(best.bookingUrl)}
+              target="_blank"
+              rel="noopener noreferrer"
+              className={styles.bookButton}
+            >
+              {t('bookOn', { airline: best.airline })}
+            </a>
+          )}
         </div>
-        {safeHttpUrl(best.bookingUrl) && (
-          <a
-            href={safeHttpUrl(best.bookingUrl)}
-            target="_blank"
-            rel="noopener noreferrer"
-            className={styles.bookButton}
-          >
-            {t('bookOn', { airline: best.airline })}
-          </a>
-        )}
-      </div>
+      ) : <p className={styles.content}>{t('noLatestFare')}</p>}
+      {historical && (
+        <aside className={styles.history} aria-label={t('historicalLow')}>
+          {t('historicalLow')}: {formatCurrency(historical.price, historical.currency)}
+          {' · '}<ScrapeTime iso={historical.scrapedAt} />
+        </aside>
+      )}
     </div>
   );
 }

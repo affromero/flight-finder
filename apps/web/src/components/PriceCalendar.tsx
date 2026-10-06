@@ -57,7 +57,7 @@ export function PriceCalendar({ snapshots, currency }: Props) {
     new Date(iso + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 
   return (
-    <div className={styles.root}>
+    <div className={styles.root} role="region" aria-label={t('title')}>
       <h3 className={styles.title}>{t('title')}</h3>
       <div className={styles.grid}>
         {days.map((d) => {

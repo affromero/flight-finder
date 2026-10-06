@@ -15,7 +15,10 @@
     "initials": "Initials"
   },
   "BestPrice": {
-    "bestPriceFound": "Best price found",
+    "latestObservedPrice": "Latest observed price",
+    "historicalLow": "Historical low",
+    "observedAt": "Observed",
+    "noLatestFare": "No latest observation matches these filters.",
     "nonstop": "Nonstop",
     "stops": "{count, plural, one {# stop} other {# stops}}",
     "bookOn": "Book on {airline}",

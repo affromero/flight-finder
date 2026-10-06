@@ -15,7 +15,10 @@
     "initials": "Iniciales"
   },
   "BestPrice": {
-    "bestPriceFound": "Mejor precio encontrado",
+    "latestObservedPrice": "Último precio observado",
+    "historicalLow": "Mínimo histórico",
+    "observedAt": "Observado",
+    "noLatestFare": "Ninguna observación reciente coincide con estos filtros.",
     "nonstop": "Directo",
     "stops": "{count, plural, one {# escala} other {# escalas}}",
     "bookOn": "Reservar en {airline}",

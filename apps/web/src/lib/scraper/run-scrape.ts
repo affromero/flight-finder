@@ -20,6 +20,7 @@ import { currentTravelContext, checkTravelAuthority, travelTransaction } from '.
 import { flightTransaction, submitFlightJob } from '../travel/flights';
 import { currentTravelExecution, travelDelay } from '../travel/execution';
 import { recordFlightAlertInTransaction } from '../notifications/flights';
+import { flightIdentifiers } from './identity/flight';
 
 const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
   'empty_extraction',
@@ -432,13 +433,7 @@ async function scrapeQueryForCountry(
   // matching against rows persisted before this rollout (kept in memory only,
   // never written to the DB).
   const withFlightIds = allPrices.map((p) => {
-    const timePart = (p.departureTime ?? '').replace(/[^0-9]/g, '') || '0000';
-    const airlinePart = p.airline.replace(/[^a-zA-Z0-9]/g, '').substring(0, 20);
-    const flightNumberPart = (p.flightNumber ?? '').replace(/\s+/g, '').toUpperCase();
-    const idTail = flightNumberPart || timePart;
-    const flightId = `${airlinePart}-${idTail}-${query.origin}-${query.destination}-${p.travelDate}`;
-    const flightIdLegacy = `${airlinePart}-${timePart}-${query.origin}-${query.destination}-${p.travelDate}`;
-    return { ...p, flightId, flightIdLegacy };
+    return { ...p, ...flightIdentifiers(query.origin, query.destination, p) };
   });
 
   // Sold-out detection: scope by BOTH queryId AND vpnCountry to avoid cross-country false positives

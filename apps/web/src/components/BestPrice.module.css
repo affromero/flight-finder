@@ -74,3 +74,11 @@
   opacity: 0.85;
   text-decoration: none;
 }
+
+.history {
+  padding: 0.75rem 1rem;
+  border-top: 1px solid var(--accent-dim);
+  font-family: var(--font-mono);
+  font-size: 0.8125rem;
+  color: var(--text-secondary);
+}
