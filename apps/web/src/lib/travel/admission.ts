@@ -3,6 +3,7 @@ import { prisma } from '@/lib/prisma';
 import type { Prisma, TravelAdmission, TravelLease } from '@/generated/prisma/client';
 import { TravelJobError } from './errors';
 import { interruptTravelRun } from './interruption';
+import { tailscaleVpnConfig } from '../scraper/vpn/tailscale-config';
 
 export interface TravelLeaseToken { id: string; owner: string; generation: number; topologyVersion: number }
 const DEFAULT_LEASE_MS = 120_000;
@@ -53,10 +54,13 @@ function duration(milliseconds: number): void {
 async function localTopology(tx: Prisma.TransactionClient) {
   const config = await tx.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { vpnProvider: true } });
   const provider = config?.vpnProvider ?? 'none';
-  if (!['none', 'expressvpn'].includes(provider)) throw new TravelJobError('Unsupported VPN configuration', 503);
-  const vpnEnabled = provider === 'expressvpn';
-  const proxy = process.env.EXPRESSVPN_SOCKS_URL || null;
-  const endpoint = process.env.EXPRESSVPN_API_URL || 'http://expressvpn:8000';
+  if (!['none', 'expressvpn', 'mullvad'].includes(provider)) throw new TravelJobError('Unsupported VPN configuration', 503);
+  const vpnEnabled = provider !== 'none';
+  let mullvad: ReturnType<typeof tailscaleVpnConfig> | undefined;
+  try { if (provider === 'mullvad') mullvad = tailscaleVpnConfig(); }
+  catch { throw new TravelJobError('Invalid VPN endpoint configuration', 503); }
+  const proxy = mullvad?.proxyUrl ?? (process.env.EXPRESSVPN_SOCKS_URL || null);
+  const endpoint = mullvad?.apiUrl ?? (process.env.EXPRESSVPN_API_URL || 'http://expressvpn:8000');
   if (vpnEnabled) {
     try {
       if (!['http:', 'https:'].includes(new URL(endpoint).protocol)) throw new Error('API protocol');

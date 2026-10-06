@@ -65,6 +65,19 @@ configuration revisions and guarded recipient receipts. The
 supports owner and capability access in all five languages. Tracking issue
 [#261](https://github.com/affromero/flight-finder/issues/261).
 
+Mullvad via Tailscale credits [Sebastian Bolanos (sbc64)](https://github.com/sbc64)
+for the [source contribution](https://github.com/sbc64/flight-finder/commit/a1dd976b8fbf0bd011c485d50d82aeb31aeddd90),
+[userspace bridge](https://github.com/sbc64/flight-finder/blob/a1dd976b8fbf0bd011c485d50d82aeb31aeddd90/scripts/tailscale-vpn-bridge.mjs)
+and [provider](https://github.com/sbc64/flight-finder/blob/a1dd976b8fbf0bd011c485d50d82aeb31aeddd90/apps/web/src/lib/scraper/vpn/mullvad-provider.ts).
+The upstream [bridge](../../scripts/vpn/tailscale-vpn-bridge.mjs) preserves the
+dedicated userspace topology and adds proxy identity binding and initial-state
+validation. The [provider](../../apps/web/src/lib/scraper/vpn/mullvad-provider.ts)
+uses canonical country lookup and browser profiles. Persistent admission,
+job cancellation and independent cleanup guard the network changes.
+[Settings](../../apps/web/src/components/vpn/VpnPreferences.tsx) supports all
+five languages and coordinates configuration saves. Tracking issue
+[#262](https://github.com/affromero/flight-finder/issues/262).
+
 The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
@@ -91,3 +104,7 @@ WhatsApp configuration screenshots: [before](screenshots/flight-whatsapp-before.
 Price rule screenshots: [before](screenshots/flight-price-rules-before.png),
 [desktop](screenshots/flight-price-rules-desktop.png),
 [mobile](screenshots/flight-price-rules-mobile.png).
+
+Mullvad settings screenshots: [before](screenshots/flight-mullvad-before.png),
+[desktop](screenshots/flight-mullvad-desktop.png),
+[mobile](screenshots/flight-mullvad-mobile.png).

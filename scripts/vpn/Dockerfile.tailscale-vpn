@@ -1,0 +1,8 @@
+ARG TAILSCALE_IMAGE=docker.io/tailscale/tailscale:v1.102.5
+FROM ${TAILSCALE_IMAGE} AS tailscale
+FROM docker.io/library/node:22-alpine
+RUN apk add --no-cache curl
+COPY --from=tailscale /usr/local/bin/tailscale /usr/local/bin/tailscale
+WORKDIR /app
+COPY scripts/vpn/tailscale-vpn-bridge.mjs ./
+CMD ["node", "tailscale-vpn-bridge.mjs"]

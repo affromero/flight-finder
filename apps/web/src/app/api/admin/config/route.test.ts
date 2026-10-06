@@ -396,6 +396,28 @@ describe('PATCH /api/admin/config — provider API keys (#149)', () => {
   });
 });
 
+describe('PATCH /api/admin/config Mullvad preferences', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockFindFirst.mockResolvedValue(null);
+    mockUpsert.mockImplementation((args: { update: Record<string, unknown> }) => Promise.resolve({ id: 'singleton', ...args.update }));
+  });
+  it('saves supported Mullvad countries without requiring an ExpressVPN code', async () => {
+    const response = await PATCH(patchRequest({ vpnProvider: 'mullvad', vpnCountries: ['US', 'DE'] }));
+    expect(response.status).toBe(200);
+    expect((await response.json()).data).toMatchObject({ vpnProvider: 'mullvad', vpnCountries: ['US', 'DE'], hasVpnActivationCode: false });
+  });
+  it('rejects a country that has no canonical browser profile', async () => {
+    const response = await PATCH(patchRequest({ vpnProvider: 'mullvad', vpnCountries: ['ZA'] }));
+    expect(response.status).toBe(400);
+    expect((await response.json()).error).toMatch(/browser profile/);
+  });
+  it('validates retained countries when switching to Mullvad', async () => {
+    mockFindFirst.mockResolvedValue({ vpnProvider: 'expressvpn', vpnCountries: ['ZA'] });
+    expect((await PATCH(patchRequest({ vpnProvider: 'mullvad' }))).status).toBe(400);
+  });
+});
+
 describe('PATCH /api/admin/config — local provider reachability (#153)', () => {
   beforeEach(() => {
     vi.clearAllMocks();

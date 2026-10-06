@@ -118,7 +118,7 @@ export function ConfirmationCard({
   const t = useTranslations('ConfirmationCard');
   const [vpnOpen, setVpnOpen] = useState(false);
   const [vpnShowAll, setVpnShowAll] = useState(false);
-  const [vpnStatus, setVpnStatus] = useState<{ configured: boolean; sidecarRunning: boolean; ready: boolean } | null>(null);
+  const [vpnStatus, setVpnStatus] = useState<{ provider?: string; configured: boolean; sidecarRunning: boolean; ready: boolean; countries?: string[] } | null>(null);
 
   useEffect(() => {
     if (!onVpnCountriesChange) return;
@@ -337,7 +337,7 @@ export function ConfirmationCard({
                 ) : (
                   <>
                     <p>{t('sidecarNotRunning')}</p>
-                    <code className={styles.vpnCommand}>docker compose -f docker-compose.prod.yml -f docker-compose.vpn.yml up -d</code>
+                    <a href="/settings" className={styles.vpnSetupLink}>{t('goToSettings')}</a>
                   </>
                 )}
               </div>
@@ -350,6 +350,7 @@ export function ConfirmationCard({
                 {(vpnShowAll ? POPULAR_COUNTRIES : POPULAR_COUNTRIES.slice(0, 12)).map((c) => (
                   <button
                     key={c.code}
+                    disabled={vpnStatus?.provider === 'mullvad' && !vpnStatus.countries?.includes(c.code) && !vpnCountries?.includes(c.code)}
                     className={`${styles.vpnChip} ${vpnCountries?.includes(c.code) ? styles.vpnChipActive : ''}`}
                     onClick={() => toggleCountry(c.code)}
                     type="button"
