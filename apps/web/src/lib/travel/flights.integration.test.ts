@@ -2,9 +2,11 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { prisma } from '@/lib/prisma';
 import { runFullScrapeForQuery, runScrapeAll, runScrapeForQuery } from '../scraper/run-scrape';
 import { getTravelAdmission } from './admission';
+import { TravelCleanupError } from './execution';
+import { cancelTravelJob } from './jobs';
 
-const boundary = vi.hoisted(() => ({ navigate: vi.fn(), extract: vi.fn() }));
-vi.mock('../scraper/navigate', async original => ({ ...await original<typeof import('../scraper/navigate')>(), navigateGoogleFlights: boundary.navigate }));
+const boundary = vi.hoisted(() => ({ navigate: vi.fn(), direct: vi.fn(), extract: vi.fn() }));
+vi.mock('../scraper/navigate', async original => ({ ...await original<typeof import('../scraper/navigate')>(), navigateGoogleFlights: boundary.navigate, navigateAirlineDirect: boundary.direct }));
 vi.mock('../scraper/extract-prices', async original => ({ ...await original<typeof import('../scraper/extract-prices')>(), extractPrices: boundary.extract }));
 
 describe.skipIf(process.env.TRAVEL_FLIGHT_INTEGRATION_TESTS !== '1')('canonical flight execution through shared PostgreSQL admission', () => {
@@ -13,7 +15,7 @@ describe.skipIf(process.env.TRAVEL_FLIGHT_INTEGRATION_TESTS !== '1')('canonical 
   const seen: { query: string; country: string | null; tunnel: boolean }[] = [];
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? 'http://invalid');
-    if (url.hostname !== '127.0.0.1' || url.port !== '55440' || url.pathname !== '/travel_flight_test') throw new Error('Flight cutover tests require disposable localhost:55440/travel_flight_test');
+    if (url.hostname !== '127.0.0.1' || !url.port || url.pathname !== '/travel_flight_test') throw new Error('Flight cutover tests require an explicitly ported disposable localhost/travel_flight_test');
     if (await prisma.query.count({ where: { active: true } })) throw new Error('Flight cutover tests require no unrelated active queries in the disposable database');
     previous = await prisma.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { vpnProvider: true, vpnCountries: true, enabled: true, aggregatorsEnabled: true, defaultCurrency: true, defaultCountry: true } });
     owner = (await prisma.user.create({ data: { username: `flight-cutover-${crypto.randomUUID()}` } })).id;
@@ -35,6 +37,7 @@ describe.skipIf(process.env.TRAVEL_FLIGHT_INTEGRATION_TESTS !== '1')('canonical 
       return { html: '<html>Provider result</html>', url: 'https://www.google.com/travel/flights', resultsFound: true, source: 'google_flights' };
     });
     boundary.extract.mockReset().mockImplementation(async (...args) => ({ prices: [{ travelDate: args[2], price: 350, currency: args[7], airline: 'Delta', bookingUrl: '', stops: 0, duration: '5h' }], usage: { inputTokens: 0, outputTokens: 0 } }));
+    boundary.direct.mockReset();
   });
   afterEach(async () => {
     await prisma.travelJob.deleteMany();
@@ -52,6 +55,106 @@ describe.skipIf(process.env.TRAVEL_FLIGHT_INTEGRATION_TESTS !== '1')('canonical 
   async function query(origin = 'LHR') {
     return prisma.query.create({ data: { userId: owner, rawInput: 'Flight cutover regression', origin, originName: origin, destination: 'JFK', destinationName: 'New York', dateFrom: new Date('2027-05-01'), dateTo: new Date('2027-05-10'), expiresAt: new Date('2027-05-01'), currency: 'GBP', cabinClass: 'business', scrapeInterval: 6 } });
   }
+  async function directQuery(reverse = false) {
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { vpnProvider: 'none', vpnCountries: [], cabinAlertBaselineCutoff: new Date() } });
+    const created = await query();
+    return prisma.query.update({ where: { id: created.id }, data: { preferredAirlines: reverse ? ['American Airlines', 'Delta'] : ['Delta', 'American Airlines'] } });
+  }
+  const fare = (airline: string, flightNumber: string, travelDate = '2027-05-01') => ({ travelDate, price: 350, currency: 'GBP', airline, flightNumber, bookingUrl: '', stops: 0, duration: '5h' });
+  const navigation = (airline: string, resultsFound = true) => ({ html: airline, url: 'https://example.com/flight', resultsFound, source: 'airline_direct' });
+  it.each(['navigation', 'unloaded', 'throw', 'empty', 'filtered'].flatMap(failure => [false, true].map(reverse => ({ failure, reverse }))))('preserves stored fares and partial diagnostics after $failure, reversed=$reverse', async ({ failure, reverse }) => {
+    const row = await directQuery(reverse);
+    await prisma.priceSnapshot.create({ data: { ...fare('American Airlines', 'AA200'), travelDate: row.dateFrom, queryId: row.id, flightId: 'AmericanAirlines-AA200-LHR-JFK-2027-05-01' } });
+    boundary.direct.mockImplementation(async (_params, airline) => {
+      if (airline === 'American Airlines' && failure === 'navigation') throw new Error('Provider unavailable');
+      return navigation(airline, airline !== 'American Airlines' || failure !== 'unloaded');
+    });
+    boundary.extract.mockImplementation(async html => {
+      if (html === 'Delta') return { prices: [fare('Delta', 'DL100')], usage: { inputTokens: 0, outputTokens: 0 } };
+      if (failure === 'throw') throw new Error('Extraction failed');
+      return { prices: [], failureReason: failure === 'filtered' ? 'all_filtered_out' : 'empty_extraction', usage: { inputTokens: 0, outputTokens: 0 } };
+    });
+    const category = failure === 'navigation' || failure === 'unloaded' ? 'page_not_loaded' : failure === 'throw' ? 'llm_error' : failure === 'filtered' ? 'all_filtered_out' : 'empty_extraction';
+    expect(await runScrapeForQuery(row.id)).toMatchObject({ status: 'partial', snapshotsCount: 1, error: expect.stringContaining(`2027-05-01: American Airlines: ${category}`) });
+    expect(await prisma.priceSnapshot.findMany({ where: { queryId: row.id }, select: { airline: true, status: true }, orderBy: { airline: 'asc' } })).toEqual([{ airline: 'American Airlines', status: 'available' }, { airline: 'Delta', status: 'available' }]);
+    expect(await prisma.fetchRun.findFirstOrThrow({ where: { queryId: row.id } })).toMatchObject({ status: 'partial', snapshotsCount: 1, error: expect.stringContaining('American Airlines'), completedAt: expect.any(Date) });
+    expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+  });
+  it('infers disappearance only on fully checked dates in a mixed run', async () => {
+    const created = await directQuery();
+    const row = await prisma.query.update({ where: { id: created.id }, data: { tripType: 'one_way', dateTo: new Date('2027-05-02') } });
+    for (const date of ['2027-05-01', '2027-05-02']) await prisma.priceSnapshot.create({ data: { ...fare('American Airlines', 'AA200', date), travelDate: new Date(date), queryId: row.id, flightId: `AmericanAirlines-AA200-LHR-JFK-${date}` } });
+    boundary.direct.mockImplementation(async (params, airline) => {
+      if (airline === 'American Airlines' && params.dateFrom.toISOString().startsWith('2027-05-01')) throw new Error('Provider unavailable');
+      return navigation(airline);
+    });
+    boundary.extract.mockImplementation(async (airline, _url, date) => ({ prices: [fare(airline, airline === 'Delta' ? 'DL100' : 'AA300', date)], usage: { inputTokens: 0, outputTokens: 0 } }));
+    expect(await runScrapeForQuery(row.id)).toMatchObject({ status: 'partial', snapshotsCount: 3 });
+    expect(await prisma.priceSnapshot.findMany({ where: { queryId: row.id, status: 'sold_out' }, select: { travelDate: true, flightNumber: true } })).toEqual([{ travelDate: new Date('2027-05-02'), flightNumber: 'AA200' }]);
+  });
+  it('reports recovered aggregator results as complete after all direct checks fail', async () => {
+    const row = await directQuery();
+    boundary.direct.mockRejectedValue(new Error('Direct source unavailable'));
+    expect(await runScrapeForQuery(row.id)).toMatchObject({ status: 'success', snapshotsCount: 1 });
+    expect(await prisma.fetchRun.findFirstOrThrow({ where: { queryId: row.id } })).toMatchObject({ status: 'success', error: null });
+  });
+  it('withholds disappearance inference when one airline returns fares for another date', async () => {
+    const row = await directQuery();
+    await prisma.priceSnapshot.create({ data: { ...fare('American Airlines', 'AA200'), queryId: row.id, travelDate: row.dateFrom, flightId: 'AmericanAirlines-AA200-LHR-JFK-2027-05-01' } });
+    boundary.direct.mockImplementation(async (_params, airline) => navigation(airline));
+    boundary.extract.mockImplementation(async airline => ({ prices: [fare(airline, airline === 'Delta' ? 'DL100' : 'AA300', airline === 'Delta' ? '2027-05-01' : '2027-05-02')], usage: { inputTokens: 0, outputTokens: 0 } }));
+    expect(await runScrapeForQuery(row.id)).toMatchObject({ status: 'partial', snapshotsCount: 2, error: expect.stringContaining('American Airlines: date_mismatch') });
+    expect(await prisma.priceSnapshot.count({ where: { queryId: row.id, status: 'sold_out' } })).toBe(0);
+    expect(await prisma.priceSnapshot.count({ where: { queryId: row.id, status: 'available' } })).toBe(3);
+  });
+  it('rejects partial results if criteria change during a failing source check', async () => {
+    const row = await directQuery();
+    boundary.direct.mockImplementation(async (_params, airline) => navigation(airline));
+    boundary.extract.mockImplementation(async airline => {
+      if (airline === 'American Airlines') {
+        await prisma.query.update({ where: { id: row.id }, data: { maxPrice: 100 } });
+        throw new Error('Extraction failed');
+      }
+      return { prices: [fare('Delta', 'DL100')], usage: { inputTokens: 0, outputTokens: 0 } };
+    });
+    await expect(runScrapeForQuery(row.id)).rejects.toThrow(/changed/);
+    expect(await prisma.priceSnapshot.count({ where: { queryId: row.id } })).toBe(0);
+  });
+  it('retains the pending alert for a new low found during a partial scrape', async () => {
+    const row = await directQuery();
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { cabinAlertBaselineCutoff: new Date(Date.now() - 86_400_000) } });
+    await prisma.priceSnapshot.create({ data: { queryId: row.id, travelDate: row.dateFrom, price: 400, currency: 'GBP', airline: 'Delta', scrapedAt: new Date(Date.now() - 60_000) } });
+    boundary.direct.mockImplementation(async (_params, airline) => {
+      if (airline === 'American Airlines') throw new Error('Provider unavailable');
+      return navigation(airline);
+    });
+    boundary.extract.mockResolvedValue({ prices: [fare('Delta', 'DL100')], usage: { inputTokens: 0, outputTokens: 0 } });
+    expect(await runScrapeForQuery(row.id)).toMatchObject({ status: 'partial', snapshotsCount: 1 });
+    expect(await prisma.travelAlertDelivery.findFirstOrThrow({ where: { queryId: row.id } })).toMatchObject({ pending: true, message: { data: { currentMin: 350, baseline: 400, currency: 'GBP' } } });
+  });
+  it('commits no partial fares after the owner cancels the running check', async () => {
+    const row = await directQuery();
+    boundary.direct.mockImplementation(async (_params, airline) => navigation(airline));
+    boundary.extract.mockImplementation(async airline => {
+      if (airline === 'American Airlines') {
+        const job = await prisma.travelJob.findFirstOrThrow({ where: { queryId: row.id, status: 'running' } });
+        expect(await cancelTravelJob(job.id, row.userId, false)).toBe(true);
+        throw new Error('Extraction interrupted');
+      }
+      return { prices: [fare('Delta', 'DL100')], usage: { inputTokens: 0, outputTokens: 0 } };
+    });
+    await expect(runScrapeForQuery(row.id)).rejects.toThrow(/cancelled/i);
+    expect(await prisma.priceSnapshot.count({ where: { queryId: row.id } })).toBe(0);
+    expect(await prisma.travelAlertDelivery.count({ where: { queryId: row.id } })).toBe(0);
+    expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+  });
+  it('quarantines unsafe cleanup without committing partial fares', async () => {
+    const row = await directQuery();
+    boundary.direct.mockRejectedValue(new TravelCleanupError([new Error('Close failed')], 'Unsafe browser cleanup'));
+    await expect(runScrapeForQuery(row.id)).rejects.toThrow(/cleanup/i);
+    expect(await prisma.priceSnapshot.count({ where: { queryId: row.id } })).toBe(0);
+    expect((await getTravelAdmission()).quarantinedAt).toBeInstanceOf(Date);
+  });
   it('keeps the manual FetchRun across local and verified VPN passes without changing query preferences', async () => {
     await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { cabinAlertBaselineCutoff: null } });
     const row = await query();

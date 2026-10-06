@@ -18,7 +18,8 @@ import { getCountryProfile } from './country-profiles';
 import { expandQueryDates } from './scrape-dates';
 import { currentTravelContext, checkTravelAuthority, travelTransaction } from '../travel/context';
 import { flightTransaction, submitFlightJob } from '../travel/flights';
-import { currentTravelExecution, travelDelay } from '../travel/execution';
+import { currentTravelExecution, travelDelay, TravelCleanupError } from '../travel/execution';
+import { TravelJobError } from '../travel/errors';
 import { recordFlightAlertInTransaction } from '../notifications/flights';
 import { flightIdentifiers } from './identity/flight';
 
@@ -117,6 +118,14 @@ interface PairScrapeResult {
   usage: ExtractionUsage;
   sources: Set<string>;
   lastFailureReason: string | undefined;
+  availabilityConfirmed: boolean;
+  failures: string[];
+}
+
+async function checkScrapeFailure(error: unknown): Promise<void> {
+  if (error instanceof TravelCleanupError || error instanceof TravelJobError) throw error;
+  currentTravelExecution()?.check();
+  await checkTravelAuthority();
 }
 
 /**
@@ -150,6 +159,7 @@ async function scrapeOneDatePair(
   proxyUrl: string | undefined,
   vpnCountry: string | null,
 ): Promise<PairScrapeResult> {
+  const travelDateFallback = pairParams.dateFrom.toISOString().split('T')[0]!;
   if (pairParams.sourceUrl) {
     const result = await scrapeImportedFlight(
       { ...pairParams, sourceUrl: pairParams.sourceUrl },
@@ -163,17 +173,20 @@ async function scrapeOneDatePair(
       usage: result.usage,
       sources: new Set(['google_flights']),
       lastFailureReason: result.failureReason,
+      availabilityConfirmed: !result.failureReason && result.prices.some(price => price.travelDate === travelDateFallback),
+      failures: result.failureReason ? [`google_flights: ${result.failureReason}`] : result.prices.some(price => price.travelDate === travelDateFallback) ? [] : ['google_flights: date_mismatch'],
     };
   }
   const effectiveCurrency = pairParams.currency ?? null;
-  const travelDateFallback = pairParams.dateFrom.toISOString().split('T')[0]!;
 
   const sources = new Set<string>();
   let prices: import('./extract-prices').PriceData[] = [];
   let usage = sumTokenUsage();
   let lastFailureReason: string | undefined;
+  let availabilityConfirmed = false;
+  let failures: string[] = [];
 
-  async function extractFromNav(nav: NavigationResult, attempt: number): Promise<void> {
+  async function extractFromNav(nav: NavigationResult, attempt: number): Promise<boolean> {
     sources.add(nav.source);
     const result = await extractPrices(
       nav.html, nav.url, travelDateFallback, filters, undefined, nav.resultsFound, nav.source, effectiveCurrency,
@@ -184,11 +197,27 @@ async function scrapeOneDatePair(
       lastFailureReason = result.failureReason;
       await saveDebugHtml(queryId, nav.html, attempt);
     } else {
-      lastFailureReason = undefined;
+      lastFailureReason = result.prices.length > 0 && !result.prices.some(price => price.travelDate === travelDateFallback) ? 'date_mismatch' : undefined;
     }
+    return !lastFailureReason && result.prices.some(price => price.travelDate === travelDateFallback);
+  }
+
+  async function extractDirectNav(nav: NavigationResult, airline: string, attempt: number): Promise<boolean> {
+    try {
+      if (await extractFromNav(nav, attempt)) return true;
+      failures.push(`${airline}: ${lastFailureReason ?? 'empty_extraction'}`);
+    } catch (error) {
+      await checkScrapeFailure(error);
+      lastFailureReason = 'llm_error';
+      failures.push(`${airline}: llm_error`);
+      usage = sumTokenUsage(usage, { inputTokens: null, outputTokens: null });
+      console.error(`[scrape] query=${queryId} pair=${travelDateFallback} source=${nav.source} extraction failed`);
+    }
+    return false;
   }
 
   for (let attempt = 1; attempt <= MAX_EXTRACT_ATTEMPTS; attempt++) {
+    failures = [];
     const vpnLabel = vpnCountry ? ` vpn=${vpnCountry}` : '';
     console.log(`[scrape] query=${queryId}${vpnLabel} pair=${travelDateFallback} extract attempt ${attempt}/${MAX_EXTRACT_ATTEMPTS}`);
 
@@ -200,15 +229,23 @@ async function scrapeOneDatePair(
         directAirlines.map(async (airline) => {
           try {
             const result = await navigateAirlineDirect(pairParams, airline, countryProfile, proxyUrl);
+            if (!result.resultsFound) failures.push(`${airline}: page_not_loaded`);
             return result.resultsFound ? result : null;
-          } catch {
+          } catch (error) {
+            await checkScrapeFailure(error);
+            failures.push(`${airline}: page_not_loaded`);
+            console.error(`[scrape] query=${queryId} pair=${travelDateFallback} airline=${airline} navigation failed`);
             return null;
           }
         })
       );
       const valid = results.filter((r): r is NavigationResult => r !== null);
-      for (const nav of valid) {
-        await extractFromNav(nav, attempt);
+      availabilityConfirmed = valid.length === directAirlines.length;
+      for (let index = 0; index < results.length; index++) {
+        const nav = results[index];
+        if (!nav) continue;
+        const complete = await extractDirectNav(nav, directAirlines[index]!, attempt);
+        availabilityConfirmed &&= complete;
       }
     }
 
@@ -247,11 +284,14 @@ async function scrapeOneDatePair(
               continue;
           }
         } catch (err) {
-          currentTravelExecution()?.check();
+          await checkScrapeFailure(err);
+          failures.push(`${source}: page_not_loaded`);
           console.error(`[scrape] query=${queryId} pair=${travelDateFallback} aggregator=${source} threw err=${err instanceof Error ? err.message : err}`);
           continue;
         }
-        await extractFromNav(nav, attempt);
+        availabilityConfirmed = await extractFromNav(nav, attempt);
+        if (availabilityConfirmed) failures = [];
+        else failures.push(`${source}: ${lastFailureReason ?? 'empty_extraction'}`);
         // all_filtered_out short-circuits — real flights existed, filters excluded them
         if (lastFailureReason === 'all_filtered_out') break;
       }
@@ -266,7 +306,7 @@ async function scrapeOneDatePair(
     }
   }
 
-  return { prices, usage, sources, lastFailureReason };
+  return { prices, usage, sources, lastFailureReason: lastFailureReason ?? (failures.length ? 'page_not_loaded' : undefined), availabilityConfirmed, failures };
 }
 
 /** Scrape a single query for a single country pass (local or VPN). */
@@ -351,6 +391,8 @@ async function scrapeQueryForCountry(
   let lastFailureReason: string | undefined;
   const sources = new Set<string>();
   const scrapedTravelDates = new Set<string>();
+  const incompleteTravelDates = new Set<string>();
+  const partialFailures: string[] = [];
 
   for (const pair of pairs) {
     const pairTravelDate = pair.outbound.toISOString().slice(0, 10);
@@ -368,11 +410,13 @@ async function scrapeQueryForCountry(
         queryId, pairParams, filters, directAirlines, useAirlineDirect, aggregatorChain, countryProfile, proxyUrl, vpnCountry,
       );
     } catch (err) {
-      currentTravelExecution()?.check();
+      await checkScrapeFailure(err);
       const msg = err instanceof Error ? err.message : String(err);
       console.error(`[scrape] query=${queryId} pair=${pairTravelDate} threw err=${msg}`);
       totalUsage = sumTokenUsage(totalUsage, { inputTokens: null, outputTokens: null });
       lastFailureReason = lastFailureReason ?? 'page_not_loaded';
+      incompleteTravelDates.add(pairTravelDate);
+      partialFailures.push(`${pairTravelDate}: check_failed`);
       continue;
     }
 
@@ -382,12 +426,14 @@ async function scrapeQueryForCountry(
     if (pairResult.lastFailureReason) {
       lastFailureReason = pairResult.lastFailureReason;
     }
-    // Only mark this travelDate as authoritatively scraped if the pair
-    // produced prices. Without this gate, a pair that hit page_not_loaded
-    // or llm_error would still flag prior snapshots for that date as
-    // sold_out, even though we did not actually verify availability.
-    if (pairResult.prices.length > 0) {
+    // A successful member of a partially checked date cannot establish which
+    // other flights disappeared. Retain its fares but withhold tombstones for
+    // the date until every attempted source completed its extraction.
+    if (pairResult.availabilityConfirmed && pairResult.prices.some(price => price.travelDate === pairTravelDate)) {
       scrapedTravelDates.add(pairTravelDate);
+    } else {
+      incompleteTravelDates.add(pairTravelDate);
+      partialFailures.push(`${pairTravelDate}: ${pairResult.failures.join(', ') || 'check_incomplete'}`);
     }
   }
 
@@ -530,14 +576,17 @@ async function scrapeQueryForCountry(
       llm_error: 'LLM call failed (timeout, rate limit, or provider error). The provider may be temporarily unavailable.',
       json_parse_error: 'LLM returned invalid JSON. Provider output was malformed or truncated.',
     };
-    const errorMsg = failureReason ? failureMessages[failureReason] : undefined;
+    const errorMsg = allPrices.length > 0 && incompleteTravelDates.size > 0
+      ? `Some flight checks did not complete (${partialFailures.slice(0, 20).join('; ')}). Fares from successful checks were retained; unavailable flights were not inferred for these dates.`
+      : failureReason ? failureMessages[failureReason] : undefined;
+    const status = allPrices.length === 0 ? 'failed' : incompleteTravelDates.size > 0 ? 'partial' : 'success';
 
     const sourceLabel = sources.size === 1 ? [...sources][0]! : [...sources].join('+');
 
     await tx.fetchRun.update({
       where: { id: fetchRunId },
       data: {
-        status: allPrices.length > 0 ? 'success' : 'failed',
+        status,
         source: sourceLabel,
         snapshotsCount: allPrices.length,
         extractionCost,
@@ -548,7 +597,7 @@ async function scrapeQueryForCountry(
 
     return {
       queryId,
-      status: allPrices.length > 0 ? 'success' : 'failed',
+      status,
       snapshotsCount: allPrices.length,
       extractionCost,
       error: errorMsg,
@@ -617,7 +666,7 @@ export async function runScrapeForQuery(
       queryId, query, searchParams, config, vpnCountry ?? null, proxyUrl, fetchRun.id
     );
   } catch (err) {
-    currentTravelExecution()?.check();
+    await checkScrapeFailure(err);
     const errorMsg = err instanceof Error ? err.message : String(err);
     // Log before updating the DB row so cron operators can diagnose silent
     // failures from logs alone (issue #65). Without this, the only signal
