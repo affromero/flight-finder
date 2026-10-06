@@ -3,7 +3,8 @@ import type { CredentialValues } from 'thesidedoor-core/ai';
 import { sumTokenUsage, usageFromGenerationError } from 'thesidedoor-core/ai/usage';
 import { MAX_PRICE_VALUE } from '@/lib/limits';
 import { prisma } from '@/lib/prisma';
-import { coerceLayovers, parseDurationToMinutes, type Layover } from './duration';
+import { coerceLayovers, type Layover } from './duration';
+import { filterSnapshotsByTrackerFilters } from '../snapshot-filters';
 import type { NavigationSource } from './navigate';
 import { acquireProviderToken } from './rate-limit';
 
@@ -29,6 +30,7 @@ export interface QueryFilters {
   maxDurationHours: number | null;
   preferredAirlines: string[];
   timePreference: string;
+  strictDepartureTime?: boolean;
   cabinClass: string;
 }
 
@@ -83,7 +85,10 @@ function buildSystemPrompt(filters: QueryFilters, maxResults: number, source: Na
       evening: 'departing after 6:00 PM',
       redeye: 'departing after 10:00 PM (red-eye flights)',
     };
-    filterRules.push(`- Prefer flights ${timeMap[filters.timePreference] ?? ''}`);
+    const strictTime = filters.timePreference === 'redeye' ? 'departing at or after 10:00 PM (red-eye flights)' : timeMap[filters.timePreference];
+    filterRules.push(filters.strictDepartureTime
+      ? `- ONLY include flights ${strictTime ?? ''}. Use the outbound airport's local departure time. Exclude unknown departure times.`
+      : `- Prefer flights ${timeMap[filters.timePreference] ?? ''}`);
   }
   if (filters.cabinClass && filters.cabinClass !== 'economy') {
     const cabinLabel: Record<string, string> = {
@@ -550,21 +555,13 @@ ${UNTRUSTED_CLOSE}`;
     return { prices: [], usage: result.usage, failureReason: 'all_filtered_out' };
   }
 
-  // Apply server side duration filter. The LLM extracts the duration string
-  // (e.g. "11h 20m") and we parse it deterministically here so the filter is
-  // testable without the LLM and consistent across providers.
-  const durationFiltered = filters.maxDurationHours
-    ? validPrices.filter((p) => {
-        const minutes = parseDurationToMinutes(p.duration);
-        return minutes === null || minutes <= filters.maxDurationHours! * 60;
-      })
-    : validPrices;
+  const criteriaFiltered = filterSnapshotsByTrackerFilters(validPrices, filters);
 
-  if (durationFiltered.length === 0) {
-    console.log(`[extract] FAIL all_filtered_out — duration filter (max ${filters.maxDurationHours}h) removed all ${validPrices.length} flights`);
+  if (criteriaFiltered.length === 0) {
+    console.log(`[extract] FAIL all_filtered_out: tracker criteria removed all ${validPrices.length} flights`);
     return { prices: [], usage: result.usage, failureReason: 'all_filtered_out' };
   }
 
-  console.log(`[extract] OK — ${durationFiltered.length} flights extracted (cheapest: $${durationFiltered[0]?.price})`);
-  return { prices: durationFiltered, usage: result.usage };
+  console.log(`[extract] OK: ${criteriaFiltered.length} flights extracted (cheapest: $${criteriaFiltered[0]?.price})`);
+  return { prices: criteriaFiltered, usage: result.usage };
 }

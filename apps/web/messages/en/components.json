@@ -1,4 +1,14 @@
 {
+  "DepartureWindowFields": {
+    "window": "Outbound departure window",
+    "any": "Any time",
+    "morning": "Morning (before 12:00)",
+    "afternoon": "Afternoon (12:00 to 18:00)",
+    "evening": "Evening (after 18:00)",
+    "redeye": "Red-eye (22:00 to 23:59)",
+    "strict": "Only include flights in this window",
+    "help": "Times are local to the departure airport. With strict filtering, flights with unknown departure times are excluded. Otherwise, this is a preference."
+  },
   "AggregatorPicker": {
     "sources": "Sources",
     "disabledByAdmin": "Disabled by admin"

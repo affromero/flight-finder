@@ -324,6 +324,7 @@ async function scrapeQueryForCountry(
     maxStops: number | null;
     maxDurationHours: number | null;
     timePreference: string;
+    strictDepartureTime?: boolean;
     cabinClass: string;
     flexibility: number;
     user: { preferredAggregators: string[] } | null;
@@ -364,6 +365,7 @@ async function scrapeQueryForCountry(
     maxDurationHours: query.maxDurationHours,
     preferredAirlines: query.preferredAirlines,
     timePreference: query.timePreference,
+    strictDepartureTime: query.strictDepartureTime ?? false,
     cabinClass: query.cabinClass,
   };
   const provider = config?.provider ?? 'anthropic';

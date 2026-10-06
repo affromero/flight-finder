@@ -3,6 +3,7 @@ import { Box, Text, useApp, useInput } from 'ink';
 import Spinner from 'ink-spinner';
 import { prisma } from '@/lib/prisma';
 import { ACTUAL_FLIGHT_FARE_WHERE } from '../lib/flight-pricing.js';
+import { filterSnapshotsByTrackerFilters } from '../lib/criteria/snapshot-filters.js';
 import { PriceChart } from '../components/PriceChart.js';
 import { BestPriceCard } from '../components/BestPriceCard.js';
 import { formatDate, formatCurrency, formatStops, formatTimeAgo } from '../lib/format.js';
@@ -168,13 +169,14 @@ export function QueryView({ id, onBack }: QueryViewProps) {
         return;
       }
 
-      const snapshots = row.snapshots.map((s) => ({
+      const snapshots = filterSnapshotsByTrackerFilters(row.snapshots, row).map((s) => ({
         id: s.id,
         price: s.price,
         currency: s.currency,
         airline: s.airline,
         stops: s.stops,
         duration: s.duration,
+        departureTime: s.departureTime,
         bookingUrl: s.bookingUrl,
         travelDate: s.travelDate,
         scrapedAt: s.scrapedAt,

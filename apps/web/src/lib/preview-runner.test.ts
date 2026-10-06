@@ -733,11 +733,13 @@ describe('round-trip pricing', () => {
     expect(mockNavigateGoogleFlights.mock.calls.every(([params]) => params.tripType === 'round_trip')).toBe(true);
   });
 
-  it('keeps preview caches separate when price limits or airline preferences change', () => {
+  it('keeps preview caches separate when criteria or strict departure mode change', () => {
     const base = { maxPrice: null, maxStops: null, maxDurationHours: null, preferredAirlines: [], timePreference: 'any' };
     const key = (filters: Parameters<typeof buildCacheKey>[7]) => buildCacheKey('YUL', 'NRT', '2027-04-15', '2027-04-30', 'economy', 'round_trip', 'CAD', filters);
     expect(key(base)).not.toBe(key({ ...base, maxPrice: 2000 }));
     expect(key(base)).not.toBe(key({ ...base, preferredAirlines: ['Lufthansa'] }));
+    expect(key({ ...base, timePreference: 'morning', strictDepartureTime: false })).not.toBe(key({ ...base, timePreference: 'morning', strictDepartureTime: true }));
+    expect(key({ ...base, timePreference: 'morning', strictDepartureTime: true })).not.toBe(key({ ...base, timePreference: 'afternoon', strictDepartureTime: true }));
   });
 });
 

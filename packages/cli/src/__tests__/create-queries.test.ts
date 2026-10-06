@@ -55,6 +55,19 @@ describe('createTrackedQueries', () => {
     mockSnapshotCreateMany.mockClear();
   });
 
+  it('preserves explicit departure criteria, duration cap and selected flight identity', async () => {
+    const flight = { travelDate: '2026-11-07', price: 431, currency: 'EUR', airline: 'Delta', bookingUrl: 'https://delta.com', stops: 0, duration: '2h', layovers: null, departureTime: '09:00', arrivalTime: '11:00', seatsLeft: null, flightNumber: 'DL 345' };
+    await createTrackedQueries({ ...baseParsed, timePreference: 'morning', strictDepartureTime: true, maxDurationHours: 4 }, 'morning flight', [{ route: baseRoute, flights: [flight] }]);
+    expect(mockQueryCreate.mock.calls[0]?.[0].data).toMatchObject({ timePreference: 'morning', strictDepartureTime: true, maxDurationHours: 4 });
+    expect(mockSnapshotCreateMany.mock.calls[0]?.[0].data[0]).toMatchObject({ departureTime: '09:00', arrivalTime: '11:00', flightNumber: 'DL 345', flightId: 'Delta-DL345-BRI-JFK-2026-11-07' });
+  });
+
+  it('rejects incompatible strict selected flights before persisting a tracker', async () => {
+    const flight = { travelDate: '2026-11-07', price: 431, currency: 'EUR', airline: 'Delta', bookingUrl: null, stops: 0, duration: null, layovers: null, departureTime: '19:00', arrivalTime: null, seatsLeft: null, flightNumber: null };
+    await expect(createTrackedQueries({ ...baseParsed, timePreference: 'morning', strictDepartureTime: true }, 'morning flight', [{ route: baseRoute, flights: [flight] }])).rejects.toThrow('criteria');
+    expect(mockQueryCreate.mock.calls).toEqual([]);
+  });
+
   // Issue 65: a picked Turkish flight used to silently flag the saved query as
   // preferredAirlines=['Turkish'], routing cron through a broken
   // turkishairlines.com URL forever.

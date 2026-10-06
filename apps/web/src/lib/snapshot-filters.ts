@@ -1,10 +1,13 @@
-import { parseDurationToMinutes } from '@/lib/scraper/duration';
+import { parseDurationToMinutes } from './scraper/duration';
+import { matchesDepartureWindow } from './criteria/departure';
 
 export interface TrackerSnapshotFilters {
   maxPrice: number | null | undefined;
   maxStops: number | null | undefined;
   maxDurationHours: number | null | undefined;
   preferredAirlines: readonly string[] | null | undefined;
+  timePreference?: string | null;
+  strictDepartureTime?: boolean;
 }
 
 interface FilterableSnapshot {
@@ -12,6 +15,7 @@ interface FilterableSnapshot {
   stops: number;
   duration: string | null;
   airline: string;
+  departureTime?: string | null;
 }
 
 function airlineMatches(snapshotAirline: string, preferredAirline: string): boolean {
@@ -38,6 +42,7 @@ export function filterSnapshotsByTrackerFilters<T extends FilterableSnapshot>(
   const preferredAirlines = filters.preferredAirlines?.filter((airline) => airline.trim()) ?? [];
 
   return snapshots.filter((snapshot) => {
+    if (filters.strictDepartureTime && !matchesDepartureWindow(snapshot.departureTime, filters.timePreference)) return false;
     if (filters.maxPrice !== null && filters.maxPrice !== undefined && snapshot.price > filters.maxPrice) {
       return false;
     }

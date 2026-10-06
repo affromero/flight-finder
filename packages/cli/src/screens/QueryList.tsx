@@ -3,6 +3,7 @@ import { Box, Text, useInput, useApp } from 'ink';
 import Spinner from 'ink-spinner';
 import { prisma } from '@/lib/prisma';
 import { ACTUAL_FLIGHT_FARE_WHERE } from '../lib/flight-pricing.js';
+import { filterSnapshotsByTrackerFilters } from '../lib/criteria/snapshot-filters.js';
 import { formatDate, formatCurrency, formatTimeAgo } from '../lib/format.js';
 
 interface QueryRow {
@@ -42,7 +43,7 @@ export function QueryList({ onView }: QueryListProps) {
             snapshots: {
               where: ACTUAL_FLIGHT_FARE_WHERE,
               orderBy: { price: 'asc' },
-              select: { price: true },
+              select: { price: true, stops: true, duration: true, airline: true, departureTime: true },
             },
             fetchRuns: {
               orderBy: { startedAt: 'desc' },
@@ -53,7 +54,7 @@ export function QueryList({ onView }: QueryListProps) {
         });
 
         setQueries(
-          rows.map((r) => ({
+          rows.map((row) => ({ ...row, snapshots: filterSnapshotsByTrackerFilters(row.snapshots, row) })).map((r) => ({
             id: r.id,
             origin: r.origin,
             originName: r.originName,

@@ -38,6 +38,7 @@ interface ScrapeRouteParams {
   maxDurationHours: number | null;
   preferredAirlines: string[];
   timePreference: string;
+  strictDepartureTime?: boolean;
   currency: string | null;
 }
 
@@ -53,6 +54,7 @@ async function scrapeRoute(params: ScrapeRouteParams): Promise<PriceData[]> {
     maxDurationHours: params.maxDurationHours,
     preferredAirlines: airlines,
     timePreference: params.timePreference,
+    strictDepartureTime: params.strictDepartureTime ?? false,
     cabinClass,
   };
 
@@ -205,6 +207,7 @@ export async function previewFlights({ parsed, onProgress }: PreviewParams): Pro
         maxDurationHours: parsed.maxDurationHours,
         preferredAirlines: parsed.preferredAirlines,
         timePreference: parsed.timePreference || 'any',
+        strictDepartureTime: parsed.strictDepartureTime ?? false,
         currency: parsed.currency,
       });
 

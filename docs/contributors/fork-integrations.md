@@ -9,6 +9,14 @@ informs upstream integrations. Source links identify the reviewed revisions.
 | [sammorris01](https://github.com/sammorris01) | [Latest-price card](https://github.com/sammorris01/flight-finder/blob/d2536f7750cdca00c4715d23e851e6c78102f21b/apps/web/src/components/BestPrice.tsx) | [Latest observed fares](../../apps/web/src/lib/flight-pricing.ts), inspired by Sam's change to use recent fares in the booking card. Upstream selection preserves independent dates and VPN observations, reconciles legacy identities and compares one currency. Historical lows remain dated information. Tracking issue [#255](https://github.com/affromero/flight-finder/issues/255). |
 | [sammorris01](https://github.com/sammorris01) | [Missing-flight inference](https://github.com/sammorris01/flight-finder/commit/016e41f8deba025f557ed1b62e64bf5a41913b39), [flight deduplication](https://github.com/sammorris01/flight-finder/commit/9bcefe85d9a3139b59bb1cb7fe92d512199670ba) | The audit of [canonical scraping](../../apps/web/src/lib/scraper/run-scrape.ts) found that identity-aware deduplication and failed/unsampled date protection were already covered upstream. The adaptation retains successful fares when another airline fails, prevents disappearance inference on partially checked dates, and records partial-run diagnostics. [PostgreSQL regressions](../../apps/web/src/lib/travel/flights.integration.test.ts) exercise both source orders, mixed dates, recovered fallback, stale criteria and unsafe cleanup. Tracking issue [#256](https://github.com/affromero/flight-finder/issues/256). |
 
+Departure criteria credit [sammorris01](https://github.com/sammorris01) for
+[shared flight filtering](https://github.com/sammorris01/flight-finder/commit/743fdd38aa6c83331634ef44808fd55346a28637)
+and the [departure-window contribution](https://github.com/sammorris01/flight-finder/commit/51e401aeca15e6f3abcc4cc9096e214855d16121).
+The upstream adaptation adds an explicit strict option, airport-local clock
+validation, web and CLI history filtering, preview isolation and audited edits.
+The existing soft preference remains the default. Tracking issue
+[#254](https://github.com/affromero/flight-finder/issues/254).
+
 The active integration scopes are tracked in
 [#253](https://github.com/affromero/flight-finder/issues/253). Each completed port
 adds its source and implementation links here.
@@ -19,3 +27,7 @@ Pushover configuration screenshots: [before](screenshots/flight-pushover-before.
 
 Latest observed fare screenshots: [desktop](screenshots/flight-latest-fares-desktop.png),
 [mobile filter result](screenshots/flight-latest-fares-mobile.png).
+
+Departure window screenshots: [before](screenshots/flight-departure-before.png),
+[desktop](screenshots/flight-departure-desktop.png),
+[mobile](screenshots/flight-departure-mobile.png).

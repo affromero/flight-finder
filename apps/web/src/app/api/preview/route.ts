@@ -3,6 +3,7 @@ import type { Prisma } from '@/generated/prisma/client';
 import { NextRequest } from 'next/server';
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { normalizeCabinClass } from '@/lib/cabin-class';
+import { departureCriteriaError } from '@/lib/criteria/departure';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
 import { getClientIp } from '@/lib/trusted-ip';
@@ -108,6 +109,7 @@ function toPreviewRequestPayload(body: Record<string, unknown>): PreviewRequestP
     maxDurationHours: body.maxDurationHours === undefined || body.maxDurationHours === null ? null : Number(body.maxDurationHours),
     preferredAirlines: Array.isArray(body.preferredAirlines) ? body.preferredAirlines.map(String) : [],
     timePreference: typeof body.timePreference === 'string' ? body.timePreference : 'any',
+    strictDepartureTime: body.strictDepartureTime === true,
     cabinClass: normalizeCabinClass(body.cabinClass),
     tripType: typeof body.tripType === 'string' ? body.tripType : 'round_trip',
     currency: typeof body.currency === 'string' && body.currency ? body.currency : null,
@@ -220,6 +222,8 @@ async function runPreviewInBackground(
 export async function POST(request: NextRequest) {
   const body = await request.json().catch(() => null);
   if (!body) return apiError('Invalid JSON body', 400);
+  const departureError = departureCriteriaError(body.timePreference, body.strictDepartureTime);
+  if (departureError) return apiError(departureError, 400);
   if (body.sourceUrl !== undefined && typeof body.sourceUrl !== 'string') return apiError('Invalid flight link', 400);
 
   const payload = toPreviewRequestPayload(body as Record<string, unknown>);

@@ -9,6 +9,15 @@ const baseSnapshot = {
 };
 
 describe('filterSnapshotsByTrackerFilters', () => {
+  it('applies strict windows retroactively and restores all observations when disabled', () => {
+    const snapshots = ['09:00', '15:00', '23:00', null, 'malformed'].map((departureTime) => ({ ...baseSnapshot, departureTime }));
+    const filters = { maxPrice: null, maxStops: null, maxDurationHours: null, preferredAirlines: [], timePreference: 'morning' };
+    expect(filterSnapshotsByTrackerFilters(snapshots, filters)).toEqual(snapshots);
+    expect(filterSnapshotsByTrackerFilters(snapshots, { ...filters, strictDepartureTime: true })).toEqual([snapshots[0]]);
+    expect(filterSnapshotsByTrackerFilters(snapshots, { ...filters, timePreference: 'redeye', strictDepartureTime: true })).toEqual([snapshots[2]]);
+    expect(filterSnapshotsByTrackerFilters(snapshots, { ...filters, strictDepartureTime: false })).toEqual(snapshots);
+    expect(snapshots).toHaveLength(5);
+  });
   it('keeps snapshots at price and stop boundaries', () => {
     const snapshots = [
       { ...baseSnapshot, price: 500, stops: 1, airline: 'Delta' },
