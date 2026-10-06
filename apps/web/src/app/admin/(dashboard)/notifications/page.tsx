@@ -4,7 +4,7 @@ import { useState, useEffect, useCallback } from 'react';
 import { useTranslations } from 'next-intl';
 import styles from './page.module.css';
 
-type ChannelType = 'telegram' | 'email' | 'ntfy' | 'webhook';
+import type { ChannelType } from '@/lib/notifications/channels/types';
 
 interface FieldDef {
   key: string;
@@ -37,9 +37,17 @@ const FIELD_DEFS: Record<ChannelType, FieldDef[]> = {
     { key: 'url', type: 'text', placeholder: 'https://...' },
     { key: 'secret', type: 'password', optional: true, secret: true },
   ],
+  pushover: [
+    { key: 'token', type: 'password', secret: true },
+    { key: 'userKey', type: 'password', secret: true },
+    { key: 'device', type: 'text', optional: true },
+    { key: 'priority', type: 'number', placeholder: '0', optional: true },
+    { key: 'retry', type: 'number', placeholder: '30', optional: true },
+    { key: 'expire', type: 'number', placeholder: '10800', optional: true },
+  ],
 };
 
-const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook'];
+const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook', 'pushover'];
 
 type FormValues = Record<string, string | boolean>;
 
@@ -74,6 +82,10 @@ function buildConfig(type: ChannelType, values: FormValues): Record<string, unkn
       config[f.key] = Boolean(v);
     } else if (typeof v === 'string' && v.trim() !== '') {
       config[f.key] = f.type === 'number' ? Number(v) : v.trim();
+    } else if (type === 'pushover' && f.key === 'priority') {
+      config.priority = 0;
+    } else if (type === 'pushover' && f.key === 'device') {
+      config.device = '';
     }
   }
   return config;
@@ -303,8 +315,9 @@ export default function NotificationsPage() {
       <section className={styles.card}>
         <h2 className={styles.sectionTitle}>{editingId ? t('form.editTitle') : t('form.addTitle')}</h2>
         <div className={styles.field}>
-          <label className={styles.label}>{t('form.type')}</label>
+          <label className={styles.label} htmlFor="channel-type">{t('form.type')}</label>
           <select
+            id="channel-type"
             className={styles.select}
             value={formType}
             disabled={!!editingId}
@@ -320,8 +333,9 @@ export default function NotificationsPage() {
           </select>
         </div>
         <div className={styles.field}>
-          <label className={styles.label}>{t('form.label')}</label>
+          <label className={styles.label} htmlFor="channel-label">{t('form.label')}</label>
           <input
+            id="channel-label"
             type="text"
             className={styles.input}
             placeholder={t('form.labelPlaceholder')}
@@ -331,12 +345,13 @@ export default function NotificationsPage() {
         </div>
         {FIELD_DEFS[formType].map((f) => (
           <div className={styles.field} key={f.key}>
-            <label className={styles.label}>
+            <label className={styles.label} htmlFor={`channel-${f.key}`}>
               {t(`fields.${f.key}`)}
               {f.optional && <span className={styles.optional}>{t('form.optionalSuffix')}</span>}
             </label>
             {f.type === 'checkbox' ? (
               <input
+                id={`channel-${f.key}`}
                 type="checkbox"
                 className={styles.checkbox}
                 checked={Boolean(formValues[f.key])}
@@ -345,6 +360,7 @@ export default function NotificationsPage() {
             ) : (
               <>
                 <input
+                  id={`channel-${f.key}`}
                   type={f.type === 'number' ? 'number' : f.type}
                   className={styles.input}
                   placeholder={

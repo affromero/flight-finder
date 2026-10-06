@@ -10,15 +10,17 @@ import type {
   NtfyConfig,
   WebhookConfig,
 } from './types';
+import { validatePushoverConfig } from './pushover/config';
 
-const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook'];
+const CHANNEL_TYPES: ChannelType[] = ['telegram', 'email', 'ntfy', 'webhook', 'pushover'];
 
 /** Secret fields per channel type — encrypted at rest, redacted on read. */
-export const SECRET_FIELDS: Record<ChannelType, string[]> = {
+const SECRET_FIELDS: Record<ChannelType, string[]> = {
   telegram: ['botToken'],
   email: ['pass'],
   ntfy: ['token'],
   webhook: ['secret'],
+  pushover: ['token', 'userKey'],
 };
 
 export function isChannelType(v: unknown): v is ChannelType {
@@ -88,6 +90,8 @@ export function validateChannelConfig<T extends ChannelType>(type: T, raw: unkno
       return validateNtfy(o) as ChannelConfigMap[T];
     case 'webhook':
       return validateWebhook(o) as ChannelConfigMap[T];
+    case 'pushover':
+      return validatePushoverConfig(o) as ChannelConfigMap[T];
     default:
       throw new Error(`Unknown channel type: ${type as string}`);
   }

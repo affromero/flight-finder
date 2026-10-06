@@ -1,4 +1,4 @@
-export type ChannelType = 'telegram' | 'email' | 'ntfy' | 'webhook';
+export type ChannelType = 'telegram' | 'email' | 'ntfy' | 'webhook' | 'pushover';
 
 export interface TelegramConfig {
   botToken: string;
@@ -26,11 +26,21 @@ export interface WebhookConfig {
   secret?: string; // optional HMAC signing key (sent as X-Signature-256)
 }
 
+export interface PushoverConfig {
+  token: string;
+  userKey: string;
+  device?: string;
+  priority: number;
+  retry?: number;
+  expire?: number;
+}
+
 export interface ChannelConfigMap {
   telegram: TelegramConfig;
   email: EmailConfig;
   ntfy: NtfyConfig;
   webhook: WebhookConfig;
+  pushover: PushoverConfig;
 }
 
 /** A notification ready to render across any channel. */
