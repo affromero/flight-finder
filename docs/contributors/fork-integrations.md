@@ -3,6 +3,15 @@
 Flight Finder retains its MIT license and credits the people whose fork work
 informs upstream integrations. Source links identify the reviewed revisions.
 
+Private SMTP encryption credits [NickStu-coder](https://github.com/NickStu-coder)
+for the [TLS requirement](https://github.com/NickStu-coder/traveller/commit/7bd642ebf0181322d2b6df6174457f43ea19073d)
+in [Traveller's sender](https://github.com/NickStu-coder/traveller/blob/8e6779d1c38ed98e38337762cb69056f0191625c/apps/web/src/lib/notifications/channels/email.ts#L28).
+The upstream [SMTP sender](../../apps/web/src/lib/notifications/channels/email.ts)
+requires encryption for user-owned channels while retaining trusted relay
+behavior. [Real SMTP regressions](../../apps/web/src/lib/notifications/channels/email/smtp.test.ts)
+verify refusal before authentication or alert delivery when TLS is unavailable.
+Tracking issue [#278](https://github.com/affromero/flight-finder/issues/278).
+
 | Contributor | Source | Upstream work |
 | --- | --- | --- |
 | [sammorris01](https://github.com/sammorris01) | [Pushover commit](https://github.com/sammorris01/flight-finder/commit/dbf40dcb36f64e6cfa3b4ead606cf7912a1b8450) | [Pushover sender](../../apps/web/src/lib/notifications/channels/pushover/send.ts). Sam's original channel encrypted credentials; upstream adaptations add emergency settings, guarded acknowledgments and localized admin integration. Tracking issue [#258](https://github.com/affromero/flight-finder/issues/258). |

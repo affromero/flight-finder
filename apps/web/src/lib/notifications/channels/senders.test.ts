@@ -297,7 +297,7 @@ describe('sendEmail', () => {
     expect(mockSendMail).not.toHaveBeenCalled();
   });
 
-  it('pins an untrusted channel to the validated IP and keeps the hostname for TLS identity', async () => {
+  it.each([false, true])('requires encryption and pins the TLS hostname for an untrusted channel with secure=%s', async secure => {
     // Closes the DNS rebinding gap: nodemailer must connect to the address we
     // already validated, not re-resolve the name (which could rebind to an
     // internal IP). The original hostname stays as the TLS servername so cert
@@ -305,13 +305,15 @@ describe('sendEmail', () => {
     mockDnsLookup.mockResolvedValue([{ address: '93.184.216.34', family: 4 }]);
     mockSendMail.mockResolvedValue({ messageId: '5' });
     await sendEmail(
-      { host: 'smtp.example', port: 587, secure: true, from: 'a@x', to: 'b@y' },
+      { host: 'smtp.example', port: 587, secure, from: 'a@x', to: 'b@y' },
       MESSAGE,
       { trusted: false },
     );
     expect(nodemailer.createTransport).toHaveBeenCalledWith(
       expect.objectContaining({
         host: '93.184.216.34',
+        secure,
+        requireTLS: true,
         tls: { servername: 'smtp.example' },
       }),
     );
@@ -328,6 +330,7 @@ describe('sendEmail', () => {
     const args = (nodemailer.createTransport as unknown as ReturnType<typeof vi.fn>).mock.calls[0]![0];
     expect(args.host).toBe('smtp.internal');
     expect(args.tls).toBeUndefined();
+    expect(args.requireTLS).toBeUndefined();
     expect(mockDnsLookup).not.toHaveBeenCalled();
   });
 });
