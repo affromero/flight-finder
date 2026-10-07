@@ -25,6 +25,7 @@ export async function sendEmail(
       host: pinnedAddress ?? config.host,
       port: config.port,
       secure: config.secure,
+      ...(!opts.trusted ? { requireTLS: true } : {}),
       auth: config.user ? { user: config.user, pass: config.pass } : undefined,
       connectionTimeout: 15_000, greetingTimeout: 15_000, socketTimeout: 15_000,
       getSocket(options, callback) {
