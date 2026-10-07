@@ -169,3 +169,12 @@ Mullvad settings screenshots: [before](screenshots/flight-mullvad-before.png),
 Background parsing screenshots: [before](screenshots/flight-parse-before.png),
 [desktop](screenshots/flight-parse-desktop.png),
 [mobile](screenshots/flight-parse-mobile.png).
+
+Provider popup protection credits [NickStu-coder](https://github.com/NickStu-coder)
+for the [context navigation guard](https://github.com/NickStu-coder/traveller/commit/8c5ad03752b710ece8624129a797441c0434f0a8)
+in [Traveller's implementation](https://github.com/NickStu-coder/traveller/blob/8e6779d1c38ed98e38337762cb69056f0191625c/apps/web/src/lib/travel/navigation.ts#L64).
+The upstream [navigation guard](../../apps/web/src/lib/travel/navigation.ts)
+installs one context policy through existing hotel, car and imported-flight
+callers while preserving page routing. [Chromium regressions](../../apps/web/src/lib/travel/navigation.browser.test.ts)
+cover the first popup request, redirect bounds, cookies and independent state.
+Tracking issue [#280](https://github.com/affromero/flight-finder/issues/280).
