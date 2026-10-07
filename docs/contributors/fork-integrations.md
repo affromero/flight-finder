@@ -32,6 +32,16 @@ Chart screenshots: [before](screenshots/flight-chart-before.png),
 [desktop](screenshots/flight-chart-desktop.png),
 [mobile](screenshots/flight-chart-mobile.png).
 
+Private cache isolation credits [NickStu-coder](https://github.com/NickStu-coder)
+for [Traveller's static-bundle restriction](https://github.com/NickStu-coder/traveller/commit/8c5ad03752b710ece8624129a797441c0434f0a8)
+in its [service worker](https://github.com/NickStu-coder/traveller/blob/8e6779d1c38ed98e38337762cb69056f0191625c/apps/web/public/sw.js#L25).
+The upstream [worker](../../apps/web/public/sw.js) excludes private responses,
+clears legacy caches and limits offline reads to its current cache.
+[Chromium regressions](../../apps/web/src/lib/pwa/service-worker.browser.test.ts)
+cover account switches, optimized images, cache headers, origins, offline
+bundles, legacy cleanup and cache write failures. Tracking issue
+[#282](https://github.com/affromero/flight-finder/issues/282).
+
 Departure criteria credit [sammorris01](https://github.com/sammorris01) for
 [shared flight filtering](https://github.com/sammorris01/flight-finder/commit/743fdd38aa6c83331634ef44808fd55346a28637)
 and the [departure-window contribution](https://github.com/sammorris01/flight-finder/commit/51e401aeca15e6f3abcc4cc9096e214855d16121).

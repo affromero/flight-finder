@@ -1,4 +1,4 @@
-const CACHE_NAME = 'flight-finder-v2';
+const CACHE_NAME = 'flight-finder-v3';
 // Only the icon is precached. The HTML document ('/') is intentionally NOT
 // cached: caching it risks serving a stale shell (old bundle refs, old theme)
 // after a redeploy. Pages and assets go through the network-first handler below.
@@ -23,24 +23,30 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const { request } = event;
 
-  // Only cache GET requests for pages and static assets
+  // Private pages, RSC payloads, APIs and optimized images stay on the network.
+  // Only same-origin public static bundles are eligible for offline storage.
   if (request.method !== 'GET') return;
 
-  // Skip API routes — always go to network
   const url = new URL(request.url);
-  if (url.pathname.startsWith('/api/')) return;
+  if (url.origin !== self.location.origin || !url.pathname.startsWith('/_next/static/')) return;
 
   event.respondWith(
     fetch(request)
       .then((response) => {
         // Cache only hashed static assets (immutable across deploys). The HTML
         // document is never cached so a redeploy is picked up on next load.
-        if (response.ok && url.pathname.startsWith('/_next/')) {
+        if (response.ok && response.type === 'basic' && !/private|no-store/i.test(response.headers.get('cache-control') || '')) {
           const clone = response.clone();
-          caches.open(CACHE_NAME).then((cache) => cache.put(request, clone));
+          // Storage failures must not discard a successful network response.
+          event.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.put(request, clone)).catch(() => {}));
         }
         return response;
       })
-      .catch(() => caches.match(request))
+      .catch(async () => {
+        const cache = await caches.open(CACHE_NAME);
+        const cached = await cache.match(request);
+        if (!cached || cached.type !== 'basic' || /private|no-store/i.test(cached.headers.get('cache-control') || '')) throw new Error('Static asset unavailable');
+        return cached;
+      })
   );
 });
