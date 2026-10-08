@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - uses: affromero/repo-maintenance@bf4eb3bcd4bfbf54ddc8d4df2b67a7bcd6b2f65a # v1.0.2
+      - uses: affromero/repo-maintenance@2f2540e9565b4f3df3de6ad70a28ad18dec0ca66 # v1.0.5
         with:
           rust-paths: 'apps/desktop/src-tauri'
           prepare: 'npx prisma generate --schema=apps/web/prisma/schema.prisma'
