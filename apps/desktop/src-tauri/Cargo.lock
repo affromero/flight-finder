@@ -739,6 +739,7 @@ dependencies = [
 name = "flight-finder-desktop"
 version = "0.15.0"
 dependencies = [
+ "glib",
  "serde",
  "serde_json",
  "tauri",
@@ -1042,8 +1043,7 @@ dependencies = [
 [[package]]
 name = "glib"
 version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "233daaf6e83ae6a12a52055f568f9d7cf4671dabb78ff9560ab6da230ce00ee5"
+source = "git+https://github.com/affromero/gtk-rs-core?rev=d7e5d3f42f4521cf79588e1178e48f9b38b8ef9c#d7e5d3f42f4521cf79588e1178e48f9b38b8ef9c"
 dependencies = [
  "bitflags 2.13.0",
  "futures-channel",
