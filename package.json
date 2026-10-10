@@ -38,10 +38,10 @@
   },
   "devDependencies": {
     "@prisma/client": "7.10.0",
-    "csv-parse": "7.0.2",
+    "csv-parse": "7.0.3",
     "geo-tz": "8.1.9",
-    "knip": "6.38.0",
-    "pg": "8.23.0",
+    "knip": "6.39.0",
+    "pg": "8.23.1",
     "playwright": "1.63.0",
     "prisma": "7.10.0",
     "react": "19.3.0",
