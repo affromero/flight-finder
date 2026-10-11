@@ -23,7 +23,7 @@ jobs:
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf
+          sudo apt-get install -y libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf xvfb
       - uses: dtolnay/rust-toolchain@stable
       - uses: swatinem/rust-cache@v2
         with:
@@ -43,6 +43,57 @@ jobs:
         if: runner.os == 'Linux'
         run: cargo test --locked --release --test glib_variant
         working-directory: apps/desktop/src-tauri
+      - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        if: runner.os == 'Linux'
+        with:
+          python-version: '3.11'
+      - name: Verify maintained GTK template macros
+        if: runner.os == 'Linux'
+        working-directory: apps/desktop/src-tauri
+        run: |
+          cargo metadata --locked --format-version 1 --filter-platform x86_64-unknown-linux-gnu > "$RUNNER_TEMP/desktop-metadata.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import shutil
+          import tomllib
+
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          metadata = json.loads((temporary / 'desktop-metadata.json').read_text())
+          patches = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['patch']['crates-io']
+          macro = next(package for package in metadata['packages'] if package['name'] == 'gtk3-macros')
+          assert macro['source'].endswith('#' + patches['gtk3-macros']['rev']), macro['source']
+          shutil.copytree(pathlib.Path(macro['manifest_path']).parent, temporary / 'gtk3-macros-tests')
+          shutil.copyfile('Cargo.lock', temporary / 'gtk3-macros-tests' / 'Cargo.lock')
+          entries = ['[patch.crates-io]']
+          for name, source in patches.items():
+              fields = ', '.join(f'{key} = {json.dumps(value)}' for key, value in source.items())
+              entries.append(f'{name} = {{ {fields} }}')
+          (temporary / 'gtk-macro-patches.toml').write_text('\n'.join(entries) + '\n')
+          PY
+          cargo metadata --format-version 1 --filter-platform x86_64-unknown-linux-gnu \
+            --manifest-path "$RUNNER_TEMP/gtk3-macros-tests/Cargo.toml" \
+            --config "$RUNNER_TEMP/gtk-macro-patches.toml" > "$RUNNER_TEMP/gtk-macro-metadata.json"
+          python3 - <<'PY'
+          import json
+          import os
+          import pathlib
+          import tomllib
+
+          temporary = pathlib.Path(os.environ['RUNNER_TEMP'])
+          consumer = json.loads((temporary / 'desktop-metadata.json').read_text())['packages']
+          isolated = json.loads((temporary / 'gtk-macro-metadata.json').read_text())['packages']
+          patches = tomllib.loads(pathlib.Path('Cargo.toml').read_text())['patch']['crates-io']
+          for name, patch in patches.items():
+              expected = f"git+{patch['git']}?rev={patch['rev']}#{patch['rev']}"
+              assert any(package['name'] == name and package['source'] == expected for package in isolated), name
+          expected_gtk = next(package['version'] for package in consumer if package['name'] == 'gtk')
+          assert {package['version'] for package in isolated if package['name'] == 'gtk'} == {expected_gtk}
+          PY
+          xvfb-run -a cargo test --locked \
+            --manifest-path "$RUNNER_TEMP/gtk3-macros-tests/Cargo.toml" \
+            --config "$RUNNER_TEMP/gtk-macro-patches.toml"
 
   cli-runtime:
     runs-on: ubuntu-latest

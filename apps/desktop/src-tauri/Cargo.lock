@@ -1043,7 +1043,7 @@ dependencies = [
 [[package]]
 name = "glib"
 version = "0.18.5"
-source = "git+https://github.com/affromero/gtk-rs-core?rev=d7e5d3f42f4521cf79588e1178e48f9b38b8ef9c#d7e5d3f42f4521cf79588e1178e48f9b38b8ef9c"
+source = "git+https://github.com/affromero/gtk-rs-core?rev=b4765c59e519d89809e7df0301726b790e258222#b4765c59e519d89809e7df0301726b790e258222"
 dependencies = [
  "bitflags 2.13.0",
  "futures-channel",
@@ -1065,12 +1065,11 @@ dependencies = [
 [[package]]
 name = "glib-macros"
 version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0bb0228f477c0900c880fd78c8759b95c7636dbd7842707f49e132378aa2acdc"
+source = "git+https://github.com/affromero/gtk-rs-core?rev=b4765c59e519d89809e7df0301726b790e258222#b4765c59e519d89809e7df0301726b790e258222"
 dependencies = [
  "heck 0.4.1",
  "proc-macro-crate 2.0.2",
- "proc-macro-error",
+ "proc-macro-error3",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -1145,11 +1144,9 @@ dependencies = [
 [[package]]
 name = "gtk3-macros"
 version = "0.18.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "52ff3c5b21f14f0736fed6dcfc0bfb4225ebf5725f3c0209edeec181e4d73e9d"
+source = "git+https://github.com/affromero/gtk3-rs?rev=3911b26fe97f48de74fd0df48225e14a387a5b99#3911b26fe97f48de74fd0df48225e14a387a5b99"
 dependencies = [
  "proc-macro-crate 1.3.1",
- "proc-macro-error",
  "proc-macro2",
  "quote",
  "syn 2.0.118",
@@ -2217,27 +2214,25 @@ dependencies = [
 ]
 
 [[package]]
-name = "proc-macro-error"
-version = "1.0.4"
+name = "proc-macro-error-attr3"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "da25490ff9892aab3fcf7c36f08cfb902dd3e71ca0f9f9517bea02a73a5ce38c"
+checksum = "9e564d14133360e1ae169ffde5da25881b5fa47261665b8e5713c212c27799da"
 dependencies = [
- "proc-macro-error-attr",
  "proc-macro2",
  "quote",
- "syn 1.0.109",
- "version_check",
 ]
 
 [[package]]
-name = "proc-macro-error-attr"
-version = "1.0.4"
+name = "proc-macro-error3"
+version = "3.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a1be40180e52ecc98ad80b184934baf3d0d29f979574e439af5a55274b35f869"
+checksum = "8f0d4471b3436c22106b21913b1dda531558918ae9b7ec55d58aa84b43552233"
 dependencies = [
+ "proc-macro-error-attr3",
  "proc-macro2",
  "quote",
- "version_check",
+ "syn 2.0.118",
 ]
 
 [[package]]
@@ -2806,16 +2801,6 @@ dependencies = [
  "base64 0.21.7",
  "serde",
  "serde_json",
-]
-
-[[package]]
-name = "syn"
-version = "1.0.109"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "72b64191b275b66ffe2469e8af2c1cfe3bafa67b529ead792a6d0160888b4237"
-dependencies = [
- "proc-macro2",
- "unicode-ident",
 ]
 
 [[package]]
