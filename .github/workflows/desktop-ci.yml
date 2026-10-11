@@ -39,6 +39,10 @@ jobs:
         working-directory: apps/desktop
       - run: cargo test --locked
         working-directory: apps/desktop/src-tauri
+      - name: Verify optimized GLib string iteration
+        if: runner.os == 'Linux'
+        run: cargo test --locked --release --test glib_variant
+        working-directory: apps/desktop/src-tauri
 
   cli-runtime:
     runs-on: ubuntu-latest

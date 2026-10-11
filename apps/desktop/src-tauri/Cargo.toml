@@ -19,6 +19,12 @@ tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+[target.'cfg(target_os = "linux")'.dev-dependencies]
+glib = "0.18"
+
+[patch.crates-io]
+glib = { git = "https://github.com/affromero/gtk-rs-core", rev = "d7e5d3f42f4521cf79588e1178e48f9b38b8ef9c" }
+
 [features]
 # Enables Tauri's custom-protocol asset serving in release builds.
 custom-protocol = ["tauri/custom-protocol"]
