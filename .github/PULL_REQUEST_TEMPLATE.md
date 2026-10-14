@@ -67,6 +67,8 @@ Choose one option for unfinished work and changes requested during review.
 
 - [ ] Maintainers may use AI agents to finish the work and prepare follow-up
       changes within the scope below. I will review the result.
+- [ ] Maintainers may take ownership and finish the work within the scope below,
+      including using AI agents. I do not need to review further changes.
 - [ ] I will make the follow-up changes myself. Please leave review comments only.
 - [ ] Please ask me before preparing follow-up changes.
 
