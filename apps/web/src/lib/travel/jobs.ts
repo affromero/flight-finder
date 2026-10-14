@@ -2,9 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { prisma } from '@/lib/prisma';
 import { Prisma, type TravelJob } from '@/generated/prisma/client';
 import { TravelJobError } from './errors';
-import { lockTravelAdmission, lockTravelLease, type TravelLeaseToken } from './admission';
+import { ADMISSION_TX_OPTIONS, lockTravelAdmission, lockTravelLease, type TravelLeaseToken } from './admission';
 export { TravelJobError } from './errors';
-export { acquireTravelLease, renewTravelLease, releaseTravelLease, lockTravelAdmission, lockTravelLease, type TravelLeaseToken } from './admission';
+export { acquireTravelLease, renewTravelLease, releaseTravelLease, ADMISSION_TX_OPTIONS, lockTravelAdmission, lockTravelLease, type TravelLeaseToken } from './admission';
 export type TravelJobRequest =
   | { kind: 'flight_batch'; userId: null }
   | { kind: 'flight_preview'; userId: string | null }
@@ -23,7 +23,7 @@ export async function lockTravelResource(tx: Prisma.TransactionClient, kind: Tra
   await tx.$queryRaw`SELECT id FROM "TravelLease" WHERE id = ${resource} FOR UPDATE`;
 }
 export async function enqueueTravelJob(request: TravelJobRequest, tx?: Prisma.TransactionClient): Promise<TravelJob> {
-  if (!tx) return prisma.$transaction(transaction => enqueueTravelJob(request, transaction));
+  if (!tx) return prisma.$transaction(transaction => enqueueTravelJob(request, transaction), ADMISSION_TX_OPTIONS);
   // Follow the same resource-first lock order as result commits. This also
   // serializes enqueue with a generation change without taking over the lease.
   await lockTravelResource(tx, request.kind);
@@ -79,7 +79,7 @@ export async function claimTravelJob(id: string, lease: TravelLeaseToken): Promi
     if (!job) return null;
     if (lease.id !== 'network' && travelResource(job.kind) !== lease.id) throw new TravelJobError('Worker does not hold the required resource');
     return tx.travelJob.update({ where: { id }, data: { status: 'running', attempts: { increment: 1 }, claimedAt: new Date(), leaseResource: lease.id, leaseOwner: lease.owner, leaseGeneration: lease.generation } });
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 /** Acquire before domain row locks and keep this transaction open through writes. */
 export async function guardTravelJob(tx: Prisma.TransactionClient, id: string, lease: TravelLeaseToken): Promise<TravelJob> {
@@ -97,7 +97,7 @@ export async function completeTravelJob<T>(id: string, lease: TravelLeaseToken, 
     await lockTravelLease(tx, lease);
     await tx.travelJob.update({ where: { id }, data: { ...clearClaim, status: 'succeeded', completedAt: new Date() } });
     return result;
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 export async function failTravelJob(id: string, lease: TravelLeaseToken, error: unknown, persist?: (tx: Prisma.TransactionClient, job: TravelJob) => Promise<void>): Promise<void> {
   await prisma.$transaction(async tx => {
@@ -105,10 +105,10 @@ export async function failTravelJob(id: string, lease: TravelLeaseToken, error: 
     await persist?.(tx, job);
     await lockTravelLease(tx, lease);
     await tx.travelJob.update({ where: { id }, data: { ...clearClaim, status: 'failed', error: (error instanceof Error ? error.message : String(error)).slice(0,4000), completedAt: new Date() } });
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 export async function cancelTravelJob(id: string, userId: string | null, isAdmin: boolean, tx?: Prisma.TransactionClient): Promise<boolean> {
-  if (!tx) return prisma.$transaction(transaction => cancelTravelJob(id, userId, isAdmin, transaction));
+  if (!tx) return prisma.$transaction(transaction => cancelTravelJob(id, userId, isAdmin, transaction), ADMISSION_TX_OPTIONS);
   await lockTravelAdmission(tx);
   const changed = await tx.travelJob.updateMany({
     where: { id, status: { in: ['queued', 'running'] }, ...(isAdmin ? {} : { userId }) },

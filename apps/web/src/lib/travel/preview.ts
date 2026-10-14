@@ -1,5 +1,5 @@
 import { prisma } from '@/lib/prisma';
-import { cancelTravelJob, enqueueTravelJob, lockTravelAdmission } from './jobs';
+import { ADMISSION_TX_OPTIONS, cancelTravelJob, enqueueTravelJob, lockTravelAdmission } from './jobs';
 import { executeTravelJob } from './executor';
 import { checkTravelAuthority, currentTravelContext } from './context';
 import { currentTravelExecution } from './execution';
@@ -16,7 +16,7 @@ export async function expireQueuedPreviews(): Promise<void> {
       where: { kind: 'flight_preview', status: 'queued', createdAt: { lt: new Date(Date.now() - ORPHAN_AGE_MS) } },
       data: { status: 'failed', activeKey: null, completedAt: new Date(), error: 'Preview process stopped before execution; search again' },
     });
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 
 /** Arguments and results stay in memory; the database stores only job state. */

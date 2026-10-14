@@ -2,7 +2,7 @@ import { AsyncLocalStorage } from 'node:async_hooks';
 import type { ExtractionConfig, Prisma, TravelJob } from '@/generated/prisma/client';
 import { prisma } from '@/lib/prisma';
 import { guardTravelJob } from './jobs';
-import { type TravelLeaseToken } from './admission';
+import { ADMISSION_TX_OPTIONS, type TravelLeaseToken } from './admission';
 import { currentTravelExecution } from './execution';
 import type { TravelVpnSession } from './vpn';
 
@@ -27,7 +27,7 @@ export async function travelTransaction<T>(work: (tx: Prisma.TransactionClient, 
     await guardTravelJob(tx, context.job.id, context.lease);
     currentTravelExecution()?.check();
     return result;
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 export async function checkTravelAuthority(): Promise<void> {
   await travelTransaction(async () => undefined);

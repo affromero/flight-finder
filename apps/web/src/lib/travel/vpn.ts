@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import { createVpnProvider, type VpnProvider, type VpnProviderType } from '../scraper/vpn';
-import { lockTravelLease, type TravelLeaseToken } from './admission';
+import { ADMISSION_TX_OPTIONS, lockTravelLease, type TravelLeaseToken } from './admission';
 import { TravelCleanupError } from './execution';
 import { TravelJobError } from './errors';
 
@@ -15,7 +15,7 @@ export class TravelVpnSession implements VpnProvider {
     this.provider = createVpnProvider(type);
   }
   private async authority(): Promise<void> {
-    await prisma.$transaction(tx => lockTravelLease(tx, this.lease));
+    await prisma.$transaction(tx => lockTravelLease(tx, this.lease), ADMISSION_TX_OPTIONS);
   }
   async getStatus() { this.signal?.throwIfAborted(); await this.authority(); return this.provider.getStatus(this.signal); }
   async listLocations() { this.signal?.throwIfAborted(); await this.authority(); return this.provider.listLocations(this.signal); }

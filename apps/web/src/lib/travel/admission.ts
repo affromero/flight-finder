@@ -8,6 +8,13 @@ import { tailscaleVpnConfig } from '../scraper/vpn/tailscale-config';
 export interface TravelLeaseToken { id: string; owner: string; generation: number; topologyVersion: number }
 const DEFAULT_LEASE_MS = 120_000;
 const EPOCH = new Date(0);
+/** Interactive-transaction budget for every admission-serialised path (advisory
+ * lock, lease row locks). These transactions are a few indexed statements by
+ * design; Prisma's 5 s default only turns a transient lock convoy or database
+ * stall into an expired transaction, which aborts verified worker heartbeats
+ * and cleanup. Waiting is still bounded far inside LEASE_MS renewal economics.
+ */
+export const ADMISSION_TX_OPTIONS = { maxWait: 10_000, timeout: 30_000 } as const;
 
 /** Fixed transaction-scoped admission lock, before resource and domain locks.
  * 761932105 is reserved for admission; 761932104 protects schema setup.
@@ -97,7 +104,7 @@ export async function acquireTravelLease(requested: string, milliseconds = DEFAU
       WHERE id = ${id} AND state = 'idle' RETURNING *`;
     const row = rows[0];
     return { token: row ? { id, owner, generation: row.generation, topologyVersion: row.topologyVersion } : null };
-  });
+  }, ADMISSION_TX_OPTIONS);
   if ('error' in outcome) throw new TravelJobError(outcome.error ?? 'Travel execution requires administrator recovery', 503);
   return outcome.token;
 }
@@ -121,7 +128,7 @@ export async function renewTravelLease(lease: TravelLeaseToken, milliseconds = D
       WHERE id = ${lease.id} AND owner = ${lease.owner} AND generation = ${lease.generation}
         AND "topologyVersion" = ${lease.topologyVersion} AND state = 'held' AND "expiresAt" > clock_timestamp()`;
     return count === 1;
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 
 /** Call only after all owned browser and network cleanup has completed. */
@@ -133,15 +140,14 @@ export async function releaseTravelLease(lease: TravelLeaseToken): Promise<void>
     await tx.travelLease.updateMany({ where: {
       id: lease.id, owner: lease.owner, generation: lease.generation, topologyVersion: lease.topologyVersion, state: 'held',
     }, data: { state: 'idle', expiresAt: EPOCH } });
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 
 /** The original owner may acknowledge settled work and cleanup, never resume expired work.
  * No VPN state is inferred. Incidents from older runtimes remain administrator-only.
  */
 export async function acknowledgeTravelCleanup(lease: TravelLeaseToken): Promise<boolean> {
-  return prisma.$transaction(async tx => {
-    const admission = await checkAdmission(tx);
+  return prisma.$transaction(async tx => {    const admission = await checkAdmission(tx);
     if (admission.vpnEnabled || admission.topologyVersion !== lease.topologyVersion
       || (admission.quarantinedAt && !admission.cleanupRecoveryAllowed)) return false;
     if ((await localTopology(tx)).topologyHash !== admission.topologyHash) return false;
@@ -171,7 +177,7 @@ export async function acknowledgeTravelCleanup(lease: TravelLeaseToken): Promise
       } });
     }
     return true;
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 
 export async function lockTravelLease(tx: Prisma.TransactionClient, lease: TravelLeaseToken): Promise<void> {
@@ -192,7 +198,7 @@ export async function quarantineTravelLease(lease: TravelLeaseToken, reason: str
     // A late report from a recovered generation cannot stop its replacement.
     if (!current || current.owner !== lease.owner || current.generation !== lease.generation || current.state === 'idle') return;
     await quarantine(tx, reason);
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 
 export async function getTravelAdmission() {
@@ -201,7 +207,7 @@ export async function getTravelAdmission() {
     const leases = await tx.travelLease.findMany({ select: { id: true, state: true, generation: true, expiresAt: true }, orderBy: { id: 'asc' } });
     return { quarantinedAt: current.quarantinedAt, reason: current.quarantineReason, recoveryGeneration: current.recoveryGeneration,
       topologyVersion: current.topologyVersion, systemWide: current.systemWide, vpnEnabled: current.vpnEnabled, leases };
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
 
 /** Surface global pauses only after the caller has authorized the requested search. */
@@ -234,5 +240,5 @@ export async function recoverTravelAdmission(actor: { userId: string | null; isA
     await tx.travelAdmission.update({ where: { id: admission.id }, data: {
       quarantinedAt: null, quarantineReason: null, cleanupRecoveryAllowed: false, recoveredAt: now, recoveredBy: actor.userId ?? 'instance-administrator', recoveryGeneration: { increment: 1 },
     } });
-  });
+  }, ADMISSION_TX_OPTIONS);
 }
