@@ -305,11 +305,10 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('share
     await expect(acquireTravelLease('browser')).rejects.toMatchObject({ status: 503 });
   }, 15_000);
 
-  it('rides out an admission-lock convoy instead of aborting verified work', async () => {
+  it('waits out an admission-lock convoy inside the transaction budget', async () => {
     const job = await batch();
-    // Reproduces a production incident: a session holding the admission advisory
-    // lock for longer than an interactive transaction tolerates makes every
-    // heartbeat renewal fail transiently; verified work must survive it.
+    // A convoy shorter than the admission transaction budget must be waited out
+    // in place: renewal succeeds late, work is never interrupted.
     const blocker = new Client({ connectionString: process.env.DATABASE_URL });
     await blocker.connect();
     try {
@@ -327,6 +326,62 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('share
       if (replacement) await releaseTravelLease(replacement);
     } finally {
       await blocker.query('SELECT pg_advisory_unlock(761932105)').catch(() => undefined);
+      await blocker.end();
+    }
+  }, 30_000);
+
+  it('recovers heartbeat renewal after transactions expire behind a long convoy', async () => {
+    const job = await batch();
+    // Reproduces the production incident shape: the admission advisory lock is
+    // held past the transaction budget, so renewal transactions throw instead
+    // of waiting. The heartbeat must retry and recover once the convoy clears,
+    // keeping the job alive inside its lease lifetime.
+    const blocker = new Client({ connectionString: process.env.DATABASE_URL });
+    await blocker.connect();
+    try {
+      expect(await executeTravelJob(job.id, async () => {
+        await blocker.query('SELECT pg_advisory_lock(761932105)');
+        await travelDelay(35_000);
+        await blocker.query('SELECT pg_advisory_unlock(761932105)');
+        await travelDelay(2_000);
+        return 'convoy-recovered';
+      })).toBe(true);
+      expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'succeeded', result: 'convoy-recovered' });
+      expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+      const replacement = await acquireTravelLease('vpn');
+      expect(replacement).not.toBeNull();
+      if (replacement) await releaseTravelLease(replacement);
+    } finally {
+      await blocker.query('SELECT pg_advisory_unlock(761932105)').catch(() => undefined);
+      await blocker.end();
+    }
+  }, 60_000);
+
+  it('keeps VPN authority verification inside the transaction budget after a provider operation', async () => {
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { vpnProvider: 'expressvpn' } });
+    vi.stubEnv('EXPRESSVPN_API_URL', 'http://vpn.test'); vi.stubEnv('EXPRESSVPN_SOCKS_URL', '');
+    const blocker = new Client({ connectionString: process.env.DATABASE_URL });
+    await blocker.connect();
+    let convolving = false, connected = true;
+    const release = () => blocker.query('SELECT pg_advisory_unlock(761932105)').catch(() => undefined);
+    vi.stubGlobal('fetch', async (url: string, init: RequestInit) => {
+      // The convoy starts once the provider command is acknowledged, so it is
+      // the fencing authority check afterwards that must wait inside budget.
+      if (init.method === 'POST' && url.endsWith('/v1/disconnect')) {
+        if (!convolving) { convolving = true; await blocker.query('SELECT pg_advisory_lock(761932105)'); setTimeout(() => { void release(); }, 7_000); }
+        connected = false;
+        return new Response('Disconnected');
+      }
+      if (init.method === 'GET' && url.endsWith('/v1/status')) return new Response(connected ? 'Connected to convoy-tunnel' : 'Not connected');
+      throw new Error('Unexpected VPN call ' + init.method + ' ' + url);
+    });
+    const job = await batch();
+    try {
+      expect(await executeTravelJob(job.id, async () => 'vpn-authority-survived')).toBe(true);
+      expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'succeeded', result: 'vpn-authority-survived' });
+      expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+    } finally {
+      await release();
       await blocker.end();
     }
   }, 30_000);

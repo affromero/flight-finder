@@ -36,20 +36,24 @@ export async function executeTravelJob(id: string, work: (job: TravelJob, lease:
   let heartbeat: Promise<void> = Promise.resolve();
   let authorityLost = false;
   let lastRenewal = Date.now();
+  let lastCancellationCheck = Date.now();
   const tick = async () => {
     try {
       if (!(await renewTravelLease(lease, LEASE_MS))) throw new TravelJobError('Travel worker authority was lost');
       lastRenewal = Date.now();
       const current = await prisma.travelJob.findUnique({ where: { id }, select: { status: true } });
+      lastCancellationCheck = Date.now();
       if (!current || current.status === 'cancelled') execution.abort(new TravelJobError('Travel job was cancelled'));
     } catch (error) {
       // Definitive answers (renew === false, TravelJobError) end authority at once.
-      // Thrown database errors only pause renewal: an expired lease quarantines
-      // admission before any replacement worker can acquire the resource, so
-      // retrying within one lease lifetime cannot run work twice. Transient
-      // advisory-lock convoys and expired interactive transactions otherwise
-      // abort verified work that was still safely owned.
-      if (error instanceof TravelJobError || Date.now() - lastRenewal >= LEASE_MS) {
+      // Thrown database errors only pause verification, bounded independently per
+      // concern: a live lease must not mask a cancellation that stays unreadable,
+      // and a readable status must not extend a lease that stays unrenewed.
+      // Within one lease lifetime this cannot double-run work: an expired lease
+      // quarantines admission before any replacement worker can acquire it.
+      if (error instanceof TravelJobError
+        || Date.now() - lastRenewal >= LEASE_MS
+        || Date.now() - lastCancellationCheck >= LEASE_MS) {
         authorityLost = true;
         execution.abort(error);
       }
