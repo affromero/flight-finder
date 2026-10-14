@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { Prisma, Query } from '@/generated/prisma/client';
-import { enqueueTravelJob, lockTravelAdmission, TravelJobError } from './jobs';
+import { ADMISSION_TX_OPTIONS, enqueueTravelJob, lockTravelAdmission, TravelJobError } from './jobs';
 import { awaitTravelJob } from './coordinator';
 import { travelTransaction } from './context';
 
@@ -17,7 +17,7 @@ export async function submitFlightJob(queryId: string | null, request: Prisma.In
       if (!updated.count) throw new TravelJobError('Flight refresh state changed');
     }
     return queued;
-  });
+  }, ADMISSION_TX_OPTIONS);
   return awaitTravelJob(job.id);
 }
 
