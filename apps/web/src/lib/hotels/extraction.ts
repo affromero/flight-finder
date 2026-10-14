@@ -12,6 +12,7 @@ export interface HotelPageCapture {
   location?: HotelLocation | null;
   totalPriceBasis?: string;
   starsLabel?: string;
+  ratingLabel?: string;
   rates?: { id: string; text: string; roomName: string; occupancy?: string; priceBasis?: string; available?: number }[];
 }
 

@@ -103,6 +103,11 @@ describe('captured Booking property rates', () => {
       { price: 529, breakfast: false, taxes: true }, { price: 611, breakfast: true, taxes: true },
     ]);
   });
+  it('falls back to the Scored aria-label when the page text omits the rating', () => {
+    const unrated = { ...fixtures.booking, text: fixtures.booking.text.replace(/Scored 8\.5/g, '8.5') };
+    expect(extractBookingOffers(unrated, family, stay).every(offer => offer.rating === null)).toBe(true);
+    expect(extractBookingOffers({ ...unrated, ratingLabel: 'Scored 8.6 ' }, family, stay).every(offer => offer.rating === 8.6)).toBe(true);
+  });
   it.each([undefined, '', 'Price', 'Price for 2 nights', 'Price per night', 'Price for 3 nights, per night'])('rejects unverified or conflicting table price basis: %s', priceBasis => {
     expect(() => extractBookingOffers({ ...headerPriced, rates: headerPriced.rates.map(rate => ({ ...rate, priceBasis })) }, search, stay)).toThrow(/tax-inclusive/);
   });
