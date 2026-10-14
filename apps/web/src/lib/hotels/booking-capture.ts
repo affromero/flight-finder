@@ -11,7 +11,7 @@ export async function captureBookingRates(page: Page) {
       const name = row.querySelector('.hprt-roomtype-icon-link,.hprt-roomtype-link,[data-testid="room-name"]')?.textContent?.trim();
       if (name) {
         roomName = name;
-        roomOccupancy = row.innerText.match(/Sleeps:\s*\d+ adults?(?:[^\n]*children?)?/i)?.[0] ?? '';
+        roomOccupancy = row.innerText.match(/(?:Sleeps|Guests):\s*\d+ adults?(?:[^\n]*children?)?/i)?.[0] ?? '';
       }
       const select = row.querySelector<HTMLSelectElement>('select[name^="nr_rooms_"]');
       const occupancy = `${roomOccupancy}\n${[...row.querySelectorAll('[title],[aria-label]')].map(element => `${element.getAttribute('title') ?? ''} ${element.getAttribute('aria-label') ?? ''}`).join('\n')}`;

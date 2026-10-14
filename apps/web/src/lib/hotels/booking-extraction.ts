@@ -11,7 +11,7 @@ interface PricedRoom { rate: CapturedRate; price: number; refundable: boolean | 
 function priceRate(rate: CapturedRate, room: HotelRoom, search: HotelSearch, stay: HotelStay): PricedRoom | null {
   if (/members?[- ]only|sign in (?:for|to)|requires? (?:a )?membership/i.test(rate.text)) return null;
   const occupancy = `${rate.text}\n${rate.occupancy ?? ''}`.replace(/<[^>]+>/g, ' ');
-  const adults = Number(occupancy.match(/Max (?:adults|persons):\s*(\d+)/i)?.[1] ?? occupancy.match(/Sleeps:\s*(\d+) adults?/i)?.[1] ?? 0);
+  const adults = Number(occupancy.match(/Max (?:adults|persons):\s*(\d+)/i)?.[1] ?? occupancy.match(/(?:Sleeps|Guests):\s*(\d+) adults?/i)?.[1] ?? 0);
   const children = Number(occupancy.match(/Max children:\s*(\d+)/i)?.[1] ?? 0);
   if (adults < room.adults || children < room.children.length || !rate.available) return null;
   if (room.children.length && !/Free stay for your child/i.test(rate.text)) return null;
