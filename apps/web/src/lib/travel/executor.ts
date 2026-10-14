@@ -1,6 +1,6 @@
 import { prisma } from '@/lib/prisma';
 import type { TravelJob } from '@/generated/prisma/client';
-import { acknowledgeTravelCleanup, acquireTravelLease, lockTravelLease, quarantineTravelLease, releaseTravelLease, renewTravelLease, type TravelLeaseToken } from './admission';
+import { acknowledgeTravelCleanup, acquireTravelLease, ADMISSION_TX_OPTIONS, lockTravelLease, quarantineTravelLease, releaseTravelLease, renewTravelLease, type TravelLeaseToken } from './admission';
 import { claimTravelJob, completeTravelJob, failTravelJob, travelResource } from './jobs';
 import { TravelJobError } from './errors';
 import { TravelCleanupError, TravelExecution, withTravelExecution } from './execution';
@@ -35,14 +35,24 @@ export async function executeTravelJob(id: string, work: (job: TravelJob, lease:
   let stopped = false, timer: ReturnType<typeof setTimeout> | undefined;
   let heartbeat: Promise<void> = Promise.resolve();
   let authorityLost = false;
+  let lastRenewal = Date.now();
   const tick = async () => {
     try {
       if (!(await renewTravelLease(lease, LEASE_MS))) throw new TravelJobError('Travel worker authority was lost');
+      lastRenewal = Date.now();
       const current = await prisma.travelJob.findUnique({ where: { id }, select: { status: true } });
       if (!current || current.status === 'cancelled') execution.abort(new TravelJobError('Travel job was cancelled'));
     } catch (error) {
-      authorityLost = true;
-      execution.abort(error);
+      // Definitive answers (renew === false, TravelJobError) end authority at once.
+      // Thrown database errors only pause renewal: an expired lease quarantines
+      // admission before any replacement worker can acquire the resource, so
+      // retrying within one lease lifetime cannot run work twice. Transient
+      // advisory-lock convoys and expired interactive transactions otherwise
+      // abort verified work that was still safely owned.
+      if (error instanceof TravelJobError || Date.now() - lastRenewal >= LEASE_MS) {
+        authorityLost = true;
+        execution.abort(error);
+      }
     } finally {
       if (!stopped && !authorityLost) timer = setTimeout(() => { heartbeat = tick(); }, HEARTBEAT_MS);
     }
@@ -56,7 +66,7 @@ export async function executeTravelJob(id: string, work: (job: TravelJob, lease:
       const config = await prisma.$transaction(async tx => {
         await lockTravelLease(tx, lease);
         return tx.extractionConfig.findUnique({ where: { id: 'singleton' } });
-      });
+      }, ADMISSION_TX_OPTIONS);
       timer = setTimeout(() => { heartbeat = tick(); }, HEARTBEAT_MS);
       execution.check();
       vpn = new TravelVpnSession(lease, (config?.vpnProvider ?? 'none') as VpnProviderType, execution.signal);

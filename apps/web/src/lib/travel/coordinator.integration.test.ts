@@ -1,4 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { Client } from 'pg';
 import { prisma } from '@/lib/prisma';
 import { launchBrowser } from '../scraper/browser';
 import type { Browser } from 'playwright';
@@ -303,4 +304,30 @@ describe.skipIf(process.env.TRAVEL_COORDINATOR_INTEGRATION_TESTS !== '1')('share
     expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'running', result: null });
     await expect(acquireTravelLease('browser')).rejects.toMatchObject({ status: 503 });
   }, 15_000);
+
+  it('rides out an admission-lock convoy instead of aborting verified work', async () => {
+    const job = await batch();
+    // Reproduces a production incident: a session holding the admission advisory
+    // lock for longer than an interactive transaction tolerates makes every
+    // heartbeat renewal fail transiently; verified work must survive it.
+    const blocker = new Client({ connectionString: process.env.DATABASE_URL });
+    await blocker.connect();
+    try {
+      expect(await executeTravelJob(job.id, async () => {
+        await blocker.query('SELECT pg_advisory_lock(761932105)');
+        await travelDelay(7_000);
+        await blocker.query('SELECT pg_advisory_unlock(761932105)');
+        await travelDelay(2_000);
+        return 'convoy-survived';
+      })).toBe(true);
+      expect(await prisma.travelJob.findUnique({ where: { id: job.id } })).toMatchObject({ status: 'succeeded', result: 'convoy-survived' });
+      expect((await getTravelAdmission()).quarantinedAt).toBeNull();
+      const replacement = await acquireTravelLease('vpn');
+      expect(replacement).not.toBeNull();
+      if (replacement) await releaseTravelLease(replacement);
+    } finally {
+      await blocker.query('SELECT pg_advisory_unlock(761932105)').catch(() => undefined);
+      await blocker.end();
+    }
+  }, 30_000);
 });
