@@ -29,6 +29,8 @@ services:
   web:
     image: ${SMOKE_TEST_IMAGE:-flight-finder-smoke:local}
     env_file: !reset []
+    volumes:
+      - ./scripts:/smoke:ro
     ports: !override
       - "127.0.0.1:${HOST_PORT:-3099}:3003"
     depends_on:
@@ -41,10 +43,9 @@ services:
       ADMIN_SESSION_SECRET: disposable-smoke-admin-secret
       CRON_ENABLED: "false"
       REDIS_URL: redis://redis:6379
-      # Point Anthropic SDK at the mock server
-      ANTHROPIC_BASE_URL: http://llmock:19876
-      ANTHROPIC_API_KEY: test-smoke-key
-      # Ensure the provider is anthropic for deterministic behavior
+      APP_URL: http://127.0.0.1:3003
+      TEST_ACCESS_NAME: disposable-smoke-owner
+      TEST_ACCESS_PASSWORD: disposable-smoke-password
       NODE_ENV: production
       SELF_HOSTED: ${SMOKE_SELF_HOSTED:-false}
       # Skip CLI install to speed up container start

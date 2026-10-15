@@ -6,14 +6,16 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 const source = new URL('./docker-smoke-test.sh', import.meta.url);
-for (const scenario of ['success', 'build-failure', 'startup-failure', 'daemon-failure', 'endpoint-failure', 'reuse-image', 'cleanup-failure']) {
+for (const scenario of ['success', 'build-failure', 'startup-failure', 'daemon-failure', 'setup-failure', 'configuration-failure', 'endpoint-failure', 'reuse-image', 'cleanup-failure']) {
   test(`isolates smoke resources and preserves the result on ${scenario}`, () => {
     const directory = mkdtempSync(join(tmpdir(), 'ff-smoke-behavior-'));
     try {
       const bin = join(directory, 'bin'), scripts = join(directory, 'scripts'), record = join(directory, 'calls.jsonl');
       mkdirSync(bin); mkdirSync(scripts);
+      mkdirSync(join(scripts, 'testing'));
       copyFileSync(source, join(scripts, 'docker-smoke-test.sh'));
       copyFileSync(new URL('./container-car-smoke.mjs', import.meta.url), join(scripts, 'container-car-smoke.mjs'));
+      copyFileSync(new URL('./testing/access-setup.py', import.meta.url), join(scripts, 'testing/access-setup.py'));
       const docker = `#!/usr/bin/env node
 const fs = require('node:fs');
 const args = process.argv.slice(2), mode = process.env.SCENARIO;
@@ -22,10 +24,32 @@ if (args[0] === 'info') process.exit(mode === 'daemon-failure' ? 19 : 0);
 if (args.includes('build') && mode === 'build-failure') process.exit(23);
 if (args.includes('up') && mode === 'startup-failure') process.exit(27);
 if (args.includes('down') && mode.endsWith('-failure')) process.exit(31);
+if (args.includes('access') && args.includes('setup')) {
+  if (mode === 'setup-failure') process.exit(43);
+  let answers = 0;
+  process.stdout.write('First Admin profile name: ');
+  process.stdin.on('data', () => {
+    answers++;
+    if (answers === 1) process.stdout.write('Shared password: ');
+    else if (answers === 2) process.stdout.write('Confirm shared password: ');
+    else process.exit(0);
+  });
+}
+if (args.includes('/smoke/testing/configure-smoke-provider.mjs')) {
+  if (mode === 'configuration-failure') process.exit(47);
+  process.stdout.write('disposable-smoke-session');
+}
 `;
       const curl = `#!/usr/bin/env node
 if (process.argv.some(arg => arg.endsWith('/api/test/scrape'))) {
-  if (process.env.SCENARIO === 'endpoint-failure') process.exit(22);
+  if (!process.argv.includes('Cookie: ft-session=disposable-smoke-session')) {
+    process.stdout.write(JSON.stringify({ok:false,error:'Locked'}) + '\\n401\\n');
+    process.exit(22);
+  }
+  if (process.env.SCENARIO === 'endpoint-failure') {
+    if (process.argv.includes('--fail-with-body')) process.stdout.write(JSON.stringify({ok:false,error:'Missing saved credential for Anthropic'}) + '\\n500\\n');
+    process.exit(22);
+  }
   process.stdout.write(JSON.stringify({ok:true,data:{checks:[],totalMs:1}}) + '\\n200\\n');
 }
 `;
@@ -37,8 +61,10 @@ if (process.argv.some(arg => arg.endsWith('/api/test/scrape'))) {
         env: { PATH: `${bin}:${process.env.PATH}`, TMPDIR: directory, RECORD: record, SCENARIO: scenario,
           COMPOSE_PROJECT_NAME: 'existing-production', COMPOSE_FILE: '/never-read-compose.yml', COMPOSE_ENV_FILES: '/never-read-secrets', POSTGRES_PASSWORD: 'not-the-test-password' },
       });
-      const expected = { success: 0, 'build-failure': 23, 'startup-failure': 27, 'daemon-failure': 1, 'endpoint-failure': 1, 'reuse-image': 0, 'cleanup-failure': 1 }[scenario];
+      const expected = { success: 0, 'build-failure': 23, 'startup-failure': 27, 'daemon-failure': 1, 'setup-failure': 1, 'configuration-failure': 47, 'endpoint-failure': 1, 'reuse-image': 0, 'cleanup-failure': 1 }[scenario];
       assert.equal(result.status, expected, `${result.error ?? ''}\n${result.stdout}\n${result.stderr}`);
+      if (scenario === 'setup-failure') assert.match(result.stderr, /Local access setup failed/);
+      if (scenario === 'endpoint-failure') assert.match(result.stdout, /Missing saved credential for Anthropic/);
       const calls = readFileSync(record, 'utf8').trim().split('\n').map(line => JSON.parse(line));
       const lifecycle = calls.filter(call => call.args[0] === 'compose');
       if (scenario === 'daemon-failure') assert.deepEqual(lifecycle, []);
