@@ -96,6 +96,23 @@ describe('captured Booking property rates', () => {
       { price: 529, breakfast: false, taxes: true }, { price: 611, breakfast: true, taxes: true },
     ]);
   });
+  it('reads occupancy from the Guests phrasing on newer Booking rate rows', () => {
+    const guestsPriced = { ...headerPriced, rates: headerPriced.rates.map(rate => ({ ...rate, text: rate.text.replace('Sleeps: 2 adults', 'Guests: 2 adults') })) };
+    const offers = extractBookingOffers(guestsPriced, search, stay);
+    expect(offers.map(offer => ({ price: offer.totalPrice, breakfast: offer.breakfast, taxes: offer.taxesIncluded }))).toEqual([
+      { price: 529, breakfast: false, taxes: true }, { price: 611, breakfast: true, taxes: true },
+    ]);
+  });
+  it('uses the verified aggregate rating even when other scores appear in the page text', () => {
+    const offers = extractBookingOffers({ ...fixtures.booking, ratingLabel: 'Scored 8.6 ' }, family, stay);
+    expect(offers.length).toBeGreaterThan(0);
+    expect(offers.every(offer => offer.rating === 8.6)).toBe(true);
+  });
+  it('leaves the rating unverified when no aggregate rating was captured', () => {
+    const offers = extractBookingOffers({ ...fixtures.booking, ratingLabel: undefined }, family, stay);
+    expect(offers.length).toBeGreaterThan(0);
+    expect(offers.every(offer => offer.rating === null)).toBe(true);
+  });
   it.each([undefined, '', 'Price', 'Price for 2 nights', 'Price per night', 'Price for 3 nights, per night'])('rejects unverified or conflicting table price basis: %s', priceBasis => {
     expect(() => extractBookingOffers({ ...headerPriced, rates: headerPriced.rates.map(rate => ({ ...rate, priceBasis })) }, search, stay)).toThrow(/tax-inclusive/);
   });

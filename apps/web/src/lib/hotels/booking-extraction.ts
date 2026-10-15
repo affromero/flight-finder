@@ -11,7 +11,7 @@ interface PricedRoom { rate: CapturedRate; price: number; refundable: boolean | 
 function priceRate(rate: CapturedRate, room: HotelRoom, search: HotelSearch, stay: HotelStay): PricedRoom | null {
   if (/members?[- ]only|sign in (?:for|to)|requires? (?:a )?membership/i.test(rate.text)) return null;
   const occupancy = `${rate.text}\n${rate.occupancy ?? ''}`.replace(/<[^>]+>/g, ' ');
-  const adults = Number(occupancy.match(/Max (?:adults|persons):\s*(\d+)/i)?.[1] ?? occupancy.match(/Sleeps:\s*(\d+) adults?/i)?.[1] ?? 0);
+  const adults = Number(occupancy.match(/Max (?:adults|persons):\s*(\d+)/i)?.[1] ?? occupancy.match(/(?:Sleeps|Guests):\s*(\d+) adults?/i)?.[1] ?? 0);
   const children = Number(occupancy.match(/Max children:\s*(\d+)/i)?.[1] ?? 0);
   if (adults < room.adults || children < room.children.length || !rate.available) return null;
   if (room.children.length && !/Free stay for your child/i.test(rate.text)) return null;
@@ -80,7 +80,7 @@ export function extractBookingOffers(capture: HotelPageCapture, search: HotelSea
       propertyUrl: url.href, bookingUrl: url.href, imageUrl: capture.images[0]?.url ?? null, seller: 'Booking.com',
       ...stay, roomName, rateName, rooms: search.rooms, totalPrice: Math.round(combination.reduce((sum, room) => sum + room.price, 0) * 100) / 100,
       currency: search.currency, taxesIncluded: true, occupancyVerified: true, refundable, breakfast,
-      stars: Number(capture.starsLabel?.match(/([1-5]) (?:out of 5|stars)/i)?.[1]) || null, rating: Number(capture.text.match(/Scored (\d+(?:\.\d+)?)/)?.[1]) || null,
+      stars: Number(capture.starsLabel?.match(/([1-5]) (?:out of 5|stars)/i)?.[1]) || null, rating: Number(capture.ratingLabel?.match(/Scored (\d+(?:\.\d+)?)/)?.[1]) || null,
       amenities: hotelAmenities(capture.text.includes('Facilities of') ? capture.text.slice(capture.text.indexOf('Facilities of'), capture.text.indexOf('The fine print') > 0 ? capture.text.indexOf('The fine print') : undefined) : ''), match: refundable !== null && breakfast !== null ? 'exact' : 'approximate',
     };
   });
