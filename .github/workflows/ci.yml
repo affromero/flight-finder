@@ -12,7 +12,7 @@ jobs:
     timeout-minutes: 20
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -57,7 +57,7 @@ jobs:
       REDIS_URL: ''
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -93,7 +93,7 @@ jobs:
       SIDEDOOR_TEST_DATABASE_URL: postgresql://postgres:sidedoor-test-only@127.0.0.1:5432/sidedoor_test
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm

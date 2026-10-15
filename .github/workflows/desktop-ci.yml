@@ -28,7 +28,7 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: ./apps/desktop/src-tauri -> target
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
       - run: npm install
@@ -102,7 +102,7 @@ jobs:
         node: [22, 26]
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: ${{ matrix.node }}
           cache: npm
