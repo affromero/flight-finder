@@ -80,7 +80,7 @@ export function extractBookingOffers(capture: HotelPageCapture, search: HotelSea
       propertyUrl: url.href, bookingUrl: url.href, imageUrl: capture.images[0]?.url ?? null, seller: 'Booking.com',
       ...stay, roomName, rateName, rooms: search.rooms, totalPrice: Math.round(combination.reduce((sum, room) => sum + room.price, 0) * 100) / 100,
       currency: search.currency, taxesIncluded: true, occupancyVerified: true, refundable, breakfast,
-      stars: Number(capture.starsLabel?.match(/([1-5]) (?:out of 5|stars)/i)?.[1]) || null, rating: Number(capture.text.match(/Scored (\d+(?:\.\d+)?)/)?.[1] ?? capture.ratingLabel?.match(/Scored (\d+(?:\.\d+)?)/)?.[1]) || null,
+      stars: Number(capture.starsLabel?.match(/([1-5]) (?:out of 5|stars)/i)?.[1]) || null, rating: Number(capture.ratingLabel?.match(/Scored (\d+(?:\.\d+)?)/)?.[1]) || null,
       amenities: hotelAmenities(capture.text.includes('Facilities of') ? capture.text.slice(capture.text.indexOf('Facilities of'), capture.text.indexOf('The fine print') > 0 ? capture.text.indexOf('The fine print') : undefined) : ''), match: refundable !== null && breakfast !== null ? 'exact' : 'approximate',
     };
   });

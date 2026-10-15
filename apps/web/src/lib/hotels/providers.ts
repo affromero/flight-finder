@@ -6,7 +6,7 @@ import type { HotelPageCapture } from './extraction';
 import { extractBookingOffers } from './booking-extraction';
 import { extractGoogleOffers } from './google-extraction';
 import { navigateHotelPage } from './navigation';
-import { captureBookingRates } from './booking-capture';
+import { captureBookingRates, captureBookingRating } from './booking-capture';
 import { captureHotelLinks } from './link-capture';
 import { captureHotelLocation } from './location-capture';
 import type { HotelOffer, HotelSearch, HotelSelection, HotelSource, HotelStay } from './types';
@@ -51,10 +51,10 @@ export async function captureHotelSource(search: HotelSearch, stay: HotelStay, s
       propertyName: ((document.querySelector('#hp_hotel_name h2') ?? document.querySelector('.pp-header__title h2') ?? document.querySelector('#hp_hotel_name') ?? document.querySelector('.pp-header__title') ?? document.querySelector('h1')) as HTMLElement | null)?.innerText?.trim().split('\n').filter(Boolean).at(-1),
       address: (document.querySelector('.hp_address_subtitle') as HTMLElement | null)?.innerText?.trim(),
       starsLabel: [...(document.querySelector('#hp_hotel_name,.pp-header__title')?.parentElement?.parentElement?.querySelectorAll('[aria-label],[title]') ?? [])].map(element => element.getAttribute('aria-label') ?? element.getAttribute('title') ?? '').find(label => /[1-5] (?:out of 5|stars)/i.test(label)),
-      ratingLabel: [...document.querySelectorAll('[aria-label]')].map(element => element.getAttribute('aria-label') ?? '').find(label => /Scored \d/i.test(label)),
     }));
+    const ratingLabel = source === 'booking' ? await captureBookingRating(page) : undefined;
     const location = await captureHotelLocation(page, source, metadata.propertyName);
-    return { url: page.url(), text: text.slice(0, 90000), controls: controls.slice(0, 20000), links: links.slice(0, 150), images: images.filter(image => /(?:bstatic\.com.*\/hotel\/|googleusercontent\.com)/.test(image.url)).slice(0, 12), rates, totalPriceBasis, ...metadata, location };
+    return { url: page.url(), text: text.slice(0, 90000), controls: controls.slice(0, 20000), links: links.slice(0, 150), images: images.filter(image => /(?:bstatic\.com.*\/hotel\/|googleusercontent\.com)/.test(image.url)).slice(0, 12), rates, totalPriceBasis, ...metadata, ratingLabel, location };
   } catch (error) {
     failure = error;
     throw error;
