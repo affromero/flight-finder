@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { trackerExpiry } from '@/lib/criteria/flight-expiry';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { requireAdminApi } from '@/lib/admin-guard';
@@ -41,5 +42,5 @@ export async function GET(request: NextRequest) {
     },
   });
 
-  return apiSuccess({ queries, page, limit });
+  return apiSuccess({ queries: queries.map(query => ({ ...query, expiresAt: trackerExpiry(query) })), page, limit });
 }

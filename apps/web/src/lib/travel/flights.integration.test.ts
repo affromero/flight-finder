@@ -40,6 +40,7 @@ describe.skipIf(process.env.TRAVEL_FLIGHT_INTEGRATION_TESTS !== '1')('canonical 
     boundary.direct.mockReset();
   });
   afterEach(async () => {
+    vi.useRealTimers();
     await prisma.travelJob.deleteMany();
     await prisma.query.deleteMany({ where: { userId: owner } });
     await prisma.travelLease.deleteMany(); await prisma.travelAdmission.deleteMany();
@@ -60,6 +61,28 @@ describe.skipIf(process.env.TRAVEL_FLIGHT_INTEGRATION_TESTS !== '1')('canonical 
     const created = await query();
     return prisma.query.update({ where: { id: created.id }, data: { preferredAirlines: reverse ? ['American Airlines', 'Delta'] : ['Delta', 'American Airlines'] } });
   }
+
+  it('rejects a departed queued tracker despite a future legacy expiry', async () => {
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { vpnProvider: 'none', vpnCountries: [] } });
+    const created = await query();
+    await prisma.query.update({ where: { id: created.id }, data: { dateFrom: new Date('2000-01-01') } });
+    expect(await runScrapeForQuery(created.id)).toMatchObject({ status: 'failed', snapshotsCount: 0, error: expect.stringContaining('expired') });
+    expect(seen).toEqual([]);
+    expect(await prisma.priceSnapshot.count({ where: { queryId: created.id } })).toBe(0);
+  });
+
+  it('does not commit flight results after outbound UTC midnight', async () => {
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { vpnProvider: 'none', vpnCountries: [] } });
+    const created = await query();
+    boundary.extract.mockImplementationOnce(async () => {
+      vi.useFakeTimers({ toFake: ['Date'] });
+      vi.setSystemTime(new Date('2027-05-02T00:00:00Z'));
+      return { prices: [{ travelDate: '2027-05-01', price: 350, currency: 'GBP', airline: 'Delta', bookingUrl: '', stops: 0 }], usage: { inputTokens: 0, outputTokens: 0 } };
+    });
+    await expect(runScrapeForQuery(created.id)).rejects.toThrow(/changed|finish/);
+    expect(await prisma.priceSnapshot.count({ where: { queryId: created.id } })).toBe(0);
+    expect(await prisma.travelJob.findFirstOrThrow({ where: { queryId: created.id } })).toMatchObject({ status: 'failed' });
+  });
   const fare = (airline: string, flightNumber: string, travelDate = '2027-05-01') => ({ travelDate, price: 350, currency: 'GBP', airline, flightNumber, bookingUrl: '', stops: 0, duration: '5h' });
   const navigation = (airline: string, resultsFound = true) => ({ html: airline, url: 'https://example.com/flight', resultsFound, source: 'airline_direct' });
   it.each(['navigation', 'unloaded', 'throw', 'empty', 'filtered'].flatMap(failure => [false, true].map(reverse => ({ failure, reverse }))))('preserves stored fares and partial diagnostics after $failure, reversed=$reverse', async ({ failure, reverse }) => {

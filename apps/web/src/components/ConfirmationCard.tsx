@@ -6,6 +6,7 @@ import { DepartureWindowFields } from './criteria/DepartureWindowFields';
 import type { TimePreference } from '@/lib/criteria/departure';
 import type { Airport } from '@/lib/scraper/parse-query';
 import { formatCurrency } from '@/lib/currency';
+import { flightExpiry } from '@/lib/criteria/flight-expiry';
 import {
   buildPreviewDatePairs,
   countPreviewTasks,
@@ -57,16 +58,6 @@ function hasFilters(p: ParsedQuery): boolean {
     p.timePreference !== 'any' ||
     p.cabinClass !== 'economy'
   );
-}
-
-function computeExpiry(dateTo: string, flexibility: number): string {
-  const d = new Date(dateTo + 'T00:00:00');
-  d.setDate(d.getDate() + flexibility);
-  return d.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  });
 }
 
 const POPULAR_COUNTRIES = [
@@ -139,20 +130,27 @@ export function ConfirmationCard({
 
   let previewTaskCount = 0;
   let previewDatePairCount = 0;
+  let trackingEnds = flightExpiry(new Date(parsed.dateFrom + 'T00:00:00Z'));
   let unequalDateError = false;
   try {
     previewTaskCount = countPreviewTasks(parsed.origins.length, parsed.destinations.length, parsed);
-    previewDatePairCount = buildPreviewDatePairs(
+    const datePairs = buildPreviewDatePairs(
       parsed.outboundDates,
       parsed.returnDates,
       parsed.dateFrom,
       parsed.dateTo,
       parsed.tripType === 'one_way',
-    ).length;
+    );
+    previewDatePairCount = datePairs.length;
+    const latestOutbound = datePairs.map(pair => pair.outboundDate).sort().at(-1);
+    if (latestOutbound) trackingEnds = flightExpiry(new Date(latestOutbound + 'T00:00:00Z'));
   } catch (error) {
     unequalDateError = error instanceof Error && error.message === UNEQUAL_MULTI_DATE_ERROR;
   }
   const showComboWarn = previewTaskCount >= PREVIEW_COMBO_WARN_THRESHOLD;
+  const trackingEndsLabel = trackingEnds.toLocaleDateString('en-US', {
+    month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC',
+  });
   const showFarFutureWarn = !unequalDateError && isPreviewFarFutureWarn(parsed);
   const overFarFuture = !unequalDateError && isPreviewTooFarInFuture(parsed);
   const overComboCap = previewTaskCount > previewMaxCombos;
@@ -244,7 +242,7 @@ export function ConfirmationCard({
         <div className={styles.expiry}>
           <span className={styles.label}>{t('linkExpires')}</span>
           <span className={styles.value}>
-            {computeExpiry(parsed.dateTo, parsed.flexibility)}
+            {trackingEndsLabel}
           </span>
         </div>
       </div>
@@ -254,7 +252,7 @@ export function ConfirmationCard({
           <circle cx="12" cy="12" r="10" />
           <path d="M12 6v6l4 2" />
         </svg>
-        {t('trackingInfo', { date: computeExpiry(parsed.dateTo, parsed.flexibility) })}
+        {t('trackingInfo', { date: trackingEndsLabel })}
       </p>
 
       {hasFilters(parsed) && (

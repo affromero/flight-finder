@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { trackerExpiry } from '@/lib/criteria/flight-expiry';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { requireAdminApi } from '@/lib/admin-guard';
@@ -82,7 +83,7 @@ export async function PATCH(
   }
 
   const updated = await prisma.query.update({ where: { id }, data });
-  return apiSuccess(updated);
+  return apiSuccess({ ...updated, expiresAt: trackerExpiry(updated) });
 }
 
 export async function DELETE(

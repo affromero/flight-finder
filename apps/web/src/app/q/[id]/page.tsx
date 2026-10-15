@@ -2,6 +2,7 @@ import type { Metadata } from 'next';
 import { notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
+import { trackerExpiry, flightRefreshTarget } from '@/lib/criteria/flight-expiry';
 import { ACTUAL_FLIGHT_FARE_WHERE, latestFlightObservations, flightComparisonCurrency, lowestFlightFare, availableFlightFares } from '@/lib/flight-pricing';
 import { PriceChart } from '@/components/PriceChart';
 import { BestPrice } from '@/components/BestPrice';
@@ -69,7 +70,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 
 function formatDate(d: Date): string {
-  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: 'UTC' });
 }
 
 function daysUntil(d: Date): number {
@@ -110,6 +111,7 @@ interface QueryWithSnapshots {
     flexibility: number;
     tripType: string;
     active: boolean;
+    isSeed: boolean;
     maxPrice: number | null;
     maxStops: number | null;
     maxDurationHours: number | null;
@@ -274,7 +276,7 @@ async function loadQueryWithSnapshots(id: string): Promise<QueryWithSnapshots | 
   }));
 
   return {
-    query,
+    query: { ...query, expiresAt: trackerExpiry(query) },
     snapshots: filterSnapshotsByTrackerFilters(allSnapshots, query),
     allSnapshots,
     editEvents: editEventsDesc.slice().reverse().map((event) => ({
@@ -359,7 +361,8 @@ export default async function ChartPage({ params }: Props) {
   const { dateFrom: groupDateFrom, dateTo: groupDateTo } = groupDateRange(
     allQueries.map((q) => q.query),
   );
-  const expired = allQueries.every((q) => now > q.query.expiresAt.getTime());
+  const expired = allQueries.every((q) => now >= q.query.expiresAt.getTime());
+  const refreshId = flightRefreshTarget(allQueries.map(q => q.query), new Date(now));
   const daysLeft = daysUntil(groupExpiresAt);
   const scrapeAggregate = aggregateScrapeStatus(
     allQueries.map((q) => ({
@@ -469,8 +472,8 @@ export default async function ChartPage({ params }: Props) {
           </p>
           {!expired && (
             <>
-              {primary.query.active && (
-                <ForceScrapeButton queryId={id} ariaLabel={t('refreshNow')} />
+              {refreshId && (
+                <ForceScrapeButton queryId={refreshId} ariaLabel={t('refreshNow')} />
               )}
               <ScrapeInterval queryId={id} currentInterval={primary.query.scrapeInterval} canEdit={canEdit} />
               <TrackerFilters

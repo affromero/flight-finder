@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { flightDayStart, hasFlightExpired } from '@/lib/criteria/flight-expiry';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { authorizeMutation } from '@/lib/query-auth';
@@ -53,6 +54,7 @@ export async function POST(
       active: true,
       isSeed: true,
       expiresAt: true,
+      dateFrom: true,
     },
   });
 
@@ -65,7 +67,7 @@ export async function POST(
     return apiError('Tracker is paused or a seed; resume it before refreshing.', 409);
   }
 
-  if (query.expiresAt.getTime() <= Date.now()) {
+  if (hasFlightExpired(query)) {
     return apiError('Tracker has expired; create a fresh one to keep scraping.', 410);
   }
 
@@ -86,7 +88,7 @@ export async function POST(
           groupId: query.groupId,
           active: true,
           isSeed: false,
-          expiresAt: { gt: now },
+          dateFrom: { gte: flightDayStart(now) },
         },
         select: { id: true },
       })).map((q) => q.id)

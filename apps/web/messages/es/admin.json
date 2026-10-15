@@ -159,7 +159,7 @@
     "scraping": "Extracción",
     "scrapingEnabled": "Extracción habilitada",
     "scrapingPaused": "Extracción pausada",
-    "scrapingHint": "Pausa para detener todas las revisiones de precios en segundo plano, por ejemplo durante un viaje o al superar una cuota de API. Los rastreadores existentes y el historial de precios se conservan.",
+    "scrapingHint": "Pausa para detener las revisiones de precios en segundo plano y retener las alertas pendientes de vuelos, hoteles y coches. Al reanudar, continúan las revisiones y el envío de alertas. Los rastreadores existentes y el historial de precios se conservan.",
     "saving": "Guardando...",
     "saveConfig": "Guardar configuración",
     "configSaved": "Configuración guardada",

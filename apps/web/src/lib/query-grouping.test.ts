@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { groupQueries, type GroupableQuery } from './query-grouping';
+import { flightRefreshTarget } from './criteria/flight-expiry';
 
 function row(overrides: Partial<GroupableQuery> & { id: string }): GroupableQuery {
   return {
@@ -19,6 +20,16 @@ function row(overrides: Partial<GroupableQuery> & { id: string }): GroupableQuer
 }
 
 describe('groupQueries', () => {
+  it('keeps the group link stable when refresh moves to a live sibling', () => {
+    const group = groupQueries([
+      row({ id: 'earliest', groupId: 'group', dateFrom: '2027-05-01', dateTo: '2027-05-20' }),
+      row({ id: 'later', groupId: 'group', dateFrom: '2027-05-03', dateTo: '2027-05-20' }),
+    ])[0]!;
+    expect(group.primaryId).toBe('earliest');
+    expect(flightRefreshTarget(group.queries, new Date('2027-05-02'))).toBe('later');
+    expect(group.primaryId).toBe('earliest');
+  });
+
   it('returns empty array for empty input', () => {
     expect(groupQueries([])).toEqual([]);
   });

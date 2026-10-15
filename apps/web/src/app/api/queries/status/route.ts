@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { hasFlightExpired } from '@/lib/criteria/flight-expiry';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 
@@ -12,7 +13,7 @@ export async function POST(request: NextRequest) {
 
   const queries = await prisma.query.findMany({
     where: { id: { in: ids } },
-    select: { id: true, active: true, expiresAt: true },
+    select: { id: true, active: true, dateFrom: true, isSeed: true },
   });
 
   const statusMap: Record<string, string> = {};
@@ -22,7 +23,7 @@ export async function POST(request: NextRequest) {
     const q = queries.find((query) => query.id === id);
     if (!q) {
       statusMap[id] = 'deleted';
-    } else if (now > q.expiresAt || !q.active) {
+    } else if (hasFlightExpired(q, now) || !q.active) {
       statusMap[id] = 'expired';
     } else {
       statusMap[id] = 'active';

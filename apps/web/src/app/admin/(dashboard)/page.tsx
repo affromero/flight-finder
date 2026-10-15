@@ -1,5 +1,6 @@
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
+import { flightDayStart } from '@/lib/criteria/flight-expiry';
 import { TravelRecovery } from '@/components/travel/TravelRecovery';
 import styles from './page.module.css';
 
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export default async function AdminDashboard() {
   const t = await getTranslations('AdminDashboard');
   const [activeQueries, totalRuns, recentRuns, costData, recentErrors] = await Promise.all([
-    prisma.query.count({ where: { active: true, expiresAt: { gt: new Date() } } }),
+    prisma.query.count({ where: { active: true, OR: [{ isSeed: true }, { dateFrom: { gte: flightDayStart() } }] } }),
     prisma.fetchRun.count(),
     prisma.fetchRun.findMany({
       orderBy: { startedAt: 'desc' },

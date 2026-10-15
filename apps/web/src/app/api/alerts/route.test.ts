@@ -7,7 +7,7 @@ vi.mock('@/lib/sidedoor/access/service', async () => {
 });
 vi.mock('next/headers', () => ({ cookies: async () => ({ get: () => sessionBoundary.fixture?.token ? { value: sessionBoundary.fixture.token } : undefined }) }));
 beforeEach(() => sessionBoundary.fixture!.resetRequest());
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const mockFindMany = vi.fn();
 const mockSnapshotFindMany = vi.fn();
@@ -41,6 +41,17 @@ function makeQuery(overrides: Record<string, unknown> = {}) {
 }
 
 describe('GET /api/alerts', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('selects alerts from live outbound days without consulting legacy expiry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-05-01T23:30:00-07:00'));
+    expect((await GET()).status).toBe(200);
+    expect(mockFindMany.mock.lastCall?.[0].where).toMatchObject({
+      active: true, dateFrom: { gte: new Date('2027-05-02T00:00:00Z') },
+    });
+  });
+
   beforeEach(async () => {
     vi.clearAllMocks();
     mockIsMultiUserEnabled.mockResolvedValue(false);

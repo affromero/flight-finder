@@ -1,5 +1,6 @@
 import { apiError, apiSuccess } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
+import { flightDayStart } from '@/lib/criteria/flight-expiry';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentProfile } from '@/lib/user-auth';
 import type { Prisma } from '@/generated/prisma/client';
@@ -21,7 +22,7 @@ export async function GET() {
     where: {
       active: true,
       isSeed: false,
-      expiresAt: { gt: new Date() },
+      dateFrom: { gte: flightDayStart() },
       ...userFilter,
     },
     select: {

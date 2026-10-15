@@ -159,7 +159,7 @@
     "scraping": "Abrufe",
     "scrapingEnabled": "Abrufe aktiviert",
     "scrapingPaused": "Abrufe pausiert",
-    "scrapingHint": "Pausiere, um alle Preisprüfungen im Hintergrund zu stoppen, etwa während du weg bist oder eine API-Quote überschritten ist. Bestehende Tracker und der Preisverlauf bleiben erhalten.",
+    "scrapingHint": "Pausiere, um Preisprüfungen im Hintergrund zu stoppen und ausstehende Preisalarme für Flüge, Hotels und Mietwagen zurückzuhalten. Nach dem Fortsetzen laufen Prüfungen und Alarmzustellung weiter. Bestehende Tracker und der Preisverlauf bleiben erhalten.",
     "saving": "Wird gespeichert...",
     "saveConfig": "Speichern",
     "configSaved": "Konfiguration gespeichert",

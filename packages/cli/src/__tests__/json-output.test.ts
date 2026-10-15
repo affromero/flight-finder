@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { mockFindUnique, mockFindMany } = vi.hoisted(() => ({
   mockFindUnique: vi.fn(),
@@ -53,6 +53,14 @@ function snap(over: Record<string, unknown> = {}) {
 
 describe('getQueryJson', () => {
   beforeEach(() => mockFindUnique.mockReset());
+  afterEach(() => vi.useRealTimers());
+
+  it('keeps a legacy pinned tracker live through departure day and reports the corrected expiry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2099-07-01T18:00:00Z'));
+    mockFindUnique.mockResolvedValue(row({ expiresAt: new Date('2099-07-01') }));
+    expect(await getQueryJson('q1')).toMatchObject({ expired: false, expiresAt: '2099-07-02T00:00:00.000Z' });
+  });
 
   it('keeps bookings and history within the saved strict window, then restores them when disabled', async () => {
     const snapshots = [snap({ price: 300, departureTime: '19:00' }), snap({ price: 600, departureTime: '09:00' }), snap({ price: 200, departureTime: null })];

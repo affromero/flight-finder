@@ -15,6 +15,7 @@ describe.skipIf(process.env.CAR_DELIVERY_INTEGRATION_TESTS !== '1')('durable car
   let handle: (path: string) => Promise<number>;
   const received: { path: string; message: { data: { eventId: string } } }[] = [];
   const channelIds: string[] = [];
+  let previousConfig: { enabled: boolean } | null;
   beforeAll(async () => {
     const url = new URL(process.env.DATABASE_URL ?? 'http://invalid');
     if (url.hostname !== '127.0.0.1' || url.port !== '55440' || url.pathname !== '/car_test') throw new Error('Car delivery tests require disposable localhost:55440/car_test');
@@ -32,6 +33,8 @@ describe.skipIf(process.env.CAR_DELIVERY_INTEGRATION_TESTS !== '1')('durable car
   });
   beforeEach(async () => {
     vi.stubEnv('SELF_HOSTED', 'true'); vi.spyOn(console, 'error').mockImplementation(() => undefined);
+    previousConfig = await prisma.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { enabled: true } });
+    await prisma.extractionConfig.upsert({ where: { id: 'singleton' }, create: { enabled: true }, update: { enabled: true } });
     received.length = 0; handle = async () => 200;
     owner = (await prisma.user.create({ data: { username: `car-delivery-owner-${crypto.randomUUID()}` } })).id;
     other = (await prisma.user.create({ data: { username: `car-delivery-other-${crypto.randomUUID()}` } })).id;
@@ -43,6 +46,8 @@ describe.skipIf(process.env.CAR_DELIVERY_INTEGRATION_TESTS !== '1')('durable car
   afterEach(async () => {
     await prisma.notificationChannel.deleteMany({ where: { id: { in: channelIds.splice(0) } } });
     await prisma.user.deleteMany({ where: { id: { in: [owner, other] } } });
+    if (previousConfig) await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: previousConfig });
+    else await prisma.extractionConfig.delete({ where: { id: 'singleton' } });
     vi.unstubAllEnvs(); vi.restoreAllMocks();
   });
   afterAll(async () => {

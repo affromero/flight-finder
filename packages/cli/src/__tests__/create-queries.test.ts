@@ -50,6 +50,21 @@ const baseRoute = {
 };
 
 describe('createTrackedQueries', () => {
+  it.each(['one_way', 'round_trip'] as const)('tracks a pinned %s through its departure day', async tripType => {
+    await createTrackedQueries({ ...baseParsed, tripType, dateTo: '2026-11-20', flexibility: 3 }, 'track flight', [{ route: baseRoute, flights: [] }]);
+    expect(mockQueryCreate.mock.calls[0]?.[0].data.expiresAt).toEqual(new Date('2026-11-08'));
+  });
+
+  it('gives each outbound date its own expiry within a tracker group', async () => {
+    await createTrackedQueries(baseParsed, 'track flight dates', [
+      { route: baseRoute, flights: [] },
+      { route: { ...baseRoute, date: '2026-11-09' }, flights: [] },
+    ]);
+    expect(mockQueryCreate.mock.calls.map(call => call[0].data.expiresAt)).toEqual([
+      new Date('2026-11-08'), new Date('2026-11-10'),
+    ]);
+  });
+
   beforeEach(() => {
     mockQueryCreate.mockClear();
     mockSnapshotCreateMany.mockClear();

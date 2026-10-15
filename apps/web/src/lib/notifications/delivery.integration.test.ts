@@ -8,9 +8,13 @@ import { editHotelTracker } from '../hotels/store';
 import { runTravelAlertsSafely } from '../travel/schedule';
 import { prepareStoredConfig } from './channels/config';
 import type { Prisma } from '@/generated/prisma/client';
+import { carOfferFixture, carSearchFixture } from '@/test/car-fixtures';
+import { carAlertMessage } from '../cars/alerts';
+import { carJson } from '../cars/store';
+import { deliverCarAlerts } from '../cars/delivery';
 
 describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and hotel delivery through PostgreSQL and local HTTP', () => {
-  let server: Server, base = '', owner = '', other = '', queryId = '', trackerId = '', cycle: Date;
+  let server: Server, base = '', owner = '', other = '', queryId = '', trackerId = '', carTrackerId = '', cycle: Date;
   let handle: (path: string) => Promise<number>;
   const received: { path: string; data: { eventId: string; currentMin?: number }; gateway?: { account: string; phone?: string; groupId?: string; message: string }; apiKey?: string }[] = [];
   const channels: string[] = [];
@@ -46,10 +50,13 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
     await prisma.extractionConfig.upsert({ where: { id: 'singleton' }, create: {}, update: {} });
     await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { enabled: true, notifyMinDropAbs: 5, notifyMinDropPct: 0, cabinAlertBaselineCutoff: new Date(now - 120_000) } });
     trackerId = '';
+    carTrackerId = '';
   });
   afterEach(async () => {
+    vi.useRealTimers();
     await prisma.notificationChannel.deleteMany({ where: { id: { in: channels.splice(0) } } });
     await prisma.query.deleteMany({ where: { id: queryId } });
+    if (carTrackerId) await prisma.carTracker.deleteMany({ where: { id: carTrackerId } });
     await prisma.user.deleteMany({ where: { id: { in: [owner, other] } } });
     vi.unstubAllEnvs(); vi.restoreAllMocks();
   });
@@ -63,6 +70,75 @@ describe.skipIf(process.env.NOTIFICATION_INTEGRATION_TESTS !== '1')('flight and 
   }
   const event = () => prisma.travelAlertDelivery.findFirstOrThrow({ where: { queryId } });
   const retry = () => prisma.travelAlertDelivery.updateMany({ where: { queryId }, data: { nextAttemptAt: new Date(0) } });
+
+  it('delivers a legacy pinned flight event through departure day without rewriting its expiry or authority', async () => {
+    const query = await prisma.query.findUniqueOrThrow({ where: { id: queryId } });
+    const legacyExpiry = new Date(query.dateFrom);
+    legacyExpiry.setUTCHours(0, 0, 0, 0);
+    await prisma.query.update({ where: { id: queryId }, data: { expiresAt: legacyExpiry } });
+    const first = await channel('a'); await channel('b');
+    await recordFlightAlert(queryId, cycle);
+    await prisma.travelAlertDelivery.updateMany({ where: { queryId }, data: { deliveredIds: [first.id] } });
+    const before = await event();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(legacyExpiry.getTime() + 18 * 3_600_000));
+    await deliverFlightAlerts();
+    expect(received.map(row => row.path)).toEqual(['/b']);
+    expect(await event()).toMatchObject({ id: before.id, eventKey: before.eventKey, message: before.message,
+      pending: false, deliveredIds: expect.arrayContaining([first.id]), lastError: null });
+    expect((await prisma.query.findUniqueOrThrow({ where: { id: queryId } })).expiresAt).toEqual(legacyExpiry);
+  });
+
+  async function pendingAlert(kind: 'flight' | 'hotel' | 'car') {
+    if (kind === 'flight') {
+      await recordFlightAlert(queryId, cycle);
+      return { deliver: deliverFlightAlerts, read: event };
+    }
+    if (kind === 'hotel') {
+      const alert = await hotelEvent();
+      return { deliver: deliverHotelAlerts, read: () => prisma.hotelAlert.findUniqueOrThrow({ where: { id: alert.id } }) };
+    }
+    const tracker = await prisma.carTracker.create({ data: { userId: owner, label: 'Paused rental alert', currency: 'GBP', search: carJson(carSearchFixture()) } });
+    carTrackerId = tracker.id;
+    const message = carAlertMessage(tracker, carOfferFixture(), { currency: 'GBP', minor: 10000 }, {
+      target: true, low: false, state: { targetArmed: false, historicalLowMinor: 10000 },
+    });
+    const alert = await prisma.travelAlertDelivery.create({ data: { carTrackerId, eventKey: `car:pause:${carTrackerId}`, message: carJson(message) } });
+    return { deliver: deliverCarAlerts, read: () => prisma.travelAlertDelivery.findUniqueOrThrow({ where: { id: alert.id } }) };
+  }
+
+  it.each(['flight', 'hotel', 'car'] as const)('holds direct %s delivery while globally paused, then delivers the same alert', async kind => {
+    const alert = await pendingAlert(kind);
+    await channel('a');
+    const before = await alert.read();
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { enabled: false } });
+    await alert.deliver();
+    expect(received).toEqual([]);
+    expect(await alert.read()).toEqual(before);
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { enabled: true } });
+    await alert.deliver();
+    expect(received.map(row => row.path)).toEqual(['/a']);
+    expect(await alert.read()).toMatchObject({ id: before.id, pending: false });
+  });
+
+  it.each(['flight', 'hotel', 'car'] as const)('retains an accepted %s receipt when globally paused during transport', async kind => {
+    const alert = await pendingAlert(kind);
+    const first = await channel('a'); await channel('b');
+    handle = async () => {
+      await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { enabled: false } });
+      return 200;
+    };
+    await alert.deliver();
+    expect(received.map(row => row.path)).toEqual(['/a']);
+    expect(await alert.read()).toMatchObject({ pending: true, deliveredIds: [first.id] });
+    await alert.deliver();
+    expect(received.map(row => row.path)).toEqual(['/a']);
+    await prisma.extractionConfig.update({ where: { id: 'singleton' }, data: { enabled: true } });
+    handle = async () => 200;
+    await alert.deliver();
+    expect(received.map(row => row.path)).toEqual(['/a', '/b']);
+    expect(await alert.read()).toMatchObject({ pending: false, deliveredIds: expect.arrayContaining([first.id]) });
+  });
   async function selectChannels(ids: string[], revision = 1) {
     return prisma.queryNotificationPolicy.upsert({ where: { queryId }, create: { queryId, mode: 'selected', channelIds: ids, revision },
       update: { mode: 'selected', channelIds: ids, revision } });

@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Box, Text, useInput, useApp } from 'ink';
 import Spinner from 'ink-spinner';
 import { prisma } from '@/lib/prisma';
+import { hasFlightExpired } from '../lib/criteria/flight-expiry.js';
 import { ACTUAL_FLIGHT_FARE_WHERE } from '../lib/flight-pricing.js';
 import { filterSnapshotsByTrackerFilters } from '../lib/criteria/snapshot-filters.js';
 import { formatDate, formatCurrency, formatTimeAgo } from '../lib/format.js';
@@ -15,7 +16,7 @@ interface QueryRow {
   dateFrom: Date;
   dateTo: Date;
   active: boolean;
-  expiresAt: Date | null;
+  isSeed: boolean;
   currency: string | null;
   lastScraped: Date | null;
   minPrice: number | null;
@@ -63,7 +64,7 @@ export function QueryList({ onView }: QueryListProps) {
             dateFrom: r.dateFrom,
             dateTo: r.dateTo,
             active: r.active,
-            expiresAt: r.expiresAt,
+            isSeed: r.isSeed,
             currency: r.currency,
             lastScraped: r.fetchRuns[0]?.startedAt ?? null,
             minPrice: r.snapshots.length > 0 ? r.snapshots[0]!.price : null,
@@ -112,8 +113,6 @@ export function QueryList({ onView }: QueryListProps) {
   }
 
   const now = new Date();
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
 
   return (
     <Box flexDirection="column">
@@ -137,8 +136,7 @@ export function QueryList({ onView }: QueryListProps) {
         const dates = `${formatDate(q.dateFrom)} – ${formatDate(q.dateTo)}`;
         // Departure passed means the trip is unbookable; show Expired even if
         // the scrape sweep has not yet flipped active to false.
-        const departed = q.dateFrom < todayStart;
-        const isExpired = departed || (q.expiresAt !== null && q.expiresAt < now);
+        const isExpired = hasFlightExpired(q, now);
         const status = isExpired ? 'Expired' : !q.active ? 'Paused' : 'Active';
         const statusColor = status === 'Active' ? 'green' : status === 'Expired' ? 'red' : 'yellow';
         const lastScraped = q.lastScraped ? formatTimeAgo(q.lastScraped) : '—';

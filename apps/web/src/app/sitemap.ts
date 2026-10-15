@@ -1,5 +1,6 @@
 import type { MetadataRoute } from 'next';
 import { prisma } from '@/lib/prisma';
+import { flightDayStart } from '@/lib/criteria/flight-expiry';
 
 export const dynamic = 'force-dynamic';
 
@@ -10,7 +11,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       firstViewedAt: { not: null },
       OR: [
         { isSeed: true },
-        { expiresAt: { gt: new Date() } },
+        { dateFrom: { gte: flightDayStart() } },
       ],
     },
     select: {

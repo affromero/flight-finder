@@ -103,6 +103,7 @@ function rowDefaults(overrides: Record<string, unknown> = {}) {
     active: true,
     isSeed: false,
     expiresAt: FAR_FUTURE,
+    dateFrom: FAR_FUTURE,
     ...overrides,
   };
 }
@@ -177,8 +178,8 @@ describe('POST /api/queries/[id]/scrape', () => {
     expect(mockRunFullScrapeForQuery).not.toHaveBeenCalled();
   });
 
-  it('returns 410 on an expired tracker (active but past expiresAt)', async () => {
-    mockQueryFindUnique.mockResolvedValue(rowDefaults({ expiresAt: FAR_PAST }));
+  it('returns 410 after departure even when legacy expiresAt is still in the future', async () => {
+    mockQueryFindUnique.mockResolvedValue(rowDefaults({ dateFrom: FAR_PAST }));
     const res = await POST(...makeRequest('q1', { deleteToken: 'real-token' }));
     const data = await res.json();
     expect(res.status).toBe(410);

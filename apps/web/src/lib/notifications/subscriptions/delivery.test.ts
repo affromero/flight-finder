@@ -18,6 +18,7 @@ describe('the final notification transport guard', () => {
       nextAttemptAt: new Date(), lastError: null, createdAt: new Date() };
     const tx = {
       $executeRaw: async () => 0,
+      extractionConfig: { findUnique: async () => ({ enabled: true }) },
       notificationChannel: {
         findMany: async () => [original],
         findUnique: async () => {

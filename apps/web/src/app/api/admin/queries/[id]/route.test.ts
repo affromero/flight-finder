@@ -54,7 +54,7 @@ function deleteRequest(id: string, body?: Record<string, unknown>): [NextRequest
 describe('admin PATCH /api/admin/queries/[id]', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    mockQueryUpdate.mockResolvedValue({});
+    mockQueryUpdate.mockResolvedValue({ dateFrom: new Date('2027-05-01'), expiresAt: new Date('2027-05-20') });
     mockQueryUpdateMany.mockResolvedValue({ count: 0 });
   });
 

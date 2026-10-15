@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma, TravelAlertDelivery } from '@/generated/prisma/client';
 import { notificationTransaction } from '../notifications/database';
-import { deliverClaimedAlert, DELIVERY_CLAIM_MS, type ClaimedDelivery } from '../notifications/delivery';
+import { deliverClaimedAlert, DELIVERY_CLAIM_MS, notificationDeliveryPaused, type ClaimedDelivery } from '../notifications/delivery';
 import type { ChannelMessage } from '../notifications/channels/types';
 import { json, lockHotelTracker } from './store';
 
@@ -41,6 +41,7 @@ async function guarded<T>(entry: HotelDelivery, work: (tx: Prisma.TransactionCli
   });
 }
 export async function deliverHotelAlerts(signal?: AbortSignal): Promise<void> {
+  if (await notificationTransaction(notificationDeliveryPaused, signal)) return;
   const alerts = await notificationTransaction(tx => tx.hotelAlert.findMany({ where: { pending: true, nextAttemptAt: { lte: new Date() }, tracker: { active: true } },
     orderBy: [{ nextAttemptAt: 'asc' }, { id: 'asc' }], take: 50 }), signal);
   for (const alert of alerts) {
