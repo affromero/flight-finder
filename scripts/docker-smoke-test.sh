@@ -133,10 +133,20 @@ until curl -sf "http://localhost:${HOST_PORT}/api/health" >/dev/null 2>&1; do
 done
 pass "Health check passed (${SECONDS_WAITED}s)"
 
+info "Configuring the disposable owner and mock provider through the application..."
+export TEST_ACCESS_NAME=disposable-smoke-owner
+export TEST_ACCESS_PASSWORD=disposable-smoke-password
+python3 scripts/testing/access-setup.py docker compose --env-file /dev/null \
+  -p "$smoke_project" "${COMPOSE_FILES[@]}" exec web flight-finder-tui access setup
+FLIGHT_FINDER_SESSION=$(compose exec -T web node /smoke/testing/configure-smoke-provider.mjs)
+export FLIGHT_FINDER_SESSION
+pass "Saved mock provider credentials"
+
 # --- Step 4: Run smoke test endpoint ---
 info "Running /api/test/scrape..."
-RESPONSE=$(curl -sf -w "\n%{http_code}" \
+RESPONSE=$(curl --fail-with-body -sS -w "\n%{http_code}" \
   -H "Authorization: Bearer $CRON_SECRET" \
+  -H "Cookie: ft-session=$FLIGHT_FINDER_SESSION" \
   --max-time "$TEST_TIMEOUT" \
   "http://localhost:${HOST_PORT}/api/test/scrape" 2>&1) || {
     fail "Test endpoint request failed"
@@ -166,7 +176,7 @@ if [ -z "$OK" ]; then
 fi
 
 # --- Step 5: Report ---
-compose exec -T web node --input-type=module < scripts/container-car-smoke.mjs
+compose exec -T -e FLIGHT_FINDER_SESSION web node --input-type=module < scripts/container-car-smoke.mjs
 pass "Container rental catalog and access checks passed"
 
 echo ""
