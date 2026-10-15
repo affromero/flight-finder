@@ -15,6 +15,24 @@ describe('runScrapeAll pause gate (issue #106)', () => {
 });
 
 describe('runScrapeForQuery', () => {
+  it('refuses an expired queued tracker before contacting a price source', async () => {
+    mockPrisma.query.findUnique.mockResolvedValue(BASE_QUERY);
+    vi.setSystemTime(new Date('2026-06-16T00:00:00Z'));
+    const result = await runScrapeForQuery('q1');
+    expect(result).toMatchObject({ status: 'failed', snapshotsCount: 0, error: expect.stringContaining('expired') });
+    expect(mockNavigateGoogleFlights.mock.calls).toEqual([]);
+  });
+
+  it('rejects results when the outbound UTC day ends during extraction', async () => {
+    vi.setSystemTime(new Date('2026-06-15T23:59:59Z'));
+    mockExtractPrices.mockImplementation(async () => {
+      vi.setSystemTime(new Date('2026-06-16T00:00:00Z'));
+      return { prices: [{ travelDate: '2026-06-15', price: 300, currency: 'USD', airline: 'Delta', bookingUrl: '', stops: 0 }], usage: { inputTokens: 0, outputTokens: 0 } };
+    });
+    await expect(runScrapeForQuery('q1')).rejects.toThrow(/changed/);
+    expect(mockPrisma.priceSnapshot.createMany.mock.calls).toEqual([]);
+  });
+
   beforeEach(() => {
     vi.clearAllMocks();
     mockPrisma.query.findUnique.mockResolvedValue(BASE_QUERY);

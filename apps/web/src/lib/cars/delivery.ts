@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { Prisma, TravelAlertDelivery } from '@/generated/prisma/client';
-import { deliverClaimedAlert, DELIVERY_CLAIM_MS } from '../notifications/delivery';
+import { deliverClaimedAlert, DELIVERY_CLAIM_MS, notificationDeliveryPaused } from '../notifications/delivery';
 import type { ChannelMessage } from '../notifications/channels/types';
 import { lockCarTrackerRow } from './store';
 import { carInteger, carRecord, carText } from './validation';
@@ -59,6 +59,7 @@ async function deliver(entry: Claimed, parent?: AbortSignal): Promise<void> {
 /** External delivery is at least once: acceptance followed by a lost receipt may repeat. */
 export async function deliverCarAlerts(signal?: AbortSignal): Promise<void> {
   if (process.env.SELF_HOSTED !== 'true') return;
+  if (await notificationTransaction(notificationDeliveryPaused, signal)) return;
   const rows = await notificationTransaction(tx => tx.travelAlertDelivery.findMany({ where: { carTrackerId: { not: null }, pending: true, nextAttemptAt: { lte: new Date() } }, orderBy: [{ nextAttemptAt: 'asc' }, { id: 'asc' }], take: 20 }), signal);
   for (const row of rows) {
     if (signal?.aborted) return;

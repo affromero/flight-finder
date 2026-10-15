@@ -2,6 +2,7 @@
 // single tracker, otherwise the whole list. Plain TypeScript (no JSX) so the
 // pure getters are unit testable by mocking the prisma client.
 import { prisma } from '@/lib/prisma';
+import { hasFlightExpired, trackerExpiry } from './criteria/flight-expiry.js';
 import { filterSnapshotsByTrackerFilters } from './criteria/snapshot-filters.js';
 import { ACTUAL_FLIGHT_FARE_WHERE } from './flight-pricing.js';
 
@@ -63,15 +64,6 @@ export interface JsonQuerySummary {
   maxPrice: number | null;
 }
 
-// A tracker is no longer live once it is paused, past its expiry, or its
-// departure day has passed. Mirrors the list screen and the scrape sweep.
-function isExpired(dateFrom: Date, expiresAt: Date, active: boolean): boolean {
-  const now = new Date();
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
-  return !active || expiresAt <= now || dateFrom < todayStart;
-}
-
 export async function getQueryJson(id: string): Promise<JsonQuery | null> {
   const row = await prisma.query.findUnique({
     where: { id },
@@ -106,8 +98,8 @@ export async function getQueryJson(id: string): Promise<JsonQuery | null> {
     cabinClass: row.cabinClass,
     currency: row.currency,
     active: row.active,
-    expired: isExpired(row.dateFrom, row.expiresAt, row.active),
-    expiresAt: row.expiresAt.toISOString(),
+    expired: !row.active || hasFlightExpired(row),
+    expiresAt: trackerExpiry(row).toISOString(),
     lastScraped: row.fetchRuns[0]?.startedAt.toISOString() ?? null,
     snapshotCount: snapshots.length,
     bestPrice: best
@@ -160,8 +152,8 @@ export async function getQueryListJson(): Promise<JsonQuerySummary[]> {
     dateTo: r.dateTo.toISOString(),
     currency: r.currency,
     active: r.active,
-    expired: isExpired(r.dateFrom, r.expiresAt, r.active),
-    expiresAt: r.expiresAt.toISOString(),
+    expired: !r.active || hasFlightExpired(r),
+    expiresAt: trackerExpiry(r).toISOString(),
     lastScraped: r.fetchRuns[0]?.startedAt.toISOString() ?? null,
     snapshotCount: r.snapshots.length,
     minPrice: r.snapshots.length > 0 ? r.snapshots[0]!.price : null,

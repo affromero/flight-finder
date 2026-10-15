@@ -99,6 +99,14 @@ receive alerts outside the app; approximate matches require explicit opt-in.
 
 ### Flight price observations
 
+Each flight tracker runs through its outbound day and expires at the following
+midnight UTC. Return dates do not extend tracking. Trackers in a group expire
+individually according to their outbound dates.
+
+Pausing Scraping in Extraction Config holds background price checks and pending
+flight, hotel, and car price alerts. Resuming allows valid pending alerts to
+continue delivery. Channels that already accepted an alert are not sent it again.
+
 Flight tracker booking cards and date calendars use the latest observed fare for
 each flight, travel date and VPN location. The card shows when the price was
 observed. A failed or unsampled check can leave an older observation visible;

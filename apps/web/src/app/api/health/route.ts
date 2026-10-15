@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { flightDayStart } from '@/lib/criteria/flight-expiry';
 import { redis } from '@/lib/redis';
 import { getCronInfo } from '@/lib/cron';
 
@@ -30,7 +31,7 @@ export async function GET() {
   let activeQueries = 0;
   try {
     activeQueries = await prisma.query.count({
-      where: { active: true, OR: [{ isSeed: true }, { expiresAt: { gt: new Date() } }] },
+      where: { active: true, OR: [{ isSeed: true }, { dateFrom: { gte: flightDayStart() } }] },
     });
   } catch {
     // non-fatal

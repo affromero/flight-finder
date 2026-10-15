@@ -1,5 +1,6 @@
 import crypto from 'crypto';
 import { NextRequest } from 'next/server';
+import { flightExpiry } from '@/lib/criteria/flight-expiry';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
@@ -331,8 +332,6 @@ export async function POST(request: NextRequest) {
   }
 
   const flex = Math.max(0, Math.min(Number(flexibility) || 0, 14));
-  const expiresAt = new Date(to);
-  expiresAt.setDate(expiresAt.getDate() + flex);
 
   // preferredAggregators is optional on creation; empty means inherit user/admin defaults.
   let aggregators: string[] = [];
@@ -380,8 +379,7 @@ export async function POST(request: NextRequest) {
       const routeFrom = route.date ? new Date(route.date + 'T00:00:00Z') : from;
       const routeTo = route.returnDate ? new Date(route.returnDate + 'T00:00:00Z') : (route.date ? new Date(route.date + 'T00:00:00Z') : to);
       const routeFlex = route.date ? 0 : flex;
-      const routeExpiry = new Date(routeTo);
-      routeExpiry.setDate(routeExpiry.getDate() + routeFlex);
+      const routeExpiry = flightExpiry(routeFrom);
 
       const query = await tx.query.create({
         data: {

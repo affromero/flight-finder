@@ -1,4 +1,5 @@
 import { NextRequest } from 'next/server';
+import { hasFlightExpired, trackerExpiry } from '@/lib/criteria/flight-expiry';
 import { apiSuccess, apiError } from '@/lib/api-response';
 import { prisma } from '@/lib/prisma';
 import { cached } from '@/lib/redis';
@@ -33,6 +34,7 @@ export async function GET(
       tripType: true,
       currency: true,
       expiresAt: true,
+      isSeed: true,
       createdAt: true,
       active: true,
       scrapeInterval: true,
@@ -48,7 +50,7 @@ export async function GET(
     return apiError('Query not found', 404);
   }
 
-  if (new Date() > query.expiresAt) {
+  if (hasFlightExpired(query)) {
     return apiError('This tracker has expired', 410);
   }
 
@@ -110,7 +112,7 @@ export async function GET(
   const effectiveInterval = query.scrapeInterval ?? globalConfig?.scrapeInterval ?? 3;
 
   return apiSuccess({
-    query,
+    query: { ...query, expiresAt: trackerExpiry(query) },
     snapshots,
     lastChecked: lastRun?.startedAt ?? null,
     lastStatus: lastRun?.status ?? null,

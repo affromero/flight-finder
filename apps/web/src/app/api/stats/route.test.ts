@@ -57,6 +57,10 @@ describe('GET /api/stats -- unauthenticated caller', () => {
     expect(res.status).toBe(200);
     const body = await res.json();
     expect(body.data.activeQueries).toBe(7);
+    expect(mockQueryCount.mock.calls[0]?.[0].where).toMatchObject({
+      active: true, isSeed: false, dateFrom: { gte: expect.any(Date) },
+    });
+    expect(mockQueryCount.mock.calls[0]?.[0].where).not.toHaveProperty('expiresAt');
     expect(body.data.totalScrapes).toBe(42);
     expect(body.data.totalPricePoints).toBe(1234);
     expect(body.data.cron).toBeDefined();

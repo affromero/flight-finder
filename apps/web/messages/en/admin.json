@@ -159,7 +159,7 @@
     "scraping": "Scraping",
     "scrapingEnabled": "Scraping enabled",
     "scrapingPaused": "Scraping paused",
-    "scrapingHint": "Pause to stop all background price checks, for example while away or over an API quota. Existing trackers and price history are kept.",
+    "scrapingHint": "Pause to stop background price checks and hold pending flight, hotel, and car price alerts. Resume to continue checks and alert delivery. Existing trackers and price history are kept.",
     "saving": "Saving...",
     "saveConfig": "Save Config",
     "configSaved": "Config saved",

@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useTranslations } from 'next-intl';
+import { flightRefreshTarget } from '@/lib/criteria/flight-expiry';
 import Link from 'next/link';
 import { getSavedTrackers, getDeleteToken, removeSavedTracker, type SavedTracker } from '@/lib/tracker-storage';
 import { groupQueries, type GroupableQuery, type QueryGroup } from '@/lib/query-grouping';
@@ -172,6 +173,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
             snapshotCount: 0,
             lastScrapedAt: null,
             status: statusMap[t.id] ?? 'deleted',
+            active: statusMap[t.id] === 'active',
             hasDeleteToken: Boolean(t.deleteToken),
             scrapeStatus: null,
             scrapeError: null,
@@ -192,6 +194,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
             snapshotCount: 0,
             lastScrapedAt: null,
             status: 'active',
+            active: true,
             hasDeleteToken: Boolean(t.deleteToken),
             scrapeStatus: null,
             scrapeError: null,
@@ -314,7 +317,7 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
         {groups.map((entry) => {
           const { group, status, aggregate } = entry;
           const extraDestinations = group.destinations.length - 1;
-          const primaryToken = getDeleteToken(group.primaryId);
+          const refreshId = flightRefreshTarget(group.queries);
           const primaryLabel = group.queries.find((q) => q.id === group.primaryId)?.label;
           return (
             <div key={group.primaryId} className={styles.card}>
@@ -386,10 +389,10 @@ export function SavedTrackers({ isAuthenticated = false }: { isAuthenticated?: b
                       }`}>
                         {status === 'active' ? t('tracking') : status === 'paused' ? t('paused') : t('expired')}
                       </span>
-                      {status === 'active' && (
+                      {status === 'active' && refreshId && (
                         <ForceScrapeButton
-                          queryId={group.primaryId}
-                          deleteToken={primaryToken}
+                          queryId={refreshId}
+                          deleteToken={getDeleteToken(refreshId)}
                           onScraped={(result) => { if (result.accepted) refetchActive(); }}
                           ariaLabel={t('refreshPrices')}
                         />

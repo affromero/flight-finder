@@ -5,6 +5,7 @@ import { TravelNav } from '@/components/hotels/TravelNav';
 import { redirect, notFound } from 'next/navigation';
 import { getTranslations } from 'next-intl/server';
 import { prisma } from '@/lib/prisma';
+import { flightExpiry, flightRefreshTarget } from '@/lib/criteria/flight-expiry';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentProfile } from '@/lib/user-auth';
 import { groupQueries, type GroupableQuery } from '@/lib/query-grouping';
@@ -66,7 +67,7 @@ export default async function AccountPage() {
     dateTo: q.dateTo.toISOString(),
     groupId: q.groupId,
     active: q.active,
-    expiresAt: q.expiresAt.toISOString(),
+    expiresAt: flightExpiry(q.dateFrom).toISOString(),
     scrapeInterval: q.scrapeInterval,
     snapshotCount: q._count.snapshots,
     lastScrapedAt: q.fetchRuns[0]?.startedAt.toISOString() ?? null,
@@ -116,6 +117,7 @@ export default async function AccountPage() {
         ) : (
           <div className={styles.list}>
             {groups.map((g) => {
+              const refreshId = flightRefreshTarget(g.queries);
               const extraDestinations = g.destinations.length - 1;
               const aggregate = aggregateScrapeStatus(
                 g.queries.map((q) => ({
@@ -146,9 +148,9 @@ export default async function AccountPage() {
                       {!g.anyActive && <span className={styles.paused}>{t('paused')}</span>}
                     </div>
                   </Link>
-                  {g.anyActive && !g.allExpired && (
+                  {refreshId && (
                     <ForceScrapeButton
-                      queryId={g.primaryId}
+                      queryId={refreshId}
                       ariaLabel={t('refreshNow')}
                     />
                   )}

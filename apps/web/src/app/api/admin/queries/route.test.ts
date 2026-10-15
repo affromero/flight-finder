@@ -32,7 +32,7 @@ describe('GET /api/admin/queries', () => {
   });
 
   it('returns 200 with queries, page, and limit in the response', async () => {
-    const queries = [{ id: 'q1', origin: 'JFK', destination: 'LAX' }];
+    const queries = [{ id: 'q1', origin: 'JFK', destination: 'LAX', dateFrom: new Date('2027-05-01'), expiresAt: new Date('2027-05-20') }];
     mockQueryFindMany.mockResolvedValue(queries);
 
     const res = await GET(makeRequest());
@@ -40,6 +40,7 @@ describe('GET /api/admin/queries', () => {
     const body = await res.json();
     expect(body.ok).toBe(true);
     expect(body.data.queries).toHaveLength(1);
+    expect(body.data.queries[0].expiresAt).toBe('2027-05-02T00:00:00.000Z');
     expect(body.data.page).toBe(0);
     expect(body.data.limit).toBe(200);
   });

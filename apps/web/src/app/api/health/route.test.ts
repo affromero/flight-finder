@@ -1,4 +1,4 @@
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 
 const { mockQueryRaw, mockQueryCount, mockRedis } = vi.hoisted(() => ({
   mockQueryRaw: vi.fn(),
@@ -29,6 +29,20 @@ vi.mock('@/lib/cron', () => ({
 import { GET } from './route';
 
 describe('GET /api/health', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it('counts live outbound days and rolling seeds without using legacy expiry', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-05-01T23:30:00-07:00'));
+    mockQueryRaw.mockResolvedValue([{ 1: 1 }]);
+    mockRedis.ping.mockResolvedValue('PONG');
+    mockQueryCount.mockResolvedValue(2);
+    expect((await (await GET()).json()).activeQueries).toBe(2);
+    expect(mockQueryCount.mock.lastCall?.[0].where).toEqual({
+      active: true, OR: [{ isSeed: true }, { dateFrom: { gte: new Date('2027-05-02T00:00:00Z') } }],
+    });
+  });
+
   it('returns ok when db and redis connected', async () => {
     mockQueryRaw.mockResolvedValue([{ 1: 1 }]);
     mockRedis.ping.mockResolvedValue('PONG');

@@ -1,4 +1,4 @@
-import { vi, beforeEach } from 'vitest';
+import { vi, beforeEach, afterEach } from 'vitest';
 import { createHash } from 'node:crypto';
 import { withTravelContext } from '../../lib/travel/context';
 import { TravelVpnSession } from '../../lib/travel/vpn';
@@ -54,6 +54,8 @@ import { runScrapeForQuery as scrapeAdmittedQuery } from '../../lib/scraper/run-
 const lease = { id: 'vpn', owner: 'unit-worker', generation: 1, topologyVersion: 1 };
 const job = { id: 'unit-job', kind: 'flight_query', queryId: 'q1', userId: null, status: 'running' } as TravelJob;
 beforeEach(() => {
+  vi.useFakeTimers({ toFake: ['Date'] });
+  vi.setSystemTime(new Date('2026-06-01T12:00:00Z'));
   mockPrisma.$transaction.mockImplementation((work: (tx: typeof mockPrisma) => Promise<unknown>) => work(mockPrisma));
   mockPrisma.$executeRaw.mockResolvedValue(1);
   mockPrisma.$queryRaw.mockImplementation(async (sql: TemplateStringsArray) => sql.join('').includes('FROM "TravelJob"') ? [job] : [{ id: 'vpn' }]);
@@ -63,6 +65,7 @@ beforeEach(() => {
   mockPrisma.queryAlertSettings.findUnique.mockResolvedValue(null);
   mockPrisma.queryAlertRule.findMany.mockResolvedValue([]);
 });
+afterEach(() => vi.useRealTimers());
 
 // These extraction regressions exercise the admitted pipeline. Queue and worker
 // lifecycle behavior is covered separately against PostgreSQL and real browsers.

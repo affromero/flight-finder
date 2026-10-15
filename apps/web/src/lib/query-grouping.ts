@@ -16,6 +16,7 @@ export interface GroupableQuery {
   dateTo: string;
   groupId: string | null;
   active?: boolean;
+  isSeed?: boolean;
   expiresAt?: string;
   scrapeInterval?: number | null;
   snapshotCount?: number;

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { flightDayStart } from '@/lib/criteria/flight-expiry';
 
 /**
  * Deactivate trackers whose departure day has already passed. A trip is
@@ -8,8 +9,7 @@ import { prisma } from '@/lib/prisma';
  * departure). Returns the number of trackers expired.
  */
 export async function expireDepartedQueries(): Promise<number> {
-  const todayStart = new Date();
-  todayStart.setUTCHours(0, 0, 0, 0);
+  const todayStart = flightDayStart();
   const result = await prisma.query.updateMany({
     where: { active: true, isSeed: false, dateFrom: { lt: todayStart } },
     data: { active: false },

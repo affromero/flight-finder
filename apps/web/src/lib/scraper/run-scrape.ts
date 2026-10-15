@@ -21,6 +21,7 @@ import { flightTransaction, submitFlightJob } from '../travel/flights';
 import { currentTravelExecution, travelDelay, TravelCleanupError } from '../travel/execution';
 import { TravelJobError } from '../travel/errors';
 import { recordFlightAlertInTransaction } from '../notifications/flights';
+import { flightDayStart, hasFlightExpired } from '@/lib/criteria/flight-expiry';
 import { flightIdentifiers } from './identity/flight';
 
 const RETRYABLE_FAILURES: ExtractionFailureReason[] = [
@@ -623,8 +624,8 @@ export async function runScrapeForQuery(
     where: { id: queryId },
     include: { user: { select: { preferredAggregators: true } } },
   });
-  if (!query || !query.active) {
-    const errorMsg = 'Query not found or inactive';
+  if (!query || !query.active || hasFlightExpired(query)) {
+    const errorMsg = 'Query not found, inactive or expired';
     // If the caller pre-created an in_progress row, finalize it here so
     // the manual scrape endpoint's lock doesn't see a stuck row forever
     // and refuse all future refreshes.
@@ -814,7 +815,7 @@ async function runScrapeAllInner(): Promise<ScrapeResult[]> {
       active: true,
       OR: [
         { isSeed: true },
-        { expiresAt: { gt: new Date() } },
+        { dateFrom: { gte: flightDayStart() } },
       ],
     },
     include: {

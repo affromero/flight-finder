@@ -1,4 +1,5 @@
 import { apiSuccess } from '@/lib/api-response';
+import { flightDayStart } from '@/lib/criteria/flight-expiry';
 import { prisma } from '@/lib/prisma';
 import { getCronInfo } from '@/lib/cron';
 import { verifyAdminSessionRevocable } from '@/lib/admin-guard';
@@ -8,7 +9,7 @@ export const dynamic = 'force-dynamic';
 export async function GET() {
   const [activeQueries, totalScrapes, totalPricePoints, costResult] = await Promise.all([
     prisma.query.count({
-      where: { active: true, isSeed: false, expiresAt: { gt: new Date() } },
+      where: { active: true, isSeed: false, dateFrom: { gte: flightDayStart() } },
     }),
     prisma.fetchRun.count(),
     prisma.priceSnapshot.count(),

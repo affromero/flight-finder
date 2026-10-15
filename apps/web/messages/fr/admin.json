@@ -159,7 +159,7 @@
     "scraping": "Extraction",
     "scrapingEnabled": "Extraction activée",
     "scrapingPaused": "Extraction en pause",
-    "scrapingHint": "Mets en pause pour arrêter toutes les vérifications de prix en arrière-plan, par exemple pendant une absence ou en cas de dépassement de quota API. Les suivis existants et l’historique des prix sont conservés.",
+    "scrapingHint": "Mets en pause pour arrêter les vérifications de prix en arrière-plan et suspendre les alertes de prix en attente pour les vols, hôtels et voitures. Reprends pour continuer les vérifications et l’envoi des alertes. Les suivis existants et l’historique des prix sont conservés.",
     "saving": "Enregistrement...",
     "saveConfig": "Enregistrer la config",
     "configSaved": "Config enregistrée",

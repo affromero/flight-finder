@@ -85,6 +85,21 @@ const validBody = {
 };
 
 describe('POST /api/queries', () => {
+  it.each(['round_trip', 'one_way'])('tracks a pinned %s through its outbound UTC day', async tripType => {
+    const response = await POST(makeRequest({ ...validBody, tripType, flexibility: 3,
+      routes: [{ ...validBody.routes[0], date: '2026-06-17', returnDate: '2026-06-25' }],
+    }));
+    expect(response.status).toBe(201);
+    expect(mockQueryCreate.mock.calls[0]?.[0].data).toMatchObject({
+      dateFrom: new Date('2026-06-17'), expiresAt: new Date('2026-06-18'),
+    });
+  });
+
+  it('expires an unpinned tracker after departure instead of return plus flexibility', async () => {
+    expect((await POST(makeRequest({ ...validBody, flexibility: 3 }))).status).toBe(201);
+    expect(mockQueryCreate.mock.calls[0]?.[0].data.expiresAt).toEqual(new Date('2026-06-16'));
+  });
+
   it.each([
     { timePreference: 'morning', strictDepartureTime: 'false' },
     { timePreference: 'any', strictDepartureTime: true },

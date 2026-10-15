@@ -1,4 +1,5 @@
 import { apiSuccess } from '@/lib/api-response';
+import { flightDayStart, flightExpiry } from '@/lib/criteria/flight-expiry';
 import { prisma } from '@/lib/prisma';
 import { isMultiUserEnabled } from '@/lib/multi-user';
 import { getCurrentProfile } from '@/lib/user-auth';
@@ -27,7 +28,7 @@ export async function GET() {
       isSeed: false,
       ...(isSelfHosted ? {} : { active: true }),
       ...userFilter,
-      expiresAt: { gt: new Date() },
+      dateFrom: { gte: flightDayStart() },
     },
     orderBy: { createdAt: 'desc' },
     select: {
@@ -74,6 +75,7 @@ export async function GET() {
     label: q.label,
     preferredAggregators: q.preferredAggregators,
     createdAt: q.createdAt.toISOString(),
+    expiresAt: flightExpiry(q.dateFrom).toISOString(),
   }));
 
   return apiSuccess({ queries: result });

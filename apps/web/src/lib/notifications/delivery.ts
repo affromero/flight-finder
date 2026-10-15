@@ -5,6 +5,19 @@ import { channelAuthority } from './subscriptions/authority';
 
 const DELIVERY_RETRY_MS = 300_000;
 export const DELIVERY_CLAIM_MS = 120_000;
+
+class DeliveryPausedError extends Error {
+  constructor() {
+    super('Price alerts are paused with scraping.');
+    this.name = 'DeliveryPausedError';
+  }
+}
+
+export async function notificationDeliveryPaused(tx: Pick<Prisma.TransactionClient, 'extractionConfig'>): Promise<boolean> {
+  const config = await tx.extractionConfig.findUnique({ where: { id: 'singleton' }, select: { enabled: true } });
+  return config?.enabled === false;
+}
+
 export interface ClaimedDelivery extends TravelAlertDelivery {
   owner: string | null;
   payload: ChannelMessage;
@@ -30,6 +43,7 @@ export async function deliverClaimedAlert(entry: ClaimedDelivery, guarded: Deliv
       selectedChannelIds: entry.requiredChannelIds,
       beforeSend: (id, version) => guarded(async tx => {
         signal.throwIfAborted();
+        if (await notificationDeliveryPaused(tx)) throw new DeliveryPausedError();
         const channel = await tx.notificationChannel.findUnique({ where: { id } });
         if (!channel?.enabled || (channel.userId !== null && channel.userId !== entry.owner) || channelAuthority(channel) !== version) {
           throw new Error('Notification channel changed before transport');
@@ -49,8 +63,10 @@ export async function deliverClaimedAlert(entry: ClaimedDelivery, guarded: Deliv
     });
   } catch (error) {
     await guarded(async tx => {
-      await update(tx, { claimToken: null, claimExpiresAt: null, nextAttemptAt: new Date(Date.now() + DELIVERY_RETRY_MS), lastError: 'Notification delivery was interrupted; acknowledged channels will not be resent.' });
+      const paused = error instanceof DeliveryPausedError;
+      await update(tx, { claimToken: null, claimExpiresAt: null, nextAttemptAt: new Date(Date.now() + (paused ? 0 : DELIVERY_RETRY_MS)), lastError: paused ? error.message : 'Notification delivery was interrupted; acknowledged channels will not be resent.' });
     }).catch(() => undefined); // Revoked claims cannot overwrite a replacement.
+    if (error instanceof DeliveryPausedError) return;
     throw error;
   } finally { clearTimeout(timer); }
 }

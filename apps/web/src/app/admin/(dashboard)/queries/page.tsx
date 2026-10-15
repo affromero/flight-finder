@@ -3,6 +3,7 @@ import { HotelTrackers } from '@/components/hotels/HotelTrackers';
 import { CarTrackers } from '@/components/cars/CarTrackers';
 import { getCurrentUser } from '@/lib/user-auth';
 import { prisma } from '@/lib/prisma';
+import { trackerExpiry } from '@/lib/criteria/flight-expiry';
 import { groupQueries } from '@/lib/query-grouping';
 import { QueryGroupRow, type AdminQuery } from './QueryRow';
 import styles from './page.module.css';
@@ -35,7 +36,8 @@ export default async function QueriesPage() {
     dateTo: q.dateTo.toISOString(),
     groupId: q.groupId,
     active: q.active,
-    expiresAt: q.expiresAt.toISOString(),
+    isSeed: q.isSeed,
+    expiresAt: trackerExpiry(q).toISOString(),
     scrapeInterval: q.scrapeInterval,
     label: q.label,
     preferredAggregators: q.preferredAggregators,

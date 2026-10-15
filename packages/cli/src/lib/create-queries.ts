@@ -1,4 +1,5 @@
 import crypto from 'crypto';
+import { flightExpiry } from './criteria/flight-expiry.js';
 import { prisma } from '@/lib/prisma';
 import type { ParsedFlightQuery } from '../../../../apps/web/src/lib/scraper/parse-query.js';
 import type { PriceData } from '../../../../apps/web/src/lib/scraper/extract-prices.js';
@@ -66,8 +67,7 @@ export async function createTrackedQueries(
     const routeFrom = route.date ? new Date(route.date + 'T00:00:00Z') : from;
     const routeTo = route.date ? new Date(route.date + 'T00:00:00Z') : to;
     const routeFlex = route.date ? 0 : flex;
-    const routeExpiry = new Date(routeTo);
-    routeExpiry.setDate(routeExpiry.getDate() + routeFlex);
+    const routeExpiry = flightExpiry(routeFrom);
 
     const query = await prisma.query.create({
       data: {

@@ -1,4 +1,5 @@
 import { prisma } from '@/lib/prisma';
+import { hasFlightExpired } from '@/lib/criteria/flight-expiry';
 import type { Prisma, Query } from '@/generated/prisma/client';
 import { ADMISSION_TX_OPTIONS, enqueueTravelJob, lockTravelAdmission, TravelJobError } from './jobs';
 import { awaitTravelJob } from './coordinator';
@@ -26,7 +27,7 @@ export async function flightTransaction<T>(query: Pick<Query, 'id' | 'userId' | 
   return travelTransaction(async (tx, job) => {
     await tx.$queryRaw`SELECT id FROM "Query" WHERE id = ${query.id} FOR UPDATE`;
     const current = await tx.query.findUnique({ where: { id: query.id } });
-    if (!current || !current.active || current.userId !== query.userId || current.updatedAt.getTime() !== query.updatedAt.getTime()
+    if (!current || !current.active || hasFlightExpired(current) || current.userId !== query.userId || current.updatedAt.getTime() !== query.updatedAt.getTime()
       || (job.kind === 'flight_query' && (job.queryId !== query.id || job.userId !== current.userId))) throw new TravelJobError('Flight query changed during execution');
     return work(tx);
   });

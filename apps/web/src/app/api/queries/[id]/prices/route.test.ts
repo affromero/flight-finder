@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { NextRequest } from 'next/server';
 
 const mockQueryFindUnique = vi.fn();
@@ -37,8 +37,21 @@ function callGet(id = 'test-id') {
 }
 
 describe('GET /api/queries/[id]/prices', () => {
+  afterEach(() => vi.useRealTimers());
+
+  it.each(['2027-05-01', '2027-05-20'])('serves departure-day prices with legacy expiry %s and expires at UTC midnight', async storedExpiry => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-05-01T23:59:59Z'));
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', dateFrom: new Date('2027-05-01'), expiresAt: new Date(storedExpiry) });
+    const response = await callGet();
+    expect(response.status).toBe(200);
+    expect((await response.json()).data.query.expiresAt).toBe('2027-05-02T00:00:00.000Z');
+    vi.setSystemTime(new Date('2027-05-02T00:00:00Z'));
+    expect((await callGet()).status).toBe(410);
+  });
+
   it('excludes legacy estimates from history and counts, including pre-upgrade cached data', async () => {
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', dateFrom: futureDate(), expiresAt: futureDate() });
     mockCached.mockResolvedValueOnce([
       { id: 'estimate', price: 2991, airline: 'Air Canada + Air Canada (approx OW+OW)' },
       { id: 'actual', price: 1809, airline: 'Air Canada + ANA' },
@@ -67,6 +80,7 @@ describe('GET /api/queries/[id]/prices', () => {
     mockQueryFindUnique.mockResolvedValue({
       id: 'test-id',
       expiresAt: new Date('2020-01-01'),
+      dateFrom: new Date('2020-01-01'),
     });
     const res = await callGet();
     expect(res.status).toBe(410);
@@ -80,6 +94,7 @@ describe('GET /api/queries/[id]/prices', () => {
       origin: 'JFK',
       destination: 'LAX',
       expiresAt: futureDate(),
+      dateFrom: futureDate(),
     });
     mockSnapshotFindMany.mockResolvedValue([
       { id: 's1', price: 300, airline: 'Delta' },
@@ -98,7 +113,7 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('includes lastChecked from most recent fetch run', async () => {
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', dateFrom: futureDate(), expiresAt: futureDate() });
     mockSnapshotFindMany.mockResolvedValue([]);
     mockFetchRunFindFirst.mockResolvedValue({
       startedAt: new Date('2026-06-01T10:00:00Z'),
@@ -112,7 +127,7 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('returns null lastChecked when no fetch runs', async () => {
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', dateFrom: futureDate(), expiresAt: futureDate() });
     mockSnapshotFindMany.mockResolvedValue([]);
     mockFetchRunFindFirst.mockResolvedValue(null);
 
@@ -123,7 +138,7 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('passes take: 5000 and orderBy desc to priceSnapshot.findMany (DB-2 bound)', async () => {
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', dateFrom: futureDate(), expiresAt: futureDate() });
     mockSnapshotFindMany.mockResolvedValue([]);
 
     await callGet();
@@ -137,7 +152,7 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('returns snapshots in ascending chronological order regardless of DB fetch order', async () => {
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', dateFrom: futureDate(), expiresAt: futureDate() });
     // Mock returns desc order (newest first) as the route requests
     const t1 = '2026-01-01T00:00:00.000Z';
     const t2 = '2026-02-01T00:00:00.000Z';
@@ -161,6 +176,7 @@ describe('GET /api/queries/[id]/prices', () => {
     mockQueryFindUnique.mockResolvedValue({
       id: 'test-id',
       expiresAt: futureDate(),
+      dateFrom: futureDate(),
       maxStops: 0,
       maxPrice: null,
       maxDurationHours: null,
@@ -182,7 +198,7 @@ describe('GET /api/queries/[id]/prices', () => {
   });
 
   it('includes tracker edit events for chart annotations', async () => {
-    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', expiresAt: futureDate() });
+    mockQueryFindUnique.mockResolvedValue({ id: 'test-id', dateFrom: futureDate(), expiresAt: futureDate() });
     mockQueryEditEventFindMany.mockResolvedValue([
       { id: 'e2', editedAt: new Date('2026-03-01T00:00:00Z'), summary: 'Price cap changed', changes: { changes: [] } },
       { id: 'e1', editedAt: new Date('2026-02-01T00:00:00Z'), summary: 'Nonstop only enabled', changes: { changes: [] } },

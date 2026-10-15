@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 const { mockUpdateMany } = vi.hoisted(() => ({ mockUpdateMany: vi.fn() }));
 
@@ -14,7 +14,12 @@ interface UpdateManyArgs {
 }
 
 describe('expireDepartedQueries', () => {
-  beforeEach(() => mockUpdateMany.mockReset());
+  beforeEach(() => {
+    mockUpdateMany.mockReset();
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date('2027-05-01T23:30:00-07:00'));
+  });
+  afterEach(() => vi.useRealTimers());
 
   it('deactivates only active non seed trackers whose departure day has passed', async () => {
     mockUpdateMany.mockResolvedValue({ count: 3 });
@@ -29,6 +34,7 @@ describe('expireDepartedQueries', () => {
 
     // Cutoff is midnight UTC today, so a tracker departing today is not swept.
     const cutoff = args.where.dateFrom.lt;
+    expect(cutoff).toEqual(new Date('2027-05-02T00:00:00Z'));
     expect(cutoff).toBeInstanceOf(Date);
     expect(cutoff.getUTCHours()).toBe(0);
     expect(cutoff.getUTCMinutes()).toBe(0);

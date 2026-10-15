@@ -1,6 +1,7 @@
 'use client';
 
 import { useRouter } from 'next/navigation';
+import { flightRefreshTarget } from '@/lib/criteria/flight-expiry';
 import { useTranslations } from 'next-intl';
 import { type QueryGroup, type GroupableQuery } from '@/lib/query-grouping';
 import { aggregateScrapeStatus } from '@/lib/scrape-status';
@@ -29,6 +30,7 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
   const t = useTranslations('AdminQueries');
   const router = useRouter();
   const expired = group.allExpired;
+  const refreshId = flightRefreshTarget(group.queries);
   const runCount = group.queries.reduce((sum, q) => sum + q.runCount, 0);
   const extraDestinations = group.destinations.length - 1;
   const primaryQuery = group.queries.find((q) => q.id === group.primaryId);
@@ -122,9 +124,9 @@ export function QueryGroupRow({ group }: { group: QueryGroup<AdminQuery> }) {
           <option value={12}>{t('everyHours', { hours: 12 })}</option>
           <option value={24}>{t('everyHours', { hours: 24 })}</option>
         </select>
-        {group.anyActive && !expired && (
+        {refreshId && (
           <ForceScrapeButton
-            queryId={group.primaryId}
+            queryId={refreshId}
             onScraped={(result) => { if (result.accepted) router.refresh(); }}
             ariaLabel={t('refreshAria')}
           />
