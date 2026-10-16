@@ -30,7 +30,7 @@ jobs:
       TRAVEL_BROWSER_OUTPUT: /tmp/flight-finder-travel-surfaces
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -68,7 +68,7 @@ jobs:
       HOTEL_INTEGRATION_TESTS: '1'
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
@@ -114,7 +114,7 @@ jobs:
       HOTEL_BROWSER_OUTPUT: /tmp/flight-finder-hotel-browser
     steps:
       - uses: actions/checkout@v7.0.1
-      - uses: actions/setup-node@v7.0.0
+      - uses: actions/setup-node@v7.1.0
         with:
           node-version: 22
           cache: npm
