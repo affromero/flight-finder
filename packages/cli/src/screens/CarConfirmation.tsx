@@ -1,17 +1,12 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Text, useInput, useStdout } from 'ink';
+import React, { useState } from 'react';
+import { Box, Text, useInput, useWindowSize } from 'ink';
 import TextInput from 'ink-text-input';
 import { carTerminalText, type CarBrowserConfirmation } from '../lib/car-browser.js';
 import { carDocumentLines } from '../lib/car-document.js';
 
 export function CarConfirmation({ confirmation, rows, onConfirm }: { confirmation: CarBrowserConfirmation; rows: number; onConfirm: () => void }) {
-  const { stdout } = useStdout();
+  const { columns } = useWindowSize();
   const [answer, setAnswer] = useState(''), [offset, setOffset] = useState(0);
-  const [columns, setColumns] = useState(stdout.columns || 80);
-  useEffect(() => {
-    const resize = () => setColumns(stdout.columns || 80);
-    stdout.on('resize', resize); return () => { stdout.off('resize', resize); };
-  }, [stdout]);
   const operation = confirmation.operation;
   const action = operation.kind === 'edit' && typeof operation.body?.active === 'boolean'
     ? operation.body.active ? 'Resume tracking' : 'Pause tracking' : operation.kind === 'refresh' ? 'Check prices' : operation.kind === 'delete' ? 'Delete tracker' : operation.kind === 'protect' ? 'Recheck rental with protection' : operation.kind;

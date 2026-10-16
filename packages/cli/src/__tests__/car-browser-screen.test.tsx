@@ -27,6 +27,14 @@ it('keeps protection receipt confirmation visible in a narrow terminal while eve
   }} onConfirm={() => { confirmed = true; }} />, { stdout, stdin, stderr, debug: true, interactive: true, patchConsole: false });
   try {
     await vi.waitFor(() => expect(frames.length).toBeGreaterThan(0));
+    frames.length = 0; stdout.columns = 32; stdout.emit('resize');
+    await vi.waitFor(() => {
+      const frame = frames.at(-1);
+      expect(frame).toContain('Esc cancels');
+      expect(frame!.trimEnd().split('\n').length).toBeLessThanOrEqual(20);
+      expect(frame!.split('\n').every(line => line.length <= 32)).toBe(true);
+    });
+    frames.splice(0, frames.length - 1);
     for (let index = 0; index < 60; index++) { stdin.push('\u001b[B'); await instance.waitUntilRenderFlush(); }
     const text = frames.join('\n');
     expect(text.replace(/\s+/g, ' ')).toContain('Does not book a car or buy coverage.');
@@ -36,7 +44,7 @@ it('keeps protection receipt confirmation visible in a narrow terminal while eve
     expect(confirmed).toBe(false);
     for (const frame of frames) {
       expect(frame.trimEnd().split('\n').length).toBeLessThanOrEqual(20);
-      expect(frame.split('\n').every(line => line.length <= 40)).toBe(true);
+      expect(frame.split('\n').every(line => line.length <= 32)).toBe(true);
       expect(frame).toContain('Esc cancels');
     }
     stdin.push('yes'); await vi.waitFor(() => expect(frames.at(-1)).toContain('Enter: yes'));
@@ -101,6 +109,14 @@ it.each([
     expect(stripVTControlCharacters(output)).toContain('No notification channel configured');
     output = ''; stdin.push('l');
     await vi.waitFor(() => expect(stripVTControlCharacters(output)).toContain('RENTAL LOCATIONS'));
+    output = ''; stdout.columns = 32; stdout.emit('resize');
+    await vi.waitFor(() => expect(stripVTControlCharacters(output)).toContain('RENTAL LOCATIONS'));
+    expect(stripVTControlCharacters(output)).not.toContain('Long terminal collection area for the selected');
+    for (let index = 0; index < 25; index++) { stdin.push('\u001b[B'); await instance.waitUntilRenderFlush(); }
+    expect(stripVTControlCharacters(output).replace(/\s+/g, ' ')).toContain('Review the rental conditions');
+    output = ''; stdout.columns = 90; stdout.emit('resize');
+    for (let index = 0; index < 25; index++) { stdin.push('\u001b[A'); await instance.waitUntilRenderFlush(); }
+    await vi.waitFor(() => expect(stripVTControlCharacters(output)).toContain('Long terminal collection area'));
     expect(stripVTControlCharacters(output)).toContain('Long terminal collection area');
     expect(stripVTControlCharacters(output)).toContain('Separate vehicle return entrance');
     for (const key of ['p', 'c', 'x']) { stdin.push(key); await instance.waitUntilRenderFlush(); }

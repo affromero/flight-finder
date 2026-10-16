@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { Box, Text, useStdout } from 'ink';
+import React from 'react';
+import { Box, Text, useWindowSize } from 'ink';
 import { renderBrailleChart, type ChartSeries } from '../lib/chart.js';
 import { currencySymbol, formatDateShort } from '../lib/format.js';
 
@@ -16,21 +16,10 @@ interface PriceChartProps {
 }
 
 export function PriceChart({ snapshots, currency }: PriceChartProps) {
-  const { stdout } = useStdout();
-  const [dims, setDims] = useState({ cols: stdout.columns || 80, rows: stdout.rows || 24 });
+  const { columns, rows } = useWindowSize();
 
-  useEffect(() => {
-    const onResize = () => {
-      setDims({ cols: stdout.columns || 80, rows: stdout.rows || 24 });
-    };
-    stdout.on('resize', onResize);
-    // Pick up initial size (tmux pane may differ from process.stdout)
-    onResize();
-    return () => { stdout.off('resize', onResize); };
-  }, [stdout]);
-
-  const chartWidth = Math.min(dims.cols - 2, 140);
-  const chartHeight = Math.max(6, Math.min(Math.floor(dims.rows * 0.35), 16));
+  const chartWidth = Math.min(columns - 2, 140);
+  const chartHeight = Math.max(6, Math.min(Math.floor(rows * 0.35), 16));
 
   if (snapshots.length === 0) {
     return <Text dimColor>No price data yet — waiting for first scrape.</Text>;
