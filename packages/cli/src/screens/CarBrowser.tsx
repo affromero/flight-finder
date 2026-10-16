@@ -1,5 +1,5 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
-import { Box, Text, useApp, useInput, useStdout, useStderr } from 'ink';
+import { Box, Text, useApp, useInput, useWindowSize, useStderr } from 'ink';
 import TextInput from 'ink-text-input';
 import { CarConfirmation } from './CarConfirmation.js';
 import { CarLocations } from './CarLocations.js';
@@ -8,7 +8,7 @@ import { formatCarMoney } from '../../../../apps/web/src/lib/cars/money.js';
 
 export function CarBrowser({ browser, signal }: { browser: Browser; signal: AbortSignal }) {
   const state = useSyncExternalStore(browser.subscribe, browser.getSnapshot);
-  const { exit } = useApp(), { stdout } = useStdout();
+  const { exit } = useApp(), { rows } = useWindowSize();
   const { write } = useStderr();
   const [selected, setSelected] = useState(0), [offset, setOffset] = useState(0);
   const [deliveryMode, setDeliveryMode] = useState(false);
@@ -16,18 +16,12 @@ export function CarBrowser({ browser, signal }: { browser: Browser; signal: Abor
   useEffect(() => { setLocationMode(false); }, [state.scope, state.hidden, state.detail?.tracker.id]);
   const [recoveryForm, setRecoveryForm] = useState(false), [receiptPath, setReceiptPath] = useState('');
   const enteringReceipt = recoveryForm && !state.hidden;
-  const [rows, setRows] = useState(stdout.rows || 24);
   const available = Math.max(1, Math.floor((rows - (state.detail ? deliveryMode ? 16 : 14 : 9)) / (state.detail && deliveryMode ? 2 : 1)));
   const selection = Math.max(0, Math.min(selected, state.trackers.length - 1));
   const snapshots = state.detail?.snapshots ?? [];
   const deliveries = state.detail?.deliveries ?? [], historyLength = deliveryMode ? deliveries.length : snapshots.length;
   const historyOffset = Math.min(offset, Math.max(0, historyLength - available));
   useEffect(() => browser.subscribeReceipts(path => write(`Recovery receipt: ${carTerminalText(path)}\n`)), [browser, write]);
-  useEffect(() => {
-    const resize = () => setRows(stdout.rows || 24);
-    stdout.on('resize', resize);
-    return () => { stdout.off('resize', resize); };
-  }, [stdout]);
   useEffect(() => {
     const stop = () => { browser.close(); exit(); };
     signal.addEventListener('abort', stop, { once: true });

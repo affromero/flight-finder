@@ -1,18 +1,13 @@
-import React, { useEffect, useState } from 'react';
-import { Box, Text, useInput, useStdout } from 'ink';
+import React, { useState } from 'react';
+import { Box, Text, useInput, useWindowSize } from 'ink';
 import type { CarTrackerView } from '../../../../apps/web/src/lib/cars/tracker-view.js';
 import { carProviderLocationLabels } from '../../../../apps/web/src/lib/cars/location-labels.js';
 import { CAR_PROVIDER_LABELS } from '../../../../apps/web/src/lib/cars/preferences.js';
 import { carDocumentLines } from '../lib/car-document.js';
 
 export function CarLocations({ tracker }: { tracker: CarTrackerView }) {
-  const { stdout } = useStdout();
-  const [size, setSize] = useState({ columns: stdout.columns || 80, rows: stdout.rows || 24 });
+  const size = useWindowSize();
   const [offset, setOffset] = useState(0);
-  useEffect(() => {
-    const resize = () => setSize({ columns: stdout.columns || 80, rows: stdout.rows || 24 });
-    stdout.on('resize', resize); return () => { stdout.off('resize', resize); };
-  }, [stdout]);
   const sources = tracker.selection ? [tracker.selection.source] : tracker.search.sources;
   const document = [tracker.label, ...(['pickup', 'dropoff'] as const).flatMap(stop => {
     const location = tracker.search[stop], time = tracker.search[stop === 'pickup' ? 'pickupAt' : 'dropoffAt'];
