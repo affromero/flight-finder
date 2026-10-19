@@ -34,7 +34,7 @@
       "title": "Von anderen Geräten erreichen",
       "hint": "Flight Finder läuft auf diesem Rechner. Wähle, wie du es vom Handy aus erreichen oder mit anderen Personen teilen willst, folge den Schritten und füge die resultierende URL unten ein, damit QR-Codes und Preisalarm-Links sie verwenden.",
       "publicUrl": "Öffentliche URL",
-      "publicUrlHint": "Leer lassen, um die Adresse zu verwenden, über die sich jedes Gerät verbindet.",
+      "publicUrlHint": "Öffentliche Adresse für Anmeldung, QR-Codes und Alarmlinks. Diese gespeicherte URL hat Vorrang vor APP_URL. Leer lassen, um APP_URL zu verwenden. Fehlen beide, verwendet die Anmeldung http://localhost:3003 und Alarme enthalten keinen Link.",
       "saving": "Wird gespeichert…",
       "saveUrl": "URL speichern",
       "saved": "Gespeichert",

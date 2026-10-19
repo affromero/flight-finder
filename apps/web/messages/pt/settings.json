@@ -34,7 +34,7 @@
       "title": "Acesse de outros dispositivos",
       "hint": "O Flight Finder roda nesta máquina. Escolha como quer acessá-lo de um celular ou compartilhá-lo com outras pessoas, siga os passos e cole a URL resultante abaixo para que os códigos QR e os links de alerta de preço a usem.",
       "publicUrl": "URL pública",
-      "publicUrlHint": "Deixe vazio para usar o endereço pelo qual cada dispositivo se conecta.",
+      "publicUrlHint": "Origem pública para iniciar sessão, gerar códigos QR e criar links nos alertas. Esta URL salva tem prioridade sobre APP_URL. Deixe vazio para usar APP_URL; se nenhuma estiver definida, o login usa http://localhost:3003 e os alertas não incluem links.",
       "saving": "Salvando…",
       "saveUrl": "Salvar URL",
       "saved": "Salvo",

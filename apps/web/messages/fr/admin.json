@@ -200,7 +200,7 @@
       "minPct": "Baisse minimale en pourcentage pour alerter",
       "minPctHint": "Garde-fou supplémentaire en plus de la baisse absolue. 0 le désactive.",
       "publicUrl": "URL publique du site",
-      "publicUrlHint": "L’adresse de ton instance, utilisée pour le lien vers le graphique dans chaque alerte. Définis-la (ou la variable d’environnement APP_URL) pour que les alertes renvoient vers ton site ; si vide, les alertes sont envoyées sans lien.",
+      "publicUrlHint": "Origine publique pour la connexion et les liens d’alerte : protocole, nom d’hôte et port facultatif, sans chemin. Cette URL enregistrée est prioritaire sur APP_URL. Si aucune n’est définie, la connexion utilise http://localhost:3003 et les alertes n’ont pas de lien.",
       "save": "Enregistrer les seuils",
       "saving": "Enregistrement...",
       "saved": "Réglages enregistrés"
