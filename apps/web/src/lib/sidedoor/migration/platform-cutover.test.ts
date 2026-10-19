@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { scrypt } from 'node:crypto';
 import pg from 'pg';
-import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 
 const run = promisify(execFile);
 const databaseUrl = process.env.SIDEDOOR_TEST_DATABASE_URL;
@@ -90,6 +90,10 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     connection = source.href;
     process.env.DATABASE_URL = connection;
     process.env.SELF_HOSTED = 'true';
+    temporary = await mkdtemp(join(tmpdir(), 'flight-finder-platform-cutover-'));
+  });
+
+  beforeEach(async () => {
     process.env.SIDEDOOR_IMPORT_ADMIN_PASSWORD = 'environment admin password';
     process.env.SIDEDOOR_IMPORT_PASSWORD = 'private instance password';
     process.env.SIDEDOOR_IMPORT_MACHINE_TOKEN = 'machine-token-that-stays-valid';
@@ -97,7 +101,13 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     process.env.SIDEDOOR_IMPORT_OPENAI_API_KEY = 'environment-openai-key';
     process.env.SIDEDOOR_IMPORT_GOOGLE_API_KEY = 'environment-google-key';
 
-    temporary = await mkdtemp(join(tmpdir(), 'flight-finder-platform-cutover-'));
+    const reset = new pg.Client({ connectionString: connection });
+    await reset.connect();
+    try {
+      await reset.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public');
+    } finally {
+      await reset.end();
+    }
     const baseline = join(temporary, 'baseline.prisma');
     await writeFile(baseline, SOURCE_SCHEMA);
     await push(baseline);
@@ -132,6 +142,61 @@ describe.skipIf(!databaseUrl)('installed platform cutover with PostgreSQL', () =
     delete process.env.SIDEDOOR_IMPORT_GOOGLE_API_KEY;
     delete process.env.SELF_HOSTED;
   });
+
+  it.each(['stored', 'environment'] as const)('preserves a solo administrator from a required-password schema using the %s password', async source => {
+    const client = new pg.Client({ connectionString: connection });
+    await client.connect();
+    try {
+      await client.query('DELETE FROM "User"; ALTER TABLE "User" ALTER COLUMN "passwordHash" SET NOT NULL');
+      if (source === 'environment') await client.query('UPDATE "ExtractionConfig" SET "adminPasswordHash" = NULL');
+      delete process.env.SIDEDOOR_IMPORT_PASSWORD;
+      const password = source === 'stored' ? 'database admin password' : 'environment admin password';
+      const { preparePlatformCutover, finalizePlatformCutover } = await import('./platform-cutover');
+      await expect(preparePlatformCutover()).resolves.toMatchObject({ setupComplete: true, sourceUsers: 0 });
+      const users = (await client.query('SELECT id, username, "passwordHash" FROM "User"')).rows;
+      expect(users).toHaveLength(1);
+      const { verifyPassword } = await import('thesidedoor-core/access');
+      expect(await verifyPassword(password, users[0].passwordHash)).toBe(true);
+      await expect(preparePlatformCutover()).resolves.toMatchObject({ sourceUsers: 0 });
+      expect((await client.query('SELECT id FROM "User"')).rows).toEqual([{ id: users[0].id }]);
+      expect((await client.query(`SELECT is_nullable FROM information_schema.columns WHERE table_name = 'User' AND column_name = 'passwordHash'`)).rows[0].is_nullable).toBe('NO');
+
+      await push(resolve('prisma/schema.prisma'));
+      await finalizePlatformCutover();
+      const { sharedAccess, sharedAccessStore } = await import('../access/service');
+      const { HouseholdProfileService } = await import('thesidedoor-core/access');
+      const session = await sharedAccess.enterHousehold(password);
+      await new HouseholdProfileService(sharedAccess).select(session, users[0].id);
+      expect((await sharedAccess.authenticate(session, true)).principal?.role).toBe('owner');
+      const before = (await sharedAccessStore.read()).principals;
+      await preparePlatformCutover();
+      await finalizePlatformCutover();
+      expect((await sharedAccessStore.read()).principals).toEqual(before);
+      const { resolveProviderCredentials } = await import('../providers/provider-credentials');
+      expect((await resolveProviderCredentials('anthropic')).apiKey).toBe('stored-provider-key');
+    } finally {
+      await client.end();
+    }
+  }, 60_000);
+
+  it('rolls back a newly imported solo administrator when saved provider credentials cannot be decrypted', async () => {
+    const client = new pg.Client({ connectionString: connection });
+    await client.connect();
+    try {
+      await client.query('DELETE FROM "User"; ALTER TABLE "User" ALTER COLUMN "passwordHash" SET NOT NULL');
+      await client.query(`UPDATE "ExtractionConfig" SET "anthropicApiKey" = 'unreadable-credential'`);
+      const { preparePlatformCutover } = await import('./platform-cutover');
+      await expect(preparePlatformCutover()).rejects.toThrow('could not be decrypted');
+      expect((await client.query('SELECT id FROM "User"')).rows).toEqual([]);
+      expect((await client.query(`SELECT to_regclass('public."SidedoorState"') AS name`)).rows[0].name).toBeNull();
+      const { encryptSecret } = await import('@/lib/secret-crypto');
+      await client.query('UPDATE "ExtractionConfig" SET "anthropicApiKey" = $1', [encryptSecret('recovered-provider-key')]);
+      await expect(preparePlatformCutover()).resolves.toMatchObject({ setupComplete: true });
+      expect((await client.query('SELECT id FROM "User"')).rows).toHaveLength(1);
+    } finally {
+      await client.end();
+    }
+  }, 60_000);
 
   it('preserves access, provider, machine and setup behavior before removing source columns', async () => {
     const { preparePlatformCutover, finalizePlatformCutover } = await import('./platform-cutover');

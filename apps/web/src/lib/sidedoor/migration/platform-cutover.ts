@@ -213,16 +213,23 @@ async function prepareInTransaction(database: Database): Promise<CutoverRecord> 
     if (added.length) {
       if (!userColumns.has('id')) throw new Error('Application accounts are unavailable for configured administrators');
       for (const principal of added) {
+        // Preparation still runs against the installed schema. Older releases
+        // require a password here until the schema push removes this column.
+        const legacyPassword = userColumns.has('passwordHash');
         await database.$executeRawUnsafe(
-          `INSERT INTO "User" ("id", "username", "isAdmin", "createdAt", "updatedAt") VALUES ($1, $2, TRUE, $3, $3)`,
+          `INSERT INTO "User" ("id", "username", "isAdmin", "createdAt", "updatedAt"${legacyPassword ? ', "passwordHash"' : ''}) VALUES ($1, $2, TRUE, $3, $3${legacyPassword ? ', $4' : ''})`,
           principal.id,
           principal.name,
           new Date(principal.createdAt),
+          ...(legacyPassword ? [principal.passwordHash] : []),
         );
       }
     }
     const gatePassword = process.env.SIDEDOOR_IMPORT_PASSWORD;
-    const gateHash = gatePassword ? await hashConfiguredPassword(gatePassword) : null;
+    const ownerPassword = process.env.SELF_HOSTED === 'true'
+      ? principals.find(principal => principal.role === 'owner')?.passwordHash ?? null
+      : null;
+    const gateHash = gatePassword ? await hashConfiguredPassword(gatePassword) : ownerPassword;
     if (gateHash)
       for (const principal of principals)
         if (principal.role === 'owner') principal.passwordHash = gateHash;

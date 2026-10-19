@@ -125,6 +125,10 @@ jobs:
           npm ci
           npx playwright install chromium --with-deps
           bash scripts/browser-smoke-test.sh http://localhost:3399
+      - name: Historical release upgrades preserve access and data
+        run: |
+          image=$(docker image inspect --format '{{.Id}}' flight-finder-test:latest)
+          node scripts/testing/upgrade/platform-upgrade.mjs "$image"
       - name: Fresh installer and browser access through local, LAN and HTTPS addresses
         run: |
           image=$(docker image inspect --format '{{.Id}}' flight-finder-test:latest)
