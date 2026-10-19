@@ -166,7 +166,7 @@ try {
     if (fixture.gate) env.push(`SIDEDOOR_IMPORT_PASSWORD=${gatePassword}`);
     await command('docker', ['run', '-d', '--init', '--name', web, '--network', prefix, '-p', '127.0.0.1::3003', ...env.flatMap(value => ['-e', value]), image]);
     webCreated = true;
-    const base = `http://${await command('docker', ['port', web, '3003/tcp'])}`;
+    let base = `http://${await command('docker', ['port', web, '3003/tcp'])}`;
     // Configure the exact published HTTP origin before exercising authentication.
     await waitForHealth(base);
     await client.query('UPDATE "ExtractionConfig" SET "publicBaseUrl" = $1', [base]);
@@ -183,7 +183,9 @@ try {
     const principals = await verify(base, fixture);
     assert.deepEqual(await snapshot(), before, 'Upgrade must preserve tracker history, ownership and settings');
     await command('docker', ['restart', web]);
+    base = `http://${await command('docker', ['port', web, '3003/tcp'])}`;
     await waitForHealth(base);
+    await client.query('UPDATE "ExtractionConfig" SET "publicBaseUrl" = $1', [base]);
     assert.deepEqual(await verify(base, fixture), principals, 'Repeated startup must preserve profile identity');
     assert.deepEqual(await snapshot(), before, 'Repeated startup must preserve historical data');
     console.log(`PASS ${fixture.name}: ${fixture.ref}, startup, HTTP Admin access, provider decryption, histories, repeated startup`);
