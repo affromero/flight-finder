@@ -34,7 +34,7 @@
       "title": "Reach it from other devices",
       "hint": "Flight Finder runs on this machine. Pick how you want to reach it from a phone or share it with other people, follow the steps, then paste the resulting URL below so QR codes and price-alert links use it.",
       "publicUrl": "Public URL",
-      "publicUrlHint": "Leave empty to use the address each device connects on.",
+      "publicUrlHint": "Public origin for sign-in, QR codes and alert links. This saved URL overrides APP_URL. Leave empty to use APP_URL; without either, login uses http://localhost:3003 and alerts have no link.",
       "saving": "Saving…",
       "saveUrl": "Save URL",
       "saved": "Saved",

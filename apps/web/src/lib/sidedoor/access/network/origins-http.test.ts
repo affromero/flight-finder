@@ -60,6 +60,34 @@ describe('installed address admission', () => {
     expect(await capabilities.json()).toMatchObject({ passkeys: false });
   });
 
+  it('restores reverse-proxy login through APP_URL while keeping other origins blocked', async () => {
+    const origin = 'https://flights.example:8443';
+    const backend = 'http://web:3003';
+    const forwarded = { 'x-forwarded-host': 'flights.example:8443', 'x-forwarded-proto': 'https' };
+    const before = (await boundary.fixture!.access.store.read()).sessions;
+    const rejected = await enter(origin, forwarded, password, backend);
+    expect(rejected.status).toBe(403);
+    expect(await rejected.json()).toMatchObject({ error: 'origin_not_allowed' });
+    expect(rejected.headers.has('set-cookie')).toBe(false);
+    expect((await boundary.fixture!.access.store.read()).sessions).toEqual(before);
+
+    vi.stubEnv('APP_URL', origin);
+    const admitted = await enter(origin, forwarded, password, backend);
+    expect(admitted.status).toBe(200);
+    const cookie = admitted.headers.get('set-cookie')!;
+    expect(cookie).toContain('HttpOnly');
+    expect(cookie).toContain('Secure');
+    const session = await GET(new Request(`${backend}/api/access/session`, {
+      headers: { host: 'web:3003', origin, ...forwarded, cookie: cookie.split(';')[0]! },
+    }), context('session'));
+    expect(session.status).toBe(200);
+    expect(await session.json()).toMatchObject({ principal: null, sessionId: expect.any(String) });
+
+    const unknown = await enter('https://unconfigured.example', forwarded, password, backend);
+    expect(unknown.status).toBe(403);
+    expect(unknown.headers.has('set-cookie')).toBe(false);
+  });
+
   it.each([
     ['unknown LAN', 'http://192.168.1.50:3003', {}],
     ['unknown host', 'https://evil.example', {}],
@@ -101,8 +129,10 @@ describe('installed address admission', () => {
   });
 
   it('uses the persisted canonical address ahead of environment configuration', async () => {
+    vi.stubEnv('APP_URL', 'https://environment.example');
     boundary.publicBaseUrl = 'https://configured.example';
     expect((await enter('https://configured.example')).status).toBe(200);
+    expect((await enter('https://environment.example')).status).toBe(403);
     expect((await enter('http://localhost:3003')).status).toBe(403);
   });
 });

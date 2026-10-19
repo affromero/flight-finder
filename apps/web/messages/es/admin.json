@@ -200,7 +200,7 @@
       "minPct": "Caída porcentual mínima para alertar",
       "minPctHint": "Filtro adicional sobre la caída absoluta. 0 lo desactiva.",
       "publicUrl": "URL pública del sitio",
-      "publicUrlHint": "La dirección de tu instancia, usada para el enlace al gráfico dentro de cada alerta. Defínela (o la variable de entorno APP_URL) para que las alertas enlacen a tu sitio; si queda en blanco, las alertas se envían sin enlace.",
+      "publicUrlHint": "Origen público para iniciar sesión y enlazar alertas: esquema, nombre de host y puerto opcional, sin ruta. Esta URL guardada tiene prioridad sobre APP_URL. Si no se define ninguna, el inicio de sesión usa http://localhost:3003 y las alertas no incluyen enlace.",
       "save": "Guardar umbrales",
       "saving": "Guardando...",
       "saved": "Ajustes guardados"

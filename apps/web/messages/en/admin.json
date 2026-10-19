@@ -200,7 +200,7 @@
       "minPct": "Minimum percentage drop to alert",
       "minPctHint": "Extra gate on top of the absolute drop. 0 disables it.",
       "publicUrl": "Public site URL",
-      "publicUrlHint": "Your instance's address, used for the chart link inside each alert. Set this (or the APP_URL environment variable) so alerts link back to your site; if left blank, alerts are sent without a link.",
+      "publicUrlHint": "Public origin for sign-in and alert links: scheme, hostname and optional port, without a path. This saved URL overrides APP_URL. If neither is set, login uses http://localhost:3003 and alerts have no link.",
       "save": "Save thresholds",
       "saving": "Saving...",
       "saved": "Settings saved"

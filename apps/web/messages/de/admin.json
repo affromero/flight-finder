@@ -200,7 +200,7 @@
       "minPct": "Mindest-Prozentrückgang für Alarm",
       "minPctHint": "Zusätzliche Hürde neben dem absoluten Rückgang. 0 deaktiviert sie.",
       "publicUrl": "Öffentliche Site-URL",
-      "publicUrlHint": "Die Adresse deiner Instanz, verwendet für den Diagramm-Link in jedem Alarm. Setze sie (oder die Umgebungsvariable APP_URL), damit Alarme auf deine Site verlinken; bleibt sie leer, werden Alarme ohne Link gesendet.",
+      "publicUrlHint": "Öffentliche Adresse für Anmeldung und Alarmlinks: Protokoll, Hostname und optionaler Port, ohne Pfad. Diese gespeicherte URL hat Vorrang vor APP_URL. Fehlen beide, verwendet die Anmeldung http://localhost:3003 und Alarme enthalten keinen Link.",
       "save": "Schwellen speichern",
       "saving": "Wird gespeichert...",
       "saved": "Einstellungen gespeichert"

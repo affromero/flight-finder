@@ -200,7 +200,7 @@
       "minPct": "Queda percentual mínima para alertar",
       "minPctHint": "Filtro extra além da queda absoluta. 0 desativa.",
       "publicUrl": "URL pública do site",
-      "publicUrlHint": "O endereço da sua instância, usado no link do gráfico dentro de cada alerta. Defina-o (ou a variável de ambiente APP_URL) para que os alertas levem de volta ao seu site; se ficar em branco, os alertas são enviados sem link.",
+      "publicUrlHint": "Origem pública para iniciar sessão e criar links nos alertas: protocolo, nome do host e porta opcional, sem caminho. Esta URL salva tem prioridade sobre APP_URL. Se nenhuma estiver definida, o login usa http://localhost:3003 e os alertas não incluem links.",
       "save": "Salvar limiares",
       "saving": "Salvando...",
       "saved": "Configurações salvas"

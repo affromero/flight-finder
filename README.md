@@ -247,16 +247,57 @@ Every option below is a terminal command, so a headless VPS can both run **and**
 
 The installer offers to start the Cloudflare quick tunnel for you at the end, and these same methods are walked step by step in **Instance settings -> Reach it from other devices** inside the app.
 
-Before signing in through a tunnel or custom hostname, configure its exact origin
-from a terminal on the server:
+#### Portainer and Docker Compose behind a reverse proxy
 
-```bash
-flight-finder access origin https://flights.yourdomain.com
+Before signing in through a custom hostname or tunnel, configure its public
+origin. An origin includes the scheme, hostname, and optional port, without a
+path. Use the address in the browser, such as `https://flights.example.com`,
+rather than the proxy's internal address, such as `http://web:3003`.
+
+For a Portainer stack or a manually managed Compose installation, add `APP_URL`
+to the existing web service's container environment:
+
+```yaml
+services:
+  web:
+    environment:
+      APP_URL: https://flights.example.com
 ```
 
-This command also repairs a login blocked by an unconfigured address. Include
-the port when it is nonstandard. The saved URL takes precedence over `APP_URL`
-and also supplies notification links. Temporary tunnel URLs need reconfiguration
+Merge this setting into your existing stack and preserve its other environment
+variables and volumes. Defining a Portainer stack variable alone does not pass
+it into the container; the service must reference it under `environment`.
+Redeploy the web service so the new environment takes effect. With Compose:
+
+```bash
+docker compose up -d --no-deps --force-recreate web
+```
+
+This repairs the `This address is not configured for login` error when the
+instance is still using the default `http://localhost:3003` origin. If the public
+address uses a nonstandard port, include it, for example
+`https://flights.example.com:8443`. Proxy headers alone do not authorize a login
+origin.
+
+A URL already saved in Instance settings or with `access origin` takes
+precedence over `APP_URL`. Update that saved URL if setting `APP_URL` does not
+change the permitted address. On an installation with the Flight Finder CLI,
+run this from a terminal on the server:
+
+```bash
+flight-finder access origin https://flights.example.com
+```
+
+For a manually managed stack without the host CLI, run the same command in the
+web container:
+
+```bash
+docker compose exec web node /app/packages/cli/dist/index.js access origin https://flights.example.com
+```
+
+The login origin is the saved URL, then `APP_URL`, then `http://localhost:3003`.
+The saved URL or `APP_URL` also supplies QR codes and notification links. Alerts
+omit links when neither is configured. Temporary tunnel URLs need reconfiguration
 when they change. Changing the hostname changes the passkey relying party;
 register passkeys again at the new hostname.
 
@@ -476,7 +517,9 @@ the actual published port. All-interface installations also include the detected
 LAN IPv4 address. Loopback-only desktop installations exclude LAN addresses.
 Explicit `APP_URL`, `SIDEDOOR_PASSWORD_ORIGINS` (including `[]`), and a canonical
 URL saved with `access origin` remain unchanged. Custom hostnames and tunnel URLs
-still need `flight-finder access origin https://your-hostname`.
+still need an explicit public origin. Use `APP_URL` in the container environment
+for Docker/Portainer, or `flight-finder access origin https://your-hostname` to
+update the saved URL. The saved URL takes precedence over `APP_URL`.
 
 The updater preserves existing configuration bytes and keeps a private
 `.env.before-update-*` backup when it adds origins. It checks health and the

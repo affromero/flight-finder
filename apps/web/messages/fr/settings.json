@@ -34,7 +34,7 @@
       "title": "Y accéder depuis d’autres appareils",
       "hint": "Flight Finder tourne sur cette machine. Choisis comment y accéder depuis un téléphone ou le partager avec d’autres personnes, suis les étapes, puis colle l’URL obtenue ci-dessous pour que les QR codes et les liens d’alerte de prix l’utilisent.",
       "publicUrl": "URL publique",
-      "publicUrlHint": "Laisse vide pour utiliser l’adresse de connexion de chaque appareil.",
+      "publicUrlHint": "Origine publique pour la connexion, les QR codes et les liens d’alerte. Cette URL enregistrée est prioritaire sur APP_URL. Laisse vide pour utiliser APP_URL ; si aucune n’est définie, la connexion utilise http://localhost:3003 et les alertes n’ont pas de lien.",
       "saving": "Enregistrement…",
       "saveUrl": "Enregistrer l’URL",
       "saved": "Enregistré",
