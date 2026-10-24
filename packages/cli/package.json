@@ -17,8 +17,8 @@
     "test:e2e": "node --import tsx --import ./register.mjs src/e2e-test.ts"
   },
   "dependencies": {
-    "@prisma/adapter-pg": "^7.10.0",
-    "@prisma/client": "^7.10.0",
+    "@prisma/adapter-pg": "^7.10.1",
+    "@prisma/client": "^7.10.1",
     "chalk": "^6.0.1",
     "commander": "^15.0.0",
     "ink": "^8.0.0",
@@ -26,16 +26,16 @@
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
     "ioredis": "6.0.0",
-    "thesidedoor-core": "0.5.2"
+    "thesidedoor-core": "0.5.3"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
-    "@types/node": "^26.6.4",
+    "@types/node": "^26.6.5",
     "@types/react": "^19.3.0",
     "eslint": "^10.12.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.1",
+    "typescript-eslint": "^8.71.2",
     "vitest": "^5.0.1"
   }
 }
