@@ -11,7 +11,8 @@ vi.mock('playwright', async original => {
 
 describe.skipIf(process.env.TRAVEL_BROWSER_TESTS !== '1')('canonical Google flight navigation', () => {
   let server: Server;
-  let mode: 'delayed' | 'empty' | 'wrong-route' | 'detail' = 'delayed';
+  let mode: 'delayed' | 'empty' | 'wrong-route' | 'detail' | 'localized' = 'delayed';
+  let localizedPrices: string[] = [];
   const params = { origin: 'JFK', destination: 'LAX', dateFrom: new Date('2026-11-06'), dateTo: new Date('2026-11-06'), tripType: 'one_way', currency: 'EUR' };
   beforeAll(async () => {
     server = createServer((request, response) => {
@@ -19,9 +20,10 @@ describe.skipIf(process.env.TRAVEL_BROWSER_TESTS !== '1')('canonical Google flig
         response.writeHead(404); response.end(); return;
       }
       response.setHeader('content-type', 'text/html; charset=utf-8');
-      const priced = `<h1>Flights from ${mode === 'wrong-route' ? 'LAX to JFK' : 'JFK to LAX'}</h1><p>EUR 120</p><p>EUR 150</p><p>EUR 180</p>`;
+      const prices = mode === 'localized' ? localizedPrices : ['EUR 120', 'EUR 150', 'EUR 180'];
+      const priced = `<h1>Flights from ${mode === 'wrong-route' ? 'LAX to JFK' : 'JFK to LAX'}</h1>${prices.map(price => `<p>${price}</p>`).join('')}`;
       if (mode === 'empty') { response.end('<div data-gs>Loading results</div><h1>Flights from JFK to LAX</h1>'); return; }
-      if (mode === 'wrong-route') { response.end(`<div data-gs>${priced}</div>`); return; }
+      if (mode === 'wrong-route' || mode === 'localized') { response.end(`<div data-gs>${priced}</div>`); return; }
       if (mode === 'detail') {
         response.end('<div role="dialog" aria-label="Cookie consent"><button onclick="this.parentElement.remove();document.getElementById(\'flights\').hidden=false">Continue</button></div><ul id="flights" hidden><li class="pIav2d" onclick="document.getElementById(\'booking\').hidden=false">Select flight</li></ul><pre id="booking" hidden>Book with Fixture AirAirline\n€245</pre>'); return;
       }
@@ -42,6 +44,21 @@ describe.skipIf(process.env.TRAVEL_BROWSER_TESTS !== '1')('canonical Google flig
     expect(result.html).not.toContain('Loading results');
     expect(result.html).not.toContain('Tout accepter');
   }, 30000);
+  it.each([
+    { currency: null, symbol: '¥' },
+    { currency: null, symbol: '￥' },
+    { currency: null, symbol: '₹' },
+    { currency: null, symbol: '₩' },
+    { currency: 'JPY', symbol: '¥' },
+    { currency: 'ZWG', symbol: 'ZWG ' },
+  ])('loads $symbol fares when currency is $currency', async ({ currency, symbol }) => {
+    mode = 'localized';
+    localizedPrices = ['7,057', '7,318', '8,283'].map(amount => `${symbol}${amount}`);
+    const result = await navigateGoogleFlights({ ...params, currency });
+    expect(result).toMatchObject({ resultsFound: true, source: 'google_flights' });
+    expect(result.html).toContain(`${symbol}7,057`);
+    expect(new URL(result.url).searchParams.get('curr')).toBe(currency);
+  }, 120000);
   it('rejects an empty results container across all URL candidates', async () => {
     mode = 'empty';
     const result = await navigateGoogleFlights(params);
