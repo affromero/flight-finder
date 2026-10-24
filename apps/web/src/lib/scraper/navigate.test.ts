@@ -550,8 +550,33 @@ describe('hasFlightPriceSignal (two-criterion airline page heuristic, issue #65)
     expect(hasFlightPriceSignal(text)).toBe(true);
   });
 
-  it('accepts symbol-form prices (€431, €99, €350)', () => {
-    expect(hasFlightPriceSignal('€431 / €99 / €350 / €480')).toBe(true);
+  it.each([
+    '$', '€', '£', '¥', '￥', '₹', '₩', '฿', '₺', '₽', '₱', '₫',
+    '₪', '₦', '₴', 'R$', 'HK$', 'S$', 'A$', 'C$', 'MX$',
+  ])('accepts prices written with %s', (symbol) => {
+    expect(hasFlightPriceSignal(`${symbol}7,057 / ${symbol}7,318 / ${symbol}8,283`)).toBe(true);
+  });
+
+  it.each([
+    'USD', 'EUR', 'GBP', 'JPY', 'CAD', 'AUD', 'CHF', 'CNY', 'INR',
+    'MXN', 'BRL', 'KRW', 'SGD', 'HKD', 'SEK', 'NOK', 'DKK', 'NZD',
+    'THB', 'COP', 'ARS', 'TRY', 'SLE', 'XCG', 'ZWG',
+  ])('accepts %s codes before and after amounts', (currency) => {
+    expect(hasFlightPriceSignal(`${currency} 7,057 / ${currency} 7,318 / ${currency} 8,283`)).toBe(true);
+    expect(hasFlightPriceSignal(`7,057 ${currency} / 7,318 ${currency} / 8,283 ${currency}`)).toBe(true);
+  });
+
+  it.each(['€', '¥', '₹', '₩'])('accepts amounts followed by %s', (symbol) => {
+    expect(hasFlightPriceSignal(`7,057 ${symbol} / 7,318 ${symbol} / 8,283 ${symbol}`)).toBe(true);
+  });
+
+  it.each([' ', '\t', '\u00a0', '\u202f', '  '])('accepts horizontal price spacing %j', (space) => {
+    expect(hasFlightPriceSignal(`₹${space}7,057 / ₹${space}7,318 / ₹${space}8,283`)).toBe(true);
+    expect(hasFlightPriceSignal(`7,057${space}CAD / 7,318${space}CAD / 8,283${space}CAD`)).toBe(true);
+  });
+
+  it.each(['¥431', '¥431 / ¥522'])('rejects too few currency mentions in %s', (text) => {
+    expect(hasFlightPriceSignal(text)).toBe(false);
   });
 
   it('accepts mixed currency tokens summing to >= 3 mentions', () => {
@@ -560,6 +585,19 @@ describe('hasFlightPriceSignal (two-criterion airline page heuristic, issue #65)
 
   it('rejects a legitimate "no flights available" page with currency in chrome only (3 mentions, no token)', () => {
     const text = 'Change currency: USD EUR GBP. No flights match your search. Try different dates.';
+    expect(hasFlightPriceSignal(text)).toBe(false);
+  });
+
+  it.each([
+    '2026\nUSD EUR GBP\nNo flights match your search.',
+    'USD EUR GBP\n3 results returned',
+    '2026\n¥ ₹ ₩\nNo flights match your search.',
+    'Change currency: CAD AUD INR. No flights match your search.',
+    'ABC431 / ABC522 / ABC99',
+    'USD EUR GBP\n431EURO',
+    'USD EUR GBP\n431INDUSTRY',
+    'USD EUR GBP\nCADILLAC 431',
+  ])('rejects non-fare currency-like content: %s', (text) => {
     expect(hasFlightPriceSignal(text)).toBe(false);
   });
 

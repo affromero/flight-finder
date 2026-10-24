@@ -85,20 +85,35 @@ export function isoDate(d: Date): string {
 // "EUR" appearing in marketing copy) passed the gate, then extraction returned
 // zero prices and the cron silently saved nothing every cycle. Two-criterion
 // signal:
-//   1. Currency must be mentioned at least MIN_CURRENCY_MENTIONS times. Real
+//   1. Currency must be mentioned at least three times. Real
 //      airline result pages render many flight rows each with a price;
 //      marketing stubs typically mention currency 0 to 2 times in chrome.
 //   2. At least one price-shaped token (symbol or bounded code adjacent to a
 //      digit). Lookaround prevents matching "TRY" inside INDUSTRY or "EUR"
 //      inside EURO trip.
-const CURRENCY_MENTION_PATTERN = '€|£|\\$|EUR|GBP|USD|TRY|JPY|CHF';
-const PRICE_TOKEN_PATTERN = '(?:€|£|\\$)\\s?\\d|(?<![A-Za-z])(?:EUR|GBP|USD|TRY|JPY|CHF)(?![A-Za-z])\\s?\\d';
-const MIN_CURRENCY_MENTIONS = 3;
+const CURRENCY_CODES = Intl.supportedValuesOf('currency');
+
+function flightPriceSignal(input: { text?: string; currencyCodes: readonly string[] }): boolean {
+  // Playwright serializes this function, so all matching logic stays inside it.
+  // Pass Node's currency list to avoid differences in Chromium's ICU data.
+  const text = input.text ?? document.body?.innerText ?? '';
+  const code = `(?<![A-Za-z])(?:${input.currencyCodes.join('|')})(?![A-Za-z])`;
+  const currency = `(?:\\p{Sc}|${code})`;
+  const mentions = text.match(new RegExp(currency, 'gu')) ?? [];
+  if (mentions.length < 3) return false;
+
+  // Keep counters on other lines from pairing with currency-selector labels.
+  const space = '[\\t \\u00a0\\u202f]*';
+  const amount = '\\d[\\d.,]*';
+  return new RegExp(`${currency}${space}${amount}|${amount}${space}${currency}`, 'u').test(text);
+}
 
 export function hasFlightPriceSignal(text: string): boolean {
-  const mentions = (text.match(new RegExp(CURRENCY_MENTION_PATTERN, 'g')) || []).length;
-  if (mentions < MIN_CURRENCY_MENTIONS) return false;
-  return new RegExp(PRICE_TOKEN_PATTERN).test(text);
+  return flightPriceSignal({ text, currencyCodes: CURRENCY_CODES });
+}
+
+async function waitForFlightPrices(page: Page): Promise<void> {
+  await page.waitForFunction(flightPriceSignal, { currencyCodes: CURRENCY_CODES }, { timeout: 15_000 });
 }
 
 // Cabin phrase prepended to the q= text query. Google Flights' NLU picks up
@@ -402,16 +417,7 @@ export async function navigateGoogleFlights(
 
         // Container is present; now wait for prices to actually render.
         const priceWaitStart = Date.now();
-        await page.waitForFunction(
-          (p: { mention: string; token: string; min: number }) => {
-            const text = document.body?.innerText ?? '';
-            const mentions = (text.match(new RegExp(p.mention, 'g')) || []).length;
-            if (mentions < p.min) return false;
-            return new RegExp(p.token).test(text);
-          },
-          { mention: CURRENCY_MENTION_PATTERN, token: PRICE_TOKEN_PATTERN, min: MIN_CURRENCY_MENTIONS },
-          { timeout: 15_000 }
-        );
+        await waitForFlightPrices(page);
         console.log(`[navigate] price signal appeared in ${Date.now() - priceWaitStart}ms`);
         resultsFound = true;
       } catch {
@@ -638,16 +644,7 @@ export async function navigateAirlineDirect(
     // Two-criterion price signal (see hasFlightPriceSignal at module top, issue 65).
     let resultsFound = false;
     try {
-      await page.waitForFunction(
-        (params: { mention: string; token: string; min: number }) => {
-          const text = document.body?.innerText ?? '';
-          const mentions = (text.match(new RegExp(params.mention, 'g')) || []).length;
-          if (mentions < params.min) return false;
-          return new RegExp(params.token).test(text);
-        },
-        { mention: CURRENCY_MENTION_PATTERN, token: PRICE_TOKEN_PATTERN, min: MIN_CURRENCY_MENTIONS },
-        { timeout: 15_000 }
-      );
+      await waitForFlightPrices(page);
       resultsFound = true;
     } catch {
       // No price signal detected — page may be a stub, marketing redirect, or block.
@@ -770,16 +767,7 @@ async function navigateAggregatorPage(
 
     let resultsFound = false;
     try {
-      await page.waitForFunction(
-        (p: { mention: string; token: string; min: number }) => {
-          const text = document.body?.innerText ?? '';
-          const mentions = (text.match(new RegExp(p.mention, 'g')) || []).length;
-          if (mentions < p.min) return false;
-          return new RegExp(p.token).test(text);
-        },
-        { mention: CURRENCY_MENTION_PATTERN, token: PRICE_TOKEN_PATTERN, min: MIN_CURRENCY_MENTIONS },
-        { timeout: 15_000 },
-      );
+      await waitForFlightPrices(page);
       resultsFound = true;
     } catch {
       // No price signal — most likely Cloudflare challenge, PerimeterX, or empty results.
