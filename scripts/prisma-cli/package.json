@@ -2,7 +2,7 @@
   "name": "flight-finder-prisma-toolchain",
   "private": true,
   "dependencies": {
-    "prisma": "7.10.0"
+    "prisma": "7.10.1"
   },
   "overrides": {
     "@prisma/config": {

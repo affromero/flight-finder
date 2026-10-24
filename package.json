@@ -29,6 +29,9 @@
     "prisma": {
       "mysql2": "3.24.2"
     },
+    "thesidedoor-core": {
+      "zod": "4.6.7"
+    },
     "tsup": {
       "esbuild": "0.28.2"
     }
