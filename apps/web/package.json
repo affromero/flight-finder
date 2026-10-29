@@ -19,7 +19,7 @@
     "@prisma/client": "^7.10.1",
     "better-sqlite3": "^13.0.3",
     "ioredis": "^6.0.0",
-    "maplibre-gl": "^6.14.0",
+    "maplibre-gl": "^6.15.0",
     "mmdb-lib": "3.0.3",
     "next": "^16.4.2",
     "next-intl": "^4.14.9",
@@ -31,13 +31,13 @@
     "react-dom": "^19.3.1",
     "react-plotly.js": "^4.1.0",
     "recharts": "^3.10.1",
-    "thesidedoor": "0.5.3",
-    "thesidedoor-core": "0.5.3",
+    "thesidedoor": "0.5.7",
+    "thesidedoor-core": "0.5.7",
     "ua-parser-js": "^2.0.10",
-    "undici": "^8.12.2"
+    "undici": "^8.12.3"
   },
   "devDependencies": {
-    "@copilotkit/aimock": "^1.45.1",
+    "@copilotkit/aimock": "^1.46.0",
     "@eslint/js": "^10.0.1",
     "@testing-library/jest-dom": "^7.0.1",
     "@testing-library/react": "^16.3.3",
@@ -49,10 +49,10 @@
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.3.0",
     "@vitest/coverage-v8": "^5.0.5",
-    "eslint": "^10.12.0",
+    "eslint": "^10.13.0",
     "jsdom": "^30.1.3",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.71.2",
+    "typescript-eslint": "^8.72.0",
     "vitest": "^5.0.1"
   }
 }
