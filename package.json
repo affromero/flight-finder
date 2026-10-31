@@ -23,6 +23,7 @@
   },
   "version": "0.16.0",
   "overrides": {
+    "minimatch@^10.0.0": "11.0.3",
     "@prisma/config": {
       "deepmerge-ts": "8.0.2"
     },
