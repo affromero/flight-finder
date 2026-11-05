@@ -44,7 +44,7 @@
     "@prisma/client": "7.10.1",
     "csv-parse": "7.0.3",
     "geo-tz": "8.1.10",
-    "knip": "6.42.1",
+    "knip": "6.44.0",
     "pg": "8.23.1",
     "playwright": "1.64.1",
     "prisma": "7.10.1",
