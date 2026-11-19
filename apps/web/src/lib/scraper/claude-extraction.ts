@@ -82,8 +82,9 @@ export async function extractClaude(
         '--model',
         model,
         '--output-format',
-        'stream-json',
-        '--verbose',
+        // Claude can stream multiple assistant records with the same message ID.
+        // Extraction only needs the final result and its usage.
+        'json',
         '--permission-mode',
         'default',
         '--disallowedTools',
@@ -93,7 +94,7 @@ export async function extractClaude(
       input: `${systemPrompt}\n\n${userPrompt}`,
       timeoutMs: 240000,
       signal: options?.signal,
-      // Protocol summaries can repeat the answer; bound transport separately from answer bytes.
+      // Bound the JSON envelope separately from the decoded answer.
       maxOutputBytes: options?.signal
         ? 16 * 1024 * 1024
         : Number.MAX_SAFE_INTEGER,

@@ -52,8 +52,7 @@ it('preserves prompt, tool restrictions and subscription isolation while measuri
       'chosen-model',
       '--print',
       '--output-format',
-      'stream-json',
-      '--verbose',
+      'json',
     ]),
   );
   expect(answer.args[answer.args.indexOf('--permission-mode') + 1]).toBe(
@@ -87,13 +86,26 @@ it('preserves prompt, tool restrictions and subscription isolation while measuri
   });
 });
 
-it('trims the answer without duplicating terminal text or emitting tool content', async () => {
+it('extracts only the final answer when Claude emits separate thinking and text blocks', async () => {
   executable(
-    `event({type:'assistant',message:{content:[{type:'tool_use',text:'private tool text'},{type:'text',text:'  answer  '}]}});event({type:'result',result:'  answer  '});`,
+    `const result={type:'result',subtype:'success',is_error:false,result:'  answer  ',usage};
+const format=process.argv[process.argv.indexOf('--output-format')+1];
+const assistant=content=>({type:'assistant',message:{id:'msg_1',content:[content]}});
+const messages=[
+  assistant({type:'thinking',thinking:'private reasoning'}),
+  assistant({type:'text',text:'  answer  '}),
+  result,
+];
+if(format==='stream-json') messages.forEach(event);
+if(format==='json') event(process.argv.includes('--verbose')?messages:result);`,
   );
-  expect(await extractClaude('model', '', '')).toEqual({
+  expect(await extractClaude('model', '', '')).toMatchObject({
     content: 'answer',
-    usage: { inputTokens: null, outputTokens: null },
+    usage: {
+      inputTokens: 35,
+      outputTokens: 7,
+      cachedInputTokens: 20,
+    },
   });
 });
 
