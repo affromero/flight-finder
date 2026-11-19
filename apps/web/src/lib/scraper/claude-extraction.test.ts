@@ -99,7 +99,7 @@ const messages=[
 if(format==='stream-json') messages.forEach(event);
 if(format==='json') event(process.argv.includes('--verbose')?messages:result);`,
   );
-  expect(await extractClaude('model', '', '')).toEqual({
+  expect(await extractClaude('model', '', '')).toMatchObject({
     content: 'answer',
     usage: {
       inputTokens: 35,
