@@ -106,7 +106,7 @@ describe('BestPrice — sold-out exclusion (issue #64)', () => {
 describe('latest fares and historical lows', () => {
   it('books the newer fare while keeping the historical low as dated information', async () => {
     render(<>{await BestPrice({ snapshots: [
-      snap({ price: 90, flightId: 'one', bookingUrl: 'https://old.example/fare' }),
+      snap({ price: 90, flightId: 'one', bookingUrl: 'https://old.example/fare', scrapedAt: '2026-05-01T12:00:00.000Z' }),
       snap({ price: 240, flightId: 'one', bookingUrl: 'https://new.example/fare', scrapedAt: '2026-05-02T00:00:00.000Z' }),
     ] })}</>);
     expect(screen.getByRole('region', { name: 'Latest observed price' })).toHaveTextContent(/240/);
