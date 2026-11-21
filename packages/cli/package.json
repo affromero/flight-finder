@@ -20,13 +20,13 @@
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "chalk": "^6.0.1",
-    "commander": "^15.0.0",
+    "commander": "^15.1.0",
     "ink": "^8.0.0",
     "ink-select-input": "^6.0.0",
     "ink-spinner": "^5.0.0",
     "ink-text-input": "^6.0.0",
     "ioredis": "6.0.0",
-    "thesidedoor-core": "0.5.7"
+    "thesidedoor-core": "0.5.8"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
@@ -35,7 +35,7 @@
     "eslint": "^10.14.0",
     "tsx": "^4.23.15",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.72.1",
+    "typescript-eslint": "^8.72.2",
     "vitest": "^5.0.1"
   }
 }
