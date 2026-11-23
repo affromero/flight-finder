@@ -50,7 +50,7 @@
     "playwright": "1.65.0",
     "prisma": "7.10.1",
     "react": "19.3.1",
-    "thesidedoor-core": "0.5.8",
+    "thesidedoor-core": "0.5.10",
     "tsup": "9.0.0",
     "tsx": "^4.23.15"
   }
