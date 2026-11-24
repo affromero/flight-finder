@@ -87,6 +87,11 @@ describe('renderBrailleChart', () => {
     expect(wideLines[0]!.length).toBeGreaterThan(narrowLines[0]!.length);
   });
 
+  it('handles constrained terminal widths without crashing', () => {
+    expect(renderBrailleChart(singleSeries, { width: 10, height: 6 })).toContain('Terminal too small');
+    expect(renderBrailleChart(singleSeries, { width: 8, height: 6 })).toContain('Terminal too small');
+  });
+
   it('adapts to different heights', () => {
     const short = renderBrailleChart(singleSeries, { width: 40, height: 4 });
     const tall = renderBrailleChart(singleSeries, { width: 40, height: 10 });
@@ -94,6 +99,12 @@ describe('renderBrailleChart', () => {
     const shortLines = short.split('\n').filter((l) => l.includes('┤'));
     const tallLines = tall.split('\n').filter((l) => l.includes('┤'));
     expect(tallLines.length).toBeGreaterThan(shortLines.length);
+  });
+
+  it('handles minimal height without NaN labels', () => {
+    const output = renderBrailleChart(singleSeries, { width: 40, height: 1 });
+    expect(output).not.toContain('NaN');
+    expect(output).toContain('┤');
   });
 
   it('uses braille characters for plotting', () => {
