@@ -70,6 +70,8 @@ export function renderBrailleChart(
   const chartCols = width - yLabelWidth - 2;
   const chartRows = height;
 
+  if (chartCols <= 0 || chartRows <= 0) return '  Terminal too small';
+
   // Braille resolution: 2 dots per col, 4 dots per row
   const dotW = chartCols * 2;
   const dotH = chartRows * 4;
@@ -127,7 +129,7 @@ export function renderBrailleChart(
 
   for (let row = 0; row < chartRows; row++) {
     // Y-axis label
-    const yVal = maxY - (row / (chartRows - 1)) * yRange;
+    const yVal = chartRows > 1 ? maxY - (row / (chartRows - 1)) * yRange : maxY;
     const label = (options.yLabel ?? '') + Math.round(yVal).toString();
     let line = chalk.dim(label.padStart(yLabelWidth)) + ' ┤';
 
