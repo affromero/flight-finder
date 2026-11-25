@@ -20,6 +20,12 @@ call against a running instance.
   An inspection-only request does not authorize creating an issue or PR.
 - Record the author's actual review-assistance preference. Do not infer consent
   to AI-assisted follow-up work or merging.
+- Keep screenshots and recordings used only as PR evidence out of the main
+  branch. Use GitHub attachments or commit-pinned links to an evidence branch.
+  If a PR already committed evidence files, pin its media links to a retained
+  commit and exclude those files from the merge result. Verify the resulting
+  tree before merging. Keep media used by product documentation or shipped
+  with the app.
 
 ## Stack
 
