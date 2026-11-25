@@ -53,12 +53,16 @@ bug fixes. Cover every affected interface and relevant mobile layouts. Show
 identical steps before and after when existing behavior changes. For new
 behavior, show it in use. Briefly explain when a GIF does not apply. -->
 
+<!-- Use GitHub attachments or commit-pinned links to an evidence branch for
+PR-only screenshots and recordings. -->
+
 ## Maintainer review
 
 - [ ] Review the linked issue, discussion, and complete diff.
 - [ ] Reproduce the reported behavior and verify the fix in a representative environment at the commit being merged.
 - [ ] Confirm required checks pass at that commit. Repeat affected verification after any changes.
 - [ ] Confirm the GIFs cover the affected interfaces or the PR explains why they do not apply.
+- [ ] If the PR committed files used only as review evidence, preserve the links and exclude those files from the merge result.
 
 ## Compatibility and deployment
 
